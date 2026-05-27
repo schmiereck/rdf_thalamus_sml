@@ -1,0 +1,44 @@
+artifacts:
+- src/pre_registration.md
+- src/temporal_dataset.py
+- src/temporal_encoder.py
+- src/run_phase2.py
+- src/test_temporal.py
+- phase_2/p2d_results.csv
+- phase_2/phase2_report.md
+experimenter_view: "The Phase 2 temporal experiments delivered a clear verdict on\
+  \ zero-shot spatial-to-temporal transfer. \nWith an F0 ratio of 0.99, frozen spatially\
+  \ trained weights offer virtually zero benefit over completely \nrandom weights\
+  \ for local JEPA temporal prediction. Furthermore, the test classification accuracy\
+  \ \ndifference is negative (-0.80pp), confirming that the 'Periodicity Loophole'\
+  \ accounts for the performance \nof both frozen baselines rather than any genuine\
+  \ zero-shot transfer of spatial priors. \nConversely, learning from scratch with\
+  \ temporal JEPA (F2) is highly successful, driving the test \nclassification accuracy\
+  \ to 65.33% and reducing loss from ~17.4 to ~3.9. This suggests that while \nuniversal\
+  \ nodes have the capacity to adapt to temporal sequences under gradient-based optimization,\
+  \ \nspatial pre-training alone does not yield a ready-to-use temporal prior. Future\
+  \ work should transition \nfrom zero-shot transfer to fine-tuning or joint spatio-temporal\
+  \ optimization.\n"
+log_excerpt: "================================================================================\n\
+  PHASE 2 SUMMARY (Averages over 5 seeds: 42, 43, 44, 45, 46)\n================================================================================\n\
+  P2-D-ZeroShot (Frozen Spatial Weights):\n  - JEPA Loss: 17.2884\n  - Test Classification\
+  \ Acc: 57.73%\n  - Next-Step Markov Cosine Sim: 0.3126\nP2-D-Trained (Trained from\
+  \ Scratch):\n  - JEPA Loss: 3.8994\n  - Test Classification Acc: 65.33%\n  - Next-Step\
+  \ Markov Cosine Sim: 0.2865\nP2-D-Untrained (Frozen Random Weights):\n  - JEPA Loss:\
+  \ 17.4573\n  - Test Classification Acc: 58.53%\n  - Next-Step Markov Cosine Sim:\
+  \ 0.3058\n\nFalsification Evaluation:\n  - F0 Ratio (ZeroShot / Untrained JEPA Loss):\
+  \ 0.9903 (Threshold: < 0.85) -> FALSIFIED!\n  - F1 Acc Diff (ZeroShot - Untrained\
+  \ Acc): -0.0080 (Threshold: > 0.05) -> FALSIFIED!\n  - F2 Trained Acc: 0.6533 (Threshold:\
+  \ >= 0.60) -> CONFIRMED!\n================================================================================\n"
+metrics:
+  f0_loss_ratio: 0.9903
+  f1_acc_diff: -0.008
+  trained_class_acc_mean: 0.6533
+  trained_loss_mean: 3.8994
+  untrained_class_acc_mean: 0.5853
+  untrained_loss_mean: 17.4573
+  zeroshot_class_acc_mean: 0.5773
+  zeroshot_loss_mean: 17.2884
+notes: Zero-shot spatial-temporal transfer is falsified by F0 and F1, but temporal
+  JEPA training from scratch is validated by F2.
+status: ok
