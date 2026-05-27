@@ -1,0 +1,89 @@
+falsification_criterion: 'The hypothesis is falsified if ANY of the following hold:
+
+
+  F1 (Transfer failure): Spatially-trained weights applied temporally yield
+
+  periodic-vs-random classification accuracy ≤5pp above the untrained-weight
+
+  temporal baseline. This would mean the node learns axis-specific (spatial)
+
+  structure, not a general local-pattern operation.
+
+
+  F2 (Temporal JEPA failure): P2-D trained from scratch on temporal data with
+
+  JEPA fails to reach ≥60% periodic-vs-random classification. This would mean
+
+  the JEPA objective does not generalize to temporal structure.
+
+
+  F3 (P2-D non-competitiveness): P2-D (temporal training) performs ≥20pp worse
+
+  than the best alternative (P2-A/B/C) on the classification task. This would
+
+  mean the kernel-3 temporal node is fundamentally inferior to dedicated temporal
+
+  mechanisms, undermining the universal-node architecture.
+
+  '
+hypothesis: 'A UniversalNode (kernel-3, d=16) trained with JEPA on spatial data produces
+  weights
+
+  that transfer to the temporal axis without retraining: when applied to temporal
+
+  triplets (state_{t-2}, state_{t-1}, state_t), the spatially-trained node yields
+
+  periodic-vs-random classification accuracy ≥10pp above an untrained-weight baseline.
+
+
+  Additionally, a P2-D node trained from scratch on temporal data with JEPA achieves
+
+  ≥60% periodic-vs-random classification accuracy and ≥55% next-step prediction accuracy,
+
+  confirming the JEPA objective works along the temporal axis.
+
+
+  The P2-D approach (three-temporal-slot node) is architecturally identical to the
+
+  spatial node, differing only in which axis provides the three inputs. Success here
+
+  would validate the core universal-node claim: one node type, one set of weights,
+
+  applicable along any axis.
+
+  '
+pre_registration_file: src/pre_registration.md
+proposed_method: "## Phase 2: Temporal Integration at a Single Node\n\n### Step 1:\
+  \ Temporal Dataset & Infrastructure (planner sub-agent)\nCreate the temporal experiment\
+  \ infrastructure:\n- **src/temporal_dataset.py**: Generate temporal sequences of\
+  \ d=16 vectors\n  - Periodic sequences (periods 3, 4, 7, 11) — labeled \"periodic\"\
+  \n  - Random walk sequences over a small state set — labeled \"random\"\n  - Irregular/semi-random\
+  \ sequences (Markov with varying transition probs)\n  - Each discrete state (A,\
+  \ B, C, D, ...) mapped to a fixed d=16 random embedding\n  - Sequences of length\
+  \ 32, with stride-1 sliding window for temporal triplets\n- **src/temporal_encoder.py**:\
+  \ Implement the four temporal integration mechanisms:\n  - P2-D: Three-temporal-slot\
+  \ node (reuse UniversalNode, inputs = state_{t-2}, state_{t-1}, state_t)\n  - P2-A:\
+  \ Multi-tick-rate node (updates every N steps, pools lower outputs)\n  - P2-B: Recurrent\
+  \ state node (hidden state + GRU-like gating)\n  - P2-C: Output-as-input loop (output\
+  \ at t-1 fed as additional input at t)\n- Evaluation: next-step prediction accuracy\
+  \ + periodic-vs-random linear-probe classification\n\n### Step 2: P2-D Zero-Shot\
+  \ Transfer Test (medium sub-agent)\nLoad Phase 1 JEPA-d16 trained weights, apply\
+  \ UniversalNode to temporal triplets.\n- Run on all sequence types with 5 seeds\
+  \ (different random embeddings)\n- Evaluate: (a) periodic-vs-random classification,\
+  \ (b) next-step prediction\n- Compare against untrained-weight baseline (same architecture,\
+  \ random weights)\n- This is the CRITICAL test: does spatial → temporal transfer\
+  \ work?\n\n### Step 3: P2-D Temporal Training (medium sub-agent)\nTrain P2-D from\
+  \ scratch on temporal data with JEPA objective.\n- Use the same JEPALoss from src/training_objectives.py\n\
+  - Temporal JEPA: predict neighbor codes in the time dimension\n- Train for 200 epochs,\
+  \ 5 seeds, d=16\n- Evaluate on same tasks as Step 2\n\n### Step 4: P2-A/B/C Baselines\
+  \ (medium sub-agent)\nImplement and train P2-A, P2-B, P2-C with same compute budget.\n\
+  - Each trained with appropriate local objectives\n- 5 seeds each\n- Same evaluation\
+  \ tasks\n\n### Step 5: Analysis & Report (high sub-agent)\n- Statistical comparison\
+  \ across all methods\n- Test falsification criteria F1, F2, F3\n- If F1 is NOT triggered\
+  \ (transfer works): document as strongest evidence for\n  universal node hypothesis\n\
+  - If F1 IS triggered (transfer fails): analyze WHY spatial weights don't transfer\n\
+  \  — is it the weight structure, the input distribution shift, or fundamental\n\
+  \  axis-specificity?\n- Produce phase_2/REPORT.md\n\n### Files to create/modify:\n\
+  - NEW: src/temporal_dataset.py\n- NEW: src/temporal_encoder.py\n- NEW: src/run_phase2.py\n\
+  - NEW: src/test_temporal.py\n- NEW: phase_2/REPORT.md\n- MODIFY: src/pre_registration.md\
+  \ (update with Phase 2 plan and criteria)\n"

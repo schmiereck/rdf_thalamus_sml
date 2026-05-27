@@ -1,9 +1,8 @@
-# RDF Scientific Pre-Registration
+# Research Manager Log - Iteration 004
 
-*   **Iteration:** 004
-*   **Pre-Registration File:** src/pre_registration.md
+## Iteration 004 -> Manager [Proposed Research Plan]
 
-## 1. Hypothesis
+**Proposed Hypothesis:**
 A UniversalNode (kernel-3, d=16) trained with JEPA on spatial data produces weights
 that transfer to the temporal axis without retraining: when applied to temporal
 triplets (state_{t-2}, state_{t-1}, state_t), the spatially-trained node yields
@@ -18,7 +17,7 @@ spatial node, differing only in which axis provides the three inputs. Success he
 would validate the core universal-node claim: one node type, one set of weights,
 applicable along any axis.
 
-## 2. Falsification Criterion
+**Proposed Falsification Criterion:**
 The hypothesis is falsified if ANY of the following hold:
 
 F1 (Transfer failure): Spatially-trained weights applied temporally yield
@@ -35,7 +34,7 @@ than the best alternative (P2-A/B/C) on the classification task. This would
 mean the kernel-3 temporal node is fundamentally inferior to dedicated temporal
 mechanisms, undermining the universal-node architecture.
 
-## 3. Proposed Method
+**Proposed Method:**
 ## Phase 2: Temporal Integration at a Single Node
 
 ### Step 1: Temporal Dataset & Infrastructure (planner sub-agent)
@@ -92,4 +91,35 @@ Implement and train P2-A, P2-B, P2-C with same compute budget.
 - MODIFY: src/pre_registration.md (update with Phase 2 plan and criteria)
 
 ---
-*Created automatically by the RDF Orchestrator prior to iteration execution.*
+
+## Iteration 004 -> Planner [Strategic Guidance]
+
+### Strategic Guidance: Manager's Note
+
+To: **Planner Agent**  
+From: **Research Manager (Forschungsleiter)**  
+Subject: **Phase 2 Strategic Guidance: Avoiding the Trivial Transfer Loophole**
+
+The transition to Phase 2 (Temporal Integration) is highly promising. Unifying spatial and temporal axes under a single universal node type is the core ambition of the HSUN project. However, we must apply strict scientific skepticism to your proposed evaluation design to ensure that our conclusions are genuinely empirical rather than trivial consequences of our experimental construction.
+
+---
+
+### 1. The Construction-vs-Empirical Test: The "Periodicity" Loophole
+Your proposed **F1 Transfer Criterion** relies on "periodic-vs-random" classification of sequence codes. 
+* **The Loophole:** Any deterministic, time-invariant mapping $f(s_{t-2}, s_{t-1}, s_t)$—including a completely untrained, random weight initialization—will map a periodic input sequence to a periodic output sequence. A downstream linear probe can easily exploit this deterministic preservation of periodicity. Consequently, both your trained spatial weights and your random baseline weights may achieve near 100% classification accuracy, resulting in a false negative (or a false positive of "successful transfer" if both perform identically high).
+* **The Correction:** You must evaluate transfer using metrics where deterministic propagation alone does not guarantee success. Implement and report:
+  1. **Zero-Shot Temporal JEPA Loss:** Evaluate the raw local JEPA loss (prediction error in latent space) of the *spatially-trained* node on temporal transitions, and compare it directly to an *untrained* node. If the spatial node has truly learned a general representation of "predictability" and "coherence," its zero-shot temporal JEPA loss should be significantly lower than that of random weights.
+  2. **Next-Step Prediction of Chaotic/Markovian Transitions:** Test prediction on irregular/Markov sequences where the node must encode temporal context to resolve state ambiguity, rather than simple periodic sequences.
+
+### 2. Fair Baseline Comparison (Parameter & Objective Hygiene)
+When evaluating P2-D (the three-temporal-slot universal node) against P2-A (multi-tick), P2-B (recurrent), and P2-C (output loop):
+* Ensure that all alternatives are trained using the **same JEPA / VICReg-style local predictive objective** to isolate the architectural differences from the loss formulation.
+* If P2-D is slightly less performant than recurrent architectures (P2-B) but operates with **zero temporal retraining (zero-shot spatial transfer)**, this must be reported as a highly successful trade-off rather than a failure. Acknowledge and document honest nulls or partial successes transparently.
+
+### 3. Pre-Registration Mandate
+Before running the simulations, the Orchestrator will automatically write your pre-registration to `src/pre_registration.md`. Refine your hypothesis and falsification criteria in your next plan step to incorporate the quantitative **Zero-Shot Temporal JEPA Loss ratio** (e.g., $Loss_{\text{spatial\_trained}} / Loss_{\text{untrained}} < 0.85$) as a primary falsification check for transfer success.
+
+Proceed with updating the pre-registration and initiating Step 1 of your temporal integration harness. Keep the language grounded, precise, and free of hyperbolic terms.
+
+---
+
