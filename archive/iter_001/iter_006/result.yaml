@@ -1,0 +1,29 @@
+artifacts:
+- src/run_phase0.py
+- phase_0/results.csv
+experimenter_view: "The Phase 0 experiment successfully completed all 25 runs (5 encoders\
+  \ × 5 seeds).\nP0-A (Lookup Table) correctly returned NaN (negative control). \n\
+  P0-C (SOM) achieved the highest topology preservation with ρ ≈ 0.88, followed by\
+  \ \nP0-E (Predictive Coding, ρ ≈ 0.72) and P0-D (Sparse Autoencoder, ρ ≈ 0.62).\
+  \ \nP0-B (Spatial Pooler) averaged ρ ≈ 0.58, narrowly missing the ρ ≥ 0.6 criterion.\n\
+  The crash occurred only during the final Markdown report generation due to the Windows\
+  \ \ndefault `cp1252` codec failing to encode the Greek letter ρ (`\\u03c1`). \n\
+  The `results.csv` was saved successfully. Fixing `open(filepath, \"w\")` to \n`open(filepath,\
+  \ \"w\", encoding=\"utf-8\")` in `src/run_phase0.py` will resolve the issue.\n"
+log_excerpt: "Results saved to phase_0/results.csv\nC:\\Users\\thomas\\Projekte\\\
+  rdf_thalamus_sml\\src\\run_phase0.py:100: RuntimeWarning: Mean of empty slice\n\
+  \  \"rho_mean\": np.nanmean(rhos),\nTraceback (most recent call last):\n  File \"\
+  ...\\src\\run_phase0.py\", line 281, in <module>\n    main()\n  File \"...\\src\\\
+  run_phase0.py\", line 274, in main\n    generate_report(results, REPORT_MD)\n  File\
+  \ \"...\\src\\run_phase0.py\", line 238, in generate_report\n    f.write(\"\\n\"\
+  .join(lines))\nUnicodeEncodeError: 'charmap' codec can't encode character '\\u03c1'\
+  \ in position 249: character maps to <undefined>\n"
+metrics:
+  p0-a_rho: NaN
+  p0-b_rho_mean: 0.5807
+  p0-c_rho_mean: 0.8811
+  p0-d_rho_mean: 0.6173
+  p0-e_rho_mean: 0.7221
+notes: 25/25 runs succeeded; Markdown report generation failed due to Windows cp1252
+  encoding.
+status: code_error
