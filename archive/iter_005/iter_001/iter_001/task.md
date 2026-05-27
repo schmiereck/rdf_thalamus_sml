@@ -1,0 +1,3 @@
+Create the spatiotemporal dataset generator file at `src/spatiotemporal_dataset.py`.
+Make sure it generates moving blob, expanding/contracting blob, periodic spatiotemporal, and object permanence classes over a 16x32 binary grid (16 spatial positions × 32 timesteps) with 500 train and 200 test samples per class, adds 10% noise (pixel flip probability), and includes functions to evaluate the shortcut baselines (single-frame and temporal-average) using SimpleLogisticRegression from `src/harness.py`.
+Verify that the shortcut baselines achieve <= 50% test accuracy.

@@ -1,0 +1,105 @@
+complexity: planner
+estimated_runtime_sec: 3600
+iter_id: '5.1'
+started_at: '2026-05-27T21:18:11.347562'
+status: running
+task: "\n# Phase 3: Unified Spatiotemporal Grid — Infrastructure + Experiments\n\n\
+  You are executing Phase 3 of the HSUN (Hierarchical Sparse Universal Nodes) research\
+  \ project. Your task is to build the full spatiotemporal infrastructure and run\
+  \ all experiments.\n\n## CRITICAL: Read the Pre-Registration File First\n\nBefore\
+  \ writing ANY code, read `src/pre_registration.md` and follow its methodology exactly.\
+  \ The falsification criteria are:\n- Primary: P3-C mean 4-class accuracy < P3-B\
+  \ mean accuracy - 15pp\n- Secondary: P3-C mean accuracy < P3-A mean accuracy - 20pp\n\
+  - Tertiary: P3-C mean accuracy < 50% (2× chance)\n\n## Research Manager's Strategic\
+  \ Requirements\n\n1. **Dimension Constraint**: Every node in the spatiotemporal\
+  \ grid must have the same input shape (3×d → d). The raw binary pixels (dim=1) cannot\
+  \ be fed directly to UniversalNodes. You MUST implement a non-learned (or separately\
+  \ trained) **pixel embedding layer** that projects raw binary inputs into d-dimensional\
+  \ space BEFORE they enter spatial Layer 0.\n\n2. **Guard Against Shortcut Features**:\
+  \ The four spatiotemporal classes must require BOTH spatial and temporal information\
+  \ to classify. Verify this by running \"shortcut baselines\":\n   - Single-frame\
+  \ baseline: classify using only one frame (e.g., first frame)  \n   - Temporal-average\
+  \ baseline: classify using only the mean across time\n   These should achieve ≤50%\
+  \ accuracy (near chance for 4-class), confirming the dataset requires genuine spatiotemporal\
+  \ processing.\n\n3. **Representation Pooling**: For the linear probe, clearly define\
+  \ how the final representation is aggregated. Suggest: average-pool across remaining\
+  \ spatial positions to get (T_out, d), then average-pool across time to get a single\
+  \ (d,) vector. Do NOT flatten the raw grid.\n\n## Existing Codebase (DO NOT recreate,\
+  \ reuse these)\n\n- `src/node.py` — UniversalNode class (3×d input → d_out output,\
+  \ with forward, compute_gradients, apply_gradients)\n- `src/hierarchical_encoder.py`\
+  \ — HierarchicalEncoder (spatial, uses UniversalNode with kernel-3 stride-1)\n-\
+  \ `src/temporal_encoder.py` — P2DEncoder (temporal sliding window, uses UniversalNode)\n\
+  - `src/training_objectives.py` — JEPALoss class with VICReg (per-layer linear predictors,\
+  \ spatial bidirectional neighbor prediction). Has forward(), backward(), step(),\
+  \ loss_and_grads()\n- `src/harness.py` — SimpleLogisticRegression, utility functions\n\
+  - `src/temporal_dataset.py` — Temporal dataset generator (for reference)\n- `src/dataset_phase1.py`\
+  \ — Phase 1 spatial dataset (for reference)\n\n## Architecture Design\n\nThe spatiotemporal\
+  \ encoder processes (B, 16, 32) binary grids (16 spatial positions × 32 timesteps):\n\
+  \n**Spatial pass**: 3 layers of kernel-3, stride-1 UniversalNodes over 16 input\
+  \ positions\n- Layer 0: 14 positions, Layer 1: 12, Layer 2: 10 → top spatial code\
+  \ at each timestep\n- Applied independently at EACH timestep (same spatial weights\
+  \ across timesteps)\n\n**Temporal pass**: 3 layers of kernel-3, stride-1 UniversalNodes\
+  \ over 32 timesteps\n- Applied to the 10 top-layer spatial codes at each spatial\
+  \ position\n- Layer 0: 30 positions, Layer 1: 28, Layer 2: 26 → final temporal code\n\
+  \n**Final representation**: Average-pool across spatial positions and timesteps\
+  \ → single d-dimensional vector\n\n**Three variants (same architecture, different\
+  \ weight sharing)**:\n- **P3-A (Separate training)**: W_spatial trained alone (200\
+  \ epochs), then W_temporal trained alone (200 epochs). Separate parameter sets.\n\
+  - **P3-B (Joint, anisotropic)**: W_spatial and W_temporal trained jointly with combined\
+  \ JEPA loss (200 epochs). Two separate weight matrices.\n- **P3-C (Joint, shared)**:\
+  \ Single W_shared for BOTH spatial and temporal passes, trained jointly (200 epochs).\
+  \ The strong universal hypothesis.\n\nAll use d=16, d_out=16 (bottleneck), JEPA\
+  \ + VICReg objective.\n\n## Spatiotemporal Dataset (4 classes)\n\nGenerate spatiotemporal\
+  \ patterns over a 16×32 binary grid:\n\n**Class 0 — Moving blob**: Contiguous block\
+  \ of 1s that translates across spatial positions over time\n- Vary: speed (1-3 positions/step),\
+  \ starting position (0-13), blob width (1-4)\n\n**Class 1 — Expanding/contracting\
+  \ blob**: Blob whose spatial extent grows then shrinks over time  \n- Vary: max\
+  \ width (4-10), expansion rate (1-2 positions/step), center position\n\n**Class\
+  \ 2 — Periodic spatiotemporal**: Pattern repeating in both space and time\n- Vary:\
+  \ spatial period (2-5), temporal period (3-7), phase\n\n**Class 3 — Object permanence**:\
+  \ Blob present, disappears for k steps, reappears at same position\n- Vary: gap\
+  \ length (3-10), blob position, blob width (1-3)\n\nEach class: 500 training, 200\
+  \ test samples. Add 10-15% noise (random pixel flips).\n\n**IMPORTANT**: Verify\
+  \ shortcut baselines as described above.\n\n## JEPA Training for Spatiotemporal\
+  \ Data\n\nThe JEPA objective must work on BOTH axes:\n\n**Spatial JEPA**: At each\
+  \ spatial layer, for each timestep independently:\n- Predict left neighbor code\
+  \ from current code, and right neighbor from current code\n- Bidirectional prediction\
+  \ using per-layer linear predictors\n\n**Temporal JEPA**: At each temporal layer,\
+  \ for each spatial position independently:\n- Predict past neighbor code from current\
+  \ code, and future neighbor from current code\n- Bidirectional prediction using\
+  \ per-layer linear predictors\n\n**VICReg**: Apply variance + covariance penalties\
+  \ on ALL node outputs (both spatial and temporal layers)\n\n**Combined loss**: alpha\
+  \ * spatial_jepa + (1-alpha) * temporal_jepa + vicreg\n- Use alpha = 0.5 (equal\
+  \ weighting)\n- For P3-A: first train alpha=1.0 (spatial only), then alpha=0.0 (temporal\
+  \ only)\n- For P3-B and P3-C: train alpha=0.5 jointly\n\n**Training details**: 200\
+  \ epochs, Adam lr=1e-3, batch_size=32, 5 seeds [42,43,44,45,46]\n\n## Evaluation\
+  \ Protocol\n\n1. Linear probe: Train a single linear classifier (SimpleLogisticRegression\
+  \ from harness.py) on the final d-dimensional code vectors\n2. 4-class classification\
+  \ accuracy on test set\n3. Per-benchmark accuracy (accuracy on each of the 4 classes\
+  \ separately)\n4. Compute: mean accuracy ± std across 5 seeds\n5. Parameter count\
+  \ for each variant\n6. Per-axis JEPA loss (spatial and temporal) at the end of training\n\
+  7. Shortcut baselines (single-frame, temporal-average)\n\n## Files to Create\n\n\
+  1. `src/spatiotemporal_dataset.py` — Dataset generator with 4 spatiotemporal pattern\
+  \ classes + shortcut baseline evaluation\n2. `src/spatiotemporal_encoder.py` — Spatiotemporal\
+  \ encoder with P3-A, P3-B, P3-C variants\n3. `src/run_phase3.py` — Main experiment\
+  \ runner (3 variants × 5 seeds + baselines)\n4. `src/test_spatiotemporal.py` — Self-tests\
+  \ for the new infrastructure\n5. Save all raw results to `phase_3/` directory as\
+  \ CSV files\n\n## Implementation Notes\n\n- Use ONLY numpy — no ML libraries\n-\
+  \ Follow the pattern from existing code (e.g., how run_phase1_v2.py and run_phase2.py\
+  \ work)\n- The UniversalNode from node.py should be reused directly (not modified)\n\
+  - For the spatial pass, you can adapt the logic from HierarchicalEncoder but for\
+  \ a single timestep\n- For the temporal pass, you can adapt P2DEncoder logic but\
+  \ for a single spatial position\n- The pixel embedding should be a simple (2, d)\
+  \ lookup table (one row for pixel=0, one for pixel=1), initialized with Xavier scaling\
+  \ — NOT learned during JEPA training (to keep it non-learned as the Research Manager\
+  \ mandates)\n- For P3-C (shared weights), the SAME UniversalNode object is used\
+  \ for both spatial and temporal passes — gradient contributions from both axes are\
+  \ summed before the Adam update\n- Run untrained baselines too (random init, no\
+  \ training) for reference\n- Save per-seed results so statistical analysis can be\
+  \ done later\n\n## Expected Runtime\n\nEach training run (200 epochs, batch_size=32,\
+  \ ~2000 samples) should take ~2-5 minutes on CPU.\n15 training runs + baselines\
+  \ = ~30-60 minutes total.\n\n## Output\n\nSave results to:\n- `phase_3/p3a_results.csv`\
+  \ — P3-A results per seed\n- `phase_3/p3b_results.csv` — P3-B results per seed \
+  \ \n- `phase_3/p3c_results.csv` — P3-C results per seed\n- `phase_3/untrained_results.csv`\
+  \ — Untrained baseline per seed\n- `phase_3/shortcut_results.csv` — Shortcut baseline\
+  \ results\n- `phase_3/param_comparison.csv` — Parameter count comparison\n"
