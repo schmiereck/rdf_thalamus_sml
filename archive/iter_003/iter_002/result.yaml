@@ -1,0 +1,79 @@
+artifacts:
+- phase_1/objectives_report.md
+- src/pre_registration.md
+experimenter_view: 'The JEPA hypothesis is strongly confirmed. JEPA-d8 achieves 62.1%
+  test
+
+  accuracy, exceeding both the 50% falsification threshold and the 60%
+
+  pre-registered target. This represents a +15.96pp significant improvement
+
+  over the untrained baseline (p=0.0046) and a +20.6pp improvement over the
+
+  best prior reconstruction-based method. The d=8 bottleneck hypothesis is
+
+  refuted: expanding to d=16 yields only +3.1pp, confirming that objective
+
+  misalignment (not architecture capacity) caused Phase 1 failure. Only JEPA
+
+  meets the Research Manager''s >=5pp success bar; Contrastive and SFA show
+
+  positive but non-significant trends, while Hebbian learning catastrophically
+
+  fails at 24%. Criterion 5 is not falsified, clearing the path for Phase 2
+
+  temporal integration using the same JEPA objective along the time axis.
+
+  '
+log_excerpt: '=== Paired comparisons ===
+
+  P1-B-JEPA-d8 vs Untrained-d8: diff=15.96pp, t=5.713, p=0.0046
+
+  P1-B-Contrastive-d8 vs Untrained-d8: diff=4.48pp, t=1.664, p=0.1715
+
+  P1-B-SFA-d8 vs Untrained-d8: diff=4.40pp, t=1.023, p=0.3643
+
+  P1-B-Hebbian-d8 vs Untrained-d8: diff=-22.20pp, t=-8.262, p=0.0012
+
+  P1-B-JEPA-d16 vs Untrained-d16: diff=10.60pp, t=4.226, p=0.0134
+
+  === Criteria ===
+
+  C1 (JEPA < 50% falsifies): JEPA-d8 = 62.12% -> NOT FALSIFIED
+
+  C2 (ALL < 48.4% falsifies): all_below=False -> NOT FALSIFIED
+
+  C3 (d16 > d8 + 10pp supports): gap=3.08pp -> NOT SUPPORTED
+
+  C4 (d16 <= d8 + 5pp refutes): gap=3.08pp -> REFUTED
+
+  C5 (JEPA < 50% falsifies temporal): JEPA-d8 = 62.12% -> NOT FALSIFIED
+
+  '
+metrics:
+  best_prior_method_accuracy: 41.52
+  contrastive_d8_test_accuracy: 50.64
+  contrastive_d8_test_std: 4.29
+  contrastive_vs_untrained_delta_pp: 4.48
+  hebbian_d8_test_accuracy: 23.96
+  hebbian_d8_test_std: 2.93
+  hebbian_vs_untrained_delta_pp: -22.2
+  jepa_d16_test_accuracy: 65.2
+  jepa_d16_test_std: 1.8
+  jepa_d16_vs_d8_gap_pp: 3.08
+  jepa_d16_vs_untrained_delta_pp: 10.6
+  jepa_d16_vs_untrained_p: 0.0134
+  jepa_d8_test_accuracy: 62.12
+  jepa_d8_test_std: 4.34
+  jepa_d8_vs_best_prior_delta_pp: 20.6
+  jepa_d8_vs_untrained_delta_pp: 15.96
+  jepa_d8_vs_untrained_p: 0.0046
+  sfa_d8_test_accuracy: 50.56
+  sfa_d8_test_std: 8.53
+  sfa_vs_untrained_delta_pp: 4.4
+  untrained_d16_test_accuracy: 54.6
+  untrained_d16_test_std: 6.48
+  untrained_d8_test_accuracy: 46.16
+  untrained_d8_test_std: 3.84
+notes: Phase 1 v2 complete. JEPA confirmed, bottleneck refuted, Phase 2 cleared.
+status: ok

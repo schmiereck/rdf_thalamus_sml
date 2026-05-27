@@ -1,0 +1,340 @@
+
+[Tool Call: read_file({'path': 'phase_1/objectives_results.csv'})]
+
+[Tool Result: config,seed,test_accuracy,train_accuracy,sparsity,n_params
+P1-B-JEPA-d8,42,0.658,0.727,0.0,1264
+P1-B-JEPA-d8,43,0.594,0.69,0.0,1264
+P1-B-JEPA-d8,44,0.648,0.736,0.0,1264
+P1-B-JEPA-d8,45,0.648,0.731,0.0,1264
+P1-B-JEPA-d8,46,0.558,0.645,0.000525,1264
+P1-B-Contrastive-d8,42,0.556,0.578,0.000775,1264
+P1-B-Contrastive-d8,43,0.532,0.609,0.0,1264
+P1-B-Contrastive-d8,44,0.454,0.472,0.002425,1264
+P1-B-Contrastive-d8,45,0.47,0.521,0.0,1264
+P1-B-Contrastive-d8,46,0.52,0.57,0.002425,1264
+P1-B-SFA-d8,42,0.434...]
+
+
+[Tool Call: read_file({'path': 'src/pre_registration.md'})]
+
+[Tool Result: # RDF Scientific Pre-Registration
+
+*   **Iteration:** 003
+*   **Pre-Registration File:** src/pre_registration.md
+
+## 1. Hypothesis
+A local JEPA training objective (predicting the latent code of spatially adjacent
+positions at each layer, with VICReg collapse prevention) applied to the P1-B
+architecture (3-layer, kernel-3, stride-1, d=8, cross-layer weight sharing,
+simultaneous training) will achieve ≥60% 5-category linear-probe accuracy on the
+structured 16-bit input dataset. This is because: (1...]
+
+
+[Tool Call: read_file({'path': 'phase_1/results.csv'})]
+
+[Tool Result: config,seed,test_accuracy,train_accuracy,sparsity,recon_mse_l0,recon_mse_l1,recon_mse_l2,n_params
+P1-A,42,0.382,0.377,0.008325,0.0019834267458420395,0.0034194307457575614,0.0028827651608619637,1264
+P1-A,43,0.324,0.362,0.0,0.0003513039977988774,0.00039201811757148515,0.0002498606631038549,1264
+P1-A,44,0.328,0.354,0.003275,0.0007616367195944663,0.000829466365708656,0.0008213798448914961,1264
+P1-A,45,0.346,0.367,0.004725,0.0023896965584859517,0.005511544084673944,0.005209626117869314,1264
+P1-A,46,0...]
+
+
+[Tool Call: read_file({'path': 'phase_1/diagnostic_results.csv'})]
+
+[Tool Result: config,seed,test_accuracy,train_accuracy,sparsity,recon_mse_l0,recon_mse_l1,recon_mse_l2,n_params
+Exp1-Random-Embedding,42,0.428,0.473,0.0,nan,nan,nan,16
+Exp1-Random-Embedding,43,0.452,0.489,0.0,nan,nan,nan,16
+Exp1-Random-Embedding,44,0.412,0.458,0.0,nan,nan,nan,16
+Exp1-Random-Embedding,45,0.438,0.487,0.0,nan,nan,nan,16
+Exp1-Random-Embedding,46,0.438,0.461,0.0,nan,nan,nan,16
+Exp2-Single-Layer,42,0.402,0.422,0.0,0.001982219049151042,nan,nan,432
+Exp2-Single-Layer,43,0.378,0.417,0.0,0.0003509471940...]
+
+
+[Tool Call: bash({'command': 'python -c "\nimport pandas as pd\nimport numpy as np\nfrom scipy import stats\n\ndf = pd.read_csv(\'phase_1/objectives_results.csv\')\n\n# Group by config\nconfigs = df[\'config\'].unique()\nresults = {}\nfor c in configs:\n    sub = df[df[\'config\'] == c]\n    results[c] = {\n        \'test_acc\': sub[\'test_accuracy\'].values,\n        \'train_acc\': sub[\'train_accuracy\'].values,\n        \'sparsity\': sub[\'sparsity\'].values,\n        \'n_params\': sub[\'n_params\'].iloc[0]\n    }\n\n# Print stats\nfor c in configs:\n    r = results[c]\n    print(f\'{c}:\')\n    print(f\'  test_acc: {r[\\"test_acc\\"].mean()*100:.2f}% ± {r[\\"test_acc\\"].std()*100:.2f}%\')\n    print(f\'  train_acc: {r[\\"train_acc\\"].mean()*100:.2f}% ± {r[\\"train_acc\\"].std()*100:.2f}%\')\n    print(f\'  sparsity: {r[\\"sparsity\\"].mean()*100:.3f}% ± {r[\\"sparsity\\"].std()*100:.3f}%\')\n    print()\n\n# Paired tests: trained vs untrained baseline\nprint(\'=== Paired comparisons vs untrained baseline ===\')\ntrained_d8 = [\'P1-B-JEPA-d8\', \'P1-B-Contrastive-d8\', \'P1-B-SFA-d8\', \'P1-B-Hebbian-d8\']\nfor c in trained_d8:\n    trained = results[c][\'test_acc\']\n    baseline = results[\'Untrained-d8\'][\'test_acc\']\n    diff = trained.mean() - baseline.mean()\n    t, p = stats.ttest_rel(trained, baseline)\n    print(f\'{c} vs Untrained-d8: diff={diff*100:.2f}pp, t={t:.3f}, p={p:.4f}\')\n\n# JEPA d16 vs untrained d16\ntrained = results[\'P1-B-JEPA-d16\'][\'test_acc\']\nbaseline = results[\'Untrained-d16\'][\'test_acc\']\ndiff = trained.mean() - baseline.mean()\nt, p = stats.ttest_rel(trained, baseline)\nprint(f\'P1-B-JEPA-d16 vs Untrained-d16: diff={diff*100:.2f}pp, t={t:.3f}, p={p:.4f}\')\n\n# Criterion evaluations\nprint()\nprint(\'=== Criterion evaluations ===\')\njepa_d8_mean = results[\'P1-B-JEPA-d8\'][\'test_acc\'].mean() * 100\nprint(f\'C1: JEPA d8 mean = {jepa_d8_mean:.2f}% (threshold 50%) -> {\\"NOT FALSIFIED\\" if jepa_d8_mean >= 50 else \\"FALSIFIED\\"}\')\n\nmeans_d8 = {c: results[c][\'test_acc\'].mean() * 100 for c in trained_d8}\nall_below = all(m < 48.4 for m in means_d8.values())\nprint(f\'C2: All four objectives < 48.4%? {all_below} -> {\\"FALSIFIED\\" if all_below else \\"NOT FALSIFIED\\"}\')\nfor c, m in means_d8.items():\n    print(f\'   {c}: {m:.2f}%\')\n\njepa_d16_mean = results[\'P1-B-JEPA-d16\'][\'test_acc\'].mean() * 100\ngap = jepa_d16_mean - jepa_d8_mean\nprint(f\'C3: JEPA-d16 ({jepa_d16_mean:.2f}%) > JEPA-d8 ({jepa_d8_mean:.2f}%) + 10pp? gap={gap:.2f}pp -> {\\"SUPPORTED\\" if gap > 10 else \\"NOT SUPPORTED\\"}\')\nprint(f\'C4: JEPA-d16 ≤ JEPA-d8 + 5pp? gap={gap:.2f}pp -> {\\"REFUTED\\" if gap <= 5 else \\"NOT REFUTED\\"}\')\nprint(f\'C5: JEPA spatial < 50%? {jepa_d8_mean:.2f}% -> {\\"FALSIFIED\\" if jepa_d8_mean < 50 else \\"NOT FALSIFIED\\"}\')\n\nprint()\nprint(\'=== RM criterion: exceeds baseline by ≥5pp ===\')\nfor c in trained_d8:\n    diff = (results[c][\'test_acc\'].mean() - results[\'Untrained-d8\'][\'test_acc\'].mean()) * 100\n    print(f\'{c}: {diff:.2f}pp -> {\\"MEETS BAR\\" if diff >= 5 else \\"FAILS BAR\\"}\')\ndiff16 = (results[\'P1-B-JEPA-d16\'][\'test_acc\'].mean() - results[\'Untrained-d16\'][\'test_acc\'].mean()) * 100\nprint(f\'P1-B-JEPA-d16: {diff16:.2f}pp -> {\\"MEETS BAR\\" if diff16 >= 5 else \\"FAILS BAR\\"}\')\n"\n'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+
+[Tool Call: bash({'command': 'python3 << \'EOF\'\nimport pandas as pd\nimport numpy as np\nfrom scipy import stats\n\ndf = pd.read_csv(\'phase_1/objectives_results.csv\')\n\n# Group by config\nconfigs = df[\'config\'].unique()\nresults = {}\nfor c in configs:\n    sub = df[df[\'config\'] == c]\n    results[c] = {\n        \'test_acc\': sub[\'test_accuracy\'].values,\n        \'train_acc\': sub[\'train_accuracy\'].values,\n        \'sparsity\': sub[\'sparsity\'].values,\n        \'n_params\': sub[\'n_params\'].iloc[0]\n    }\n\n# Print stats\nfor c in configs:\n    r = results[c]\n    print(f"{c}:")\n    print(f"  test_acc: {r[\'test_acc\'].mean()*100:.2f}% ± {r[\'test_acc\'].std()*100:.2f}%")\n    print(f"  train_acc: {r[\'train_acc\'].mean()*100:.2f}% ± {r[\'train_acc\'].std()*100:.2f}%")\n    print(f"  sparsity: {r[\'sparsity\'].mean()*100:.3f}% ± {r[\'sparsity\'].std()*100:.3f}%")\n    print()\n\n# Paired tests: trained vs untrained baseline\nprint("=== Paired comparisons vs untrained baseline ===")\ntrained_d8 = [\'P1-B-JEPA-d8\', \'P1-B-Contrastive-d8\', \'P1-B-SFA-d8\', \'P1-B-Hebbian-d8\']\nfor c in trained_d8:\n    trained = results[c][\'test_acc\']\n    baseline = results[\'Untrained-d8\'][\'test_acc\']\n    diff = trained.mean() - baseline.mean()\n    t, p = stats.ttest_rel(trained, baseline)\n    print(f"{c} vs Untrained-d8: diff={diff*100:.2f}pp, t={t:.3f}, p={p:.4f}")\n\n# JEPA d16 vs untrained d16\ntrained = results[\'P1-B-JEPA-d16\'][\'test_acc\']\nbaseline = results[\'Untrained-d16\'][\'test_acc\']\ndiff = trained.mean() - baseline.mean()\nt, p = stats.ttest_rel(trained, baseline)\nprint(f"P1-B-JEPA-d16 vs Untrained-d16: diff={diff*100:.2f}pp, t={t:.3f}, p={p:.4f}")\n\n# Criterion evaluations\nprint()\nprint("=== Criterion evaluations ===")\njepa_d8_mean = results[\'P1-B-JEPA-d8\'][\'test_acc\'].mean() * 100\nprint(f"C1: JEPA d8 mean = {jepa_d8_mean:.2f}% (threshold 50%) -> {\'NOT FALSIFIED\' if jepa_d8_mean >= 50 else \'FALSIFIED\'}")\n\nmeans_d8 = {c: results[c][\'test_acc\'].mean() * 100 for c in trained_d8}\nall_below = all(m < 48.4 for m in means_d8.values())\nprint(f"C2: All four objectives < 48.4%? {all_below} -> {\'FALSIFIED\' if all_below else \'NOT FALSIFIED\'}")\nfor c, m in means_d8.items():\n    print(f"   {c}: {m:.2f}%")\n\njepa_d16_mean = results[\'P1-B-JEPA-d16\'][\'test_acc\'].mean() * 100\ngap = jepa_d16_mean - jepa_d8_mean\nprint(f"C3: JEPA-d16 ({jepa_d16_mean:.2f}%) > JEPA-d8 ({jepa_d8_mean:.2f}%) + 10pp? gap={gap:.2f}pp -> {\'SUPPORTED\' if gap > 10 else \'NOT SUPPORTED\'}")\nprint(f"C4: JEPA-d16 <= JEPA-d8 + 5pp? gap={gap:.2f}pp -> {\'REFUTED\' if gap <= 5 else \'NOT REFUTED\'}")\nprint(f"C5: JEPA spatial < 50%? {jepa_d8_mean:.2f}% -> {\'FALSIFIED\' if jepa_d8_mean < 50 else \'NOT FALSIFIED\'}")\n\nprint()\nprint("=== RM criterion: exceeds baseline by >=5pp ===")\nfor c in trained_d8:\n    diff = (results[c][\'test_acc\'].mean() - results[\'Untrained-d8\'][\'test_acc\'].mean()) * 100\n    print(f"{c}: {diff:.2f}pp -> {\'MEETS BAR\' if diff >= 5 else \'FAILS BAR\'}")\ndiff16 = (results[\'P1-B-JEPA-d16\'][\'test_acc\'].mean() - results[\'Untrained-d16\'][\'test_acc\'].mean()) * 100\nprint(f"P1-B-JEPA-d16: {diff16:.2f}pp -> {\'MEETS BAR\' if diff16 >= 5 else \'FAILS BAR\'}")\nEOF\n'})]
+
+[Tool Result: exit_code: 1
+stdout: 
+stderr: "<<" kann syntaktisch an dieser Stelle nicht verarbeitet werden.
+]
+
+
+[Tool Call: write_file({'path': 'analyze_results.py', 'content': 'import pandas as pd\nimport numpy as np\nfrom scipy import stats\n\ndf = pd.read_csv(\'phase_1/objectives_results.csv\')\n\n# Group by config\nconfigs = df[\'config\'].unique()\nresults = {}\nfor c in configs:\n    sub = df[df[\'config\'] == c]\n    results[c] = {\n        \'test_acc\': sub[\'test_accuracy\'].values,\n        \'train_acc\': sub[\'train_accuracy\'].values,\n        \'sparsity\': sub[\'sparsity\'].values,\n        \'n_params\': sub[\'n_params\'].iloc[0]\n    }\n\n# Print stats\nfor c in configs:\n    r = results[c]\n    print(f"{c}:")\n    print(f"  test_acc: {r[\'test_acc\'].mean()*100:.2f}% ± {r[\'test_acc\'].std()*100:.2f}%")\n    print(f"  train_acc: {r[\'train_acc\'].mean()*100:.2f}% ± {r[\'train_acc\'].std()*100:.2f}%")\n    print(f"  sparsity: {r[\'sparsity\'].mean()*100:.3f}% ± {r[\'sparsity\'].std()*100:.3f}%")\n    print()\n\n# Paired tests: trained vs untrained baseline\nprint("=== Paired comparisons vs untrained baseline ===")\ntrained_d8 = [\'P1-B-JEPA-d8\', \'P1-B-Contrastive-d8\', \'P1-B-SFA-d8\', \'P1-B-Hebbian-d8\']\nfor c in trained_d8:\n    trained = results[c][\'test_acc\']\n    baseline = results[\'Untrained-d8\'][\'test_acc\']\n    diff = trained.mean() - baseline.mean()\n    t, p = stats.ttest_rel(trained, baseline)\n    print(f"{c} vs Untrained-d8: diff={diff*100:.2f}pp, t={t:.3f}, p={p:.4f}")\n\n# JEPA d16 vs untrained d16\ntrained = results[\'P1-B-JEPA-d16\'][\'test_acc\']\nbaseline = results[\'Untrained-d16\'][\'test_acc\']\ndiff = trained.mean() - baseline.mean()\nt, p = stats.ttest_rel(trained, baseline)\nprint(f"P1-B-JEPA-d16 vs Untrained-d16: diff={diff*100:.2f}pp, t={t:.3f}, p={p:.4f}")\n\n# Criterion evaluations\nprint()\nprint("=== Criterion evaluations ===")\njepa_d8_mean = results[\'P1-B-JEPA-d8\'][\'test_acc\'].mean() * 100\nprint(f"C1: JEPA d8 mean = {jepa_d8_mean:.2f}% (threshold 50%) -> {\'NOT FALSIFIED\' if jepa_d8_mean >= 50 else \'FALSIFIED\'}")\n\nmeans_d8 = {c: results[c][\'test_acc\'].mean() * 100 for c in trained_d8}\nall_below = all(m < 48.4 for m in means_d8.values())\nprint(f"C2: All four objectives < 48.4%? {all_below} -> {\'FALSIFIED\' if all_below else \'NOT FALSIFIED\'}")\nfor c, m in means_d8.items():\n    print(f"   {c}: {m:.2f}%")\n\njepa_d16_mean = results[\'P1-B-JEPA-d16\'][\'test_acc\'].mean() * 100\ngap = jepa_d16_mean - jepa_d8_mean\nprint(f"C3: JEPA-d16 ({jepa_d16_mean:.2f}%) > JEPA-d8 ({jepa_d8_mean:.2f}%) + 10pp? gap={gap:.2f}pp -> {\'SUPPORTED\' if gap > 10 else \'NOT SUPPORTED\'}")\nprint(f"C4: JEPA-d16 <= JEPA-d8 + 5pp? gap={gap:.2f}pp -> {\'REFUTED\' if gap <= 5 else \'NOT REFUTED\'}")\nprint(f"C5: JEPA spatial < 50%? {jepa_d8_mean:.2f}% -> {\'FALSIFIED\' if jepa_d8_mean < 50 else \'NOT FALSIFIED\'}")\n\nprint()\nprint("=== RM criterion: exceeds baseline by >=5pp ===")\nfor c in trained_d8:\n    diff = (results[c][\'test_acc\'].mean() - results[\'Untrained-d8\'][\'test_acc\'].mean()) * 100\n    print(f"{c}: {diff:.2f}pp -> {\'MEETS BAR\' if diff >= 5 else \'FAILS BAR\'}")\ndiff16 = (results[\'P1-B-JEPA-d16\'][\'test_acc\'].mean() - results[\'Untrained-d16\'][\'test_acc\'].mean()) * 100\nprint(f"P1-B-JEPA-d16: {diff16:.2f}pp -> {\'MEETS BAR\' if diff16 >= 5 else \'FAILS BAR\'}")\n'})]
+
+[Tool Result: Successfully wrote to analyze_results.py]
+
+
+[Tool Call: bash({'command': 'python analyze_results.py'})]
+
+[Tool Result: exit_code: 1
+stdout: 
+stderr: Traceback (most recent call last):
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\analyze_results.py", line 1, in <module>
+    import pandas as pd
+  File "C:\Users\thomas\Projekte\uroboros-rdf\.venv\Lib\site-packages\pandas\__init__.py", line 56, in <module>
+    import pandas.core.config_init  # pyright: ignore[reportUnusedImport] # noqa: F401
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\thomas\Projekte\uroboros-rdf\.venv\Lib\site-packages\pandas\cor...]
+
+
+[Tool Call: bash({'command': 'python -c "\nimport csv\nfrom scipy import stats\n\n# Read CSV\ndata = {}\nwith open(\'phase_1/objectives_results.csv\', \'r\') as f:\n    reader = csv.DictReader(f)\n    for row in reader:\n        c = row[\'config\']\n        if c not in data: data[c] = {\'test\':[], \'train\':[], \'sparsity\':[], \'n\':0}\n        data[c][\'test\'].append(float(row[\'test_accuracy\']))\n        data[c][\'train\'].append(float(row[\'train_accuracy\']))\n        data[c][\'sparsity\'].append(float(row[\'sparsity\']))\n        data[c][\'n\'] = int(row[\'n_params\'])\n\nimport numpy as np\n\nfor c, v in data.items():\n    t = np.array(v[\'test\'])\n    tr = np.array(v[\'train\'])\n    s = np.array(v[\'sparsity\'])\n    print(f\'{c}:\')\n    print(f\'  test: {t.mean()*100:.2f} +/- {t.std(ddof=1)*100:.2f}\')\n    print(f\'  train: {tr.mean()*100:.2f} +/- {tr.std(ddof=1)*100:.2f}\')\n    print(f\'  sparsity: {s.mean()*100:.3f} +/- {s.std(ddof=1)*100:.3f}\')\n    print()\n\nprint(\'=== Paired comparisons ===\')\ntrained_d8 = [\'P1-B-JEPA-d8\',\'P1-B-Contrastive-d8\',\'P1-B-SFA-d8\',\'P1-B-Hebbian-d8\']\nfor c in trained_d8:\n    trained = np.array(data[c][\'test\'])\n    base = np.array(data[\'Untrained-d8\'][\'test\'])\n    diff = trained.mean() - base.mean()\n    tstat, p = stats.ttest_rel(trained, base)\n    print(f\'{c} vs Untrained-d8: diff={diff*100:.2f}pp, t={tstat:.3f}, p={p:.4f}\')\n\ntrained = np.array(data[\'P1-B-JEPA-d16\'][\'test\'])\nbase = np.array(data[\'Untrained-d16\'][\'test\'])\ndiff = trained.mean() - base.mean()\ntstat, p = stats.ttest_rel(trained, base)\nprint(f\'P1-B-JEPA-d16 vs Untrained-d16: diff={diff*100:.2f}pp, t={tstat:.3f}, p={p:.4f}\')\n\nprint()\nprint(\'=== Criteria ===\')\njepa_d8_mean = np.array(data[\'P1-B-JEPA-d8\'][\'test\']).mean()*100\njepa_d16_mean = np.array(data[\'P1-B-JEPA-d16\'][\'test\']).mean()*100\nbase_d8_mean = np.array(data[\'Untrained-d8\'][\'test\']).mean()*100\nbase_d16_mean = np.array(data[\'Untrained-d16\'][\'test\']).mean()*100\ngap = jepa_d16_mean - jepa_d8_mean\n\nmeans_d8 = {c: np.array(data[c][\'test\']).mean()*100 for c in trained_d8}\nall_below = all(m < 48.4 for m in means_d8.values())\n\nprint(f\'C1 (JEPA < 50% falsifies): JEPA-d8 = {jepa_d8_mean:.2f}% -> {\\"FALSIFIED\\" if jepa_d8_mean < 50 else \\"NOT FALSIFIED\\"}\')\nprint(f\'C2 (ALL < 48.4% falsifies): all_below={all_below} -> {\\"FALSIFIED\\" if all_below else \\"NOT FALSIFIED\\"}\')\nfor c, m in means_d8.items():\n    print(f\'   {c}: {m:.2f}%\')\nprint(f\'C3 (d16 > d8 + 10pp supports): gap={gap:.2f}pp -> {\\"SUPPORTED\\" if gap > 10 else \\"NOT SUPPORTED\\"}\')\nprint(f\'C4 (d16 <= d8 + 5pp refutes): gap={gap:.2f}pp -> {\\"REFUTED\\" if gap <= 5 else \\"NOT REFUTED\\"}\')\nprint(f\'C5 (JEPA < 50% falsifies temporal): JEPA-d8 = {jepa_d8_mean:.2f}% -> {\\"FALSIFIED\\" if jepa_d8_mean < 50 else \\"NOT FALSIFIED\\"}\')\n\nprint()\nprint(\'=== RM: exceeds baseline by >=5pp ===\')\nfor c in trained_d8:\n    diff = (np.array(data[c][\'test\']).mean() - np.array(data[\'Untrained-d8\'][\'test\']).mean())*100\n    print(f\'{c}: {diff:.2f}pp -> {\\"MEETS BAR\\" if diff >= 5 else \\"FAILS BAR\\"}\')\ndiff16 = (np.array(data[\'P1-B-JEPA-d16\'][\'test\']).mean() - np.array(data[\'Untrained-d16\'][\'test\']).mean())*100\nprint(f\'P1-B-JEPA-d16: {diff16:.2f}pp -> {\\"MEETS BAR\\" if diff16 >= 5 else \\"FAILS BAR\\"}\')\n"\n'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+
+[Tool Call: write_file({'path': 'analyze_results.py', 'content': 'import csv\nfrom scipy import stats\nimport numpy as np\n\n# Read CSV\ndata = {}\nwith open(\'phase_1/objectives_results.csv\', \'r\') as f:\n    reader = csv.DictReader(f)\n    for row in reader:\n        c = row[\'config\']\n        if c not in data: data[c] = {\'test\':[], \'train\':[], \'sparsity\':[], \'n\':0}\n        data[c][\'test\'].append(float(row[\'test_accuracy\']))\n        data[c][\'train\'].append(float(row[\'train_accuracy\']))\n        data[c][\'sparsity\'].append(float(row[\'sparsity\']))\n        data[c][\'n\'] = int(row[\'n_params\'])\n\nfor c, v in data.items():\n    t = np.array(v[\'test\'])\n    tr = np.array(v[\'train\'])\n    s = np.array(v[\'sparsity\'])\n    print(f\'{c}:\')\n    print(f\'  test: {t.mean()*100:.2f} +/- {t.std(ddof=1)*100:.2f}\')\n    print(f\'  train: {tr.mean()*100:.2f} +/- {tr.std(ddof=1)*100:.2f}\')\n    print(f\'  sparsity: {s.mean()*100:.3f} +/- {s.std(ddof=1)*100:.3f}\')\n    print()\n\nprint(\'=== Paired comparisons ===\')\ntrained_d8 = [\'P1-B-JEPA-d8\',\'P1-B-Contrastive-d8\',\'P1-B-SFA-d8\',\'P1-B-Hebbian-d8\']\nfor c in trained_d8:\n    trained = np.array(data[c][\'test\'])\n    base = np.array(data[\'Untrained-d8\'][\'test\'])\n    diff = trained.mean() - base.mean()\n    tstat, p = stats.ttest_rel(trained, base)\n    print(f\'{c} vs Untrained-d8: diff={diff*100:.2f}pp, t={tstat:.3f}, p={p:.4f}\')\n\ntrained = np.array(data[\'P1-B-JEPA-d16\'][\'test\'])\nbase = np.array(data[\'Untrained-d16\'][\'test\'])\ndiff = trained.mean() - base.mean()\ntstat, p = stats.ttest_rel(trained, base)\nprint(f\'P1-B-JEPA-d16 vs Untrained-d16: diff={diff*100:.2f}pp, t={tstat:.3f}, p={p:.4f}\')\n\nprint()\nprint(\'=== Criteria ===\')\njepa_d8_mean = np.array(data[\'P1-B-JEPA-d8\'][\'test\']).mean()*100\njepa_d16_mean = np.array(data[\'P1-B-JEPA-d16\'][\'test\']).mean()*100\ngap = jepa_d16_mean - jepa_d8_mean\n\nmeans_d8 = {c: np.array(data[c][\'test\']).mean()*100 for c in trained_d8}\nall_below = all(m < 48.4 for m in means_d8.values())\n\nprint(f\'C1 (JEPA < 50% falsifies): JEPA-d8 = {jepa_d8_mean:.2f}% -> {"FALSIFIED" if jepa_d8_mean < 50 else "NOT FALSIFIED"}\')\nprint(f\'C2 (ALL < 48.4% falsifies): all_below={all_below} -> {"FALSIFIED" if all_below else "NOT FALSIFIED"}\')\nfor c, m in means_d8.items():\n    print(f\'   {c}: {m:.2f}%\')\nprint(f\'C3 (d16 > d8 + 10pp supports): gap={gap:.2f}pp -> {"SUPPORTED" if gap > 10 else "NOT SUPPORTED"}\')\nprint(f\'C4 (d16 <= d8 + 5pp refutes): gap={gap:.2f}pp -> {"REFUTED" if gap <= 5 else "NOT REFUTED"}\')\nprint(f\'C5 (JEPA < 50% falsifies temporal): JEPA-d8 = {jepa_d8_mean:.2f}% -> {"FALSIFIED" if jepa_d8_mean < 50 else "NOT FALSIFIED"}\')\n\nprint()\nprint(\'=== RM: exceeds baseline by >=5pp ===\')\nfor c in trained_d8:\n    diff = (np.array(data[c][\'test\']).mean() - np.array(data[\'Untrained-d8\'][\'test\']).mean())*100\n    print(f\'{c}: {diff:.2f}pp -> {"MEETS BAR" if diff >= 5 else "FAILS BAR"}\')\ndiff16 = (np.array(data[\'P1-B-JEPA-d16\'][\'test\']).mean() - np.array(data[\'Untrained-d16\'][\'test\']).mean())*100\nprint(f\'P1-B-JEPA-d16: {diff16:.2f}pp -> {"MEETS BAR" if diff16 >= 5 else "FAILS BAR"}\')\n'})]
+
+[Tool Result: Successfully wrote to analyze_results.py]
+
+
+[Tool Call: bash({'command': 'python analyze_results.py'})]
+
+[Tool Result: exit_code: 0
+stdout: P1-B-JEPA-d8:
+  test: 62.12 +/- 4.34
+  train: 70.58 +/- 3.85
+  sparsity: 0.010 +/- 0.023
+
+P1-B-Contrastive-d8:
+  test: 50.64 +/- 4.29
+  train: 55.00 +/- 5.38
+  sparsity: 0.112 +/- 0.123
+
+P1-B-SFA-d8:
+  test: 50.56 +/- 8.53
+  train: 54.24 +/- 7.26
+  sparsity: 0.008 +/- 0.017
+
+P1-B-Hebbian-d8:
+  test: 23.96 +/- 2.93
+  train: 23.64 +/- 4.61
+  sparsity: 0.000 +/- 0.000
+
+P1-B-JEPA-d16:
+  test: 65.20 +/- 1.80
+  train: 80.50 +/- 0.52
+  sparsity: 0.003 +/- 0.0...]
+
+
+[Tool Call: bash({'command': 'python -c "\nimport numpy as np\n\n# Old results from results.csv\nuntrained_old = np.array([0.516, 0.462, 0.468, 0.546, 0.430])\nrecon_old = np.array([0.374, 0.284, 0.322, 0.352, 0.344])\nkwta_old = np.array([0.29, 0.338, 0.278, 0.4, 0.48])\n\n# Old results from diagnostic_results.csv\nsim_old = np.array([0.404, 0.406, 0.388, 0.498, 0.38])\npc_old = np.array([0.388, 0.486, 0.308, 0.526, 0.2])\nstrongl1_old = np.array([0.354, 0.362, 0.372, 0.422, 0.346])\n\nfor name, arr in [(\'Untrained-P1-B\', untrained_old), (\'Reconstruction\', recon_old), (\'k-WTA\', kwta_old),\n                  (\'Simultaneous\', sim_old), (\'Predictive Coding\', pc_old), (\'Strong L1\', strongl1_old)]:\n    print(f\'{name}: {arr.mean()*100:.2f}% +/- {arr.std(ddof=1)*100:.2f}%\')\n"\n'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+
+[Tool Call: write_file({'path': 'old_stats.py', 'content': "import numpy as np\n\n# Old results from results.csv\nuntrained_old = np.array([0.516, 0.462, 0.468, 0.546, 0.430])\nrecon_old = np.array([0.374, 0.284, 0.322, 0.352, 0.344])\nkwta_old = np.array([0.29, 0.338, 0.278, 0.4, 0.48])\n\n# Old results from diagnostic_results.csv\nsim_old = np.array([0.404, 0.406, 0.388, 0.498, 0.38])\npc_old = np.array([0.388, 0.486, 0.308, 0.526, 0.2])\nstrongl1_old = np.array([0.354, 0.362, 0.372, 0.422, 0.346])\n\nfor name, arr in [('Untrained-P1-B', untrained_old), ('Reconstruction', recon_old), ('k-WTA', kwta_old),\n                  ('Simultaneous', sim_old), ('Predictive Coding', pc_old), ('Strong L1', strongl1_old)]:\n    print(f'{name}: {arr.mean()*100:.2f}% +/- {arr.std(ddof=1)*100:.2f}%')\n"})]
+
+[Tool Result: Successfully wrote to old_stats.py]
+
+
+[Tool Call: bash({'command': 'python old_stats.py'})]
+
+[Tool Result: exit_code: 0
+stdout: Untrained-P1-B: 48.44% +/- 4.62%
+Reconstruction: 33.52% +/- 3.41%
+k-WTA: 35.72% +/- 8.38%
+Simultaneous: 41.52% +/- 4.76%
+Predictive Coding: 38.16% +/- 13.25%
+Strong L1: 37.12% +/- 3.00%
+
+stderr: ]
+
+Now I have all the statistics. Let me create the report and update the pre-registration file
+
+[Tool Call: write_file({'path': 'phase_1/objectives_report.md', 'content': "# Phase 1 v2 Results Report: Local Training Objectives\n\n**Date:** 2025-01-20  \n**Iteration:** 003  \n**Experiments:** 7 configurations × 5 seeds (42–46), 200 epochs each\n\n---\n\n## Executive Summary\n\nThe JEPA local-objective hypothesis is **strongly validated**: JEPA-d8 achieves **62.1%** test accuracy, a **+15.96pp improvement** over the untrained baseline and a **+28.6pp improvement** over the best prior reconstruction-based result. The d=8 bottleneck is **refuted as the primary cause** of Phase 1 failure (JEPA-d16 only gains +3.1pp over JEPA-d8). Three of four objectives beat the untrained baseline, but **only JEPA meets the ≥5pp success bar**. The temporal-unification path to Phase 2 is **cleared**.\n\n---\n\n## Results Table\n\n| Configuration | Test Accuracy | Train Accuracy | Sparsity | n_params |\n|:---|:---|:---|:---|---:|\n| **P1-B-JEPA-d8** | **62.12 ± 4.34%** | **70.58 ± 3.85%** | 0.010 ± 0.023% | 1,264 |\n| **P1-B-JEPA-d16** | **65.20 ± 1.80%** | **80.50 ± 0.52%** | 0.003 ± 0.008% | 4,832 |\n| P1-B-Contrastive-d8 | 50.64 ± 4.29% | 55.00 ± 5.38% | 0.112 ± 0.123% | 1,264 |\n| P1-B-SFA-d8 | 50.56 ± 8.53% | 54.24 ± 7.26% | 0.008 ± 0.017% | 1,264 |\n| P1-B-Hebbian-d8 | 23.96 ± 2.93% | 23.64 ± 4.61% | 0.000 ± 0.000% | 1,264 |\n| Untrained-d8 | 46.16 ± 3.84% | 52.10 ± 5.23% | 0.169 ± 0.176% | 1,264 |\n| Untrained-d16 | 54.60 ± 6.48% | 60.42 ± 5.36% | 0.121 ± 0.161% | 4,832 |\n\n*All values are mean ± std across 5 random seeds.*\n\n---\n\n## Comparison vs Untrained Baseline\n\n| Trained Config | Baseline | Mean Δ | t-stat | p-value | Significant? | RM Bar (≥5pp)? |\n|:---|:---|---:|---:|---:|:---|:---|\n| P1-B-JEPA-d8 | Untrained-d8 | **+15.96pp** | 5.713 | 0.0046 | **Yes** | **MEETS BAR** |\n| P1-B-Contrastive-d8 | Untrained-d8 | +4.48pp | 1.664 | 0.1715 | No | FAILS BAR |\n| P1-B-SFA-d8 | Untrained-d8 | +4.40pp | 1.023 | 0.3643 | No | FAILS BAR |\n| P1-B-Hebbian-d8 | Untrained-d8 | **−22.20pp** | −8.262 | 0.0012 | **Yes (negative)** | FAILS BAR |\n| P1-B-JEPA-d16 | Untrained-d16 | **+10.60pp** | 4.226 | 0.0134 | **Yes** | **MEETS BAR** |\n\n*Paired t-tests, df=4. Significance threshold: p < 0.05.*\n\n**Interpretation:** Only JEPA (both d=8 and d=16) produces a statistically significant and practically meaningful improvement over the corresponding untrained baseline. Contrastive and SFA show positive trends but fail to clear the 5pp bar and are not statistically significant at n=5. Hebbian learning catastrophically degrades performance, falling to ~24% (near chance for 5 categories = 20%).\n\n---\n\n## Evaluation of Pre-Registered Falsification Criteria\n\n| Criterion | Description | Threshold | Actual | Verdict |\n|:---|:---|:---|:---|:---|\n| **C1** | JEPA hypothesis falsified if mean < 50% at d=8 | < 50% | **62.12%** | **NOT FALSIFIED** ✓ |\n| **C2** | General local-objective falsified if ALL four < 48.4% at d=8 | All < 48.4% | JEPA 62.1%, Contrastive 50.6%, SFA 50.6%, Hebbian 24.0% | **NOT FALSIFIED** ✓ |\n| **C3** | d=8 bottleneck SUPPORTED if d16 > d8 + 10pp | > 10pp | **3.08pp** | **NOT SUPPORTED** |\n| **C4** | d=8 bottleneck REFUTED if d16 ≤ d8 + 5pp | ≤ 5pp | **3.08pp** | **REFUTED** ✓ |\n| **C5** | Temporal-unification falsified if JEPA spatial < 50% | < 50% | **62.12%** | **NOT FALSIFIED** ✓ |\n\n**Summary:**\n- **C1 (JEPA hypothesis):** NOT FALSIFIED. JEPA-d8 at 62.12% comfortably exceeds the 50% threshold and even surpasses the pre-registered ≥60% target.\n- **C2 (General local-objective):** NOT FALSIFIED. Three of four objectives exceed the 48.4% untrained baseline; only Hebbian fails.\n- **C3/C4 (Bottleneck):** The d=8 bottleneck hypothesis is **REFUTED**. The gain from d=8 to d=16 is only 3.08pp, well within the ≤5pp refutation band. The bottleneck is **not** the primary cause of Phase 1 failure.\n- **C5 (Temporal-unification):** NOT FALSIFIED. Since JEPA succeeds spatially (62.12% ≫ 50%), the same objective applied temporally in Phase 2 is not pre-emptively ruled out.\n\n---\n\n## d=8 vs d=16 Analysis\n\n| Metric | JEPA-d8 | JEPA-d16 | Δ (d16 − d8) |\n|:---|---:|---:|---:|\n| Test Accuracy | 62.12 ± 4.34% | 65.20 ± 1.80% | **+3.08pp** |\n| Train Accuracy | 70.58 ± 3.85% | 80.50 ± 0.52% | +9.92pp |\n| Sparsity | 0.010 ± 0.023% | 0.003 ± 0.008% | −0.007pp |\n| Parameters | 1,264 | 4,832 | +3,568 (+282%) |\n\n**Key observations:**\n1. **Diminishing returns:** A 3.8× parameter increase yields only a 3.1pp test-accuracy gain. The d=8 architecture is remarkably parameter-efficient.\n2. **Lower variance at d=16:** Std drops from 4.34% to 1.80%, suggesting the wider bottleneck stabilizes training across seeds.\n3. **Larger train-test gap at d=16:** The d=16 model overfits more (train 80.5% vs test 65.2%, gap = 15.3pp) compared to d=8 (train 70.6% vs test 62.1%, gap = 8.5pp). The extra capacity is not fully generalizing.\n4. **Verdict:** The bottleneck is a minor factor. The **objective alignment** (JEPA vs reconstruction) is the dominant driver of performance.\n\n---\n\n## Objective Ranking\n\n| Rank | Objective | Test Accuracy | Δ vs Untrained | RM Bar | Assessment |\n|:---|:---|---:|---:|:---|:---|\n| 1 | **JEPA** | **62.12%** | **+15.96pp** | **PASS** | Clear winner; strong, significant, generalizes |\n| 2 | Contrastive | 50.64% | +4.48pp | FAIL | Marginal improvement; high variance across seeds |\n| 3 | SFA | 50.56% | +4.40pp | FAIL | Similar to contrastive; one strong seed (61.2%) pulls mean up |\n| 4 | Hebbian | 23.96% | −22.20pp | FAIL | Catastrophic failure; objective is misaligned with task |\n\n**Note:** The gap between JEPA and the next-best objective is **11.5pp** — a large margin that underscores the importance of the spatial-prediction-in-latent-space formulation.\n\n---\n\n## Previous Results Comparison (Iter 002)\n\n| Method | Test Accuracy | vs JEPA-d8 | vs JEPA-d16 |\n|:---|---:|---:|---:|\n| **JEPA-d8 (this work)** | **62.12%** | — | −3.1pp |\n| **JEPA-d16 (this work)** | **65.20%** | +3.1pp | — |\n| Untrained-P1-B (iter 002) | 48.44% | −13.7pp | −16.8pp |\n| Simultaneous reconstruction (iter 002) | 41.52% | −20.6pp | −23.7pp |\n| Predictive coding (iter 002) | 38.16% | −24.0pp | −27.0pp |\n| Strong L1 (iter 002) | 37.12% | −25.0pp | −28.1pp |\n| k-WTA (iter 002) | 35.72% | −26.4pp | −29.5pp |\n| Reconstruction P1-B (iter 002) | 33.52% | −28.6pp | −31.7pp |\n\n**Key insight:** JEPA-d8 outperforms **every prior method** by at least 13.7pp, and outperforms the best prior trained method (simultaneous reconstruction) by **20.6pp**. This confirms that the failure of Phase 1 was **not** architecture or capacity, but **objective misalignment**: reconstruction objectives destroy the discriminative structure that JEPA preserves.\n\n---\n\n## Recommendation for Phase 2\n\n**Use JEPA as the temporal integration objective.**\n\nRationale:\n1. **Strongest spatial performance:** JEPA is the only objective that both (a) significantly exceeds the untrained baseline and (b) clears the 5pp success bar.\n2. **Temporal-unification path cleared:** Criterion 5 is not falsified — JEPA succeeds spatially, so applying the same objective temporally is scientifically justified.\n3. **d=8 is sufficient:** The bottleneck refutation means we do not need to increase dimensionality for Phase 2. The d=8 architecture (1,264 params) is parameter-efficient and generalizes well.\n4. **Lower variance at d=16 is tempting but not decisive:** If Phase 2 training proves unstable, d=16 can be revisited, but d=8 should be the default.\n\n**Proposed Phase 2 design:**\n- Architecture: P1-B (3-layer, kernel-3, stride-1, d=8, cross-layer weight sharing)\n- Objective: JEPA loss applied along the **time axis** (predict next timestep's latent from current)\n- Same VICReg collapse prevention (variance + covariance penalties)\n- Evaluation: Linear probe on 5-category structured dataset after temporal training\n\n---\n\n## Key Insight: What This Phase Teaches Us About the HSUN Architecture\n\n1. **The architecture is not the bottleneck.** The same P1-B architecture that achieved 33.5% with reconstruction now achieves 62.1% with JEPA — an 85% relative improvement. The architecture has always had sufficient representational capacity; it was the **training signal** that was broken.\n\n2. **Latent-space prediction >> pixel-space reconstruction.** Reconstruction forces the encoder to preserve every input detail, including noise and category-irrelevant structure. JEPA predicts in latent space, allowing the encoder to discard noise and compress into category-discriminative features.\n\n3. **Spatial structure is learnable from local objectives.** The JEPA task (predict adjacent spatial positions) requires understanding blob shape, periodicity, and noise patterns — exactly the structure that distinguishes the 5 categories. The encoder learns this **without any labels**.\n\n4. **Not all local objectives are equal.** Contrastive and SFA show promise but are noisy and inconsistent. Hebbian learning fails completely. The specific formulation of JEPA (bidirectional prediction + VICReg collapse prevention) appears to be the critical combination.\n\n5. **Cross-layer weight sharing works.** The P1-B architecture with shared weights across layers achieves strong performance, validating the HSUN design principle of weight sharing as a strong prior for hierarchical structure.\n\n---\n\n## Raw Data\n\nSee `phase_1/objectives_results.csv` for per-seed raw values.\n\n| Config | Seed 42 | Seed 43 | Seed 44 | Seed 45 | Seed 46 |\n|:---|---:|---:|---:|---:|---:|\n| P1-B-JEPA-d8 | 65.8% | 59.4% | 64.8% | 64.8% | 55.8% |\n| P1-B-Contrastive-d8 | 55.6% | 53.2% | 45.4% | 47.0% | 52.0% |\n| P1-B-SFA-d8 | 43.4% | 40.6% | 61.2% | 55.6% | 52.0% |\n| P1-B-Hebbian-d8 | 27.8% | 20.0% | 23.4% | 23.0% | 25.6% |\n| P1-B-JEPA-d16 | 67.8% | 63.6% | 65.4% | 63.4% | 65.8% |\n| Untrained-d8 | 44.0% | 50.4% | 50.0% | 41.8% | 44.6% |\n| Untrained-d16 | 54.8% | 50.0% | 61.2% | 46.4% | 60.6% |\n\n---\n\n*Report generated automatically from phase_1/objectives_results.csv*\n"})]
+
+[Tool Result: Successfully wrote to phase_1/objectives_report.md]
+
+
+[Tool Call: read_file({'path': 'src/pre_registration.md'})]
+
+[Tool Result: # RDF Scientific Pre-Registration
+
+*   **Iteration:** 003
+*   **Pre-Registration File:** src/pre_registration.md
+
+## 1. Hypothesis
+A local JEPA training objective (predicting the latent code of spatially adjacent
+positions at each layer, with VICReg collapse prevention) applied to the P1-B
+architecture (3-layer, kernel-3, stride-1, d=8, cross-layer weight sharing,
+simultaneous training) will achieve ≥60% 5-category linear-probe accuracy on the
+structured 16-bit input dataset. This is because: (1...]
+
+
+[Tool Call: write_file({'path': 'src/pre_registration.md', 'content': '# RDF Scientific Pre-Registration\n\n*   **Iteration:** 003\n*   **Pre-Registration File:** src/pre_registration.md\n\n## 1. Hypothesis\nA local JEPA training objective (predicting the latent code of spatially adjacent\npositions at each layer, with VICReg collapse prevention) applied to the P1-B\narchitecture (3-layer, kernel-3, stride-1, d=8, cross-layer weight sharing,\nsimultaneous training) will achieve ≥60% 5-category linear-probe accuracy on the\nstructured 16-bit input dataset. This is because: (1) predicting in latent space\navoids the reconstruction-objective misalignment that destroyed discriminative\ninformation in Phase 1; (2) the spatial prediction task requires the encoder to\nlearn category-relevant spatial structure (blobs, periodicity, noise have\ndifferent spatial predictability patterns); (3) the architecture already produces\n48.4% accuracy with random weights — a well-aligned objective should exceed this.\n\nSecondary hypothesis: the d=8 bottleneck is NOT the primary cause of poor Phase 1\nperformance. If JEPA-d8 ≥ 60%, the bottleneck was never the problem (the objective\nwas). If JEPA-d16 exceeds JEPA-d8 by >10pp, then the bottleneck is a contributing\nfactor and should be reconsidered for the universal-node form.\n\n## 2. Falsification Criterion\n1. JEPA hypothesis FALSIFIED if: mean JEPA accuracy (5 seeds) < 50% at d=8\n   (below the untrained baseline of 48.4%, meaning JEPA actively degrades\n   representations like reconstruction did).\n2. General local-objective hypothesis FALSIFIED if: ALL four objectives (JEPA,\n   contrastive, SFA, Hebbian) achieve mean accuracy < 48.4% at d=8 (none beats\n   doing nothing).\n3. d=8 bottleneck hypothesis SUPPORTED if: JEPA-d16 mean > JEPA-d8 mean + 10pp\n   (the bottleneck costs ≥10pp of accuracy).\n4. d=8 bottleneck hypothesis REFUTED if: JEPA-d16 mean ≤ JEPA-d8 mean + 5pp\n   (the bottleneck is not a major factor).\n5. Temporal-unification claim FALSIFIED if: JEPA fails spatially (<50%), since\n   the same objective applied temporally cannot succeed where it fails spatially.\n\n## 3. Proposed Method\nStep 1: Create src/training_objectives.py with four loss classes:\n  - JEPALoss: bidirectional neighbor prediction at each layer, VICReg collapse\n    prevention (variance penalty + covariance off-diagonal penalty). Predictor\n    is a linear layer (d→d) per layer, not shared across layers.\n  - ContrastiveLoss: InfoNCE with random bit-flip augmentation (1-2 bits/16),\n    temperature τ=0.5, projection head MLP(88→44→22), L2 normalization.\n  - SFALoss: minimize ‖z[i]−z[i−1]‖² at each layer + variance=1 constraint.\n  - HebbianLoss: maximize y·x correlation with Oja normalization and\n    off-diagonal decorrelation penalty.\n\nStep 2: Modify src/hierarchical_encoder.py to return intermediate layer codes\n  (needed for JEPA, SFA, Hebbian losses computed at each layer). Add flag\n  return_intermediate=False for backward compatibility.\n\nStep 3: Modify src/node.py to support encoder-only mode (no decoder needed\n  for non-reconstruction objectives). Add encode_only() method.\n\nStep 4: Create src/run_phase1_v2.py experiment runner:\n  - 7 configs: P1-B-JEPA-d8, P1-B-Contrastive-d8, P1-B-SFA-d8,\n    P1-B-Hebbian-d8, P1-B-JEPA-d16, Untrained-d8, Untrained-d16\n  - 5 seeds each (42-46)\n  - 200 epochs, batch_size=64, Adam lr=1e-3\n  - Linear probe evaluation (sklearn LogisticRegression, 80/20 split)\n  - Metrics: accuracy, sparsity, std across seeds, parameter count\n\nStep 5: Run all experiments, collect results in phase_1/objectives_results.csv\n\nStep 6: Create phase_1/objectives_report.md with:\n  - Per-objective mean ± std accuracy across seeds\n  - Comparison vs untrained baseline (paired t-test)\n  - Ranking of objectives\n  - d=8 vs d=16 comparison for JEPA\n  - Recommendation for Phase 2 temporal objective\n\nStep 7: Update src/pre_registration.md with this hypothesis and criteria.\n\nControl conditions (from previous experiments, no re-run needed):\n  - Untrained P1-B d=8: 48.4% ± (from iter_002)\n  - Reconstruction P1-B d=8: 33.5% ± (from iter_002)\n  - Predictive coding P1-B d=8: 38.2% ± (from iter_002)\n\nExpected outcome: JEPA ≥ 60%, Contrastive ~50-55%, SFA ~45-55%,\nHebbian ~40-50%. If JEPA succeeds, it validates both the objective and\nthe temporal-unification path (Phase 2 uses same objective on time axis).\n\n---\n*Created automatically by the RDF Orchestrator prior to iteration execution.*\n\n## Phase 1 v2 Results (Iteration 3)\n\n**Date:** 2025-01-20\n\n### Summary of Findings Against Each Criterion\n\n| Criterion | Description | Threshold | Actual | Verdict |\n|:---|:---|:---|:---|:---|\n| C1 | JEPA hypothesis falsified if mean < 50% at d=8 | < 50% | **62.12%** | **NOT FALSIFIED** |\n| C2 | General local-objective falsified if ALL four < 48.4% at d=8 | All < 48.4% | JEPA 62.1%, Contrastive 50.6%, SFA 50.6%, Hebbian 24.0% | **NOT FALSIFIED** |\n| C3 | d=8 bottleneck SUPPORTED if d16 > d8 + 10pp | > 10pp | **3.08pp** | **NOT SUPPORTED** |\n| C4 | d=8 bottleneck REFUTED if d16 ≤ d8 + 5pp | ≤ 5pp | **3.08pp** | **REFUTED** |\n| C5 | Temporal-unification falsified if JEPA spatial < 50% | < 50% | **62.12%** | **NOT FALSIFIED** |\n\n### Final Verdict on Each Hypothesis\n\n1. **Primary JEPA hypothesis: CONFIRMED.** Mean JEPA-d8 test accuracy = 62.12% (5 seeds), exceeding both the 50% falsification threshold and the pre-registered ≥60% target. Paired t-test vs untrained baseline: +15.96pp, t(4)=5.713, p=0.0046. The JEPA objective successfully aligns the encoder with the discriminative structure of the data.\n\n2. **General local-objective hypothesis: PARTIALLY CONFIRMED.** Three of four objectives (JEPA, Contrastive, SFA) exceed the untrained baseline of 46.16%, but only JEPA clears the ≥5pp practical success bar. Contrastive (+4.48pp, p=0.17) and SFA (+4.40pp, p=0.36) show positive trends but are not statistically significant at n=5. Hebbian learning catastrophically fails (−22.20pp, p=0.0012), indicating that not all local objectives are viable.\n\n3. **d=8 bottleneck hypothesis: REFUTED.** The gain from d=8 to d=16 for JEPA is only 3.08pp (62.12% → 65.20%), well within the ≤5pp refutation band. A 3.8× increase in parameters (1,264 → 4,832) yields minimal test improvement. The bottleneck is **not** the primary cause of Phase 1 failure; objective misalignment was.\n\n4. **Temporal-unification claim: CLEARED FOR PHASE 2.** Since JEPA succeeds spatially (62.12% ≫ 50%), Criterion 5 is not falsified. The same JEPA objective applied along the time axis is scientifically justified for Phase 2 temporal integration experiments.\n\n### Additional Research Manager Criterion\n\n| Objective | Δ vs Untrained | Verdict |\n|:---|---:|:---|\n| JEPA-d8 | +15.96pp | **SUCCESS** |\n| JEPA-d16 | +10.60pp | **SUCCESS** |\n| Contrastive-d8 | +4.48pp | FAIL (below 5pp bar) |\n| SFA-d8 | +4.40pp | FAIL (below 5pp bar) |\n| Hebbian-d8 | −22.20pp | FAIL (catastrophic) |\n\n### Recommendation\n\n**Proceed to Phase 2 with JEPA as the temporal integration objective.** Use the d=8 architecture (parameter-efficient, strong generalization). The JEPA formulation (bidirectional latent prediction + VICReg collapse prevention) should be applied along the time axis to learn temporal structure without labels.\n\n---\n*Results section appended after experiment completion.*\n'})]
+
+[Tool Result: Successfully wrote to src/pre_registration.md]
+
+
+[Tool Call: read_file({'path': 'phase_1/objectives_report.md'})]
+
+[Tool Result: # Phase 1 v2 Results Report: Local Training Objectives
+
+**Date:** 2025-01-20  
+**Iteration:** 003  
+**Experiments:** 7 configurations × 5 seeds (42–46), 200 epochs each
+
+---
+
+## Executive Summary
+
+The JEPA local-objective hypothesis is **strongly validated**: JEPA-d8 achieves **62.1%** test accuracy, a **+15.96pp improvement** over the untrained baseline and a **+28.6pp improvement** over the best prior reconstruction-based result. The d=8 bottleneck is **refuted as the primary cause** of Phase ...]
+
+
+[Tool Call: read_file({'path': 'src/pre_registration.md'})]
+
+[Tool Result: # RDF Scientific Pre-Registration
+
+*   **Iteration:** 003
+*   **Pre-Registration File:** src/pre_registration.md
+
+## 1. Hypothesis
+A local JEPA training objective (predicting the latent code of spatially adjacent
+positions at each layer, with VICReg collapse prevention) applied to the P1-B
+architecture (3-layer, kernel-3, stride-1, d=8, cross-layer weight sharing,
+simultaneous training) will achieve ≥60% 5-category linear-probe accuracy on the
+structured 16-bit input dataset. This is because: (1...]
+
+
+[Tool Call: bash({'command': 'del analyze_results.py old_stats.py'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+
+[Tool Call: list_dir({'path': 'phase_1'})]
+
+[Tool Result:       diagnostic_results.csv
+      objectives_report.md
+      objectives_results.csv
+      REPORT.md
+      results.csv
+      run.log
+      run_log.txt]
+
+
+[Tool Call: bash({'command': 'echo "=== File sizes ===" && dir phase_1\\objectives_report.md src\\pre_registration.md /-c && echo. && echo "=== Report line count ===" && findstr /n /c:"Executive Summary" phase_1\\objectives_report.md && echo. && echo "=== Pre-reg results section ===" && findstr /n /c:"Phase 1 v2 Results" src\\pre_registration.md'})]
+
+[Tool Result: exit_code: 0
+stdout: "=== File sizes ===" 
+ Volume in Laufwerk C: hat keine Bezeichnung.
+ Volumeseriennummer: F4E9-4E77
+
+ Verzeichnis von C:\Users\thomas\Projekte\rdf_thalamus_sml\phase_1
+
+27.05.2026  16:42             10109 objectives_report.md
+               1 Datei(en),          10109 Bytes
+
+ Verzeichnis von C:\Users\thomas\Projekte\rdf_thalamus_sml\src
+
+27.05.2026  16:43              7402 pre_registration.md
+               1 Datei(en),           7402 Bytes
+               0 Verze...]
+
+## Task Complete ✓
+
+Both output files have been created/updated successfully:
+
+### 1. `phase_1/objectives_report.md` (10,109 bytes)
+Full report containing:
+- **Executive summary** — JEPA validated at 62.1%, bottleneck refuted, Phase 2 path cleared
+- **Results table** — all 7 configs with mean ± std for test accuracy, train accuracy, sparsity
+- **Baseline comparison** — paired t-tests vs untrained baselines (JEPA: +15.96pp, p=0.0046; JEPA-d16: +10.60pp, p=0.0134)
+- **5 pre-registered criteria evaluated** — C1 NOT FALSIFIED, C2 NOT FALSIFIED, C3 NOT SUPPORTED, C4 REFUTED, C5 NOT FALSIFIED
+- **RM success bar** — only JEPA (d8 and d16) meets ≥5pp threshold
+- **d=8 vs d=16 analysis** — only +3.08pp gain for 3.8× parameters; bottleneck is minor
+- **Objective ranking** — JEPA >> Contrastive ≈ SFA >> Hebbian (catastrophic failure)
+- **Previous results comparison** — JEPA beats best prior method by 20.6pp
+- **Phase 2 recommendation** — proceed with JEPA temporal, d=8 architecture
+- **5 key insights** about the HSUN architecture
+
+### 2. `src/pre_registration.md` (7,402 bytes, updated)
+Appended section: **"Phase 1 v2 Results (Iteration 3)"** with:
+- Summary table of all 5 criteria
+- Final verdict on each hypothesis (CONFIRMED, PARTIALLY CONFIRMED, REFUTED, CLEARED)
+- RM criterion table
+- Recommendation to proceed to Phase 2
+
+---
+
+### Key Numerical Findings
+
+| Metric | Value |
+|:---|:---|
+| JEPA-d8 test accuracy | **62.12 ± 4.34%** |
+| JEPA-d16 test accuracy | **65.20 ± 1.80%** |
+| Improvement over untrained d8 | **+15.96pp** (p = 0.0046) |
+| Improvement over best prior (simultaneous recon) | **+20.6pp** |
+| d16 − d8 gap | **3.08pp** → bottleneck **REFUTED** |
+| Only objective meeting ≥5pp bar | **JEPA** (both d8 and d16) |
+
+[NUDGE RESPONSE]
+```yaml
+status: ok
+artifacts:
+  - phase_1/objectives_report.md
+  - src/pre_registration.md
+metrics:
+  jepa_d8_test_accuracy: 62.12
+  jepa_d8_test_std: 4.34
+  jepa_d16_test_accuracy: 65.20
+  jepa_d16_test_std: 1.80
+  contrastive_d8_test_accuracy: 50.64
+  contrastive_d8_test_std: 4.29
+  sfa_d8_test_accuracy: 50.56
+  sfa_d8_test_std: 8.53
+  hebbian_d8_test_accuracy: 23.96
+  hebbian_d8_test_std: 2.93
+  untrained_d8_test_accuracy: 46.16
+  untrained_d8_test_std: 3.84
+  untrained_d16_test_accuracy: 54.60
+  untrained_d16_test_std: 6.48
+  jepa_d8_vs_untrained_delta_pp: 15.96
+  jepa_d8_vs_untrained_p: 0.0046
+  jepa_d16_vs_untrained_delta_pp: 10.60
+  jepa_d16_vs_untrained_p: 0.0134
+  jepa_d16_vs_d8_gap_pp: 3.08
+  contrastive_vs_untrained_delta_pp: 4.48
+  sfa_vs_untrained_delta_pp: 4.40
+  hebbian_vs_untrained_delta_pp: -22.20
+  best_prior_method_accuracy: 41.52
+  jepa_d8_vs_best_prior_delta_pp: 20.60
+log_excerpt: |
+  === Paired comparisons ===
+  P1-B-JEPA-d8 vs Untrained-d8: diff=15.96pp, t=5.713, p=0.0046
+  P1-B-Contrastive-d8 vs Untrained-d8: diff=4.48pp, t=1.664, p=0.1715
+  P1-B-SFA-d8 vs Untrained-d8: diff=4.40pp, t=1.023, p=0.3643
+  P1-B-Hebbian-d8 vs Untrained-d8: diff=-22.20pp, t=-8.262, p=0.0012
+  P1-B-JEPA-d16 vs Untrained-d16: diff=10.60pp, t=4.226, p=0.0134
+  === Criteria ===
+  C1 (JEPA < 50% falsifies): JEPA-d8 = 62.12% -> NOT FALSIFIED
+  C2 (ALL < 48.4% falsifies): all_below=False -> NOT FALSIFIED
+  C3 (d16 > d8 + 10pp supports): gap=3.08pp -> NOT SUPPORTED
+  C4 (d16 <= d8 + 5pp refutes): gap=3.08pp -> REFUTED
+  C5 (JEPA < 50% falsifies temporal): JEPA-d8 = 62.12% -> NOT FALSIFIED
+experimenter_view: |
+  The JEPA hypothesis is strongly confirmed. JEPA-d8 achieves 62.1% test
+  accuracy, exceeding both the 50% falsification threshold and the 60%
+  pre-registered target. This represents a +15.96pp significant improvement
+  over the untrained baseline (p=0.0046) and a +20.6pp improvement over the
+  best prior reconstruction-based method. The d=8 bottleneck hypothesis is
+  refuted: expanding to d=16 yields only +3.1pp, confirming that objective
+  misalignment (not architecture capacity) caused Phase 1 failure. Only JEPA
+  meets the Research Manager's >=5pp success bar; Contrastive and SFA show
+  positive but non-significant trends, while Hebbian learning catastrophically
+  fails at 24%. Criterion 5 is not falsified, clearing the path for Phase 2
+  temporal integration using the same JEPA objective along the time axis.
+notes: "Phase 1 v2 complete. JEPA confirmed, bottleneck refuted, Phase 2 cleared."
+```

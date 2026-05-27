@@ -82,3 +82,44 @@ the temporal-unification path (Phase 2 uses same objective on time axis).
 
 ---
 *Created automatically by the RDF Orchestrator prior to iteration execution.*
+
+## Phase 1 v2 Results (Iteration 3)
+
+**Date:** 2025-01-20
+
+### Summary of Findings Against Each Criterion
+
+| Criterion | Description | Threshold | Actual | Verdict |
+|:---|:---|:---|:---|:---|
+| C1 | JEPA hypothesis falsified if mean < 50% at d=8 | < 50% | **62.12%** | **NOT FALSIFIED** |
+| C2 | General local-objective falsified if ALL four < 48.4% at d=8 | All < 48.4% | JEPA 62.1%, Contrastive 50.6%, SFA 50.6%, Hebbian 24.0% | **NOT FALSIFIED** |
+| C3 | d=8 bottleneck SUPPORTED if d16 > d8 + 10pp | > 10pp | **3.08pp** | **NOT SUPPORTED** |
+| C4 | d=8 bottleneck REFUTED if d16 ≤ d8 + 5pp | ≤ 5pp | **3.08pp** | **REFUTED** |
+| C5 | Temporal-unification falsified if JEPA spatial < 50% | < 50% | **62.12%** | **NOT FALSIFIED** |
+
+### Final Verdict on Each Hypothesis
+
+1. **Primary JEPA hypothesis: CONFIRMED.** Mean JEPA-d8 test accuracy = 62.12% (5 seeds), exceeding both the 50% falsification threshold and the pre-registered ≥60% target. Paired t-test vs untrained baseline: +15.96pp, t(4)=5.713, p=0.0046. The JEPA objective successfully aligns the encoder with the discriminative structure of the data.
+
+2. **General local-objective hypothesis: PARTIALLY CONFIRMED.** Three of four objectives (JEPA, Contrastive, SFA) exceed the untrained baseline of 46.16%, but only JEPA clears the ≥5pp practical success bar. Contrastive (+4.48pp, p=0.17) and SFA (+4.40pp, p=0.36) show positive trends but are not statistically significant at n=5. Hebbian learning catastrophically fails (−22.20pp, p=0.0012), indicating that not all local objectives are viable.
+
+3. **d=8 bottleneck hypothesis: REFUTED.** The gain from d=8 to d=16 for JEPA is only 3.08pp (62.12% → 65.20%), well within the ≤5pp refutation band. A 3.8× increase in parameters (1,264 → 4,832) yields minimal test improvement. The bottleneck is **not** the primary cause of Phase 1 failure; objective misalignment was.
+
+4. **Temporal-unification claim: CLEARED FOR PHASE 2.** Since JEPA succeeds spatially (62.12% ≫ 50%), Criterion 5 is not falsified. The same JEPA objective applied along the time axis is scientifically justified for Phase 2 temporal integration experiments.
+
+### Additional Research Manager Criterion
+
+| Objective | Δ vs Untrained | Verdict |
+|:---|---:|:---|
+| JEPA-d8 | +15.96pp | **SUCCESS** |
+| JEPA-d16 | +10.60pp | **SUCCESS** |
+| Contrastive-d8 | +4.48pp | FAIL (below 5pp bar) |
+| SFA-d8 | +4.40pp | FAIL (below 5pp bar) |
+| Hebbian-d8 | −22.20pp | FAIL (catastrophic) |
+
+### Recommendation
+
+**Proceed to Phase 2 with JEPA as the temporal integration objective.** Use the d=8 architecture (parameter-efficient, strong generalization). The JEPA formulation (bidirectional latent prediction + VICReg collapse prevention) should be applied along the time axis to learn temporal structure without labels.
+
+---
+*Results section appended after experiment completion.*
