@@ -1,0 +1,1 @@
+Find and kill any running background Python processes on Windows (e.g. running run_phase3_background.py, run_phase3_medium.py, etc.) to free up the CPU.
