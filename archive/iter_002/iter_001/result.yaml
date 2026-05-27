@@ -1,0 +1,69 @@
+artifacts:
+- src/pre_registration.md
+- src/node.py
+- src/hierarchical_encoder.py
+- src/dataset_phase1.py
+- src/eval_phase1.py
+- src/run_phase1.py
+- phase_1/results.csv
+- phase_1/REPORT.md
+experimenter_view: "The Phase 1 primary scientific hypothesis was conclusively falsified\
+  \ across all pre-registered criteria.\nThe trained Universal Node (P1-B) achieved\
+  \ 18.36% classification accuracy, which is at chance level (20%)\nand 11.4 percentage\
+  \ points worse than the untrained baseline (29.76%).\nThe primary driver of this\
+  \ failure is a \"representation collapse\" phenomenon: the default small embedding\n\
+  initialization scale (Uniform[-0.01, 0.01]) resulted in tiny inputs where the reconstruction\
+  \ MSE gradient\nwas completely dominated by the L1 sparsity penalty's constant gradient.\
+  \ This drove all codes and weights\nto exactly zero. While this yielded high code\
+  \ sparsity (70%), it completely erased all spatial pattern features,\npreventing\
+  \ any downstream linear probe classification. In contrast, the untrained baseline\
+  \ preserved random, \nnon-zero projections of the binary inputs, allowing it to\
+  \ outperform the trained model.\nAn exploratory hyperparameter search confirmed\
+  \ that initializing embeddings with standard normal scaling\nrescues feature learning\
+  \ (boosting accuracy to 53.8%), but introduces a stark trade-off where sparsity\
+  \ drops\nbelow 1%.\n"
+log_excerpt: 'Running configuration: P1-D (sharing=cross_layer, d=4)
+
+  Seed 46 complete.
+
+  Running configuration: P1-E (sharing=cross_layer, d=8, d_out=16)
+
+  Seed 42 complete.
+
+  Seed 43 complete.
+
+  Seed 44 complete.
+
+  Seed 45 complete.
+
+  Seed 46 complete.
+
+  Running Untrained Baseline (sharing=cross_layer, d=8)
+
+  Seed 42 complete.
+
+  Seed 43 complete.
+
+  Seed 44 complete.
+
+  Seed 45 complete.
+
+  Seed 46 complete.
+
+  All experiments completed successfully! Results written to phase_1/results.csv.
+
+  '
+metrics:
+  p1_a_accuracy_mean: 0.1844
+  p1_b_accuracy_mean: 0.1836
+  p1_b_layer0_mse_mean: 7.33e-06
+  p1_b_sparsity_mean: 0.7
+  p1_b_vs_untrained_gap: -0.114
+  p1_c_accuracy_mean: 0.1904
+  p1_c_vs_p1_b_gap: 0.0068
+  p1_d_accuracy_mean: 0.1804
+  p1_e_accuracy_mean: 0.2068
+  untrained_accuracy_mean: 0.2976
+notes: Phase 1 experiments successfully executed and the primary hypothesis was conclusively
+  falsified due to representation collapse.
+status: ok
