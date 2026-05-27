@@ -1,147 +1,84 @@
 # RDF Scientific Pre-Registration
 
-*   **Iteration:** 002
+*   **Iteration:** 003
 *   **Pre-Registration File:** src/pre_registration.md
 
 ## 1. Hypothesis
-A hierarchical encoder using kernel-3 stride-1 Sparse Autoencoder nodes
-(3 layers over 16 binary inputs, d=8 per slot) with cross-layer weight
-sharing and recursive dimensions (dim_out = dim_in per slot = 8) achieves:
-(a) linear-probe accuracy ≥ 80% on five structured 16-bit input categories,
-and (b) accuracy within 15 percentage points of an independent-weights-per-node
-upper bound (P1-C), when both are trained with local reconstruction objectives
-(MSE + L1 sparsity) without end-to-end backpropagation.
+A local JEPA training objective (predicting the latent code of spatially adjacent
+positions at each layer, with VICReg collapse prevention) applied to the P1-B
+architecture (3-layer, kernel-3, stride-1, d=8, cross-layer weight sharing,
+simultaneous training) will achieve ≥60% 5-category linear-probe accuracy on the
+structured 16-bit input dataset. This is because: (1) predicting in latent space
+avoids the reconstruction-objective misalignment that destroyed discriminative
+information in Phase 1; (2) the spatial prediction task requires the encoder to
+learn category-relevant spatial structure (blobs, periodicity, noise have
+different spatial predictability patterns); (3) the architecture already produces
+48.4% accuracy with random weights — a well-aligned objective should exceed this.
 
-Specifically, the strict universal-node form (single weight matrix shared across
-all layers and positions, recursive d=8) does NOT sacrifice more than 15pp of
-classification accuracy relative to the fully independent per-node weights
-upper bound, confirming that the universal-node architecture is expressively
-viable for spatial hierarchy.
-
-**Untrained baseline criterion:** Trained P1-B must beat the untrained (random-weight,
-no-training) baseline by ≥ 15 percentage points in linear-probe accuracy, ensuring that
-learning genuinely occurs and the architecture is not merely exploiting input biases.
-
-**Sparsity criterion:** P1-B must achieve average code sparsity ≥ 50% (fraction of
-code dimensions with activation magnitude > 0.01), confirming that the L1 sparsity
-penalty is effective and the codes are meaningfully sparse.
+Secondary hypothesis: the d=8 bottleneck is NOT the primary cause of poor Phase 1
+performance. If JEPA-d8 ≥ 60%, the bottleneck was never the problem (the objective
+was). If JEPA-d16 exceeds JEPA-d8 by >10pp, then the bottleneck is a contributing
+factor and should be reconsidered for the universal-node form.
 
 ## 2. Falsification Criterion
-The hypothesis is falsified if EITHER:
-(1) P1-B (cross-layer sharing, d=8) achieves linear-probe accuracy < 80%
-    on the 5-category classification task, OR
-(2) The accuracy gap P1-C − P1-B exceeds 15 percentage points (e.g.,
-    P1-C ≥ 80% and P1-B < 65%), demonstrating that cross-layer weight
-    sharing sacrifices too much expressivity for the universal-node
-    architecture to be viable.
-
-**Untrained baseline criterion:** The hypothesis is falsified if trained P1-B does
-not beat the untrained baseline (random-weight, no-training encoder) by at least
-15 percentage points in linear-probe accuracy.
-
-**Sparsity criterion:** The hypothesis is falsified if the average code sparsity
-of P1-B codes (fraction of code dimensions > 0.01 magnitude) is < 50%.
-
-Additionally, P1-D (d=4) is expected to underperform P1-B (d=8), and
-P1-E (wider output) is expected to outperform P1-B; if P1-D matches or
-exceeds P1-B, or if P1-E provides no improvement over P1-B, these
-secondary predictions are falsified (informing dimension design choices).
+1. JEPA hypothesis FALSIFIED if: mean JEPA accuracy (5 seeds) < 50% at d=8
+   (below the untrained baseline of 48.4%, meaning JEPA actively degrades
+   representations like reconstruction did).
+2. General local-objective hypothesis FALSIFIED if: ALL four objectives (JEPA,
+   contrastive, SFA, Hebbian) achieve mean accuracy < 48.4% at d=8 (none beats
+   doing nothing).
+3. d=8 bottleneck hypothesis SUPPORTED if: JEPA-d16 mean > JEPA-d8 mean + 10pp
+   (the bottleneck costs ≥10pp of accuracy).
+4. d=8 bottleneck hypothesis REFUTED if: JEPA-d16 mean ≤ JEPA-d8 mean + 5pp
+   (the bottleneck is not a major factor).
+5. Temporal-unification claim FALSIFIED if: JEPA fails spatially (<50%), since
+   the same objective applied temporally cannot succeed where it fails spatially.
 
 ## 3. Proposed Method
-EXPERIMENTAL PROTOCOL — Phase 1: Spatial Hierarchy without Time
+Step 1: Create src/training_objectives.py with four loss classes:
+  - JEPALoss: bidirectional neighbor prediction at each layer, VICReg collapse
+    prevention (variance penalty + covariance off-diagonal penalty). Predictor
+    is a linear layer (d→d) per layer, not shared across layers.
+  - ContrastiveLoss: InfoNCE with random bit-flip augmentation (1-2 bits/16),
+    temperature τ=0.5, projection head MLP(88→44→22), L2 normalization.
+  - SFALoss: minimize ‖z[i]−z[i−1]‖² at each layer + variance=1 constraint.
+  - HebbianLoss: maximize y·x correlation with Oja normalization and
+    off-diagonal decorrelation penalty.
 
-### 3.1 Training Mechanics: Progressive Training (vs. Simultaneous Training)
+Step 2: Modify src/hierarchical_encoder.py to return intermediate layer codes
+  (needed for JEPA, SFA, Hebbian losses computed at each layer). Add flag
+  return_intermediate=False for backward compatibility.
 
-**Choice rationale:** Progressive Training was chosen over Simultaneous Training
-for the layer-by-layer local reconstruction training procedure.
+Step 3: Modify src/node.py to support encoder-only mode (no decoder needed
+  for non-reconstruction objectives). Add encode_only() method.
 
-In Simultaneous Training, all layers are trained concurrently by averaging
-gradients across layers for the shared weight matrix. This causes a fundamental
-instability: layer l+1 reconstructs a moving target, because layer l's
-representations are continually changing as its weights are updated. The shared
-weight gradients are averaged across layers, which means no single layer's
-reconstruction target ever stabilizes.
+Step 4: Create src/run_phase1_v2.py experiment runner:
+  - 7 configs: P1-B-JEPA-d8, P1-B-Contrastive-d8, P1-B-SFA-d8,
+    P1-B-Hebbian-d8, P1-B-JEPA-d16, Untrained-d8, Untrained-d16
+  - 5 seeds each (42-46)
+  - 200 epochs, batch_size=64, Adam lr=1e-3
+  - Linear probe evaluation (sklearn LogisticRegression, 80/20 split)
+  - Metrics: accuracy, sparsity, std across seeds, parameter count
 
-Progressive Training avoids this problem entirely:
-- Layer 1 is trained first (frozen after training).
-- Then Layer 2 is trained using Layer 1's frozen output as input.
-- Then Layer 3 is trained using Layer 2's frozen output as input.
-- The shared weight matrix is frozen after each layer completes training.
+Step 5: Run all experiments, collect results in phase_1/objectives_results.csv
 
-This keeps intermediate layer representations stable during training of
-subsequent layers, is architecturally cleaner (no gradient averaging across
-heterogeneous layers), and ensures that each layer genuinely learns to
-reconstruct its input distribution rather than chasing a moving target.
+Step 6: Create phase_1/objectives_report.md with:
+  - Per-objective mean ± std accuracy across seeds
+  - Comparison vs untrained baseline (paired t-test)
+  - Ranking of objectives
+  - d=8 vs d=16 comparison for JEPA
+  - Recommendation for Phase 2 temporal objective
 
-### 3.2 Implementation Plan
+Step 7: Update src/pre_registration.md with this hypothesis and criteria.
 
-1. CREATE src/node.py — UniversalNode class
-   - Encoder: Linear(3d, d) + tanh activation
-   - Decoder: Linear(d, 3d) (reconstruction)
-   - Loss: MSE(input, reconstruction) + λ * L1(code)
-   - Methods: forward(x_3d) → code, reconstruct(code) → x_hat
-   - Support weight sharing: parameters can be shared across instances
+Control conditions (from previous experiments, no re-run needed):
+  - Untrained P1-B d=8: 48.4% ± (from iter_002)
+  - Reconstruction P1-B d=8: 33.5% ± (from iter_002)
+  - Predictive coding P1-B d=8: 38.2% ± (from iter_002)
 
-2. CREATE src/hierarchical_encoder.py — HierarchicalEncoder class
-   - Input: 16 binary pixels → learnable embedding (2×d lookup table)
-   - Stack 3 layers of kernel-3 stride-1 nodes
-   - Configurable weight_sharing mode: 'within_layer' | 'cross_layer' | 'none'
-   - Configurable d per slot (8 for P1-A/B/C, 4 for P1-D)
-   - For P1-E: support d_in=8, d_out=16 (non-recursive)
-   - Training: progressive layer-by-layer local reconstruction (each layer trained
-     and frozen before moving to the next), no cross-layer gradient flow
-   - For shared weights: single shared weight matrix used across all layers/positions
-   - Forward: returns top-layer codes (10 × d flattened)
-
-3. CREATE src/dataset_phase1.py — Five structured 16-bit datasets
-   - Category 1: Uniform random bits (control)
-   - Category 2: Single-blob (one contiguous run of 1s, random position & width)
-   - Category 3: Two-blob (two separate runs of 1s)
-   - Category 4: Periodic patterns (periods 2, 3, 4, with random phase)
-   - Category 5: Mixed noise (structured base + random bit flips at 10-20% rate)
-   - Each category: 200 train + 100 test samples = 1000 train + 500 test total
-   - Labels: category index (0-4) for linear probe evaluation
-
-4. CREATE src/eval_phase1.py — Evaluation module
-   - Linear probe: fit sklearn-free logistic regression on top-layer codes
-     (simple gradient descent, 200 epochs, lr=0.1, no regularization)
-   - Train on train-set codes, evaluate accuracy on test-set codes
-   - Also compute: per-layer reconstruction MSE, code sparsity, parameter count
-   - Report per-config, per-seed results
-
-5. CREATE src/run_phase1.py — Experiment runner
-   - 5 configurations (P1-A through P1-E) × 5 seeds (42-46) = 25 runs
-   - Each run: instantiate HierarchicalEncoder, train unsupervised, evaluate
-   - Save results to phase_1/results.csv
-   - Generate phase_1/REPORT.md with comparison table and pass/fail assessment
-
-6. GENERATE phase_1/REPORT.md — Comparison report including:
-   - Table: config × metric (accuracy, params, sparsity, recon_loss)
-   - P1-B vs P1-C gap analysis (primary hypothesis test)
-   - P1-D vs P1-B dimension comparison
-   - P1-E vs P1-B recursive-constraint comparison
-   - P1-A vs P1-B within-layer vs cross-layer comparison
-   - Pass/fail on each Phase 1 success criterion
-
-CONTROL CONDITIONS:
-- P1-C (no sharing, d=8) serves as the expressivity upper bound
-- P1-A (within-layer sharing) serves as the standard CNN baseline
-- Random-init untrained encoder serves as chance-level baseline (~20% for 5 classes)
-- All configs use the same training budget (100 epochs per layer), same dataset,
-  same seeds, same embedding initialization
-
-HYPERPARAMETERS (fixed across all configs):
-- d = 8 per slot (except P1-D: d=4, P1-E: d_out=16)
-- λ_L1 = 0.002 (sparsity penalty, from Phase 0 P0-D tuning)
-- learning_rate = 0.01
-- epochs = 100 per layer
-- batch_size = 32
-- 3 layers (depths: 14, 12, 10 positions)
-- seeds: 42, 43, 44, 45, 46
-
-FILES MODIFIED: None (all new files; existing src/ files are read-only references)
-FILES CREATED: src/node.py, src/hierarchical_encoder.py, src/dataset_phase1.py,
-               src/eval_phase1.py, src/run_phase1.py, phase_1/REPORT.md
+Expected outcome: JEPA ≥ 60%, Contrastive ~50-55%, SFA ~45-55%,
+Hebbian ~40-50%. If JEPA succeeds, it validates both the objective and
+the temporal-unification path (Phase 2 uses same objective on time axis).
 
 ---
 *Created automatically by the RDF Orchestrator prior to iteration execution.*

@@ -1,0 +1,71 @@
+falsification_criterion: "1. JEPA hypothesis FALSIFIED if: mean JEPA accuracy (5 seeds)\
+  \ < 50% at d=8\n   (below the untrained baseline of 48.4%, meaning JEPA actively\
+  \ degrades\n   representations like reconstruction did).\n2. General local-objective\
+  \ hypothesis FALSIFIED if: ALL four objectives (JEPA,\n   contrastive, SFA, Hebbian)\
+  \ achieve mean accuracy < 48.4% at d=8 (none beats\n   doing nothing).\n3. d=8 bottleneck\
+  \ hypothesis SUPPORTED if: JEPA-d16 mean > JEPA-d8 mean + 10pp\n   (the bottleneck\
+  \ costs ≥10pp of accuracy).\n4. d=8 bottleneck hypothesis REFUTED if: JEPA-d16 mean\
+  \ ≤ JEPA-d8 mean + 5pp\n   (the bottleneck is not a major factor).\n5. Temporal-unification\
+  \ claim FALSIFIED if: JEPA fails spatially (<50%), since\n   the same objective\
+  \ applied temporally cannot succeed where it fails spatially.\n"
+hypothesis: 'A local JEPA training objective (predicting the latent code of spatially
+  adjacent
+
+  positions at each layer, with VICReg collapse prevention) applied to the P1-B
+
+  architecture (3-layer, kernel-3, stride-1, d=8, cross-layer weight sharing,
+
+  simultaneous training) will achieve ≥60% 5-category linear-probe accuracy on the
+
+  structured 16-bit input dataset. This is because: (1) predicting in latent space
+
+  avoids the reconstruction-objective misalignment that destroyed discriminative
+
+  information in Phase 1; (2) the spatial prediction task requires the encoder to
+
+  learn category-relevant spatial structure (blobs, periodicity, noise have
+
+  different spatial predictability patterns); (3) the architecture already produces
+
+  48.4% accuracy with random weights — a well-aligned objective should exceed this.
+
+
+  Secondary hypothesis: the d=8 bottleneck is NOT the primary cause of poor Phase
+  1
+
+  performance. If JEPA-d8 ≥ 60%, the bottleneck was never the problem (the objective
+
+  was). If JEPA-d16 exceeds JEPA-d8 by >10pp, then the bottleneck is a contributing
+
+  factor and should be reconsidered for the universal-node form.
+
+  '
+pre_registration_file: src/pre_registration.md
+proposed_method: "Step 1: Create src/training_objectives.py with four loss classes:\n\
+  \  - JEPALoss: bidirectional neighbor prediction at each layer, VICReg collapse\n\
+  \    prevention (variance penalty + covariance off-diagonal penalty). Predictor\n\
+  \    is a linear layer (d→d) per layer, not shared across layers.\n  - ContrastiveLoss:\
+  \ InfoNCE with random bit-flip augmentation (1-2 bits/16),\n    temperature τ=0.5,\
+  \ projection head MLP(88→44→22), L2 normalization.\n  - SFALoss: minimize ‖z[i]−z[i−1]‖²\
+  \ at each layer + variance=1 constraint.\n  - HebbianLoss: maximize y·x correlation\
+  \ with Oja normalization and\n    off-diagonal decorrelation penalty.\n\nStep 2:\
+  \ Modify src/hierarchical_encoder.py to return intermediate layer codes\n  (needed\
+  \ for JEPA, SFA, Hebbian losses computed at each layer). Add flag\n  return_intermediate=False\
+  \ for backward compatibility.\n\nStep 3: Modify src/node.py to support encoder-only\
+  \ mode (no decoder needed\n  for non-reconstruction objectives). Add encode_only()\
+  \ method.\n\nStep 4: Create src/run_phase1_v2.py experiment runner:\n  - 7 configs:\
+  \ P1-B-JEPA-d8, P1-B-Contrastive-d8, P1-B-SFA-d8,\n    P1-B-Hebbian-d8, P1-B-JEPA-d16,\
+  \ Untrained-d8, Untrained-d16\n  - 5 seeds each (42-46)\n  - 200 epochs, batch_size=64,\
+  \ Adam lr=1e-3\n  - Linear probe evaluation (sklearn LogisticRegression, 80/20 split)\n\
+  \  - Metrics: accuracy, sparsity, std across seeds, parameter count\n\nStep 5: Run\
+  \ all experiments, collect results in phase_1/objectives_results.csv\n\nStep 6:\
+  \ Create phase_1/objectives_report.md with:\n  - Per-objective mean ± std accuracy\
+  \ across seeds\n  - Comparison vs untrained baseline (paired t-test)\n  - Ranking\
+  \ of objectives\n  - d=8 vs d=16 comparison for JEPA\n  - Recommendation for Phase\
+  \ 2 temporal objective\n\nStep 7: Update src/pre_registration.md with this hypothesis\
+  \ and criteria.\n\nControl conditions (from previous experiments, no re-run needed):\n\
+  \  - Untrained P1-B d=8: 48.4% ± (from iter_002)\n  - Reconstruction P1-B d=8: 33.5%\
+  \ ± (from iter_002)\n  - Predictive coding P1-B d=8: 38.2% ± (from iter_002)\n\n\
+  Expected outcome: JEPA ≥ 60%, Contrastive ~50-55%, SFA ~45-55%,\nHebbian ~40-50%.\
+  \ If JEPA succeeds, it validates both the objective and\nthe temporal-unification\
+  \ path (Phase 2 uses same objective on time axis).\n"
