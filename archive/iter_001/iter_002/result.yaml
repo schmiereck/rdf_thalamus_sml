@@ -1,0 +1,24 @@
+artifacts:
+- src/harness.py
+experimenter_view: 'Only completed the unicode fix in src/harness.py (replacing ρ
+  with ''rho'').
+
+  The harness self-test passes successfully. No encoders were implemented,
+
+  no experiment runner was created, and the phase0 experiment was not run.
+
+  The core infrastructure (DatasetGenerator, SimilarityEvaluator, EncoderBase,
+
+  utility functions) exists in harness.py and is functional.
+
+  '
+log_excerpt: "=== Harness Self-Test ===\n[OK] Dataset: base=(8, 3), all=(88, 3)\n\
+  [OK] Similarity eval: rho=nan, p=nan, pairs=28\n     Note: rho=NaN is expected for\
+  \ orthogonal (one-hot) codes.\n[OK] Sparsity (one-hot): 0.8750\n[OK] Reconstruction\
+  \ error (identity): 0.0\n[OK] Linear probe accuracy (one-hot): 1.0000\n[OK] Inverse\
+  \ Hamming distances verified\n[OK] Random codes rho=0.1767, p=3.6840e-01\n=== All\
+  \ self-tests passed ===\n"
+metrics: {}
+notes: Reached execution limit after fixing harness.py unicode issue; no encoders
+  implemented yet.
+status: code_error

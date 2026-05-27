@@ -1,10 +1,10 @@
 """
-HSUN Phase 0 — Experimental Harness
+HSUN Phase 0 -- Experimental Harness
 
 Dataset generator, similarity evaluator, encoder interface, and utility functions
 for the smoke-test of hierarchical sparse universal nodes.
 
-Dependencies: numpy, scipy only — no external ML libraries.
+Dependencies: numpy, scipy only -- no external ML libraries.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from scipy.stats import spearmanr
 class DatasetGenerator:
     """
     Generates the Phase 0 dataset:
-      - 8 base states: all 3-bit binary tuples (0,0,0) … (1,1,1)
+      - 8 base states: all 3-bit binary tuples (0,0,0) ... (1,1,1)
       - 10 noise variants per base state (bit-flip prob 0.1)
       - Total: 88 samples
     """
@@ -52,11 +52,11 @@ class DatasetGenerator:
         return variants
 
     def get_base_states(self) -> np.ndarray:
-        """Return just the 8 base states — shape (8, 3)."""
+        """Return just the 8 base states -- shape (8, 3)."""
         return self.base_states.copy()
 
     def get_all_samples(self) -> np.ndarray:
-        """Return all 88 samples — shape (88, 3)."""
+        """Return all 88 samples -- shape (88, 3)."""
         base = self.base_states
         samples: List[np.ndarray] = [base.copy()]
         for i in range(base.shape[0]):
@@ -72,7 +72,7 @@ class DatasetGenerator:
 class SimilarityEvaluator:
     """
     Computes pairwise input inverse Hamming distance and pairwise code
-    cosine similarity for the 8 base states, then calculates Spearman ρ
+    cosine similarity for the 8 base states, then calculates Spearman rho
     STRICTLY on off-diagonal (distinct) pairs.
     """
 
@@ -107,7 +107,7 @@ class SimilarityEvaluator:
         cls, states: np.ndarray, codes: np.ndarray
     ) -> Tuple[float, float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
-        Compute Spearman ρ on OFF-DIAGONAL pairs between code cosine similarity
+        Compute Spearman rho on OFF-DIAGONAL pairs between code cosine similarity
         and input inverse Hamming distance.
 
         Parameters
@@ -284,7 +284,7 @@ def linear_probe_accuracy(
     Parameters
     ----------
     codes : np.ndarray, shape (n_samples, dim_out)
-    labels : np.ndarray, shape (n_samples,) — integer class labels
+    labels : np.ndarray, shape (n_samples,) -- integer class labels
 
     Returns
     -------
@@ -315,21 +315,21 @@ def _self_test() -> None:
     print(f"[OK] Dataset: base={base.shape}, all={all_samples.shape}")
 
     # 2. Similarity evaluator (dummy codes: one-hot)
-    #    One-hot codes are orthogonal → cosine similarity = 0 for all off-diagonal.
-    #    Spearman ρ should be near 0 or undefined (constant cos_sim).
+    #    One-hot codes are orthogonal -> cosine similarity = 0 for all off-diagonal.
+    #    Spearman rho should be near 0 or undefined (constant cos_sim).
     dummy_codes = np.eye(8)
     rho, p_val, inv_h, cos_s, _, _ = SimilarityEvaluator.evaluate(base, dummy_codes)
     n_pairs = inv_h.shape[0]
     assert n_pairs == 28, f"Expected 28 off-diagonal pairs, got {n_pairs}"
-    # With one-hot codes, all off-diagonal cosine similarities are 0 → constant.
+    # With one-hot codes, all off-diagonal cosine similarities are 0 -> constant.
     # spearmanr may return NaN for constant inputs, which is expected.
-    print(f"[OK] Similarity eval: ρ={rho}, p={p_val}, pairs={n_pairs}")
-    print(f"     Note: ρ=NaN is expected for orthogonal (one-hot) codes.")
+    print(f"[OK] Similarity eval: rho={rho}, p={p_val}, pairs={n_pairs}")
+    print(f"     Note: rho=NaN is expected for orthogonal (one-hot) codes.")
 
     # 3. Utility: sparsity
     sparsity = compute_sparsity(dummy_codes)
     # One-hot has 7/8 entries = 0.875 below any small threshold
-    assert sparsity == 7 / 8, f"Expected {7/8}, got {sparsity}"
+    assert sparsity == 7 / 8, f"Expected 0.875, got {sparsity}"
     print(f"[OK] Sparsity (one-hot): {sparsity:.4f}")
 
     # 4. Utility: reconstruction error
@@ -362,7 +362,7 @@ def _self_test() -> None:
     # Normalize
     random_codes = random_codes / np.linalg.norm(random_codes, axis=1, keepdims=True)
     rho2, p2, _, _, _, _ = SimilarityEvaluator.evaluate(base, random_codes)
-    print(f"[OK] Random codes ρ={rho2:.4f}, p={p2:.4e}")
+    print(f"[OK] Random codes rho={rho2:.4f}, p={p2:.4e}")
 
     print("=== All self-tests passed ===")
 

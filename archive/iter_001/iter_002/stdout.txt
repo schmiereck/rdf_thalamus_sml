@@ -1,0 +1,275 @@
+ 
+
+[Tool Call: read_file({'path': 'src/pre_registration.md'})]
+
+[Tool Result: # RDF Scientific Pre-Registration
+
+*   **Iteration:** 001
+*   **Pre-Registration File:** src/pre_registration.md
+
+## 1. Hypothesis
+
+With 3 binary inputs (8 possible states), all five encoder types can be trained
+end-to-end. Non-trivial distributed encoders (P0-B SDR, P0-C SOM, P0-D Sparse AE,
+P0-E Predictive Coding) will produce codes where the Spearman rank correlation
+between pairwise code cosine similarity and pairwise input inverse Hamming distance
+is ≥ 0.6 when computed on **DISTINCT (off-d...]
+
+
+[Tool Call: read_file({'path': 'src/harness.py'})]
+
+[Tool Result: """
+HSUN Phase 0 — Experimental Harness
+
+Dataset generator, similarity evaluator, encoder interface, and utility functions
+for the smoke-test of hierarchical sparse universal nodes.
+
+Dependencies: numpy, scipy only — no external ML libraries.
+"""
+
+from __future__ import annotations
+
+import itertools
+from abc import ABC, abstractmethod
+from typing import Dict, List, Tuple
+
+import numpy as np
+from scipy.stats import spearmanr
+
+
+# --------------------------------------------------------------------...]
+
+ 
+
+[Tool Call: bash({'command': 'python -c "\nwith open(\'src/harness.py\',\'r\',encoding=\'utf-8\') as f:\n    content = f.read()\nfor i,ch in enumerate(content):\n    if ord(ch) > 127:\n        print(f\'Line {content[:i].count(chr(10))+1}: char U+{ord(ch):04X} {ch!r}\')\n"'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+ 
+
+[Tool Call: bash({'command': 'python src/harness.py'})]
+
+[Tool Result: exit_code: 1
+stdout: === Harness Self-Test ===
+[OK] Dataset: base=(8, 3), all=(88, 3)
+
+stderr: C:\Users\thomas\Projekte\rdf_thalamus_sml\src\harness.py:150: ConstantInputWarning: An input array is constant; the correlation coefficient is not defined.
+  rho, p_value = spearmanr(inv_ham_pairs, cos_sim_pairs)
+Traceback (most recent call last):
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\harness.py", line 371, in <module>
+    _self_test()
+  File "C:\Users\thomas\Projekte\rdf_thalamu...]
+
+   
+
+[Tool Call: bash({'command': 'python -c "\nwith open(\'src/harness.py\',\'r\',encoding=\'utf-8\') as f:\n    content = f.read()\nfor i,ch in enumerate(content):\n    if ord(ch) > 127:\n        line = content[:i].count(chr(10))+1\n        print(f\'Line {line}: U+{ord(ch):04X} {ch!r}\')\n"'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+   
+
+[Tool Call: grep_search({'pattern': 'ρ'})]
+
+[Tool Result: current_state.md:31: | 0 | Harness & smoke test | Can all five encoders run end-to-end? (Spearman ρ ≥ 0.6) |
+goal.md:63: - Similarity metric: cosine similarity of codes correlates with inverse Hamming distance of inputs (Spearman ρ ≥ 0.6 for non-trivial methods)
+manager_log.md:11: achieve similarity preservation within 0.15 (absolute ρ difference) of the
+manager_log.md:16: (1) Any non-trivial encoder (P0-B through P0-E) fails to achieve Spearman ρ ≥ 0.6
+manager_log.md:19: achieves ρ more than 0....]
+
+ 
+
+[Tool Call: read_file({'path': 'src/harness.py', 'start_line': 315})]
+
+[Tool Result: --- lines 315 to 371 of 371 ---
+    print(f"[OK] Dataset: base={base.shape}, all={all_samples.shape}")
+
+    # 2. Similarity evaluator (dummy codes: one-hot)
+    #    One-hot codes are orthogonal → cosine similarity = 0 for all off-diagonal.
+    #    Spearman ρ should be near 0 or undefined (constant cos_sim).
+    dummy_codes = np.eye(8)
+    rho, p_val, inv_h, cos_s, _, _ = SimilarityEvaluator.evaluate(base, dummy_codes)
+    n_pairs = inv_h.shape[0]
+    assert n_pairs == 28, f"Expected 28 off-dia...]
+
+   
+
+[Tool Call: bash({'command': 'python -c "\nwith open(\'src/harness.py\',\'r\',encoding=\'utf-8\') as f:\n    content = f.read()\nold = content\ncontent = content.replace(\'ρ\',\'rho\')\nif content != old:\n    print(\'Changed\', old.count(\'ρ\'), \'occurrences\')\n    with open(\'src/harness.py\',\'w\',encoding=\'utf-8\') as f:\n        f.write(content)\nelse:\n    print(\'No rho found\')\n"'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+   
+
+[Tool Call: bash({'command': 'powershell -Command "\n$content = Get-Content \'src/harness.py\' -Raw\n$newContent = $content -replace \'ρ\', \'rho\'\nif ($newContent -ne $content) {\n    Set-Content \'src/harness.py\' -Value $newContent -NoNewline\n    Write-Host \'Fixed rho chars in harness.py\'\n} else {\n    Write-Host \'No rho found\'\n}\n"'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+ 
+
+[Tool Call: bash({'command': 'python -c "\nwith open(\'src/harness.py\',\'rb\') as f:\n    content = f.read()\n# Find the rho character (UTF-8 0xCF 0x81)\nimport sys\nprint(\'Has rho bytes:\', b\'\\xcf\\x81\' in content)\n# Replace it\nnew_content = content.replace(b\'\\xcf\\x81\', b\'rho\')\nwith open(\'src/harness.py\',\'wb\') as f:\n    f.write(new_content)\nprint(\'Done\')\n"'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+   
+
+[Tool Call: bash({'command': 'python -c "\nwith open(\'src/harness.py\',\'rb\') as f:\n    data = f.read()\nfor i,b in enumerate(data):\n    if b & 0x80:\n        # Start of multi-byte sequence\n        print(f\'Multi-byte at {i}: {hex(b)}\')\n"'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+   
+
+[Tool Call: bash({'command': 'python src/harness.py'})]
+
+[Tool Result: exit_code: 1
+stdout: === Harness Self-Test ===
+[OK] Dataset: base=(8, 3), all=(88, 3)
+
+stderr: C:\Users\thomas\Projekte\rdf_thalamus_sml\src\harness.py:150: ConstantInputWarning: An input array is constant; the correlation coefficient is not defined.
+  rho, p_value = spearmanr(inv_ham_pairs, cos_sim_pairs)
+Traceback (most recent call last):
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\harness.py", line 371, in <module>
+    _self_test()
+  File "C:\Users\thomas\Projekte\rdf_thalamu...]
+
+ 
+
+[Tool Call: read_file({'path': 'src/harness.py', 'start_line': 320})]
+
+[Tool Result: --- lines 320 to 371 of 371 ---
+    dummy_codes = np.eye(8)
+    rho, p_val, inv_h, cos_s, _, _ = SimilarityEvaluator.evaluate(base, dummy_codes)
+    n_pairs = inv_h.shape[0]
+    assert n_pairs == 28, f"Expected 28 off-diagonal pairs, got {n_pairs}"
+    # With one-hot codes, all off-diagonal cosine similarities are 0 → constant.
+    # spearmanr may return NaN for constant inputs, which is expected.
+    print(f"[OK] Similarity eval: ρ={rho}, p={p_val}, pairs={n_pairs}")
+    print(f"     Note: ρ=Na...]
+
+   
+
+[Tool Call: bash({'command': 'python -c "\nwith open(\'src/harness.py\',\'rb\') as f:\n    data = f.read()\n# Find the line that contains the rho (search bytes near line 326)\n# The line should contain \'Similarity eval:\'\nidx = data.find(b\'Similarity eval:\')\nprint(\'idx:\', idx)\nif idx >= 0:\n    print(\'bytes:\', data[idx:idx+80])\n    # Check for rho (0xCF 0x81 in UTF-8)\n    for i in range(idx, idx+80):\n        if i >= len(data):\n            break\n        if data[i:i+2] == b\'\\xcf\\x81\':\n            print(\'Found rho at byte\', i)\n            print(\'surrounding:\', data[max(0,i-10):i+10])\n"'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+     
+
+[Tool Call: bash({'command': 'powershell -Command "\n$raw = [System.IO.File]::ReadAllBytes(\'src/harness.py\')\n# Find rho in UTF-8 (two bytes CF 81)\nfor ($i = 0; $i -lt $raw.Length - 1; $i++) {\n    if ($raw[$i] -eq 0xCF -and $raw[$i+1] -eq 0x81) {\n        Write-Host \\"Found rho at byte $i\\" \n    }\n}\n"'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+   
+
+[Tool Call: read_file({'path': 'src/harness.py'})]
+
+[Tool Result: """
+HSUN Phase 0 — Experimental Harness
+
+Dataset generator, similarity evaluator, encoder interface, and utility functions
+for the smoke-test of hierarchical sparse universal nodes.
+
+Dependencies: numpy, scipy only — no external ML libraries.
+"""
+
+from __future__ import annotations
+
+import itertools
+from abc import ABC, abstractmethod
+from typing import Dict, List, Tuple
+
+import numpy as np
+from scipy.stats import spearmanr
+
+
+# --------------------------------------------------------------------...]
+
+     
+
+[Tool Call: bash({'command': 'type src\\harness.py | findstr /n "rho" | findstr "323 326 327 361 365"'})]
+
+[Tool Result: exit_code: 0
+stdout: 326:    print(f"[OK] Similarity eval: ρ={rho}, p={p_val}, pairs={n_pairs}")
+365:    print(f"[OK] Random codes ρ={rho2:.4f}, p={p2:.4e}")
+
+stderr: ]
+
+   
+
+[Tool Call: bash({'command': 'python -c "\nwith open(\'src/harness.py\',\'r\',encoding=\'utf-8\') as f:\n    lines = f.readlines()\nfor i in [325, 326, 327, 360, 364]:\n    print(i+1, repr(lines[i]))\n"'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+   
+
+[Tool Call: bash({'command': 'python -c "\nwith open(\'src/harness.py\',\'rb\') as f:\n    data = f.read()\nprint(\'File size:\', len(data))\n# Show bytes at position around line 326\n# Count newlines until around line 325\nlines = data.split(b\'\\n\')\nprint(\'Num lines:\', len(lines))\nfor i in [325, 326, 327, 360, 364]:\n    print(i, lines[i])\n"'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+     
+
+[Tool Call: write_file({'path': 'src/harness.py', 'content': '"""\nHSUN Phase 0 -- Experimental Harness\n\nDataset generator, similarity evaluator, encoder interface, and utility functions\nfor the smoke-test of hierarchical sparse universal nodes.\n\nDependencies: numpy, scipy only -- no external ML libraries.\n"""\n\nfrom __future__ import annotations\n\nimport itertools\nfrom abc import ABC, abstractmethod\nfrom typing import Dict, List, Tuple\n\nimport numpy as np\nfrom scipy.stats import spearmanr\n\n\n# ---------------------------------------------------------------------------\n# Dataset Generator\n# ---------------------------------------------------------------------------\n\nclass DatasetGenerator:\n    """\n    Generates the Phase 0 dataset:\n      - 8 base states: all 3-bit binary tuples (0,0,0) ... (1,1,1)\n      - 10 noise variants per base state (bit-flip prob 0.1)\n      - Total: 88 samples\n    """\n\n    NUM_BITS = 3\n    NOISE_VARIANTS_PER_STATE = 10\n    FLIP_PROB = 0.1\n\n    def __init__(self, seed: int | None = None) -> None:\n        self.rng = np.random.default_rng(seed)\n\n    @property\n    def base_states(self) -> np.ndarray:\n        """Return the 8 canonical 3-bit states as an (8, 3) array."""\n        states = np.array(\n            list(itertools.product([0, 1], repeat=self.NUM_BITS)), dtype=np.float64\n        )\n        return states\n\n    def _noisy_variants(self, state: np.ndarray, n: int) -> np.ndarray:\n        """Generate n noise variants of a single state by flipping bits."""\n        flip_mask = self.rng.random((n, self.NUM_BITS)) < self.FLIP_PROB\n        variants = state.astype(np.float64) + flip_mask.astype(np.float64)\n        variants = np.mod(variants, 2)\n        return variants\n\n    def get_base_states(self) -> np.ndarray:\n        """Return just the 8 base states -- shape (8, 3)."""\n        return self.base_states.copy()\n\n    def get_all_samples(self) -> np.ndarray:\n        """Return all 88 samples -- shape (88, 3)."""\n        base = self.base_states\n        samples: List[np.ndarray] = [base.copy()]\n        for i in range(base.shape[0]):\n            variants = self._noisy_variants(base[i], self.NOISE_VARIANTS_PER_STATE)\n            samples.append(variants)\n        return np.vstack(samples)\n\n\n# ---------------------------------------------------------------------------\n# Similarity Evaluator\n# ---------------------------------------------------------------------------\n\nclass SimilarityEvaluator:\n    """\n    Computes pairwise input inverse Hamming distance and pairwise code\n    cosine similarity for the 8 base states, then calculates Spearman rho\n    STRICTLY on off-diagonal (distinct) pairs.\n    """\n\n    @staticmethod\n    def pairwise_hamming(states: np.ndarray) -> np.ndarray:\n        """Return an (N, N) matrix of Hamming distances between binary states."""\n        n = states.shape[0]\n        dist = np.zeros((n, n), dtype=np.float64)\n        for i in range(n):\n            for j in range(i + 1, n):\n                d = np.sum(states[i] != states[j])\n                dist[i, j] = d\n                dist[j, i] = d\n        return dist\n\n    @staticmethod\n    def inverse_hamming(hamming: np.ndarray) -> np.ndarray:\n        """Return 1 / (1 + hamming_distance)."""\n        return 1.0 / (1.0 + hamming)\n\n    @staticmethod\n    def pairwise_cosine(codes: np.ndarray) -> np.ndarray:\n        """Return an (N, N) matrix of cosine similarities between code vectors."""\n        norms = np.linalg.norm(codes, axis=1, keepdims=True)\n        # Guard against zero-norm vectors\n        norms = np.where(norms < 1e-12, 1.0, norms)\n        normalized = codes / norms\n        return normalized @ normalized.T\n\n    @classmethod\n    def evaluate(\n        cls, states: np.ndarray, codes: np.ndarray\n    ) -> Tuple[float, float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:\n        """\n        Compute Spearman rho on OFF-DIAGONAL pairs between code cosine similarity\n        and input inverse Hamming distance.\n\n        Parameters\n        ----------\n        states : np.ndarray, shape (N, 3)\n            The base input states (typically 8).\n        codes : np.ndarray, shape (N, dim_out)\n            The encoded codes for the base states.\n\n        Returns\n        -------\n        spearman_rho : float\n            Spearman rank correlation (off-diagonal only).\n        p_value : float\n            Two-sided p-value from spearmanr.\n        inv_ham_pairs : np.ndarray\n            Flattened inverse Hamming distances (off-diagonal).\n        cos_sim_pairs : np.ndarray\n            Flattened cosine similarities (off-diagonal).\n        row_indices : np.ndarray\n            Row indices for each off-diagonal pair.\n        col_indices : np.ndarray\n            Column indices for each off-diagonal pair.\n        """\n        assert states.shape[0] == codes.shape[0], (\n            f"states ({states.shape[0]}) and codes ({codes.shape[0]}) must match"\n        )\n\n        ham_dist = cls.pairwise_hamming(states)\n        inv_ham = cls.inverse_hamming(ham_dist)\n        cos_sim = cls.pairwise_cosine(codes)\n\n        n = states.shape[0]\n        # Extract upper-triangle indices (off-diagonal)\n        row_indices, col_indices = np.triu_indices(n, k=1)\n\n        inv_ham_pairs = inv_ham[row_indices, col_indices]\n        cos_sim_pairs = cos_sim[row_indices, col_indices]\n\n        rho, p_value = spearmanr(inv_ham_pairs, cos_sim_pairs)\n\n        return rho, p_value, inv_ham_pairs, cos_sim_pairs, row_indices, col_indices\n\n\n# ---------------------------------------------------------------------------\n# Encoder Interface\n# ---------------------------------------------------------------------------\n\nclass EncoderBase(ABC):\n    """Abstract base class for all Phase 0 encoders."""\n\n    @abstractmethod\n    def train(self, inputs: np.ndarray, epochs: int = 50) -> dict:\n        """\n        Train the encoder on inputs.\n\n        Parameters\n        ----------\n        inputs : np.ndarray, shape (n_samples, 3)\n        epochs : int\n\n        Returns\n        -------\n        metrics : dict\n            Training metrics (e.g., loss history).\n        """\n        pass\n\n    @abstractmethod\n    def encode(self, inputs: np.ndarray) -> np.ndarray:\n        """\n        Encode inputs into code vectors.\n\n        Parameters\n        ----------\n        inputs : np.ndarray, shape (n_samples, 3)\n\n        Returns\n        -------\n        codes : np.ndarray, shape (n_samples, dim_out)\n        """\n        pass\n\n    @property\n    @abstractmethod\n    def dim_out(self) -> int:\n        """Output dimension of the encoder."""\n        pass\n\n    @property\n    def name(self) -> str:\n        return self.__class__.__name__\n\n\n# ---------------------------------------------------------------------------\n# Utility Functions\n# ---------------------------------------------------------------------------\n\ndef compute_sparsity(codes: np.ndarray, threshold: float = 0.01) -> float:\n    """\n    Compute the fraction of code activations below a given threshold.\n\n    Parameters\n    ----------\n    codes : np.ndarray, shape (n_samples, dim_out)\n    threshold : float\n        Below this value an activation is considered "inactive".\n\n    Returns\n    -------\n    sparsity : float in [0, 1]\n    """\n    return float(np.mean(np.abs(codes) < threshold))\n\n\ndef compute_reconstruction_error(\n    original: np.ndarray, reconstructed: np.ndarray\n) -> float:\n    """Compute mean-squared reconstruction error."""\n    return float(np.mean((original - reconstructed) ** 2))\n\n\nclass SimpleLogisticRegression:\n    """\n    Minimal softmax logistic regression implemented in numpy.\n    Suitable for a linear-probe baseline with no sklearn dependency.\n    """\n\n    def __init__(self, n_classes: int, n_features: int, lr: float = 0.1,\n                 max_iter: int = 1000, seed: int = 42):\n        self.n_classes = n_classes\n        self.n_features = n_features\n        self.lr = lr\n        self.max_iter = max_iter\n        rng = np.random.default_rng(seed)\n        self.W = rng.standard_normal((n_features, n_classes)) * 0.01\n        self.b = np.zeros(n_classes)\n\n    @staticmethod\n    def _softmax(z: np.ndarray) -> np.ndarray:\n        z_shifted = z - np.max(z, axis=1, keepdims=True)\n        exp_z = np.exp(z_shifted)\n        return exp_z / np.sum(exp_z, axis=1, keepdims=True)\n\n    def fit(self, X: np.ndarray, y: np.ndarray) -> "SimpleLogisticRegression":\n        n = X.shape[0]\n        # One-hot encode labels\n        y_oh = np.zeros((n, self.n_classes))\n        y_oh[np.arange(n), y.astype(int)] = 1.0\n\n        for _ in range(self.max_iter):\n            probs = self._softmax(X @ self.W + self.b)\n            grad_W = X.T @ (probs - y_oh) / n\n            grad_b = np.mean(probs - y_oh, axis=0)\n            self.W -= self.lr * grad_W\n            self.b -= self.lr * grad_b\n        return self\n\n    def predict(self, X: np.ndarray) -> np.ndarray:\n        probs = self._softmax(X @ self.W + self.b)\n        return np.argmax(probs, axis=1)\n\n    def score(self, X: np.ndarray, y: np.ndarray) -> float:\n        preds = self.predict(X)\n        return float(np.mean(preds == y))\n\n\ndef linear_probe_accuracy(\n    codes: np.ndarray, labels: np.ndarray\n) -> Tuple[float, SimpleLogisticRegression]:\n    """\n    Fit a simple logistic regression classifier on codes and return accuracy.\n\n    Parameters\n    ----------\n    codes : np.ndarray, shape (n_samples, dim_out)\n    labels : np.ndarray, shape (n_samples,) -- integer class labels\n\n    Returns\n    -------\n    accuracy : float\n    model : fitted SimpleLogisticRegression instance\n    """\n    n_classes = len(np.unique(labels))\n    n_features = codes.shape[1]\n    model = SimpleLogisticRegression(n_classes, n_features)\n    model.fit(codes, labels)\n    accuracy = float(model.score(codes, labels))\n    return accuracy, model\n\n\n# ---------------------------------------------------------------------------\n# Quick self-test (run with: python src/harness.py)\n# ---------------------------------------------------------------------------\n\ndef _self_test() -> None:\n    print("=== Harness Self-Test ===")\n\n    # 1. Dataset\n    ds = DatasetGenerator(seed=42)\n    base = ds.get_base_states()\n    all_samples = ds.get_all_samples()\n    assert base.shape == (8, 3), f"Expected (8, 3), got {base.shape}"\n    assert all_samples.shape == (88, 3), f"Expected (88, 3), got {all_samples.shape}"\n    print(f"[OK] Dataset: base={base.shape}, all={all_samples.shape}")\n\n    # 2. Similarity evaluator (dummy codes: one-hot)\n    #    One-hot codes are orthogonal -> cosine similarity = 0 for all off-diagonal.\n    #    Spearman rho should be near 0 or undefined (constant cos_sim).\n    dummy_codes = np.eye(8)\n    rho, p_val, inv_h, cos_s, _, _ = SimilarityEvaluator.evaluate(base, dummy_codes)\n    n_pairs = inv_h.shape[0]\n    assert n_pairs == 28, f"Expected 28 off-diagonal pairs, got {n_pairs}"\n    # With one-hot codes, all off-diagonal cosine similarities are 0 -> constant.\n    # spearmanr may return NaN for constant inputs, which is expected.\n    print(f"[OK] Similarity eval: rho={rho}, p={p_val}, pairs={n_pairs}")\n    print(f"     Note: rho=NaN is expected for orthogonal (one-hot) codes.")\n\n    # 3. Utility: sparsity\n    sparsity = compute_sparsity(dummy_codes)\n    # One-hot has 7/8 entries = 0.875 below any small threshold\n    assert sparsity == 7 / 8, f"Expected 0.875, got {sparsity}"\n    print(f"[OK] Sparsity (one-hot): {sparsity:.4f}")\n\n    # 4. Utility: reconstruction error\n    recon_err = compute_reconstruction_error(base, base)\n    assert recon_err == 0.0\n    print(f"[OK] Reconstruction error (identity): {recon_err}")\n\n    # 5. Utility: linear probe\n    labels = np.arange(8)  # each state is its own class\n    acc, model = linear_probe_accuracy(dummy_codes, labels)\n    assert acc == 1.0, f"Expected 100% accuracy on identity, got {acc}"\n    print(f"[OK] Linear probe accuracy (one-hot): {acc:.4f}")\n\n    # 6. Verify inverse Hamming distances for 3-bit states\n    ham = SimilarityEvaluator.pairwise_hamming(base)\n    inv_h_full = SimilarityEvaluator.inverse_hamming(ham)\n    # Diagonal should be 1.0 (distance=0)\n    assert np.allclose(np.diag(inv_h_full), 1.0)\n    # Max inverse Hamming (distance=1) should be 0.5\n    assert 0.5 in inv_h_full\n    # Min inverse Hamming (distance=3) should be 0.25\n    assert 0.25 in inv_h_full\n    print(f"[OK] Inverse Hamming distances verified")\n\n    # 7. Test with a code set that should show positive correlation\n    #    Create codes proportional to inverse Hamming structure\n    #    (trivial test: just verify the pipeline runs on non-orthogonal codes)\n    rng = np.random.default_rng(123)\n    random_codes = rng.standard_normal((8, 16))\n    # Normalize\n    random_codes = random_codes / np.linalg.norm(random_codes, axis=1, keepdims=True)\n    rho2, p2, _, _, _, _ = SimilarityEvaluator.evaluate(base, random_codes)\n    print(f"[OK] Random codes rho={rho2:.4f}, p={p2:.4e}")\n\n    print("=== All self-tests passed ===")\n\n\nif __name__ == "__main__":\n    _self_test()\n'})]
+
+[Tool Result: Successfully wrote to src/harness.py]
+
+   
+
+[Tool Call: bash({'command': 'python src/harness.py'})]
+
+[Tool Result: exit_code: 0
+stdout: === Harness Self-Test ===
+[OK] Dataset: base=(8, 3), all=(88, 3)
+[OK] Similarity eval: rho=nan, p=nan, pairs=28
+     Note: rho=NaN is expected for orthogonal (one-hot) codes.
+[OK] Sparsity (one-hot): 0.8750
+[OK] Reconstruction error (identity): 0.0
+[OK] Linear probe accuracy (one-hot): 1.0000
+[OK] Inverse Hamming distances verified
+[OK] Random codes rho=0.1767, p=3.6840e-01
+=== All self-tests passed ===
+
+stderr: C:\Users\thomas\Projekte\rdf_thalamus_sml\src\harness...]
+
+
+[NUDGE RESPONSE]
+ ```yaml
+status: code_error
+artifacts:
+  - src/harness.py
+metrics: {}
+log_excerpt: |
+  === Harness Self-Test ===
+  [OK] Dataset: base=(8, 3), all=(88, 3)
+  [OK] Similarity eval: rho=nan, p=nan, pairs=28
+       Note: rho=NaN is expected for orthogonal (one-hot) codes.
+  [OK] Sparsity (one-hot): 0.8750
+  [OK] Reconstruction error (identity): 0.0
+  [OK] Linear probe accuracy (one-hot): 1.0000
+  [OK] Inverse Hamming distances verified
+  [OK] Random codes rho=0.1767, p=3.6840e-01
+  === All self-tests passed ===
+experimenter_view: |
+  Only completed the unicode fix in src/harness.py (replacing ρ with 'rho').
+  The harness self-test passes successfully. No encoders were implemented,
+  no experiment runner was created, and the phase0 experiment was not run.
+  The core infrastructure (DatasetGenerator, SimilarityEvaluator, EncoderBase,
+  utility functions) exists in harness.py and is functional.
+notes: "Reached execution limit after fixing harness.py unicode issue; no encoders implemented yet."
+```
