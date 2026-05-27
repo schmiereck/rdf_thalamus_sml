@@ -1,0 +1,134 @@
+## Phase 2: Temporal Integration at a Single Node — Infrastructure + P2-D Experiments
+
+You are building the temporal experiment infrastructure for the HSUN project and running the critical P2-D experiments. This is the core test of the universal-node hypothesis: can the same UniversalNode that works spatially also work temporally?
+
+### CRITICAL RESEARCH MANAGER GUIDANCE — Read Carefully
+
+The Research Manager identified a **"Periodicity Loophole"**: any deterministic, time-invariant mapping (including completely untrained random weights) will map a periodic input sequence to a periodic output sequence. A downstream linear probe can trivially exploit this. Therefore:
+
+1. **PRIMARY METRIC: Zero-Shot Temporal JEPA Loss.** Evaluate the raw local JEPA loss (prediction error in latent space) of the *spatially-trained* node on temporal transitions, and compare directly to an *untrained* node. Transfer success requires: `Loss_spatial_trained / Loss_untrained < 0.85`.
+2. **Secondary metrics:** periodic-vs-random classification, next-step prediction accuracy on Markovian/irregular sequences where deterministic propagation alone does not guarantee success.
+3. **All temporal integration variants (P2-A, P2-B, P2-C, P2-D) must use JEPA as the training objective** to isolate architectural differences from loss formulation.
+
+### Step 1: Update Pre-Registration
+
+Update `src/pre_registration.md` to add Phase 2-specific criteria. Add to the falsification criteria:
+
+**F0 (Zero-Shot Transfer JEPA Loss):** If `Loss_spatial_trained / Loss_untrained ≥ 0.85` on temporal JEPA loss, the spatial → temporal transfer has FAILED. This is the most rigorous test of whether spatially-trained weights encode general local-pattern structure vs. axis-specific structure.
+
+Keep existing F1, F2, F3 criteria. Reorder so F0 comes first.
+
+### Step 2: Create `src/temporal_dataset.py`
+
+Generate temporal sequences of d=16 vectors for training and evaluation:
+
+**State set:** 8 discrete states (A through H), each mapped to a fixed d=16 random embedding vector. The embedding vectors should be generated with a seed and should have moderate cosine similarity (use Xavier-scaled random vectors, NOT orthogonal — this is more realistic).
+
+**Sequence types (for classification):**
+- **Periodic** (label 0): Fixed period cycles with periods 3, 4, 7, 11. E.g., A,B,C,A,B,C,... or AB,C,AB,C,...
+- **Random walk** (label 1): Markov chain with near-uniform transition matrix (each transition prob 0.1-0.3). Changes state unpredictably.
+- **Irregular/semi-random** (label 2): Markov chain with non-uniform transitions. Some states preferred. Mix of predictable and unpredictable transitions.
+
+Each sequence should be length 64. Generate 200 training and 100 test sequences per category. Use sliding window to create temporal triplets.
+
+**For next-step prediction evaluation:** Use a separate held-out set of sequences. The task is: given (state_{t-2}, state_{t-1}, state_t), predict the embedding of state_{t+1} (measured by cosine similarity between predicted and actual next-step embedding).
+
+### Step 3: Create `src/temporal_encoder.py`
+
+Implement all four temporal integration mechanisms. ALL use JEPA training objective:
+
+**P2-D (Three-temporal-slot node) — HIGHEST PRIORITY:**
+- Reuse UniversalNode directly: inputs are (embedding_{t-2}, embedding_{t-1}, embedding_t) stacked as (batch, 3, d)
+- The node's forward() produces a d_out-dimensional code for each temporal position
+- For zero-shot transfer: load spatial weights from a Phase-1 JEPA-trained UniversalNode
+- For temporal training: train from scratch with JEPA objective applied along the time axis
+
+**P2-A (Multi-tick-rate node):**
+- The node updates every N steps (N=3 by default)
+- Between updates, it accumulates/pools inputs (average pooling over the N steps)
+- At each update, it receives the pooled (current_pool, prev_pool, prev_prev_pool) as 3-slot input
+- Train with JEPA on the time-axis codes
+
+**P2-B (Recurrent state node):**
+- Has a hidden state h of dimension d
+- At each time step: h_new = tanh(W_xh @ x_t + W_hh @ h + b_h), code = h_new
+- The 3-slot input for JEPA comparison is (code_{t-2}, code_{t-1}, code_t) but the recurrent state carries information across the whole sequence
+- Train with JEPA on the time-axis codes
+
+**P2-C (Output-as-input loop):**
+- At time t, input is (code_{t-1}, embedding_{t-1}, embedding_t) — 3 slots
+- Uses UniversalNode with d_out=d, so code_{t-1} from the previous step feeds back
+- At t=0, code_{-1} = zeros(d)
+- Train with JEPA on the time-axis codes
+
+All encoders should produce a sequence of codes of shape (B, T, d_out) where T is the sequence length.
+
+### Step 4: Create `src/run_phase2.py`
+
+Main experiment runner. Must handle:
+
+**Config 1: P2-D Zero-Shot Transfer**
+- Load a Phase-1 JEPA-d16 trained encoder's UniversalNode weights
+- To get Phase-1 trained weights: train a HierarchicalEncoder with JEPA-d16 first (use the existing training loop from run_phase1_v2.py), then extract the master node's W_enc and b_enc
+- Apply these weights to temporal triplets
+- Evaluate: (a) Zero-Shot Temporal JEPA Loss (PRIMARY), (b) periodic-vs-random classification, (c) next-step prediction
+
+**Config 2: P2-D Temporal Training**
+- Train P2-D from scratch with temporal JEPA, 200 epochs, d=16, 5 seeds
+- Same evaluation tasks
+
+**Config 3: P2-D Untrained Baseline**
+- Randomly initialized UniversalNode applied to temporal triplets
+- Same evaluation — this is the denominator for the Zero-Shot JEPA Loss ratio
+
+For JEPA on the temporal axis: the codes are (B, T, d), and we predict code at t+1 from code at t (and vice versa) — this is exactly the same spatial JEPA but along the time dimension. Use JEPALoss from training_objectives.py with n_layers=1.
+
+### Step 5: Run the P2-D Experiments
+
+Execute these configs with 5 seeds each:
+1. P2-D untrained baseline (5 seeds)
+2. P2-D zero-shot transfer from spatial weights (5 seeds)
+3. P2-D temporal training from scratch with JEPA (5 seeds, 200 epochs)
+
+For each run, record:
+- Temporal JEPA loss (raw value)
+- Zero-Shot JEPA Loss ratio (transfer / untrained) — for F0 criterion
+- Periodic-vs-random classification accuracy (linear probe on code sequence means)
+- Next-step prediction cosine similarity (on irregular/Markov sequences)
+
+Also train the Phase-1 JEPA-d16 encoder needed for zero-shot transfer (use the existing code in run_phase1_v2.py). This should use d=16, sharing_mode="cross_layer", JEPA objective, 200 epochs.
+
+### Step 6: Create `src/test_temporal.py`
+
+Self-tests for all new components:
+- Dataset generation produces correct shapes and label distributions
+- P2-D forward pass produces correct output shapes
+- P2-A, P2-B, P2-C forward passes produce correct output shapes
+- Temporal JEPA loss computation works
+- Zero-shot transfer correctly loads and applies spatial weights
+
+### File Locations
+ALL code goes in src/. NEVER put code in archive/.
+- src/temporal_dataset.py
+- src/temporal_encoder.py
+- src/run_phase2.py
+- src/test_temporal.py
+- src/pre_registration.md (update)
+- phase_2/ directory for results (phase_2/p2d_results.csv)
+
+### Important Implementation Notes
+- Use numpy only — no ML libraries (torch, tensorflow, etc.)
+- Follow snake_case for modules, PascalCase for classes
+- Use the existing UniversalNode class from src/node.py (import it)
+- Use the existing JEPALoss class from src/training_objectives.py
+- Use SimpleLogisticRegression from src/harness.py for linear probes
+- The embedding for discrete states should use Xavier initialization: rng.standard_normal((n_states, d)) * sqrt(2/d)
+- For temporal triplet construction: given a sequence of embeddings (T, d), create temporal triplets as (T-2, 3, d) by sliding window of size 3 with stride 1
+- When computing periodic-vs-random classification: use the MEAN of the code sequence as the feature vector for the linear probe (not per-timestep codes)
+- All experiments use d=16
+
+### Success Criteria for This Sub-Goal
+- All source files created and self-tests pass
+- P2-D zero-shot transfer results computed with Zero-Shot JEPA Loss ratio
+- P2-D temporal training results with classification accuracy and prediction accuracy
+- Results saved to phase_2/p2d_results.csv
