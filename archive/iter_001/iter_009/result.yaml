@@ -1,0 +1,25 @@
+artifacts:
+- phase_0/REPORT.md
+experimenter_view: "Successfully generated the Phase 0 experiment report from pre-existing\
+  \ results.csv.\nKey findings: P0-C (SOM) is the best performer with rho=0.8811,\
+  \ followed by \nP0-E (Predictive Coding) at 0.7221, then P0-D (Sparse Autoencoder)\
+  \ at 0.6173.\nP0-B (Spatial Pooler) failed the rho>=0.6 criterion at 0.5807. All\
+  \ three local\nmethods (P0-B, P0-C, P0-E) are within 0.15 rho of the P0-D baseline\
+  \ (Criterion 3\nPASS). The report recommends P0-D as the Phase 1 baseline due to\
+  \ gradient-based\ntraining and ease of integration.\n"
+log_excerpt: "Report generated successfully!\nC:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\\
+  src\\run_phase0.py:100: RuntimeWarning: Mean of empty slice\n  \"rho_mean\": np.nanmean(rhos),\n\
+  C:\\Users\\thomas\\Projekte\\uroboros-rdf\\.venv\\Lib\\site-packages\\numpy\\lib\\\
+  _nanfunctions_impl.py:1997: RuntimeWarning: Degrees of freedom <= 0 for slice.\n\
+  \  var = nanvar(a, axis=axis, dtype=dtype, out=out, ddof=ddof,\n"
+metrics:
+  p0_b_rho_mean: 0.5807
+  p0_c_rho_mean: 0.8811
+  p0_c_rho_std: 0.0177
+  p0_d_rho_mean: 0.6173
+  p0_d_rho_std: 0.0842
+  p0_e_rho_mean: 0.7221
+  p0_e_rho_std: 0.025
+  runs_completed: 25
+notes: Phase 0 report generated via _gen_report.py using existing results.csv data.
+status: ok
