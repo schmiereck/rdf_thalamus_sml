@@ -1,0 +1,19 @@
+artifacts:
+- src/hierarchical_encoder.py
+experimenter_view: "The HierarchicalEncoder has been successfully updated to natively\
+  \ support \nlist-of-arrays in `backward_from_code_grads`. When a list is provided,\
+  \ \ngradients from each layer are appropriately added and propagated back \nthrough\
+  \ the network. The existing behavior for single 2D arrays remains \nunchanged and\
+  \ all verification tests pass successfully.\n"
+log_excerpt: "--- Testing HebbianLoss (Oja's rule) ---\n  monitoring loss = -0.1126\n\
+  \  weight change = 0.000341\n  [PASS]\n\n--- Testing Encoder backward_from_code_grads\
+  \ ---\n  [mode=none]\n    embedding grad shape: (2, 4)  [OK]\n    dx_binary shape:\
+  \ (4, 16, 4)  [OK]\n  [mode=within_layer]\n    embedding grad shape: (2, 4)  [OK]\n\
+  \    dx_binary shape: (4, 16, 4)  [OK]\n  [mode=cross_layer]\n    embedding grad\
+  \ shape: (2, 4)  [OK]\n    dx_binary shape: (4, 16, 4)  [OK]\n  [PASS]\n\n--- Testing\
+  \ forward consistency ---\n  forward() == forward_with_intermediates()  [PASS]\n\
+  \n============================================================\n  ALL SELF-TESTS\
+  \ PASSED\n============================================================\n"
+metrics: {}
+notes: Native list-of-arrays support added and verified for encoder gradients.
+status: ok

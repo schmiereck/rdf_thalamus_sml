@@ -191,15 +191,20 @@ class HierarchicalEncoder:
 
     def backward_from_code_grads(
         self,
-        dL_dcodes: np.ndarray,
+        dL_dcodes: np.ndarray | list[np.ndarray],
         codes: np.ndarray,
         node_inputs: list[np.ndarray],
         x_binary: np.ndarray,
     ) -> dict:
-        batch = dL_dcodes.shape[0]
+        batch = codes.shape[0]
 
+        dL_dcodes_is_list = isinstance(dL_dcodes, list)
         n_nodes_last = self.n_nodes_per_layer[-1]
-        dL_dx = dL_dcodes.reshape(batch, n_nodes_last, self.d_out)
+
+        if dL_dcodes_is_list:
+            dL_dx_prop = np.zeros((batch, n_nodes_last, self.d_out))
+        else:
+            dL_dx_prop = dL_dcodes.reshape(batch, n_nodes_last, self.d_out)
 
         if self.sharing_mode == "none":
             dL_dnodes = [
@@ -212,6 +217,11 @@ class HierarchicalEncoder:
         dL_dembed = np.zeros_like(self.embedding)
 
         for l in reversed(range(self.n_layers)):
+            if dL_dcodes_is_list:
+                dL_dx_total = dL_dx_prop + dL_dcodes[l]
+            else:
+                dL_dx_total = dL_dx_prop
+
             n_nodes = self.n_nodes_per_layer[l]
             node_ins = node_inputs[l]
 
@@ -224,7 +234,7 @@ class HierarchicalEncoder:
                 node = self._get_node(l, p)
                 code = node.forward(x_3d)
 
-                dL_da = dL_dx[:, p, :].copy()
+                dL_da = dL_dx_total[:, p, :].copy()
 
                 if node.kwta_k is not None:
                     k = min(node.kwta_k, node.d_out)
@@ -284,22 +294,22 @@ class HierarchicalEncoder:
             if l > 0:
                 n_nodes_prev = self.n_nodes_per_layer[l - 1]
                 if self.d_out > self.d:
-                    dL_dx = np.zeros((batch, n_nodes_prev, self.d_out))
-                    dL_dx[:, :, : self.d] = dL_dlayer_input
+                    dL_dx_prop = np.zeros((batch, n_nodes_prev, self.d_out))
+                    dL_dx_prop[:, :, : self.d] = dL_dlayer_input
                 else:
-                    dL_dx = dL_dlayer_input
+                    dL_dx_prop = dL_dlayer_input
             else:
                 for pos in range(self.n_input):
                     idx_arr = x_binary[:, pos].astype(int)
                     for b in range(batch):
                         dL_dembed[idx_arr[b]] += dL_dlayer_input[b, pos, :]
                 dL_dembed /= batch
-                dL_dx = dL_dlayer_input
+                dL_dx_prop = dL_dlayer_input
 
         return {
             "dL_dembedding": dL_dembed,
             "dL_dnodes": dL_dnodes if self.sharing_mode == "none" else dL_dnodes_layer,
-            "dL_dx_binary": dL_dx,
+            "dL_dx_binary": dL_dx_prop,
         }
 
     # ------------------------------------------------------------------
