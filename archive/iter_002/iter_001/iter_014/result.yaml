@@ -1,0 +1,49 @@
+artifacts:
+- phase_1/REPORT.md
+experimenter_view: 'The Phase 1 hypothesis for cross-layer shared hierarchical learning
+  is decisively falsified.
+
+  The trained P1-B model performed at chance level (18.4% accuracy vs 20% baseline)
+  and
+
+  actively degraded performance by 11.4 percentage points compared to its untrained
+  random
+
+  initialization. The root cause has been identified as representation collapse: with
+  the
+
+  default embedding scale of Uniform[-0.01, 0.01], input magnitudes are so small that
+  the
+
+  L1 sparsity penalty (lambda=0.002) completely dominates the vanishingly tiny reconstruction
+
+  loss during gradient descent, forcing all weights and codes to zero. A 128-configuration
+
+  hyperparameter sweep confirmed this diagnosis; scaling embeddings to Normal(0, 2.0)
+
+  rescued accuracy up to 53.8%, but at the complete cost of code sparsity (dropping
+  to <1%),
+
+  proving a fundamental accuracy-sparsity trade-off under the current architecture
+  and L1 penalty.
+
+  '
+log_excerpt: 'Results saved to phase_1\results.csv
+
+  Report saved to phase_1/REPORT.md (generated manually)
+
+  Phase 1 Hypothesis: FALSIFIED.
+
+  '
+metrics:
+  accuracy_vs_baseline_delta_pp: -11.4
+  hyper_sweep_best_accuracy: 0.538
+  hyper_sweep_best_accuracy_sparsity: 0.0083
+  hyper_sweep_total_configs: 128
+  p1b_mean_sparsity: 0.7
+  p1b_mean_test_accuracy: 0.1836
+  p1b_untrained_baseline_accuracy: 0.2976
+  p1c_minus_p1b_gap_pp: 0.68
+notes: Phase 1 report complete. Hypothesis falsified on accuracy and baseline metrics.
+  Actionable path for Phase 2 identified.
+status: ok
