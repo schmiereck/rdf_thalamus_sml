@@ -1,0 +1,1 @@
+Write a small script `test_raw_accuracy.py` that generates the Phase 1 dataset with `generate_phase1_dataset(seed=42)` and trains a `SimpleLogisticRegression` directly on the raw 16-bit inputs (train_x, train_y) and scores it on the test set (test_x, test_y). Print the train and test accuracies.
