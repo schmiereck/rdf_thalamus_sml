@@ -1,0 +1,30 @@
+artifacts:
+- _fix_rho.py
+- _fix_encoding.py
+- _gen_report.py
+experimenter_view: "The two targeted fixes were successfully applied to src/run_phase0.py:\n\
+  \n1. All 13 instances of the Greek letter ρ (U+03C1) in string literals within\n\
+  \   the generate_report function were replaced with ASCII \"rho\". This prevents\n\
+  \   the UnicodeEncodeError that occurs on Windows with cp1252 encoding when\n  \
+  \ writing the report.\n\n2. Both open() calls in the file were updated to include\
+  \ encoding=\"utf-8\":\n   - write_csv(): open(filepath, \"w\", newline=\"\", encoding=\"\
+  utf-8\")\n   - generate_report(): open(filepath, \"w\", encoding=\"utf-8\")\n\n\
+  A helper script (_gen_report.py) was written to load results.csv and call\ngenerate_report()\
+  \ directly, avoiding a full re-run of experiments. However,\ndue to the execution\
+  \ limit, this script was not executed and the report\nat phase_0/REPORT.md has not\
+  \ been regenerated yet. Running\n`python _gen_report.py` would complete the task.\n"
+log_excerpt: 'Count before: 13
+
+  Count after: 0
+
+  Done
+
+  Added utf-8 encoding to file open calls
+
+  '
+metrics:
+  greek_rho_replacements: 13
+  open_calls_with_encoding: 2
+notes: Fixes applied. Report regeneration script written but not executed due to token
+  limit.
+status: code_error

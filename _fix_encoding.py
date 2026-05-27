@@ -1,0 +1,5 @@
+content = open('src/run_phase0.py', 'r', encoding='utf-8').read()
+content = content.replace('open(filepath, "w")', 'open(filepath, "w", encoding="utf-8")')
+content = content.replace('open(filepath, "w", newline="")', 'open(filepath, "w", newline="", encoding="utf-8")')
+open('src/run_phase0.py', 'w', encoding='utf-8').write(content)
+print('Added utf-8 encoding to file open calls')

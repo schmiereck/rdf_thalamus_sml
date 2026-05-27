@@ -1,0 +1,10 @@
+import sys
+content = open('src/run_phase0.py', 'r', encoding='utf-8').read()
+cnt_before = content.count('\u03c1')
+print('Count before:', cnt_before)
+content = content.replace('\u03c1', 'rho')
+content = content.replace('\u03A1', 'Rho')
+cnt_after = content.count('\u03c1') + content.count('\u03A1')
+print('Count after:', cnt_after)
+open('src/run_phase0.py', 'w', encoding='utf-8').write(content)
+print('Done')

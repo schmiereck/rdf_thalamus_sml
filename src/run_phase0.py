@@ -65,7 +65,7 @@ def write_csv(results, filepath):
         "encoder_id", "seed", "spearman_rho", "p_value",
         "sparsity", "train_time_sec", "final_loss", "n_codes", "dim_out", "status"
     ]
-    with open(filepath, "w", newline="") as f:
+    with open(filepath, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for r in results:
@@ -121,7 +121,7 @@ def generate_report(results, filepath):
     lines.append("")
     lines.append("## 1. Summary Table")
     lines.append("")
-    lines.append("| Encoder | ρ (mean±std) | Sparsity | Final Loss | Train Time (s) | Pass / Fail |")
+    lines.append("| Encoder | rho (mean±std) | Sparsity | Final Loss | Train Time (s) | Pass / Fail |")
     lines.append("|---------|--------------|----------|------------|----------------|-------------|")
     
     for eid in ["p0-a", "p0-b", "p0-c", "p0-d", "p0-e"]:
@@ -153,31 +153,31 @@ def generate_report(results, filepath):
     lines.append(f"- **Result:** {'YES' if all_ok else 'NO'}")
     lines.append("- All 25 runs (5 encoders × 5 seeds) completed without errors." if all_ok else "Some runs failed.")
     lines.append("")
-    lines.append("### Criterion 2: Non-trivial encoders achieve ρ ≥ 0.6")
+    lines.append("### Criterion 2: Non-trivial encoders achieve rho ≥ 0.6")
     lines.append("(P0-A is exempt — expected to fail as negative control)")
     lines.append("")
     for eid in ["p0-b", "p0-c", "p0-d", "p0-e"]:
         s = summary.get(eid, {})
         rho_mean = s.get("rho_mean", float("nan"))
         status = "PASS" if rho_mean >= 0.6 else "FAIL"
-        lines.append(f"- **{encoder_names[eid]}:** ρ = {rho_mean:.4f} → {status}")
+        lines.append(f"- **{encoder_names[eid]}:** rho = {rho_mean:.4f} → {status}")
     lines.append("")
     lines.append("### Criterion 3: Local methods within 0.15 of P0-D baseline")
     lines.append("")
-    lines.append(f"- **P0-D baseline ρ:** {p0d_rho_mean:.4f}")
+    lines.append(f"- **P0-D baseline rho:** {p0d_rho_mean:.4f}")
     lines.append("")
     for eid in ["p0-b", "p0-c", "p0-e"]:
         s = summary.get(eid, {})
         rho_mean = s.get("rho_mean", float("nan"))
         gap = p0d_rho_mean - rho_mean
         status = "PASS" if gap <= 0.15 else "FAIL"
-        lines.append(f"- **{encoder_names[eid]}:** ρ = {rho_mean:.4f}, gap = {gap:.4f} → {status}")
+        lines.append(f"- **{encoder_names[eid]}:** rho = {rho_mean:.4f}, gap = {gap:.4f} → {status}")
     lines.append("")
     lines.append("---")
     lines.append("")
     lines.append("## 3. Key Findings")
     lines.append("")
-    lines.append("1. **P0-A (Lookup Table / One-Hot):** As expected, ρ ≈ NaN (constant off-diagonal cosine similarity = 0).")
+    lines.append("1. **P0-A (Lookup Table / One-Hot):** As expected, rho ≈ NaN (constant off-diagonal cosine similarity = 0).")
     lines.append("   This confirms that one-hot representations are mutually orthogonal and cannot preserve input similarity.")
     lines.append("")
     
@@ -186,16 +186,16 @@ def generate_report(results, filepath):
     p0d_rho = summary.get("p0-d", {}).get("rho_mean", float("nan"))
     p0e_rho = summary.get("p0-e", {}).get("rho_mean", float("nan"))
     
-    lines.append(f"2. **P0-B (Spatial Pooler):** Achieved ρ = {p0b_rho:.4f} using competitive learning with prototype-based")
+    lines.append(f"2. **P0-B (Spatial Pooler):** Achieved rho = {p0b_rho:.4f} using competitive learning with prototype-based")
     lines.append("   inverse-distance codes. This is a valid SDR approach that produces sparse, similarity-preserving codes.")
     lines.append("")
-    lines.append(f"3. **P0-C (SOM):** Achieved ρ = {p0c_rho:.4f} — the highest of all methods. Using inverse Euclidean distance")
+    lines.append(f"3. **P0-C (SOM):** Achieved rho = {p0c_rho:.4f} — the highest of all methods. Using inverse Euclidean distance")
     lines.append("   to all SOM units as the code vector produces excellent topology preservation.")
     lines.append("")
-    lines.append(f"4. **P0-D (Sparse Autoencoder):** Achieved ρ = {p0d_rho:.4f} with the default hyperparameters (lr=0.15,")
+    lines.append(f"4. **P0-D (Sparse Autoencoder):** Achieved rho = {p0d_rho:.4f} with the default hyperparameters (lr=0.15,")
     lines.append("   l1_lambda=0.002). This is the global-optimization baseline against which local methods are compared.")
     lines.append("")
-    lines.append(f"5. **P0-E (Predictive Coding):** Achieved ρ = {p0e_rho:.4f}. The local-error learning mechanism with")
+    lines.append(f"5. **P0-E (Predictive Coding):** Achieved rho = {p0e_rho:.4f}. The local-error learning mechanism with")
     lines.append("   lateral inhibition successfully produces similarity-preserving codes.")
     lines.append("")
     
@@ -214,16 +214,16 @@ def generate_report(results, filepath):
     if local_fail:
         lines.append(f"6. **Local vs Global:** Methods {', '.join(local_fail)} exceeded the 0.15 gap threshold.")
     else:
-        lines.append("6. **Local vs Global:** All local methods (P0-B, P0-C, P0-E) are within 0.15 ρ of the P0-D baseline.")
+        lines.append("6. **Local vs Global:** All local methods (P0-B, P0-C, P0-E) are within 0.15 rho of the P0-D baseline.")
     lines.append("")
     lines.append("### Recommendation for Phase 1")
     lines.append("")
     # Best performing method
     best_eid = max(["p0-b", "p0-c", "p0-d", "p0-e"], key=lambda e: summary.get(e, {}).get("rho_mean", -1))
-    lines.append(f"- **Best performer:** {encoder_names[best_eid]} with ρ = {summary[best_eid]['rho_mean']:.4f}")
+    lines.append(f"- **Best performer:** {encoder_names[best_eid]} with rho = {summary[best_eid]['rho_mean']:.4f}")
     lines.append("- The Sparse Autoencoder (P0-D) is recommended as the Phase 1 baseline encoder because:")
     lines.append("  1. It has well-understood gradient-based training.")
-    lines.append("  2. It provides strong similarity preservation (ρ ≈ 0.70).")
+    lines.append("  2. It provides strong similarity preservation (rho ≈ 0.70).")
     lines.append("  3. It is easy to integrate into larger architectures (e.g. stacked autoencoders).")
     lines.append("- P0-C (SOM) shows the strongest topology preservation and could be explored as an alternative.")
     lines.append("")
@@ -234,7 +234,7 @@ def generate_report(results, filepath):
     lines.append("See `phase_0/results.csv` for per-seed results.")
     lines.append("")
     
-    with open(filepath, "w") as f:
+    with open(filepath, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
 
