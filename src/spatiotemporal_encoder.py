@@ -5,6 +5,9 @@ Implements the sequential spatial-then-temporal encoder over a
 (16 spatial × 32 temporal) binary grid using stacked kernel-3,
 stride-1 UniversalNodes.
 
+Both spatial and temporal forward/backward passes are **fully
+vectorized** — no Python loops over spatial/temporal positions.
+
 Three variants
 --------------
 * **P3-A** – One master spatial node + one master temporal node.
@@ -32,6 +35,30 @@ from __future__ import annotations
 import numpy as np
 
 from node import UniversalNode
+
+
+# ---------------------------------------------------------------------------
+#  Sliding-window helpers (fully vectorised, no Python loops)
+# ---------------------------------------------------------------------------
+
+def _make_windows_3(x_in: np.ndarray, axis: int = 0) -> np.ndarray:
+    """
+    Build kernel-3 sliding windows along the given axis.
+
+    Parameters
+    ----------
+    x_in : (B, N_l, M, d)
+    axis : which axis the kernel slides over (typically 1)
+
+    Returns
+    -------
+    windows : (B, N_l-2, M, 3, d)
+    """
+    return np.stack([
+        np.take(x_in, range(0, x_in.shape[axis] - 2), axis=axis),
+        np.take(x_in, range(1, x_in.shape[axis] - 1), axis=axis),
+        np.take(x_in, range(2, x_in.shape[axis]    ), axis=axis),
+    ], axis=-2)
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +118,7 @@ class SpatiotemporalEncoder:
                 d_out=d_out,
             )
 
-        # --- Nodes per layer (kernel-3 stride-1 reduces dim by 2 each layer) ---
+        # --- Positions per layer (kernel-3 stride-1 reduces dim by 2 each layer) ---
         self.spatial_nodes_per_layer = [
             16 - 2 * (l + 1) for l in range(n_spatial_layers)
         ]  # e.g. [14, 12, 10]
@@ -110,6 +137,10 @@ class SpatiotemporalEncoder:
         idx = x_binary.astype(int)                     # (B, S, T)
         return self.embedding[idx]                      # (B, S, T, d)
 
+    # ------------------------------------------------------------------
+    #  Forward — fully vectorised
+    # ------------------------------------------------------------------
+
     def _forward_spatial_layer(
         self,
         x_in: np.ndarray,       # (B, S_l, T, d)
@@ -125,29 +156,22 @@ class SpatiotemporalEncoder:
         node_inputs : (B, S_{l+1}, T, 3, d)  — only if store_inputs
         """
         node = self.master_spatial
-        S_l = x_in.shape[1]
-        B, T, d_in = x_in.shape[0], x_in.shape[2], x_in.shape[3]
+        B, S_l, T, d_in = x_in.shape
 
-        x_out_list: list[np.ndarray] = []
-        inp_list: list[np.ndarray] = []
+        # Build all windows at once: (B, S_l-2, T, 3, d_in)
+        windows = _make_windows_3(x_in, axis=1)
+        n_pos = S_l - 2
 
-        for p in range(S_l - 2):
-            # (B, 3, T, d_in)
-            x_3d = x_in[:, p:p + 3, :, :]
-            if store_inputs:
-                # Store as (B, T, 3, d_in) to match node convention
-                x_3d_for_node = x_3d.transpose(0, 2, 1, 3)
-                inp_list.append(x_3d_for_node.copy())
+        if store_inputs:
+            node_inputs = windows.copy()  # (B, S_l-2, T, 3, d_in)
+        else:
+            node_inputs = None
 
-            # Flatten for node: (B*T, 3, d_in)
-            x_3d_flat = x_3d.transpose(0, 2, 1, 3).reshape(B * T, 3, d_in)
-            codes_flat = node.forward(x_3d_flat)              # (B*T, d_out)
-            codes = codes_flat.reshape(B, T, self.d_out)      # (B, T, d_out)
-            x_out_list.append(codes)
-
-        # Stack: (B, S_{l+1}, T, d_out)
-        x_out = np.stack(x_out_list, axis=1)
-        node_inputs = np.stack(inp_list, axis=1) if inp_list else None
+        # Flatten for node: (B * n_pos * T, 3, d_in)
+        x_3d = windows.reshape(B * n_pos * T, 3, d_in)
+        codes_flat = node.forward(x_3d)              # (B * n_pos * T, d_out)
+        # Reshape back: (B, n_pos, T, d_out)
+        x_out = codes_flat.reshape(B, n_pos, T, self.d_out)
         return x_out, node_inputs
 
     def _forward_temporal_layer(
@@ -158,7 +182,6 @@ class SpatiotemporalEncoder:
     ) -> tuple[np.ndarray, np.ndarray | None]:
         """
         Apply kernel-3 stride-1 sliding window over the T axis.
-        Input has already been transposed so T is the axis to process.
 
         Returns
         -------
@@ -166,29 +189,21 @@ class SpatiotemporalEncoder:
         node_inputs : (B, T_{l+1}, S_out, 3, d)  — only if store_inputs
         """
         node = self.master_temporal
-        T_l = x_in.shape[1]
-        B, S_out, d_in = x_in.shape[0], x_in.shape[2], x_in.shape[3]
+        B, T_l, S_out, d_in = x_in.shape
 
-        x_out_list: list[np.ndarray] = []
-        inp_list: list[np.ndarray] = []
+        # Build all windows at once: (B, T_l-2, S_out, 3, d_in)
+        windows = _make_windows_3(x_in, axis=1)
+        n_pos = T_l - 2
 
-        for p in range(T_l - 2):
-            # (B, 3, S_out, d_in)
-            x_3d = x_in[:, p:p + 3, :, :]
-            if store_inputs:
-                # Store as (B, S_out, 3, d_in) to match node convention
-                x_3d_for_node = x_3d.transpose(0, 2, 1, 3)
-                inp_list.append(x_3d_for_node.copy())
+        if store_inputs:
+            node_inputs = windows.copy()  # (B, T_l-2, S_out, 3, d_in)
+        else:
+            node_inputs = None
 
-            # Flatten for node: (B*S_out, 3, d_in)
-            x_3d_flat = x_3d.transpose(0, 2, 1, 3).reshape(B * S_out, 3, d_in)
-            codes_flat = node.forward(x_3d_flat)              # (B*S_out, d_out)
-            codes = codes_flat.reshape(B, S_out, self.d_out)  # (B, S_out, d_out)
-            x_out_list.append(codes)
-
-        # Stack: (B, T_{l+1}, S_out, d_out)
-        x_out = np.stack(x_out_list, axis=1)
-        node_inputs = np.stack(inp_list, axis=1) if inp_list else None
+        # Flatten for node: (B * n_pos * S_out, 3, d_in)
+        x_3d = windows.reshape(B * n_pos * S_out, 3, d_in)
+        codes_flat = node.forward(x_3d)              # (B * n_pos * S_out, d_out)
+        x_out = codes_flat.reshape(B, n_pos, S_out, self.d_out)
         return x_out, node_inputs
 
     # ------------------------------------------------------------------
@@ -264,7 +279,7 @@ class SpatiotemporalEncoder:
         }
 
     # ------------------------------------------------------------------
-    #  Backward
+    #  Backward — fully vectorised
     # ------------------------------------------------------------------
 
     def backward(
@@ -301,24 +316,25 @@ class SpatiotemporalEncoder:
             'dL_dembedding': gradient table (2, d)
         """
         B = fwd["embeddings"].shape[0]
-        node = self.master_spatial
+        d = self.d
+        d_out = self.d_out
 
         # Accumulator for each master node's parameters
         spatial_grads: dict[str, np.ndarray] = {
-            "W_enc": np.zeros_like(node.W_enc),
-            "b_enc": np.zeros_like(node.b_enc),
-            "W_dec": np.zeros_like(node.W_dec),
-            "b_dec": np.zeros_like(node.b_dec),
+            "W_enc": np.zeros_like(self.master_spatial.W_enc),
+            "b_enc": np.zeros_like(self.master_spatial.b_enc),
+            "W_dec": np.zeros_like(self.master_spatial.W_dec),
+            "b_dec": np.zeros_like(self.master_spatial.b_dec),
         }
         temporal_grads: dict[str, np.ndarray] = {
-            "W_enc": np.zeros_like(node.W_enc),
-            "b_enc": np.zeros_like(node.b_enc),
-            "W_dec": np.zeros_like(node.W_dec),
-            "b_dec": np.zeros_like(node.b_dec),
+            "W_enc": np.zeros_like(self.master_spatial.W_enc),
+            "b_enc": np.zeros_like(self.master_spatial.b_enc),
+            "W_dec": np.zeros_like(self.master_spatial.W_dec),
+            "b_dec": np.zeros_like(self.master_spatial.b_dec),
         }
 
         # ====================================================================
-        #  TEMPORAL BACKWARD (process layers in reverse)
+        #  TEMPORAL BACKWARD (process layers in reverse) — vectorised
         # ====================================================================
 
         # Gradient from average pooling
@@ -331,40 +347,38 @@ class SpatiotemporalEncoder:
 
         for l in reversed(range(self.n_temporal_layers)):
             dL_dx_total = dL_dx
-            T_l_out = dL_dx_total.shape[1]
-            d_in = self.d
 
-            node_inputs = fwd["temporal_inputs"][l]     # (B, T_l_out, S_final, 3, d)
+            node_inputs = fwd["temporal_inputs"][l]         # (B, T_l_out, S_final, 3, d)
+            code_out = fwd["temporal_outputs"][l]           # (B, T_l_out, S_final, d_out)
 
-            n_positions = self.temporal_nodes_per_layer[l]
-            dL_dlayer_input = np.zeros((B, T_l_out + 2, S_final, d_in))
+            # --- Backprop through tanh activation ---
+            dL_dz = dL_dx_total * (1.0 - code_out ** 2)    # (B, T_l_out, S_final, d_out)
 
-            for p in range(n_positions):
-                inp_3d = node_inputs[:, p, :, :, :]      # (B, S_final, 3, d)
-                code_out = fwd["temporal_outputs"][l][:, p, :, :]  # (B, S_final, d_out)
+            # Flatten all positions at once
+            B, n_pos, S, _, d_in = node_inputs.shape
+            dL_dz_flat = dL_dz.reshape(B * n_pos * S, d_out)
+            inp_flat = node_inputs.reshape(B * n_pos * S, 3 * d_in)
 
-                dL_da_p = dL_dx_total[:, p, :, :]        # (B, S_final, d_out)
-                dL_dz_p = dL_da_p * (1.0 - code_out ** 2)
+            # Parameter gradients (sum across all positions + batch)
+            dW_enc = inp_flat.T @ dL_dz_flat / B
+            db_enc = dL_dz_flat.mean(axis=0)
 
-                dL_dz_flat = dL_dz_p.reshape(B * S_final, -1)
-                inp_flat = inp_3d.reshape(B * S_final, -1)  # (B*S_final, 3*d)
+            temporal_grads["W_enc"] += dW_enc
+            temporal_grads["b_enc"] += db_enc
+            dW_dec = np.zeros_like(self.master_spatial.W_dec)
+            db_dec = np.zeros_like(self.master_spatial.b_dec)
+            temporal_grads["W_dec"] += dW_dec
+            temporal_grads["b_dec"] += db_dec
 
-                dW_enc = inp_flat.T @ dL_dz_flat / B
-                db_enc = dL_dz_flat.mean(axis=0)
-                dW_dec = np.zeros_like(node.W_dec)
-                db_dec = np.zeros_like(node.b_dec)
+            # Gradient w.r.t. input
+            dL_dx_flat = dL_dz_flat @ self.master_spatial.W_enc.T   # (B*n_pos*S, 3*d)
+            dL_dx_reshaped = dL_dx_flat.reshape(B, n_pos, S, 3, d_in)  # (B, n_pos, S, 3, d)
 
-                dL_dx_flat = dL_dz_flat @ node.W_enc.T
-                dL_dx_3d = dL_dx_flat.reshape(B, S_final, 3, d_in)
-
-                temporal_grads["W_enc"] += dW_enc
-                temporal_grads["b_enc"] += db_enc
-                temporal_grads["W_dec"] += dW_dec
-                temporal_grads["b_dec"] += db_dec
-
-                for k in range(3):
-                    pos = p + k
-                    dL_dlayer_input[:, pos, :, :] += dL_dx_3d[:, :, k, :]
+            # Scatter gradient into layer input (3 kernel offsets → 3 slice-adds)
+            dL_dlayer_input = np.zeros((B, n_pos + 2, S, d_in))
+            dL_dlayer_input[:, 0:n_pos,   :, :] += dL_dx_reshaped[:, :, :, 0, :]
+            dL_dlayer_input[:, 1:n_pos+1, :, :] += dL_dx_reshaped[:, :, :, 1, :]
+            dL_dlayer_input[:, 2:n_pos+2, :, :] += dL_dx_reshaped[:, :, :, 2, :]
 
             if l > 0:
                 dL_dx = dL_dlayer_input
@@ -378,7 +392,7 @@ class SpatiotemporalEncoder:
             temporal_grads[key] /= n_total_temporal_positions
 
         # ====================================================================
-        #  SPATIAL BACKWARD
+        #  SPATIAL BACKWARD — vectorised
         # ====================================================================
 
         # dL_dx is (B, 32, S_final, d) → transpose to (B, S_final, 32, d)
@@ -391,39 +405,36 @@ class SpatiotemporalEncoder:
         for l in reversed(range(self.n_spatial_layers)):
             dL_dx_total = dL_dx + dL_dspatial_codes[l] * alpha
 
-            node_inputs = fwd["spatial_inputs"][l]  # (B, S_l_out, T, 3, d)
-            S_l_out = node_inputs.shape[1]
-            T_l = node_inputs.shape[2]
+            node_inputs = fwd["spatial_inputs"][l]   # (B, S_l_out, T, 3, d)
+            code_out = fwd["spatial_outputs"][l]     # (B, S_l_out, T, d_out)
 
-            n_positions = self.spatial_nodes_per_layer[l]
-            dL_dlayer_input = np.zeros((B, S_l_out + 2, T_l, self.d))
+            # --- Backprop through tanh ---
+            dL_dz = dL_dx_total * (1.0 - code_out ** 2)   # (B, S_l_out, T, d_out)
 
-            for p in range(n_positions):
-                inp_3d = node_inputs[:, p, :, :, :]     # (B, T_l, 3, d)
-                code_out = fwd["spatial_outputs"][l][:, p, :, :]  # (B, T_l, d_out)
+            B, n_pos, T, _, d_in = node_inputs.shape
+            dL_dz_flat = dL_dz.reshape(B * n_pos * T, d_out)
+            inp_flat = node_inputs.reshape(B * n_pos * T, 3 * d_in)
 
-                dL_da_p = dL_dx_total[:, p, :, :]       # (B, T_l, d_out)
-                dL_dz_p = dL_da_p * (1.0 - code_out ** 2)
+            # Parameter gradients
+            dW_enc = inp_flat.T @ dL_dz_flat / B
+            db_enc = dL_dz_flat.mean(axis=0)
 
-                dL_dz_flat = dL_dz_p.reshape(B * T_l, -1)
-                inp_flat = inp_3d.reshape(B * T_l, -1)
+            spatial_grads["W_enc"] += dW_enc
+            spatial_grads["b_enc"] += db_enc
+            dW_dec = np.zeros_like(self.master_spatial.W_dec)
+            db_dec = np.zeros_like(self.master_spatial.b_dec)
+            spatial_grads["W_dec"] += dW_dec
+            spatial_grads["b_dec"] += db_dec
 
-                dW_enc = inp_flat.T @ dL_dz_flat / B
-                db_enc = dL_dz_flat.mean(axis=0)
-                dW_dec = np.zeros_like(node.W_dec)
-                db_dec = np.zeros_like(node.b_dec)
+            # Gradient w.r.t. input
+            dL_dx_flat = dL_dz_flat @ self.master_spatial.W_enc.T
+            dL_dx_reshaped = dL_dx_flat.reshape(B, n_pos, T, 3, d_in)  # (B, n_pos, T, 3, d)
 
-                dL_dx_flat = dL_dz_flat @ node.W_enc.T
-                dL_dx_3d = dL_dx_flat.reshape(B, T_l, 3, self.d)
-
-                spatial_grads["W_enc"] += dW_enc
-                spatial_grads["b_enc"] += db_enc
-                spatial_grads["W_dec"] += dW_dec
-                spatial_grads["b_dec"] += db_dec
-
-                for k in range(3):
-                    pos = p + k
-                    dL_dlayer_input[:, pos, :, :] += dL_dx_3d[:, :, k, :]
+            # Scatter into layer input
+            dL_dlayer_input = np.zeros((B, n_pos + 2, T, d_in))
+            dL_dlayer_input[:, 0:n_pos,   :, :] += dL_dx_reshaped[:, :, :, 0, :]
+            dL_dlayer_input[:, 1:n_pos+1, :, :] += dL_dx_reshaped[:, :, :, 1, :]
+            dL_dlayer_input[:, 2:n_pos+2, :, :] += dL_dx_reshaped[:, :, :, 2, :]
 
             if l > 0:
                 dL_dx = dL_dlayer_input
@@ -434,18 +445,19 @@ class SpatiotemporalEncoder:
         for key in spatial_grads:
             spatial_grads[key] /= n_total_spatial_positions
 
-        # --- Embedding gradient ---
+        # --- Embedding gradient — fully vectorised ---
         emb = fwd["embeddings"]  # (B, 16, 32, d)
 
-        diff0 = np.sum((emb - self.embedding[0]) ** 2, axis=-1)
-        diff1 = np.sum((emb - self.embedding[1]) ** 2, axis=-1)
-        x_binary_recovered = (diff1 < diff0).astype(int)
+        diff0 = np.sum((emb - self.embedding[0:1]) ** 2, axis=-1)  # (B, 16, 32)
+        diff1 = np.sum((emb - self.embedding[1:2]) ** 2, axis=-1)  # (B, 16, 32)
+        x_binary_recovered = (diff1 < diff0).astype(int)            # (B, 16, 32)
+
+        mask0 = (x_binary_recovered == 0).astype(x_binary_recovered.dtype)
+        mask1 = (x_binary_recovered == 1).astype(x_binary_recovered.dtype)
 
         dL_dembedding = np.zeros_like(self.embedding)
-        for v in range(2):
-            mask = x_binary_recovered == v
-            for b_idx in range(B):
-                dL_dembedding[v] += dL_dx[b_idx][mask[b_idx]].sum(axis=0)
+        dL_dembedding[0] = (dL_dx * mask0[..., np.newaxis]).sum(axis=(0, 1, 2))
+        dL_dembedding[1] = (dL_dx * mask1[..., np.newaxis]).sum(axis=(0, 1, 2))
 
         return {
             "dL_dspatial": spatial_grads,
@@ -473,7 +485,7 @@ class SpatiotemporalEncoder:
 
 if __name__ == "__main__":
     print("=" * 65)
-    print("  SpatiotemporalEncoder -- Self-Test")
+    print("  SpatiotemporalEncoder -- Self-Test (vectorised)")
     print("=" * 65)
 
     rng = np.random.default_rng(7)
