@@ -1,0 +1,229 @@
+ 
+
+[Tool Call: read_file({'path': 'src/harness.py'})]
+
+[Tool Result: """
+HSUN Phase 0 -- Experimental Harness
+
+Dataset generator, similarity evaluator, encoder interface, and utility functions
+for the smoke-test of hierarchical sparse universal nodes.
+
+Dependencies: numpy, scipy only -- no external ML libraries.
+"""
+
+from __future__ import annotations
+
+import itertools
+from abc import ABC, abstractmethod
+from typing import Dict, List, Tuple
+
+import numpy as np
+from scipy.stats import spearmanr
+
+
+# ------------------------------------------------------------------...]
+
+
+[Tool Call: list_dir({'path': 'src'})]
+
+[Tool Result: [DIR] encoders
+      harness.py
+      pre_registration.md]
+
+ Let me create all four encoder files and the `__init__.py`. 
+
+[Tool Call: write_file({'content': 'from harness import EncoderBase\nimport numpy as np\n\n\nclass LookupTableEncoder(EncoderBase):\n    """P0-A: One-hot lookup table — NEGATIVE CONTROL (expected rho ~ 0)."""\n\n    def __init__(self, dim_in=3, dim_out=8, seed=None):\n        self._dim_in = dim_in\n        self._dim_out = dim_out\n        self._mapping = {}  # state tuple -> one-hot index\n\n    def train(self, inputs, epochs=1):\n        # Just enumerate unique states\n        for row in inputs:\n            key = tuple(row)\n            if key not in self._mapping:\n                idx = len(self._mapping)\n                self._mapping[key] = idx\n        return {"final_loss": 0.0, "n_states": len(self._mapping)}\n\n    def encode(self, inputs):\n        codes = np.zeros((len(inputs), self._dim_out))\n        for i, row in enumerate(inputs):\n            key = tuple(row)\n            if key in self._mapping:\n                codes[i, self._mapping[key]] = 1.0\n        return codes\n\n    @property\n    def dim_out(self):\n        return self._dim_out\n\n\nif __name__ == "__main__":\n    import sys\n    sys.path.insert(0, \'.\')\n\n    from harness import DatasetGenerator, SimilarityEvaluator\n\n    ds = DatasetGenerator(seed=42)\n    base = ds.get_base_states()\n    all_samples = ds.get_all_samples()\n\n    enc = LookupTableEncoder(seed=42)\n    metrics = enc.train(all_samples)\n    print("[LookupTableEncoder] Train metrics:", metrics)\n\n    codes = enc.encode(base)\n    print("[LookupTableEncoder] Encoded shape:", codes.shape)\n    print("[LookupTableEncoder] Codes:\\n", codes)\n\n    rho, p_val, *_ = SimilarityEvaluator.evaluate(base, codes)\n    print(f"[LookupTableEncoder] Spearman rho={rho}, p={p_val}")\n', 'path': 'src/encoders/lookup_table.py'})]
+
+[Tool Result: Successfully wrote to src/encoders/lookup_table.py]
+
+
+[Tool Call: write_file({'content': 'from harness import EncoderBase\nimport numpy as np\n\n\nclass SpatialPoolerEncoder(EncoderBase):\n    """P0-B: HTM-style SDR encoder — random projection + k-WTA + Hebbian updates."""\n\n    def __init__(self, dim_in=3, dim_out=16, k=5, seed=42, permanence_threshold=0.5,\n                 perm_inc=0.1, perm_dec=0.05):\n        self._dim_in = dim_in\n        self._dim_out = dim_out\n        self.k = k\n        self.permanence_threshold = permanence_threshold\n        self.perm_inc = perm_inc\n        self.perm_dec = perm_dec\n        rng = np.random.default_rng(seed)\n        # Permanence matrix: how strongly connected each input is to each output\n        self.permanence = rng.uniform(0.4, 0.6, size=(dim_in, dim_out))\n        # Random potential pool\n        self.potential_pool = rng.random((dim_in, dim_out)) < 0.8  # 80% connectivity\n\n    def _connected(self):\n        return (self.permanence >= self.permanence_threshold) & self.potential_pool\n\n    def _forward(self, x):\n        connected = self._connected().astype(np.float64)\n        overlap = x @ (connected * self.permanence)  # (dim_out,)\n        return overlap\n\n    def _kwta(self, activations):\n        result = np.zeros_like(activations)\n        if self.k > 0 and len(activations) > 0:\n            top_k = np.argsort(activations)[-self.k:]\n            result[top_k] = activations[top_k]\n        return result\n\n    def train(self, inputs, epochs=50):\n        for epoch in range(epochs):\n            for x in inputs:\n                overlap = self._forward(x)\n                active = self._kwta(overlap)\n                active_indices = active > 0\n                # Update permanences\n                for j in range(self._dim_out):\n                    if active_indices[j]:\n                        for i in range(self._dim_in):\n                            if self.potential_pool[i, j]:\n                                if x[i] > 0.5:\n                                    self.permanence[i, j] += self.perm_inc\n                                else:\n                                    self.permanence[i, j] -= self.perm_dec\n                self.permanence = np.clip(self.permanence, 0.0, 1.0)\n        return {"final_loss": 0.0}\n\n    def encode(self, inputs):\n        codes = np.zeros((len(inputs), self._dim_out))\n        for i, x in enumerate(inputs):\n            overlap = self._forward(x)\n            codes[i] = self._kwta(overlap)\n        return codes\n\n    @property\n    def dim_out(self):\n        return self._dim_out\n\n\nif __name__ == "__main__":\n    import sys\n    sys.path.insert(0, \'.\')\n\n    from harness import DatasetGenerator, SimilarityEvaluator, compute_sparsity\n\n    ds = DatasetGenerator(seed=42)\n    base = ds.get_base_states()\n    all_samples = ds.get_all_samples()\n\n    enc = SpatialPoolerEncoder(seed=42)\n    metrics = enc.train(all_samples, epochs=50)\n    print("[SpatialPoolerEncoder] Train metrics:", metrics)\n\n    codes = enc.encode(base)\n    print("[SpatialPoolerEncoder] Encoded shape:", codes.shape)\n    print("[SpatialPoolerEncoder] Codes:\\n", codes)\n\n    rho, p_val, *_ = SimilarityEvaluator.evaluate(base, codes)\n    print(f"[SpatialPoolerEncoder] Spearman rho={rho}, p={p_val}")\n    print(f"[SpatialPoolerEncoder] Sparsity={compute_sparsity(codes):.4f}")\n', 'path': 'src/encoders/spatial_pooler.py'})]
+
+[Tool Result: Successfully wrote to src/encoders/spatial_pooler.py]
+
+
+[Tool Call: write_file({'content': 'from harness import EncoderBase\nimport numpy as np\n\n\nclass SOMEncoder(EncoderBase):\n    """P0-C: Kohonen Self-Organizing Map encoder."""\n\n    def __init__(self, dim_in=3, dim_out=16, seed=42, lr_init=0.5, lr_final=0.01,\n                 radius_init=4.0, radius_final=0.5):\n        self._dim_in = dim_in\n        self._dim_out = dim_out\n        self.lr_init = lr_init\n        self.lr_final = lr_final\n        self.radius_init = radius_init\n        self.radius_final = radius_final\n        rng = np.random.default_rng(seed)\n        # Initialize weights randomly in [0, 1]\n        self.weights = rng.uniform(0.0, 1.0, size=(dim_out, dim_in))\n        # Grid positions for 1D SOM\n        self.positions = np.arange(dim_out, dtype=np.float64)\n\n    def _find_bmu(self, x):\n        dists = np.sum((self.weights - x) ** 2, axis=1)\n        return np.argmin(dists)\n\n    def _neighborhood(self, bmu, radius):\n        dists = np.abs(self.positions - bmu)\n        return np.exp(-(dists ** 2) / (2 * radius ** 2))\n\n    def train(self, inputs, epochs=50):\n        for epoch in range(epochs):\n            t = epoch / max(epochs - 1, 1)\n            lr = self.lr_init * (1 - t) + self.lr_final * t\n            radius = self.radius_init * (1 - t) + self.radius_final * t\n            for x in inputs:\n                bmu = self._find_bmu(x)\n                h = self._neighborhood(bmu, radius)\n                # Update: move weights toward input proportional to neighborhood\n                self.weights += lr * h[:, np.newaxis] * (x - self.weights)\n        return {"final_loss": 0.0}\n\n    def encode(self, inputs):\n        codes = np.zeros((len(inputs), self._dim_out))\n        for i, x in enumerate(inputs):\n            bmu = self._find_bmu(x)\n            # Activation pattern: Gaussian around BMU\n            codes[i] = self._neighborhood(bmu, radius=1.0)  # narrow encoding\n        return codes\n\n    @property\n    def dim_out(self):\n        return self._dim_out\n\n\nif __name__ == "__main__":\n    import sys\n    sys.path.insert(0, \'.\')\n\n    from harness import DatasetGenerator, SimilarityEvaluator, compute_sparsity\n\n    ds = DatasetGenerator(seed=42)\n    base = ds.get_base_states()\n    all_samples = ds.get_all_samples()\n\n    enc = SOMEncoder(seed=42)\n    metrics = enc.train(all_samples, epochs=50)\n    print("[SOMEncoder] Train metrics:", metrics)\n\n    codes = enc.encode(base)\n    print("[SOMEncoder] Encoded shape:", codes.shape)\n    print("[SOMEncoder] Codes:\\n", codes)\n\n    rho, p_val, *_ = SimilarityEvaluator.evaluate(base, codes)\n    print(f"[SOMEncoder] Spearman rho={rho}, p={p_val}")\n    print(f"[SOMEncoder] Sparsity={compute_sparsity(codes):.4f}")\n', 'path': 'src/encoders/som.py'})]
+
+[Tool Result: Successfully wrote to src/encoders/som.py]
+
+
+[Tool Call: write_file({'content': 'ENCODER_REGISTRY = {}\n\n\ndef register_encoder(encoder_id, encoder_class):\n    ENCODER_REGISTRY[encoder_id] = encoder_class\n\n\ndef get_encoder(encoder_id):\n    return ENCODER_REGISTRY.get(encoder_id)\n\n\n# ---------------------------------------------------------------------------\n# Register Phase 0 encoders\n# ---------------------------------------------------------------------------\n\nfrom .lookup_table import LookupTableEncoder\nfrom .spatial_pooler import SpatialPoolerEncoder\nfrom .som import SOMEncoder\n\nregister_encoder("p0-a", LookupTableEncoder)\nregister_encoder("p0-b", SpatialPoolerEncoder)\nregister_encoder("p0-c", SOMEncoder)\n', 'path': 'src/encoders/__init__.py'})]
+
+[Tool Result: Successfully wrote to src/encoders/__init__.py]
+
+ Now let me verify that all standalone tests pass and the `__init__.py` imports correctly:  
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python src/encoders/lookup_table.py'})]
+
+[Tool Result: exit_code: 1
+stdout: 
+stderr: Traceback (most recent call last):
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\encoders\lookup_table.py", line 1, in <module>
+    from harness import EncoderBase
+ModuleNotFoundError: No module named 'harness'
+]
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python src/encoders/spatial_pooler.py'})]
+
+[Tool Result: exit_code: 1
+stdout: 
+stderr: Traceback (most recent call last):
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\encoders\spatial_pooler.py", line 1, in <module>
+    from harness import EncoderBase
+ModuleNotFoundError: No module named 'harness'
+]
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python src/encoders/som.py'})]
+
+[Tool Result: exit_code: 1
+stdout: 
+stderr: Traceback (most recent call last):
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\encoders\som.py", line 1, in <module>
+    from harness import EncoderBase
+ModuleNotFoundError: No module named 'harness'
+]
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python -c "from src.encoders import get_encoder, ENCODER_REGISTRY; print(\'Registered:\', list(ENCODER_REGISTRY.keys())); e = get_encoder(\'p0-a\'); print(\'p0-a class:\', e)"'})]
+
+[Tool Result: exit_code: 1
+stdout: 
+stderr: Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\encoders\__init__.py", line 16, in <module>
+    from .lookup_table import LookupTableEncoder
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\encoders\lookup_table.py", line 1, in <module>
+    from harness import EncoderBase
+ModuleNotFoundError: No module named 'harness'
+]
+
+  The import fails because `harness.py` lives in `src/`, not the project root. I need to prepend `src/` to `sys.path` in each encoder file so `from harness import EncoderBase` resolves correctly regardless of how the file is invoked. 
+
+[Tool Call: write_file({'path': 'src/encoders/lookup_table.py', 'content': 'import os\nimport sys\nsys.path.insert(0, os.path.join(os.path.dirname(__file__), \'..\'))\n\nfrom harness import EncoderBase\nimport numpy as np\n\n\nclass LookupTableEncoder(EncoderBase):\n    """P0-A: One-hot lookup table — NEGATIVE CONTROL (expected rho ~ 0)."""\n\n    def __init__(self, dim_in=3, dim_out=8, seed=None):\n        self._dim_in = dim_in\n        self._dim_out = dim_out\n        self._mapping = {}  # state tuple -> one-hot index\n\n    def train(self, inputs, epochs=1):\n        # Just enumerate unique states\n        for row in inputs:\n            key = tuple(row)\n            if key not in self._mapping:\n                idx = len(self._mapping)\n                self._mapping[key] = idx\n        return {"final_loss": 0.0, "n_states": len(self._mapping)}\n\n    def encode(self, inputs):\n        codes = np.zeros((len(inputs), self._dim_out))\n        for i, row in enumerate(inputs):\n            key = tuple(row)\n            if key in self._mapping:\n                codes[i, self._mapping[key]] = 1.0\n        return codes\n\n    @property\n    def dim_out(self):\n        return self._dim_out\n\n\n# ---------------------------------------------------------------------------\n# Standalone sanity test\n# ---------------------------------------------------------------------------\n\nif __name__ == "__main__":\n    from harness import DatasetGenerator, SimilarityEvaluator\n\n    ds = DatasetGenerator(seed=42)\n    base = ds.get_base_states()\n    all_samples = ds.get_all_samples()\n\n    enc = LookupTableEncoder(seed=42)\n    metrics = enc.train(all_samples)\n    print("[LookupTableEncoder] Train metrics:", metrics)\n\n    codes = enc.encode(base)\n    print("[LookupTableEncoder] Encoded shape:", codes.shape)\n    print("[LookupTableEncoder] Codes:\\n", codes)\n\n    rho, p_val, *_ = SimilarityEvaluator.evaluate(base, codes)\n    print(f"[LookupTableEncoder] Spearman rho={rho}, p={p_val}")\n'})]
+
+[Tool Result: Successfully wrote to src/encoders/lookup_table.py]
+
+
+[Tool Call: write_file({'path': 'src/encoders/spatial_pooler.py', 'content': 'import os\nimport sys\nsys.path.insert(0, os.path.join(os.path.dirname(__file__), \'..\'))\n\nfrom harness import EncoderBase\nimport numpy as np\n\n\nclass SpatialPoolerEncoder(EncoderBase):\n    """P0-B: HTM-style SDR encoder — random projection + k-WTA + Hebbian updates."""\n\n    def __init__(self, dim_in=3, dim_out=16, k=5, seed=42, permanence_threshold=0.5,\n                 perm_inc=0.1, perm_dec=0.05):\n        self._dim_in = dim_in\n        self._dim_out = dim_out\n        self.k = k\n        self.permanence_threshold = permanence_threshold\n        self.perm_inc = perm_inc\n        self.perm_dec = perm_dec\n        rng = np.random.default_rng(seed)\n        # Permanence matrix: how strongly connected each input is to each output\n        self.permanence = rng.uniform(0.4, 0.6, size=(dim_in, dim_out))\n        # Random potential pool\n        self.potential_pool = rng.random((dim_in, dim_out)) < 0.8  # 80% connectivity\n\n    def _connected(self):\n        return (self.permanence >= self.permanence_threshold) & self.potential_pool\n\n    def _forward(self, x):\n        connected = self._connected().astype(np.float64)\n        overlap = x @ (connected * self.permanence)  # (dim_out,)\n        return overlap\n\n    def _kwta(self, activations):\n        result = np.zeros_like(activations)\n        if self.k > 0 and len(activations) > 0:\n            top_k = np.argsort(activations)[-self.k:]\n            result[top_k] = activations[top_k]\n        return result\n\n    def train(self, inputs, epochs=50):\n        for epoch in range(epochs):\n            for x in inputs:\n                overlap = self._forward(x)\n                active = self._kwta(overlap)\n                active_indices = active > 0\n                # Update permanences\n                for j in range(self._dim_out):\n                    if active_indices[j]:\n                        for i in range(self._dim_in):\n                            if self.potential_pool[i, j]:\n                                if x[i] > 0.5:\n                                    self.permanence[i, j] += self.perm_inc\n                                else:\n                                    self.permanence[i, j] -= self.perm_dec\n                self.permanence = np.clip(self.permanence, 0.0, 1.0)\n        return {"final_loss": 0.0}\n\n    def encode(self, inputs):\n        codes = np.zeros((len(inputs), self._dim_out))\n        for i, x in enumerate(inputs):\n            overlap = self._forward(x)\n            codes[i] = self._kwta(overlap)\n        return codes\n\n    @property\n    def dim_out(self):\n        return self._dim_out\n\n\n# ---------------------------------------------------------------------------\n# Standalone sanity test\n# ---------------------------------------------------------------------------\n\nif __name__ == "__main__":\n    from harness import DatasetGenerator, SimilarityEvaluator, compute_sparsity\n\n    ds = DatasetGenerator(seed=42)\n    base = ds.get_base_states()\n    all_samples = ds.get_all_samples()\n\n    enc = SpatialPoolerEncoder(seed=42)\n    metrics = enc.train(all_samples, epochs=50)\n    print("[SpatialPoolerEncoder] Train metrics:", metrics)\n\n    codes = enc.encode(base)\n    print("[SpatialPoolerEncoder] Encoded shape:", codes.shape)\n    print("[SpatialPoolerEncoder] Codes:\\n", codes)\n\n    rho, p_val, *_ = SimilarityEvaluator.evaluate(base, codes)\n    print(f"[SpatialPoolerEncoder] Spearman rho={rho}, p={p_val}")\n    print(f"[SpatialPoolerEncoder] Sparsity={compute_sparsity(codes):.4f}")\n'})]
+
+[Tool Result: Successfully wrote to src/encoders/spatial_pooler.py]
+
+
+[Tool Call: write_file({'path': 'src/encoders/som.py', 'content': 'import os\nimport sys\nsys.path.insert(0, os.path.join(os.path.dirname(__file__), \'..\'))\n\nfrom harness import EncoderBase\nimport numpy as np\n\n\nclass SOMEncoder(EncoderBase):\n    """P0-C: Kohonen Self-Organizing Map encoder."""\n\n    def __init__(self, dim_in=3, dim_out=16, seed=42, lr_init=0.5, lr_final=0.01,\n                 radius_init=4.0, radius_final=0.5):\n        self._dim_in = dim_in\n        self._dim_out = dim_out\n        self.lr_init = lr_init\n        self.lr_final = lr_final\n        self.radius_init = radius_init\n        self.radius_final = radius_final\n        rng = np.random.default_rng(seed)\n        # Initialize weights randomly in [0, 1]\n        self.weights = rng.uniform(0.0, 1.0, size=(dim_out, dim_in))\n        # Grid positions for 1D SOM\n        self.positions = np.arange(dim_out, dtype=np.float64)\n\n    def _find_bmu(self, x):\n        dists = np.sum((self.weights - x) ** 2, axis=1)\n        return np.argmin(dists)\n\n    def _neighborhood(self, bmu, radius):\n        dists = np.abs(self.positions - bmu)\n        return np.exp(-(dists ** 2) / (2 * radius ** 2))\n\n    def train(self, inputs, epochs=50):\n        for epoch in range(epochs):\n            t = epoch / max(epochs - 1, 1)\n            lr = self.lr_init * (1 - t) + self.lr_final * t\n            radius = self.radius_init * (1 - t) + self.radius_final * t\n            for x in inputs:\n                bmu = self._find_bmu(x)\n                h = self._neighborhood(bmu, radius)\n                # Update: move weights toward input proportional to neighborhood\n                self.weights += lr * h[:, np.newaxis] * (x - self.weights)\n        return {"final_loss": 0.0}\n\n    def encode(self, inputs):\n        codes = np.zeros((len(inputs), self._dim_out))\n        for i, x in enumerate(inputs):\n            bmu = self._find_bmu(x)\n            # Activation pattern: Gaussian around BMU\n            codes[i] = self._neighborhood(bmu, radius=1.0)  # narrow encoding\n        return codes\n\n    @property\n    def dim_out(self):\n        return self._dim_out\n\n\n# ---------------------------------------------------------------------------\n# Standalone sanity test\n# ---------------------------------------------------------------------------\n\nif __name__ == "__main__":\n    from harness import DatasetGenerator, SimilarityEvaluator, compute_sparsity\n\n    ds = DatasetGenerator(seed=42)\n    base = ds.get_base_states()\n    all_samples = ds.get_all_samples()\n\n    enc = SOMEncoder(seed=42)\n    metrics = enc.train(all_samples, epochs=50)\n    print("[SOMEncoder] Train metrics:", metrics)\n\n    codes = enc.encode(base)\n    print("[SOMEncoder] Encoded shape:", codes.shape)\n    print("[SOMEncoder] Codes:\\n", codes)\n\n    rho, p_val, *_ = SimilarityEvaluator.evaluate(base, codes)\n    print(f"[SOMEncoder] Spearman rho={rho}, p={p_val}")\n    print(f"[SOMEncoder] Sparsity={compute_sparsity(codes):.4f}")\n'})]
+
+[Tool Result: Successfully wrote to src/encoders/som.py]
+
+  Let me re-run all four verification tests:   
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python src/encoders/lookup_table.py'})]
+
+[Tool Result: exit_code: 0
+stdout: [LookupTableEncoder] Train metrics: {'final_loss': 0.0, 'n_states': 8}
+[LookupTableEncoder] Encoded shape: (8, 8)
+[LookupTableEncoder] Codes:
+ [[1. 0. 0. 0. 0. 0. 0. 0.]
+ [0. 1. 0. 0. 0. 0. 0. 0.]
+ [0. 0. 1. 0. 0. 0. 0. 0.]
+ [0. 0. 0. 1. 0. 0. 0. 0.]
+ [0. 0. 0. 0. 1. 0. 0. 0.]
+ [0. 0. 0. 0. 0. 1. 0. 0.]
+ [0. 0. 0. 0. 0. 0. 1. 0.]
+ [0. 0. 0. 0. 0. 0. 0. 1.]]
+[LookupTableEncoder] Spearman rho=nan, p=nan
+
+stderr: C:\Users\thomas\Projekte\rdf_thalamus_sml\src\encoder...]
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python src/encoders/spatial_pooler.py'})]
+
+[Tool Result: exit_code: 0
+stdout: [SpatialPoolerEncoder] Train metrics: {'final_loss': 0.0}
+[SpatialPoolerEncoder] Encoded shape: (8, 16)
+[SpatialPoolerEncoder] Codes:
+ [[0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   0.
+  0.   0.  ]
+ [0.   0.   0.   0.   0.   0.   0.   0.   0.   1.   0.   0.   1.   1.
+  1.   1.  ]
+ [0.   0.   1.   0.   1.   0.   1.   0.   0.   0.   1.   0.   0.95 0.
+  0.   0.  ]
+ [0.   0.   0.   0.   0.   0.   0.   0.   0.   0.   1.85 0.   1.95 1.95
+  1.95 1.95]...]
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python src/encoders/som.py'})]
+
+[Tool Result: exit_code: 0
+stdout: [SOMEncoder] Train metrics: {'final_loss': 0.0}
+[SOMEncoder] Encoded shape: (8, 16)
+[SOMEncoder] Codes:
+ [[5.31109225e-27 1.92874985e-22 2.57675711e-18 1.26641655e-14
+  2.28973485e-11 1.52299797e-08 3.72665317e-06 3.35462628e-04
+  1.11089965e-02 1.35335283e-01 6.06530660e-01 1.00000000e+00
+  6.06530660e-01 1.35335283e-01 1.11089965e-02 3.35462628e-04]
+ [2.00500878e-37 5.38018616e-32 5.31109225e-27 1.92874985e-22
+  2.57675711e-18 1.26641655e-14 2.28973485e-11 1.522997...]
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python -c "from src.encoders import get_encoder, ENCODER_REGISTRY; print(\'Registered:\', list(ENCODER_REGISTRY.keys())); print(\'p0-a:\', get_encoder(\'p0-a\')); print(\'p0-b:\', get_encoder(\'p0-b\')); print(\'p0-c:\', get_encoder(\'p0-c\'))"'})]
+
+[Tool Result: exit_code: 0
+stdout: Registered: ['p0-a', 'p0-b', 'p0-c']
+p0-a: <class 'src.encoders.lookup_table.LookupTableEncoder'>
+p0-b: <class 'src.encoders.spatial_pooler.SpatialPoolerEncoder'>
+p0-c: <class 'src.encoders.som.SOMEncoder'>
+
+stderr: ]
+
+  All four files are created and every verification passes. Here is the summary:
+
+| File | Purpose | Result |
+|---|---|---|
+| `src/encoders/__init__.py` | Registry (`ENCODER_REGISTRY`, `register_encoder`, `get_encoder`) + imports all three encoders | ✅ `p0-a`, `p0-b`, `p0-c` registered |
+| `src/encoders/lookup_table.py` | **P0-A**: `LookupTableEncoder` | ✅ Trains, emits one-hot (8,8), Spearman `nan` (expected negative control) |
+| `src/encoders/spatial_pooler.py` | **P0-B**: `SpatialPoolerEncoder` | ✅ Trains, emits sparse SDRs (8,16), sparsity **72.7%**, Spearman **0.162** |
+| `src/encoders/som.py` | **P0-C**: `SOMEncoder` | ✅ Trains, emits smooth Gaussian codes (8,16), sparsity **62.5%**, Spearman **0.435** (p=0.021) |
+
+Key design details preserved:
+- Each file begins with `sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))` so `from harness import EncoderBase` resolves correctly from both the project root and the `src/encoders/` directory.
+- Every constructor accepts a `seed` parameter for reproducibility.
+- Each file includes a standalone `if __name__ == "__main__"` sanity test that can be run directly (`python src/encoders/<file>.py`).
+- `harness.py` was left untouched.
+
+[NUDGE RESPONSE]
+ ```yaml
+status: ok
+artifacts:
+  - src/encoders/__init__.py
+  - src/encoders/lookup_table.py
+  - src/encoders/spatial_pooler.py
+  - src/encoders/som.py
+metrics:
+  p0a_spearman_rho: nan
+  p0b_spearman_rho: 0.1615
+  p0b_sparsity: 0.7266
+  p0c_spearman_rho: 0.4351
+  p0c_sparsity: 0.6250
+log_excerpt: |
+  [LookupTableEncoder] Train metrics: {'final_loss': 0.0, 'n_states': 8}
+  [LookupTableEncoder] Spearman rho=nan, p=nan
+  [SpatialPoolerEncoder] Spearman rho=0.16153631949156494, p=0.4115250110336337
+  [SpatialPoolerEncoder] Sparsity=0.7266
+  [SOMEncoder] Spearman rho=0.43511294383317894, p=0.020663508486874933
+  [SOMEncoder] Sparsity=0.6250
+  Registered: ['p0-a', 'p0-b', 'p0-c']
+  p0-a: <class 'src.encoders.lookup_table.LookupTableEncoder'>
+  p0-b: <class 'src.encoders.spatial_pooler.SpatialPoolerEncoder'>
+  p0-c: <class 'src.encoders.som.SOMEncoder'>
+experimenter_view: |
+  All three Phase 0 encoders were successfully implemented and registered.
+  P0-A (LookupTable) works as a negative control with orthogonal one-hot codes,
+  yielding undefined Spearman correlation as expected. P0-B (SpatialPooler)
+  produces sparse SDRs (~73% sparsity) with low positive correlation to input
+  structure. P0-C (SOM) achieves the highest correlation (rho=0.435, p=0.021)
+  because the topology-preserving Gaussian neighborhood naturally encodes
+  similarity structure in its activation patterns. The encoder registry is
+  functional and all standalone tests pass.
+notes: "Phase 0 encoders implemented, registered, and verified."
+```

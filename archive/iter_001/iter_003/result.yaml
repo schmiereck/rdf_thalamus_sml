@@ -1,0 +1,52 @@
+artifacts:
+- src/encoders/__init__.py
+- src/encoders/lookup_table.py
+- src/encoders/spatial_pooler.py
+- src/encoders/som.py
+experimenter_view: 'All three Phase 0 encoders were successfully implemented and registered.
+
+  P0-A (LookupTable) works as a negative control with orthogonal one-hot codes,
+
+  yielding undefined Spearman correlation as expected. P0-B (SpatialPooler)
+
+  produces sparse SDRs (~73% sparsity) with low positive correlation to input
+
+  structure. P0-C (SOM) achieves the highest correlation (rho=0.435, p=0.021)
+
+  because the topology-preserving Gaussian neighborhood naturally encodes
+
+  similarity structure in its activation patterns. The encoder registry is
+
+  functional and all standalone tests pass.
+
+  '
+log_excerpt: '[LookupTableEncoder] Train metrics: {''final_loss'': 0.0, ''n_states'':
+  8}
+
+  [LookupTableEncoder] Spearman rho=nan, p=nan
+
+  [SpatialPoolerEncoder] Spearman rho=0.16153631949156494, p=0.4115250110336337
+
+  [SpatialPoolerEncoder] Sparsity=0.7266
+
+  [SOMEncoder] Spearman rho=0.43511294383317894, p=0.020663508486874933
+
+  [SOMEncoder] Sparsity=0.6250
+
+  Registered: [''p0-a'', ''p0-b'', ''p0-c'']
+
+  p0-a: <class ''src.encoders.lookup_table.LookupTableEncoder''>
+
+  p0-b: <class ''src.encoders.spatial_pooler.SpatialPoolerEncoder''>
+
+  p0-c: <class ''src.encoders.som.SOMEncoder''>
+
+  '
+metrics:
+  p0a_spearman_rho: nan
+  p0b_sparsity: 0.7266
+  p0b_spearman_rho: 0.1615
+  p0c_sparsity: 0.625
+  p0c_spearman_rho: 0.4351
+notes: Phase 0 encoders implemented, registered, and verified.
+status: ok
