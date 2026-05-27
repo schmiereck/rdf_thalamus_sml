@@ -1,0 +1,1 @@
+Run `src/tmp_test_phase3_timing.py` and print the output so we can verify the speedup from vectorization.
