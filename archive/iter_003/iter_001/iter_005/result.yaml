@@ -1,0 +1,26 @@
+artifacts:
+- src/training_objectives.py
+- src/test_objectives.py
+experimenter_view: 'Successfully refactored ContrastiveLoss to use a 2-layer MLP (10d
+  -> 5d -> 2.5d).
+
+  The test suite was updated to feed representations of shape (B, 10*d), matching
+
+  the encoder''s output structure. All gradient calculations and Adam updates
+
+  are verified as correct.
+
+  '
+log_excerpt: "--- Testing ContrastiveLoss ---\nloss = 3.4174\n[PASS]\n\n--- Testing\
+  \ SFALoss ---\nloss = 14.8407 (slow=0.0098, var=0.5932)\nstep check: before=14.8407,\
+  \ after=14.8229\n[PASS]\n\n--- Testing HebbianLoss (Oja's rule) ---\nmonitoring\
+  \ loss = -0.1126\nweight change = 0.000341\n[PASS]\n\n--- Testing Encoder backward_from_code_grads\
+  \ ---\n[mode=none]\n    embedding grad shape: (2, 4)  [OK]\n    dx_binary shape:\
+  \ (4, 16, 4)  [OK]\n...\n============================================================\n\
+  \  ALL SELF-TESTS PASSED\n============================================================\n"
+metrics:
+  contrastive_loss: 3.4174
+  tests_failed: 0
+  tests_passed: 6
+notes: Refactored ContrastiveLoss to 2-layer MLP; all tests passed.
+status: ok

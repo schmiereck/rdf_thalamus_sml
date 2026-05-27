@@ -3,7 +3,7 @@ Training objectives for Phase 1 -- pure NumPy implementations.
 
 Includes:
   - JEPALoss          : Bidirectional JEPA with per-layer predictors + VICReg
-  - ContrastiveLoss   : NT-Xent with 3-layer projection MLP
+  - ContrastiveLoss   : NT-Xent with 2-layer projection MLP
   - SFALoss           : Slowness (temporal difference) + variance penalty
   - HebbianLoss       : Oja's rule online updates on encoder nodes
 """
@@ -306,50 +306,46 @@ class JEPALoss:
 
 class ContrastiveLoss:
     """
-    NT-Xent contrastive loss with a 3-layer projection MLP:
-    d -> 10*d -> 5*d -> 2.5*d, with ReLU and L2 normalization.
+    NT-Xent contrastive loss with a 2-layer projection MLP:
+    10*d -> 5*d -> 2.5*d, with ReLU and L2 normalization.
     """
 
     def __init__(self, d: int, temp: float = 0.5, lr: float = 1e-3):
-        self.d = d
+        self.d = d  # base d (e.g. d=8 => input_dim=80, hidden=40, output=20)
         self.temp = temp
         self.lr = lr
-        self.h1 = 10 * d
-        self.h2 = 5 * d
+
+        self.input_dim = 10 * d
+        self.hidden = 5 * d
         self.d_proj = int(2.5 * d)
 
         rng = np.random.default_rng(43)
 
-        self.W1 = rng.standard_normal((d, self.h1)) * np.sqrt(2.0 / d)
-        self.b1 = np.zeros(self.h1)
-        self.W2 = rng.standard_normal((self.h1, self.h2)) * np.sqrt(2.0 / self.h1)
-        self.b2 = np.zeros(self.h2)
-        self.W3 = rng.standard_normal((self.h2, self.d_proj)) * np.sqrt(2.0 / self.h2)
-        self.b3 = np.zeros(self.d_proj)
+        self.W1 = rng.standard_normal((self.input_dim, self.hidden)) * np.sqrt(2.0 / self.input_dim)
+        self.b1 = np.zeros(self.hidden)
+        self.W2 = rng.standard_normal((self.hidden, self.d_proj)) * np.sqrt(2.0 / self.hidden)
+        self.b2 = np.zeros(self.d_proj)
 
         params = {
             "W1": self.W1,
             "b1": self.b1,
             "W2": self.W2,
             "b2": self.b2,
-            "W3": self.W3,
-            "b3": self.b3,
         }
         self.adam = _Adam(params, lr=lr)
 
     def _project(
         self, z: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Projection MLP with ReLU and L2 normalization.
-        Returns (proj, h1, h2, pre_norm).
+        Returns (proj, h1, pre_norm).
         """
         h1 = np.maximum(z @ self.W1 + self.b1, 0.0)
-        h2 = np.maximum(h1 @ self.W2 + self.b2, 0.0)
-        pre_norm = h2 @ self.W3 + self.b3
+        pre_norm = h1 @ self.W2 + self.b2
         norm = np.linalg.norm(pre_norm, axis=-1, keepdims=True)
         proj = pre_norm / np.maximum(norm, 1e-12)
-        return proj, h1, h2, pre_norm
+        return proj, h1, pre_norm
 
     def forward(self, z1: np.ndarray, z2: np.ndarray) -> dict:
         """
@@ -357,7 +353,7 @@ class ContrastiveLoss:
 
         Parameters
         ----------
-        z1, z2 : np.ndarray, shape (B, d)
+        z1, z2 : np.ndarray, shape (B, 10 * d)
 
         Returns
         -------
@@ -366,9 +362,9 @@ class ContrastiveLoss:
         B = z1.shape[0]
 
         # Stack views: original + augmented
-        z = np.concatenate([z1, z2], axis=0)  # (2B, d)
+        z = np.concatenate([z1, z2], axis=0)  # (2B, 10*d)
 
-        p, h1, h2, pre_norm = self._project(z)  # (2B, d_proj)
+        p, h1, pre_norm = self._project(z)  # (2B, d_proj)
 
         # Similarity matrix
         logits = p @ p.T / self.temp  # (2B, 2B)
@@ -400,7 +396,6 @@ class ContrastiveLoss:
                 "z": z,
                 "p": p,
                 "h1": h1,
-                "h2": h2,
                 "pre_norm": pre_norm,
                 "logits": logits_masked,
                 "exp_logits": exp_logits,
@@ -416,16 +411,13 @@ class ContrastiveLoss:
         z = cached["z"]
         p = cached["p"]
         h1 = cached["h1"]
-        h2 = cached["h2"]
         pre_norm = cached["pre_norm"]
         exp_logits = cached["exp_logits"]
         sum_exp = cached["sum_exp"]
         pos_indices = cached["pos_indices"]
 
         B_total = z.shape[0]  # 2B
-        d = self.d
-        H1 = self.h1
-        H2 = self.h2
+        H1 = self.hidden
         D_proj = self.d_proj
 
         # Gradient w.r.t. logits
@@ -440,18 +432,10 @@ class ContrastiveLoss:
         norm = np.linalg.norm(pre_norm, axis=-1, keepdims=True)
         d_pre = (d_p - p * np.sum(d_p * p, axis=-1, keepdims=True)) * norm
 
-        # Linear 3
-        dW3 = h2.T @ d_pre / B_total
-        db3 = d_pre.mean(axis=0)
-        d_h2 = d_pre @ self.W3.T
-
-        # ReLU 2
-        d_h2 *= (h2 > 0).astype(float)
-
         # Linear 2
-        dW2 = h1.T @ d_h2 / B_total
-        db2 = d_h2.mean(axis=0)
-        d_h1 = d_h2 @ self.W2.T
+        dW2 = h1.T @ d_pre / B_total
+        db2 = d_pre.mean(axis=0)
+        d_h1 = d_pre @ self.W2.T
 
         # ReLU 1
         d_h1 *= (h1 > 0).astype(float)
@@ -469,8 +453,6 @@ class ContrastiveLoss:
             "b1": db1,
             "W2": dW2,
             "b2": db2,
-            "W3": dW3,
-            "b3": db3,
             "d_z1": d_z1,
             "d_z2": d_z2,
         }
@@ -485,8 +467,6 @@ class ContrastiveLoss:
             "b1": self.b1,
             "W2": self.W2,
             "b2": self.b2,
-            "W3": self.W3,
-            "b3": self.b3,
         }
         grad_params = {k: grads[k] for k in params}
         self.adam.step(params, grad_params)

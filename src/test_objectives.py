@@ -56,12 +56,13 @@ def test_jepa():
 def test_contrastive():
     print("--- Testing ContrastiveLoss ---")
     rng = np.random.default_rng(2)
-    B, d = 16, 32
+    B, d = 16, 8
 
     contr = ContrastiveLoss(d=d, temp=0.5, lr=1e-3)
 
-    z1 = rng.standard_normal((B, d))
-    z2 = rng.standard_normal((B, d))
+    # Representations from encoder: shape (B, 10 * d)
+    z1 = rng.standard_normal((B, 10 * d))
+    z2 = rng.standard_normal((B, 10 * d))
 
     result = contr.loss_and_grads(z1, z2)
 
@@ -69,10 +70,16 @@ def test_contrastive():
     assert result["loss"] > 0.0, "Contrastive loss should be > 0"
     print(f"  loss = {result['loss']:.4f}")
 
-    assert result["d_z1"].shape == (B, d), "d_z1 shape mismatch"
-    assert result["d_z2"].shape == (B, d), "d_z2 shape mismatch"
-    for wname in ("W1", "b1", "W2", "b2", "W3", "b3"):
+    assert result["d_z1"].shape == (B, 10 * d), "d_z1 shape mismatch"
+    assert result["d_z2"].shape == (B, 10 * d), "d_z2 shape mismatch"
+    for wname in ("W1", "b1", "W2", "b2"):
         assert not np.any(np.isnan(result[wname])), f"NaN in {wname}"
+
+    # Check weight shapes
+    assert contr.W1.shape == (10 * d, 5 * d), f"W1 shape mismatch: {contr.W1.shape}"
+    assert contr.b1.shape == (5 * d,), f"b1 shape mismatch: {contr.b1.shape}"
+    assert contr.W2.shape == (5 * d, int(2.5 * d)), f"W2 shape mismatch: {contr.W2.shape}"
+    assert contr.b2.shape == (int(2.5 * d),), f"b2 shape mismatch: {contr.b2.shape}"
 
     # Check Adam update changes parameters
     W1_0 = contr.W1.copy()
