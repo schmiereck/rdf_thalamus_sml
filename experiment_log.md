@@ -1,0 +1,59 @@
+
+---
+```yaml
+cached_tokens: 0
+campaign: phase-0-smoke-test
+campaign_status: completed
+campaign_summary: 'Phase 0 smoke test complete: all 5 encoders run end-to-end; 3/4
+  non-trivial encoders pass rho>=0.6; all local methods within 0.15 of global baseline;
+  report generated.'
+cost_usd: 1.40168
+hypothesis: 'phase-1-setup: establish spatial hierarchy with shared-weight stacked
+  nodes; test whether P0-D/P0-C/P0-E can be stacked with dim_out=dim_in recursion
+  and cross-layer weight sharing within 15% of per-layer upper bound'
+input_tokens: 3316169
+iter: 1
+metrics:
+  epochs: 200
+  p0_a_rho_mean: NaN
+  p0_b_rho_mean: 0.5807
+  p0_b_rho_std: 0.0794
+  p0_b_sparsity: 0.6875
+  p0_c_rho_mean: 0.8811
+  p0_c_rho_std: 0.0177
+  p0_c_sparsity: 0.0
+  p0_d_rho_mean: 0.6173
+  p0_d_rho_std: 0.0842
+  p0_d_sparsity_mean: 0.6703
+  p0_e_rho_mean: 0.7221
+  p0_e_rho_std: 0.025
+  p0_e_sparsity_mean: 0.5203
+  runs_completed: 25
+  seeds: 42, 43, 44, 45, 46
+output_tokens: 113150
+status: ok
+```
+
+## iter_001: phase-1-setup: establish spatial hierarchy with shared-weight stacked nodes; test whether P0-D/P0-C/P0-E can be stacked with dim_out=dim_in recursion and cross-layer weight sharing within 15% of per-layer upper bound
+
+**Analysis:** Phase 0 was decomposed into 3 original sub-goals (harness, encoders, experiment)
+but required 9 sub-agent calls due to: (a) execution limits on each agent, 
+(b) Unicode encoding issues on Windows, (c) need for iterative tuning of encoders.
+
+Key finding: P0-B (Spatial Pooler with competitive learning) narrowly fails the
+pre-registered rho>=0.6 threshold (mean=0.5807). However, it passes Criterion 3
+
+**Status:** ok
+
+**Metrics:** `{'p0_a_rho_mean': 'NaN', 'p0_b_rho_mean': 0.5807, 'p0_b_rho_std': 0.0794, 'p0_c_rho_mean': 0.8811, 'p0_c_rho_std': 0.0177, 'p0_d_rho_mean': 0.6173, 'p0_d_rho_std': 0.0842, 'p0_e_rho_mean': 0.7221, 'p0_e_rho_std': 0.025, 'p0_b_sparsity': 0.6875, 'p0_c_sparsity': 0.0, 'p0_d_sparsity_mean': 0.6703, 'p0_e_sparsity_mean': 0.5203, 'runs_completed': 25, 'seeds': '42, 43, 44, 45, 46', 'epochs': 200}`
+
+**Experimenter view:** Phase 0 (Harness & Smoke Test) completed across 9 sub-agent calls (1.1–1.9).
+
+HARNESS (1.1–1.2): Created src/pre_registration.md with corrected hypothesis
+(P0-A exempt from rho>=0.6, off-diagonal-only Spearman) per Research Manager
+guidance. Created src/harness.py with DatasetGenerator, SimilarityEvaluator
+(strictly off-diagonal Spearman), EncoderBase ABC, and utility functions.
+Fixed Unicode enco
+
+**Notes:** Phase 0 smoke test complete. 4/4 non-trivial encoders run end-to-end; 3/4 pass rho>=0.6 criterion; all local methods within 0.15 of global baseline. Report at phase_0/REPORT.md.
+

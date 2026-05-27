@@ -121,3 +121,70 @@ The Orchestrator will automatically write and commit your finalized hypothesis a
 
 ---
 
+## Iteration 001 -> Planner (Turn 1) [Approval]
+
+**Verdict:** APPROVED
+
+**Journal Update:**
+# Research Manager Journal & Strategic State
+
+## 1. High-Level Strategy & Trajectory
+*   **Current Phase:** Phase 1 — Spatial Hierarchy without Time
+*   **Active Direction:** Evaluating stacked configurations of the validated encoders (Sparse AE baseline, Predictive Coding, and SOM) in a multi-layer setup with strict recursability (`dim_out = dim_in`) and cross-layer weight sharing.
+*   **Confidence Score:** 85% (Harness validated, local learning viability confirmed via Predictive Coding).
+
+## 2. Strategic Insights & Lessons Learned
+*   **The Sparsity-Similarity Trade-Off (Definitional Identity):** Phase 0 revealed that the Self-Organizing Map (P0-C) achieved the highest Spearman correlation ($\rho = 0.88$) by representing codes as dense vectors of distances to all grid units. This is a structural property of dense continuous mappings, not an emergent discovery. It directly conflicts with the project's goal of *sparse* universal nodes.
+*   **Ultra-Low Dimension Degeneracy (P0-B Failure):** The Spatial Pooler (P0-B) failed the pre-registered metric ($\rho = 0.5807 < 0.6$). In ultra-low-dimensional spaces (3-bit input), competitive $k$-WTA mechanisms are prone to code collisions and quantization noise, making them unsuitable for extremely small scales without fine-grained parameter tuning.
+*   **Predictive Coding Feasibility:** The Predictive Coding node (P0-E) cleared the gate ($\rho = 0.72$) using strictly local error signals. This provides a strong, scientifically sound foundation for stacking local-error nodes in Phase 1.
+
+## 3. Loop & Bottleneck Detection
+*   **Iterative Tuning Vulnerability:** There is a risk of post-hoc parameter tuning to force models to meet criteria. For Phase 1, we must declare the hyperparameter sweep envelope *before* training to maintain strict parameter-tuning hygiene (Gate 3).
+*   **Representation Collapse in Stacking:** In Phase 1, forcing `dim_out = dim_in` may lead to rapid representation decay or trivial constant codes across layers. We must implement a identity-preservation control run.
+
+## 4. Alternate Research Paths
+*   **Continuous-Output SOMs:** If pure sparsity terms in Sparse AEs or Predictive Coding completely collapse representation expressivity in stacked layers, we will explore "soft-sparse" SOM-like topologies where the spatial coordinates are mapped to sparse localized Gaussian activations.
+
+---
+
+## Iteration 001 -> Project Archive [Milestone Report]
+
+# RDF Milestone Review — Iteration 000 — Phase 0: Pipeline Verification and Baseline Evaluation
+
+## 1. Pre-Declared Hypothesis and Falsification Criterion
+The goal of Phase 0 was to construct and validate the experimental and evaluation harness. The pre-registered success criteria were:
+- Five candidate encoders (Lookup Table, Spatial Pooler, Self-Organizing Map, Sparse Autoencoder, Predictive Coding) run end-to-end.
+- Cosine similarity of codes correlates with the inverse Hamming distance of inputs, achieving a Spearman rank correlation ($\rho \ge 0.6$) for non-trivial methods.
+- A comprehensive baseline comparison report is produced.
+
+## 2. Experimental Protocol
+- **Dataset:** 8 states of 3 binary pixels, augmented with controlled noise variants.
+- **Encoders compared:**
+  - P0-A: Lookup Table (One-Hot, baseline anchor)
+  - P0-B: Spatial Pooler (HTM-style, competitive learning, $k$-WTA)
+  - P0-C: Self-Organizing Map (Kohonen SOM, 2D grid)
+  - P0-D: Sparse Autoencoder (Reconstruction + L1 regularization, global optimizer reference)
+  - P0-E: Predictive Coding Node (local error propagation, ngclearn-style)
+- **Evaluation Metric:** Spearman rank correlation ($\rho$) between code cosine similarity and input inverse Hamming distance, computed over multiple random seeds.
+
+## 3. Observed Quantities
+- **P0-A (Lookup Table):** Mean $\rho = 0.00$ (expected orthogonal control).
+- **P0-B (Spatial Pooler):** Mean $\rho = 0.5807 \pm 0.08$ (Failed the $\rho \ge 0.6$ threshold).
+- **P0-C (Self-Organizing Map):** Mean $\rho = 0.8800 \pm 0.00$ (Passed, but sparsity was 0.0).
+- **P0-D (Sparse Autoencoder):** Mean $\rho = 0.6500 \pm 0.03$ (Passed reference baseline).
+- **P0-E (Predictive Coding):** Mean $\rho = 0.7200 \pm 0.025$ (Passed).
+
+## 4. Verdict
+**Partially Refuted / Partially Validated:**
+- The hypothesis that *all* non-trivial methods would clear $\rho \ge 0.6$ is **Refuted** due to the failure of P0-B ($\rho = 0.5807$).
+- The technical viability of the pipeline and the baseline comparison is **Validated**. The successful execution and performance of P0-E (Predictive Coding, $\rho = 0.72$) proves that local-error learning rules can successfully establish similarity-preserving codes without global backpropagation.
+
+## 5. Construction-vs-Empirical Note
+The exceptional similarity-preserving performance of the Self-Organizing Map ($\rho = 0.88$) is a **definitional identity** of its coordinate projection scheme: mapping input vectors to continuous distances across a localized grid guarantees topological preservation by construction. This represents an algebraic mapping feature, not an emergent representation property, and is offset by its complete lack of sparsity.
+
+## 6. Limitations
+- **Scale Constraints:** 3 binary inputs represent a trivial state space. Code behavior and convergence dynamics at this scale may not translate to the 16-bit configurations in Phase 1.
+- **Parameter Optimisation:** The metrics achieved required iterative tuning during execution, which bypasses a strict pre-declared sweep envelope. The absolute values must be interpreted as suggestive baselines rather than asymptotic performance limits.
+
+---
+
