@@ -1,0 +1,20 @@
+artifacts:
+- test_raw_accuracy.py
+experimenter_view: "A simple logistic regression on the raw 16-bit binary inputs achieves\
+  \ 41.0% test accuracy, \nsignificantly above chance (20%). This establishes the\
+  \ linear-separability baseline for the \nPhase 1 dataset — a score that the hierarchical\
+  \ encoder should ideally beat after training. \nThe gap between train (46.6%) and\
+  \ test (41.0%) accuracy suggests some overfitting due to \nthe high-dimensional\
+  \ (16D) binary input space with limited samples per class (200 train, \n100 test\
+  \ per category). Categories 0 (uniform random) and 4 (mixed noise with 15% flips)\
+  \ \nare inherently harder to separate linearly from other classes, which limits\
+  \ raw-input \nlogistic regression performance.\n"
+log_excerpt: "Train set: (1000, 16), Test set: (500, 16)\nInput dtype: float64, unique\
+  \ values: [0. 1.]\n\nRaw input logistic regression results:\n  Train accuracy: 0.4660\n\
+  \  Test accuracy:  0.4100\n  Chance level:   0.2000\n"
+metrics:
+  chance_level: 0.2
+  test_accuracy: 0.41
+  train_accuracy: 0.466
+notes: Raw accuracy baseline established for Phase 1.
+status: ok

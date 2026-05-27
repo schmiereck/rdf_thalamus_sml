@@ -1,0 +1,113 @@
+
+[Tool Call: list_dir({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml'})]
+
+[Tool Result: [DIR] -p
+[DIR] .git
+      .gitignore
+[DIR] .venv
+      _debug.txt
+      _fix_encoding.py
+      _fix_rho.py
+      _gen_report.py
+[DIR] archive
+      config.toml
+      current_state.md
+      experiment_log.md
+      goal.md
+      manager_log.md
+[DIR] phase_0
+[DIR] phase_1
+      RESEARCH-RESULT-001.md
+      research_journal.md
+[DIR] src
+      test_scale.py
+      test_training.py
+      tmp_launch.py
+      tmp_run_bg.py
+      tmp_test_sa.py
+      tmp_test_sa2.py
+      tmp_test_sa3.py
+      tmp_timing....]
+
+
+[Tool Call: grep_search({'pattern': 'generate_phase1_dataset'})]
+
+[Tool Result: test_scale.py:23: from dataset_phase1 import generate_phase1_dataset
+test_scale.py:104: dataset = generate_phase1_dataset(n_train=200, n_test=100, seed=42)
+test_training.py:17: from dataset_phase1 import generate_phase1_dataset
+test_training.py:27: data = generate_phase1_dataset(n_train=200, n_test=100, seed=42)
+tmp_timing.py:5: from dataset_phase1 import generate_phase1_dataset
+tmp_timing.py:10: dataset = generate_phase1_dataset(seed=42)
+src\dataset_phase1.py:6: def generate_phase1_dataset(n_tr...]
+
+
+[Tool Call: grep_search({'pattern': 'SimpleLogisticRegression'})]
+
+[Tool Result: test_scale.py:25: from harness import SimpleLogisticRegression
+test_scale.py:70: model = SimpleLogisticRegression(n_classes, n_features)
+src\eval_phase1.py:19: from src.harness import SimpleLogisticRegression
+src\eval_phase1.py:61: probe = SimpleLogisticRegression(
+src\harness.py:233: class SimpleLogisticRegression:
+src\harness.py:255: def fit(self, X: np.ndarray, y: np.ndarray) -> "SimpleLogisticRegression":
+src\harness.py:280: ) -> Tuple[float, SimpleLogisticRegression]:
+src\harness.py:292: mo...]
+
+
+[Tool Call: write_file({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\test_raw_accuracy.py', 'content': '#!/usr/bin/env python3\n"""Test raw input accuracy on Phase 1 dataset using SimpleLogisticRegression."""\n\nimport sys\nimport os\n\nsys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))\n\nfrom dataset_phase1 import generate_phase1_dataset\nfrom harness import SimpleLogisticRegression\n\n\ndef main():\n    # Generate the Phase 1 dataset\n    dataset = generate_phase1_dataset(seed=42)\n    train_x = dataset["train_x"]  # (1000, 16) - 5 categories x 200 each\n    train_y = dataset["train_y"]\n    test_x = dataset["test_x"]    # (500, 16)  - 5 categories x 100 each\n    test_y = dataset["test_y"]\n\n    print(f"Train set: {train_x.shape}, Test set: {test_x.shape}")\n    print(f"Input dtype: {train_x.dtype}, unique values: {np.unique(train_x)}")\n\n    # Train a logistic regression directly on the raw 16-bit inputs\n    n_classes = 5\n    n_features = train_x.shape[1]\n\n    model = SimpleLogisticRegression(\n        n_classes=n_classes,\n        n_features=n_features,\n        lr=0.1,\n        max_iter=1000,\n        seed=42,\n    )\n    model.fit(train_x, train_y)\n\n    train_acc = model.score(train_x, train_y)\n    test_acc = model.score(test_x, test_y)\n\n    print(f"\\nRaw input logistic regression results:")\n    print(f"  Train accuracy: {train_acc:.4f}")\n    print(f"  Test accuracy:  {test_acc:.4f}")\n    print(f"  Chance level:   {1.0/n_classes:.4f}")\n\n\nif __name__ == "__main__":\n    import numpy as np\n    main()'})]
+
+[Tool Result: Successfully wrote to C:\Users\thomas\Projekte\rdf_thalamus_sml\test_raw_accuracy.py]
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && .venv\\Scripts\\python.exe test_raw_accuracy.py'})]
+
+[Tool Result: exit_code: 0
+stdout: Train set: (1000, 16), Test set: (500, 16)
+Input dtype: float64, unique values: [0. 1.]
+
+Raw input logistic regression results:
+  Train accuracy: 0.4660
+  Test accuracy:  0.4100
+  Chance level:   0.2000
+
+stderr: ]
+
+The script is created and executed successfully. Here are the results:
+
+**`test_raw_accuracy.py`** output:
+
+| Metric | Value |
+|---|---|
+| Train accuracy | **0.4660** (46.6%) |
+| Test accuracy | **0.4100** (41.0%) |
+| Chance level | 0.2000 (20%) |
+
+A simple logistic regression on the raw 16-bit inputs achieves **41% test accuracy** — well above chance (20%), but far from perfect. This makes sense: categories 0 (uniform random) and 4 (mixed noise with 15% flips) overlap heavily with other categories in the raw input space, so a linear model cannot fully separate all 5 classes.
+
+[NUDGE RESPONSE]
+```yaml
+status: ok
+artifacts:
+  - test_raw_accuracy.py
+metrics:
+  train_accuracy: 0.466
+  test_accuracy: 0.410
+  chance_level: 0.200
+log_excerpt: |
+  Train set: (1000, 16), Test set: (500, 16)
+  Input dtype: float64, unique values: [0. 1.]
+  
+  Raw input logistic regression results:
+    Train accuracy: 0.4660
+    Test accuracy:  0.4100
+    Chance level:   0.2000
+experimenter_view: |
+  A simple logistic regression on the raw 16-bit binary inputs achieves 41.0% test accuracy, 
+  significantly above chance (20%). This establishes the linear-separability baseline for the 
+  Phase 1 dataset — a score that the hierarchical encoder should ideally beat after training. 
+  The gap between train (46.6%) and test (41.0%) accuracy suggests some overfitting due to 
+  the high-dimensional (16D) binary input space with limited samples per class (200 train, 
+  100 test per category). Categories 0 (uniform random) and 4 (mixed noise with 15% flips) 
+  are inherently harder to separate linearly from other classes, which limits raw-input 
+  logistic regression performance.
+notes: "Raw accuracy baseline established for Phase 1."
+```
