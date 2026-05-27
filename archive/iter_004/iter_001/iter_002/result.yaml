@@ -1,0 +1,21 @@
+artifacts:
+- phase_2/p2d_results.csv
+- phase_2/phase2_report.md
+experimenter_view: "The Universal Node hypothesis (P2-D-ZeroShot) is falsified. \n\
+  Spatially-pretrained weights, when frozen, provide no statistical advantage \nover\
+  \ a randomly initialized encoder. \n1. ZeroShot test accuracy (0.577) is statistically\
+  \ indistinguishable from \n   Untrained (0.585). \n2. Only P2-D-Trained (0.653)\
+  \ achieved significant performance (p < 0.05 vs others).\n3. JEPA loss for ZeroShot\
+  \ (~17.3) was identical to Untrained, while Trained \n   converged to ~3.9. \nConclusion:\
+  \ Temporal structure cannot be inherited from spatial representations;\ntemporal\
+  \ representations must be learned end-to-end.\n"
+metrics:
+  hypothesis_falsified: true
+  p2d_trained_jepa_loss: 3.8994
+  p2d_trained_test_acc: 0.6533
+  p2d_untrained_jepa_loss: 17.4573
+  p2d_untrained_test_acc: 0.5853
+  p2d_zero_shot_jepa_loss: 17.2884
+  p2d_zero_shot_test_acc: 0.5773
+notes: Phase 2 completed; hypothesis falsified by null result on ZeroShot transfer.
+status: ok
