@@ -1,0 +1,26 @@
+artifacts:
+- src/eval_phase1.py
+experimenter_view: 'Successfully implemented the evaluation module `src/eval_phase1.py`.
+  It encodes
+
+  the Phase-1 dataset, fits a numpy-based logistic regression probe, and computes
+
+  accuracy, code sparsity, reconstruction MSEs, and parameter counts. The untrained
+
+  baseline achieves ~33-35% accuracy on the 5-class problem (chance=20%), suggesting
+
+  the random hierarchical projections offer meaningful initial structure for the
+
+  linear classifier. The self-test passed without errors.
+
+  '
+metrics:
+  n_params: 3616
+  recon_mse_layer0: 6.4e-05
+  recon_mse_layer1: 9.0e-05
+  recon_mse_layer2: 9.5e-05
+  sparsity: 0.1056
+  test_accuracy: 0.332
+  train_accuracy: 0.351
+notes: Eval module created and verified against untrained encoder.
+status: ok
