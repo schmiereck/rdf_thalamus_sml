@@ -1,0 +1,614 @@
+# Research Project – Phase 3
+
+## Research Goal
+# RDF Project: Hierarchical Sparse Universal Nodes (HSUN)
+
+## Vision
+
+Investigate an architecture for unsupervised representation learning built from a **single, universal node type** that satisfies the following properties:
+
+1. Maps a small fixed-arity input (target: 3 slots, each a vector of dimension `d`) to a single output vector of dimension `d`.
+2. Can be stacked hierarchically by feeding triplets of node outputs into nodes of the next layer (shared weights, kernel-3 1D convolution semantics, stride 1 — overlap of 2).
+3. Can be applied along the time axis identically — three temporally consecutive outputs of one position feeding a temporal node.
+4. Is trained via a **local, label-free objective** such that the same trained node works at every spatial position and every hierarchical level.
+
+The architecture should yield representations where similar inputs produce similar codes (similarity-preserving encoding) and the dimensions of those codes carry **consistent semantics across positions and layers**.
+
+## Non-Goals (for this project)
+
+- 2D or higher-dimensional sensory data
+- End-to-end backpropagation across the full hierarchy
+- Real-world sensor integration
+- Motor / action loops (deferred — continued in a `rdf_thalamus` project)
+
+## Design Constraints
+
+- Python 3.10 / 3.11
+- **No SaaS dependencies, no global ML library installations.** Isolated environments per phase.
+- All training and evaluation runs locally (CPU acceptable for early phases)
+- File naming: `snake_case` for modules, `PascalCase` for classes
+- Each component must be swappable behind a small, explicit interface
+- Each phase produces a numerical comparison report committed to the repo
+
+## How to Read This Document
+
+This document defines a **gated phase plan**. The implementing agent should not advance to the next phase until the current phase's success criteria are met, OR a rigorous justification for skipping is documented in `current_state.md`. The strategist may reorder alternatives within a phase but must not skip phases without justification.
+
+Each phase specifies:
+- **Setup** — the experimental configuration
+- **Alternatives** — concrete variants to implement and compare
+- **Success criteria** — quantitative bar to clear before advancing
+- **Expected insight** — what the phase is supposed to teach us
+
+---
+
+## Phase 0 — Harness & Smoke Test
+
+**Purpose:** Verify the experimental pipeline end-to-end. Establish a similarity metric and a baseline. **This is a smoke test, not a research result.**
+
+**Setup:**
+- Input: 3 binary pixels (8 possible states)
+- Single encoder, no hierarchy, no time
+- Synthetic dataset enumerating all 8 states with controlled noise variants
+
+**Alternatives to implement and compare:**
+
+| ID    | Name                      | Description                                                      |
+|-------|---------------------------|------------------------------------------------------------------|
+| P0-A  | Lookup table              | One-hot embedding, trivial lower bound                           |
+| P0-B  | SDR / Spatial Pooler      | HTM-style sparse distributed representation, k-WTA               |
+| P0-C  | Self-Organizing Map       | Kohonen SOM on a small grid                                      |
+| P0-D  | Sparse Autoencoder        | Reconstruction + L1 sparsity penalty                             |
+| P0-E  | Predictive Coding node    | Local-error node in the spirit of ngclearn                       |
+
+**Success criteria:**
+- All five implementations run end-to-end
+- Similarity metric: cosine similarity of codes correlates with inverse Hamming distance of inputs (Spearman ρ ≥ 0.6 for non-trivial methods)
+- A comparison report is produced (`phase_0/REPORT.md`)
+
+**Expected insight:** With only 8 input states, every reasonable method succeeds. The deliverable is a working harness, a fixed similarity metric, and confidence that all five candidate encoders are correctly implemented. **Do not draw architectural conclusions from this phase.**
+
+---
+
+## Phase 1 — Spatial Hierarchy without Time
+
+**Purpose:** Test the shared-weight stacked architecture on a non-trivial input space.
+
+**Setup:**
+- Input: 16 binary pixels in a 1D array
+- Architecture: kernel-3 nodes with stride 1, 2–3 stacked layers
+- Output dimension `d` chosen such that input slot dim = output slot dim (recursability)
+- Structured datasets, not exhaustive enumeration of 2^16:
+  - Uniform random bits
+  - Single-blob inputs (one contiguous run of 1s)
+  - Two-blob inputs
+  - Periodic patterns (periods 2, 3, 4)
+  - Mixed noise overlays
+
+**Alternatives to compare:**
+
+| ID    | Name                                                 | Description                                              |
+|-------|------------------------------------------------------|----------------------------------------------------------|
+| P1-A  | Best Phase-0 method, stacked, shared within layer    | Baseline stacking                                        |
+| P1-B  | Same, but weights shared across layers too           | Test the strict universal-node hypothesis                |
+| P1-C  | Per-layer learned weights (no cross-layer sharing)   | Upper-bound reference: what does sharing cost?           |
+| P1-D  | Output dim = input dim, fully recursive form         | Strict universal-node form                               |
+| P1-E  | Output dim ≠ input dim (e.g., wider)                 | Test if shape-matching is too restrictive                |
+
+**Success criteria:**
+- Top-layer codes separate the five structured input categories with ≥80% linear-probe accuracy
+- Per-layer-vs-shared comparison quantified
+- The strict universal form (P1-B with P1-D) reaches within 15% of upper-bound (P1-C)
+
+**Expected insight:** Does forcing `dim_out = dim_in` and cross-layer weight sharing sacrifice too much expressivity? This phase decides whether the universal-node ambition is viable in the spatial-only setting.
+
+---
+
+## Phase 2 — Temporal Integration at a Single Node
+
+**Purpose:** Test mechanisms for letting representations integrate over time, isolated from spatial hierarchy.
+
+**Setup:**
+- Single spatial position
+- Input: sequence of single-state vectors over time (A/B/C: single Input 1.0,, AB/ABC/...: inputs 1.0,  '-': all Inputs 0.0)
+- Example Test sequences:
+  - Periodic: `A,B,C,A,B,C,…`, `AB,C,AB,C,…`, `A,B,-,A,B,-,…`, ...
+  - Irregular: `A,B,A,B,C,B,A,B,…`, `A,AB,B,BC,A,B,AC,C,ABC,…`, ...
+  - Random walks over a small state set
+  - Long-range periodic patterns (period 7, 11)
+
+**Alternatives to compare:**
+
+| ID    | Name                            | Description                                                                     |
+|-------|---------------------------------|---------------------------------------------------------------------------------|
+| P2-A  | Different tick rates per layer  | Higher-level node updates every N steps, pools lower outputs                    |
+| P2-B  | Internal recurrent state        | Node has a hidden state, mixes with current input (GRU-like, locally trained)   |
+| P2-C  | Output-as-input loop            | Output at t-1 fed as an additional input slot at t (thalamus-style)             |
+| P2-D  | Three-temporal-slot node        | Same kernel-3 node, inputs are `(state_{t-2}, state_{t-1}, state_t)` — full spatial-temporal symmetry |
+
+**Success criteria:**
+- Each method evaluated on (a) next-step prediction accuracy and (b) periodic-vs-random classification
+- For P2-D specifically: can the same node trained spatially be applied temporally **without retraining**? If yes, this is the strongest evidence for unification.
+
+**Expected insight:** P2-D is architecturally the cleanest. This phase decides whether the unified spatial-temporal grid is viable.
+
+---
+
+## Phase 3 — Unified Spatiotemporal Grid
+
+**Purpose:** Combine spatial hierarchy and temporal integration into one architecture using a single universal node type.
+
+**Setup:**
+- 16 binary pixels, sequences of length 32
+- 2D grid of nodes: spatial axis × temporal axis
+- Single node type applied at every `(space, time)` position with kernel-3 receptive field in both axes
+
+**Alternatives to compare:**
+
+| ID    | Name                                                       | Description                                       |
+|-------|------------------------------------------------------------|---------------------------------------------------|
+| P3-A  | Separate spatial then temporal stages                       | Sequential: spatial encoder → temporal encoder    |
+| P3-B  | Unified grid, anisotropic (different params space/time)     | Slight relaxation of the universal hypothesis     |
+| P3-C  | Fully unified grid, single node type                        | The strong universal hypothesis                   |
+
+**Test patterns:**
+- Moving blob (translation in time)
+- Expanding/contracting blob
+- Periodic spatial-temporal patterns
+- Object permanence: blob disappears for k steps then reappears
+
+**Success criteria:**
+- Pattern recognition accuracy on the four spatiotemporal benchmarks
+- P3-C within 20% accuracy of P3-A
+- Parameter count comparison: P3-C should be dramatically smaller
+
+---
+
+## Phase 4 — Training Objective Comparison
+
+**Purpose:** With the architecture fixed (best variant from Phase 3), compare self-supervised training objectives on identical conditions.
+
+**Setup:**
+- Architecture frozen to the Phase-3 winner
+- Dataset and evaluation held constant
+- Train from scratch with each objective; equal compute budget
+
+**Alternatives to compare:**
+
+| ID    | Name                            | Description                                                          |
+|-------|---------------------------------|----------------------------------------------------------------------|
+| P4-A  | Predictive Coding (local)       | ngclearn-style local error propagation                               |
+| P4-B  | Local JEPA                      | Predict own future latent from neighbors + own past                  |
+| P4-C  | Slow Feature Analysis           | Minimize temporal change subject to variance constraint              |
+| P4-D  | Hebbian + sparsity              | Pure local correlation learning with sparsity penalty                |
+| P4-E  | Reconstruction (sparse AE)      | Reference point                                                      |
+
+**Downstream evaluation tasks (held out from training):**
+1. Anomaly detection (inject novel patterns)
+2. Sequence classification
+3. Next-step prediction
+
+**Success criteria:**
+- Ranked comparison across the three downstream tasks
+- Training stability and per-method compute cost documented
+- Recommendation issued for the default objective going forward
+
+---
+
+## Phase 5 — Vector Semantics Investigation
+
+**Purpose:** Investigate whether code dimensions carry consistent semantics across positions and layers.
+
+**Setup:**
+- Take best model from Phase 4
+- Probe each dimension of the code vector for correlations with hand-designed semantic axes:
+  - Local magnitude / activity level
+  - Local gradient (left-right asymmetry)
+  - Local variance / "chaos"
+  - Periodicity / repetition
+  - Novelty / surprise (deviation from local prediction)
+
+**Alternatives to compare:**
+
+| ID    | Name                       | Description                                                            |
+|-------|----------------------------|------------------------------------------------------------------------|
+| P5-A  | Pure emergence             | No constraints on dimensions during training                           |
+| P5-B  | Anchor features            | First k dimensions regularized toward hand-designed semantic features  |
+| P5-C  | Disentanglement penalty    | Information-bottleneck or β-VAE-like loss term added                   |
+
+**Success criteria:**
+- For each dimension at each (layer, position): variance explained by each semantic axis
+- Consistency score: how stable is the dimension-to-semantics mapping across positions and layers?
+- Document which approach yields the most consistent and most interpretable semantics
+
+---
+
+## Open Question Resolved in Phase 0
+
+> *Is it meaningful to begin with only 3 b/w inputs and no temporal component, or does that strip out all the interesting properties?*
+
+**Answer:** Phase 0 with 3 inputs is a smoke test for the harness only. The architecture's interesting properties — hierarchy, time, recursion, universal node — cannot be evaluated at that scale (only 8 possible input states; every reasonable method succeeds trivially). Phase 1 (16 inputs, spatial hierarchy) is the first phase where method comparisons carry research weight. Phase 2 is where the architecture's distinctive value proposition begins to be tested. **Do not draw architectural conclusions from Phase 0.**
+
+## Relationship to Existing Projects
+
+- The architecture is intended to be eventually testable as a perception encoder in the 1D physics sandbox (128 RGB pixels, 3 objects). That integration is **out of scope** for this project but should be kept in mind as the long-term target.
+
+## References for the Implementing Agent
+
+- **HTM Spatial Pooler & Temporal Memory** — Numenta literature (Hawkins et al.)
+- **ngclearn** — predictive coding library, biologically plausible local learning
+- **JEPA family** — LeCun et al., joint embedding predictive architectures
+- **Slow Feature Analysis** — Wiskott & Sejnowski, 2002
+- **Hebbian / Oja learning rules** — classical references
+- **Sparse coding** — Olshausen & Field, 1996
+
+
+## All Iterations (overview)
+[phase-0-smoke-test] COMPLETED  (iter 001–001, 1 iterations)
+  Phase 0 smoke test complete: all 5 encoders run end-to-end; 3/4 non-trivial encoders pass rho>=0.6; all local methods within 0.15 of global baseline; report generated.
+  → read_campaign("phase-0-smoke-test") to see all iterations
+
+[phase-1-spatial-hierarchy] active
+  iter | status          | hypothesis
+  -----|-----------------|----------
+  002  | ok              | phase-2: the reconstruction objective is misaligned with classification; test alternative local objectives (predictive coding, SFA, Hebbian, contrastive) on the corrected hierarchical architecture with simultaneous training to determine if any local objective can reach ≥60% accuracy
+
+## Current State
+# Current Research State — HSUN Project
+**Last updated:** After Phase 1 completion (iter_2, sub-agents 2.1–2.3)
+
+## Goal
+Investigate an architecture for unsupervised representation learning built from
+a single, universal node type. Phase 1 (Spatial Hierarchy) is now complete.
+
+## Confirmed (with iter/sub-agent references)
+
+1. **Weight sharing has ZERO expressivity penalty** (iter_2, 2.2):
+   - P1-B (cross-layer sharing, d=8): 33.52% ± 3.05%
+   - P1-C (independent weights, d=8): 33.24% ± 2.51%
+   - Gap: −0.28pp (well within 15pp threshold)
+   - This is the most POSITIVE finding for the universal-node hypothesis
+
+2. **Reconstruction training is misaligned with classification** (iter_2, 2.2, 2.3):
+   - ALL trained configs (P1-A through P1-E, k-WTA, predictive coding, strong L1)
+     achieve 33–42% accuracy, below the untrained baseline at ~48–51%
+   - The autoencoder optimizes for pixel-level reconstruction, not category structure
+   - Simultaneous training (41.5%) outperforms progressive training (33.5%)
+
+3. **d_out = 3*d creates no bottleneck (BUG, now fixed)** (iter_2, 2.1→2.2):
+   - Original: Encoder 24→24, Decoder 24→24 (identity-like, no compression)
+   - Corrected: Encoder 24→8, Decoder 8→24 (true 3:1 bottleneck)
+   - Original + tiny embeddings → representation collapse (all weights → 0)
+   - Corrected + Normal(0,1) embeddings → no collapse but accuracy still low
+
+4. **L1 sparsity is incompatible with discriminative representations** (iter_2, 2.2):
+   - L1 λ=0.002 with Normal(0,1) embeddings → sparsity = 0.03% (ineffective)
+   - Stronger L1 doesn't help accuracy (diagnostic Exp5: 37.1%)
+   - Hyperparameter search: accuracy-sparsity trade-off is fundamental
+
+5. **k-WTA successfully enforces structural sparsity** (iter_2, 2.2):
+   - P1-B-kwta with k=4/8: sparsity = 50.0% (exactly), accuracy = 35.7%
+   - Sparsity is guaranteed by construction, independent of training dynamics
+   - Does NOT solve the accuracy problem (still below untrained baseline)
+
+6. **Predictive coding with lateral inhibition creates sparsity but unstable** (iter_2, 2.3):
+   - Mean accuracy: 38.2%, sparsity: 72.5%
+   - High variance across seeds: 20%–53% accuracy
+   - Lateral inhibition suppresses weakly-activated neurons, creating sparsity
+   - But also suppresses useful discriminative information
+
+7. **The untrained baseline is a strong reference** (iter_2, 2.2, 2.3):
+   - Original architecture (tiny embeddings): ~30% accuracy
+   - Corrected architecture (Normal embeddings): ~48% accuracy
+   - Random flat embedding (16×8=128 features): ~43% accuracy
+   - Random 3-layer hierarchy: ~51% accuracy (best non-trained result)
+   - This means 51% is achievable with zero training — any useful training
+     should IMPROVE on this, not degrade it
+
+8. **P1-D (d=4) is too small** (iter_2, 2.2):
+   - Accuracy: 23.9% (near chance), confirms d=4 bottleneck is too aggressive
+   - Supports d=8 as minimum viable per-slot dimension
+
+9. **P1-E (d_out=16, wider) slightly outperforms P1-B (d_out=8, recursive)** (iter_2, 2.2):
+   - P1-E: 35.2% vs P1-B: 33.5% (+1.7pp)
+   - Wider code dimension provides slightly more capacity
+   - But still below untrained baseline
+
+## Refuted Hypotheses
+- Phase 1 pre-registered hypothesis FALSIFIED on multiple counts:
+  (1) P1-B accuracy < 80% (observed: 33.5%)
+  (2) Trained P1-B − untrained < 15pp (observed: −14.9pp)
+  (3) P1-B sparsity < 50% with L1 (observed: 0.03%)
+- The reconstruction + L1 training objective cannot produce discriminative
+  sparse codes in a hierarchical autoencoder with 3:1 bottleneck compression
+
+## Current Best Result
+- **Untrained hierarchical encoder** (Normal(0,1) embeddings, d=8, d_out=8):
+  48.4% accuracy, but no sparsity (0.04%)
+- **P1-B-kwta** (cross-layer sharing, k-WTA k=4):
+  35.7% accuracy, 50.0% sparsity — the only config meeting sparsity criterion
+- **Simultaneous training** (diagnostic):
+  41.5% accuracy — best trained result, but still below untrained
+
+## In Progress
+- Phase 4 training objectives should be tested NEXT (moved earlier from plan)
+- Need a training objective that PRESERVES discriminative information
+  while enforcing sparsity
+
+## Open Questions (ordered by expected value)
+1. **Can any non-reconstruction local objective reach ≥60%?** This is the
+   most critical question. If no local objective can beat random projections,
+   the HSUN architecture requires a fundamentally different approach.
+2. **Is 80% accuracy achievable with any local training?** The untrained
+   baseline at 51% sets an upper bound for random projections. We need to
+   determine if supervised or semi-supervised signals are necessary.
+3. **Can simultaneous training + better objective close the gap?**
+   Simultaneous training (41.5%) significantly outperforms progressive (33.5%).
+   Combined with a contrastive or Hebbian objective, could we reach ≥60%?
+4. **Does increasing d improve accuracy?** d=8 gives 80 top-layer features.
+   d=16 would give 160 features — does the wider bottleneck help?
+5. **Can lateral inhibition + simultaneous training work together?**
+   Predictive coding achieved 72% sparsity but unstable. Simultaneous training
+   gave best accuracy. Can they be combined?
+6. **Is tanh the right activation for the bottleneck?** ReLU might allow
+   more expressive sparse codes (natural sparsity from ReLU dead neurons).
+7. **Spatial-temporal symmetry (Phase 2):** Can a kernel-3 node trained
+   spatially be applied temporally without retraining? This remains untested.
+
+## Critical Design Decisions Made This Phase
+- **d_out = d (recursive form):** Confirmed as correct (not 3*d)
+- **Embedding: Normal(0,1):** Confirmed as necessary (not Uniform[-0.01,0.01])
+- **Simultaneous training > progressive training:** For this task/architecture
+- **k-WTA > L1 for sparsity:** Structural sparsity is more reliable than L1
+
+## Files Created This Phase
+- src/node.py — UniversalNode with encoder/decoder, L1, k-WTA, gradient check
+- src/hierarchical_encoder.py — 3-layer hierarchical encoder with weight sharing
+- src/dataset_phase1.py — 5 structured 16-bit datasets
+- src/eval_phase1.py — Linear probe evaluation module
+- src/run_phase1.py — Experiment runner (7 configs × 5 seeds)
+- src/diagnostic_phase1.py — 5 diagnostic experiments
+- src/pre_registration.md — Updated with Phase 1 hypothesis + Manager's criteria
+- phase_1/results.csv — Raw experimental results
+- phase_1/diagnostic_results.csv — Diagnostic experiment results
+- phase_1/REPORT.md — Full comparison report
+
+
+## Recent Log (last 3 entries)
+
+---
+```yaml
+cached_tokens: 0
+campaign: phase-0-smoke-test
+campaign_status: completed
+campaign_summary: 'Phase 0 smoke test complete: all 5 encoders run end-to-end; 3/4
+  non-trivial encoders pass rho>=0.6; all local methods within 0.15 of global baseline;
+  report generated.'
+cost_usd: 1.40168
+hypothesis: 'phase-1-setup: establish spatial hierarchy with shared-weight stacked
+  nodes; test whether P0-D/P0-C/P0-E can be stacked with dim_out=dim_in recursion
+  and cross-layer weight sharing within 15% of per-layer upper bound'
+input_tokens: 3316169
+iter: 1
+metrics:
+  epochs: 200
+  p0_a_rho_mean: NaN
+  p0_b_rho_mean: 0.5807
+  p0_b_rho_std: 0.0794
+  p0_b_sparsity: 0.6875
+  p0_c_rho_mean: 0.8811
+  p0_c_rho_std: 0.0177
+  p0_c_sparsity: 0.0
+  p0_d_rho_mean: 0.6173
+  p0_d_rho_std: 0.0842
+  p0_d_sparsity_mean: 0.6703
+  p0_e_rho_mean: 0.7221
+  p0_e_rho_std: 0.025
+  p0_e_sparsity_mean: 0.5203
+  runs_completed: 25
+  seeds: 42, 43, 44, 45, 46
+output_tokens: 113150
+status: ok
+```
+
+## iter_001: phase-1-setup: establish spatial hierarchy with shared-weight stacked nodes; test whether P0-D/P0-C/P0-E can be stacked with dim_out=dim_in recursion and cross-layer weight sharing within 15% of per-layer upper bound
+
+**Analysis:** Phase 0 was decomposed into 3 original sub-goals (harness, encoders, experiment)
+but required 9 sub-agent calls due to: (a) execution limits on each agent, 
+(b) Unicode encoding issues on Windows, (c) need for iterative tuning of encoders.
+
+Key finding: P0-B (Spatial Pooler with competitive learning) narrowly fails the
+pre-registered rho>=0.6 threshold (mean=0.5807). However, it passes Criterion 3
+
+**Status:** ok
+
+**Metrics:** `{'p0_a_rho_mean': 'NaN', 'p0_b_rho_mean': 0.5807, 'p0_b_rho_std': 0.0794, 'p0_c_rho_mean': 0.8811, 'p0_c_rho_std': 0.0177, 'p0_d_rho_mean': 0.6173, 'p0_d_rho_std': 0.0842, 'p0_e_rho_mean': 0.7221, 'p0_e_rho_std': 0.025, 'p0_b_sparsity': 0.6875, 'p0_c_sparsity': 0.0, 'p0_d_sparsity_mean': 0.6703, 'p0_e_sparsity_mean': 0.5203, 'runs_completed': 25, 'seeds': '42, 43, 44, 45, 46', 'epochs': 200}`
+
+**Experimenter view:** Phase 0 (Harness & Smoke Test) completed across 9 sub-agent calls (1.1–1.9).
+
+HARNESS (1.1–1.2): Created src/pre_registration.md with corrected hypothesis
+(P0-A exempt from rho>=0.6, off-diagonal-only Spearman) per Research Manager
+guidance. Created src/harness.py with DatasetGenerator, SimilarityEvaluator
+(strictly off-diagonal Spearman), EncoderBase ABC, and utility functions.
+Fixed Unicode enco
+
+**Notes:** Phase 0 smoke test complete. 4/4 non-trivial encoders run end-to-end; 3/4 pass rho>=0.6 criterion; all local methods within 0.15 of global baseline. Report at phase_0/REPORT.md.
+
+
+---
+```yaml
+cached_tokens: 2233031
+campaign: phase-1-spatial-hierarchy
+cost_usd: 2.92354
+hypothesis: 'phase-2: the reconstruction objective is misaligned with classification;
+  test alternative local objectives (predictive coding, SFA, Hebbian, contrastive)
+  on the corrected hierarchical architecture with simultaneous training to determine
+  if any local objective can reach ≥60% accuracy'
+input_tokens: 8049498
+iter: 2
+metrics:
+  p1_a_corrected_accuracy: 0.3424
+  p1_b_corrected_accuracy: 0.3352
+  p1_b_kwta_accuracy: 0.3572
+  p1_b_kwta_sparsity: 0.5
+  p1_b_original_accuracy: 0.1836
+  p1_b_params: 1264
+  p1_b_sparsity: 0.0003
+  p1_c_corrected_accuracy: 0.3324
+  p1_c_minus_p1_b_pp: -0.28
+  p1_c_params: 14992
+  p1_d_corrected_accuracy: 0.2392
+  p1_e_corrected_accuracy: 0.3516
+  predictive_coding_accuracy: 0.3816
+  predictive_coding_sparsity: 0.7246
+  random_embedding_accuracy: 0.4336
+  simultaneous_training_accuracy: 0.4152
+  single_layer_accuracy: 0.3976
+  strong_l1_accuracy: 0.3712
+  trained_minus_untrained_pp: -14.92
+  untrained_corrected_accuracy: 0.4844
+  untrained_original_accuracy: 0.2976
+output_tokens: 227654
+status: ok
+```
+
+## iter_002: phase-2: the reconstruction objective is misaligned with classification; test alternative local objectives (predictive coding, SFA, Hebbian, contrastive) on the corrected hierarchical architecture with simultaneous training to determine if any local objective can reach ≥60% accuracy
+
+**Analysis:** Phase 1 tested whether a hierarchical encoder with shared-weight UniversalNodes
+(kernel-3, stride-1, d=8, 3 layers over 16 binary inputs) trained with local
+reconstruction objectives can produce representations that classify 5 structured
+input categories at ≥80% accuracy.
+
+Three sub-goals were executed:
+
+1. ORIGINAL EXPERIMENT (2.1): Revealed representation collapse due to (a) d_out=3*d
+creating n
+
+**Status:** ok
+
+**Metrics:** `{'p1_b_original_accuracy': 0.1836, 'untrained_original_accuracy': 0.2976, 'p1_b_corrected_accuracy': 0.3352, 'p1_c_corrected_accuracy': 0.3324, 'p1_a_corrected_accuracy': 0.3424, 'p1_d_corrected_accuracy': 0.2392, 'p1_e_corrected_accuracy': 0.3516, 'p1_b_kwta_accuracy': 0.3572, 'untrained_corrected_accuracy': 0.4844, 'random_embedding_accuracy': 0.4336, 'single_layer_accuracy': 0.3976, 'simultaneous_training_accuracy': 0.4152, 'predictive_coding_accuracy': 0.3816, 'strong_l1_accuracy': 0.3712, 'p1_b_sparsity': 0.0003, 'p1_b_kwta_sparsity': 0.5, 'predictive_coding_sparsity': 0.7246, 'p1_c_minus_p1_b_pp': -0.28, 'trained_minus_untrained_pp': -14.92, 'p1_b_params': 1264, 'p1_c_params': 14992}`
+
+**Experimenter view:** Phase 1 (Spatial Hierarchy without Time) was executed in three sub-goals:
+
+SUB-GOAL 2.1 (Planner): Original Phase 1 experiment revealed representation collapse.
+The UniversalNode used d_out=3*d=24 (no bottleneck, identity-like autoencoder)
+and Uniform[-0.01,0.01] embedding initialization. This caused the L1 penalty
+to dominate the tiny reconstruction MSE, driving all weights to zero.
+P1-B accuracy
+
+**Notes:** Phase 1 hypothesis falsified on accuracy and untrained-baseline criteria. Weight sharing confirmed to have zero cost. Reconstruction objective identified as root cause.
+
+
+
+## Decompose and Execute
+Plan and execute the next research phase. Break it into sub-tasks:
+- run_agent(complexity='planner') — for sub-goals requiring multi-step analysis (the inner Planner can itself spawn sub-agents)
+- run_agent(complexity='medium'/'high') — for bounded, direct experiments
+Run sub-tasks sequentially. Each result informs the next. Synthesise all results into your final YAML report.
+
+## Approved Research Plan for this Iteration
+You previously proposed this plan during the planning phase:
+```yaml
+falsification_criterion: "1. JEPA hypothesis FALSIFIED if: mean JEPA accuracy (5 seeds)\
+  \ < 50% at d=8\n   (below the untrained baseline of 48.4%, meaning JEPA actively\
+  \ degrades\n   representations like reconstruction did).\n2. General local-objective\
+  \ hypothesis FALSIFIED if: ALL four objectives (JEPA,\n   contrastive, SFA, Hebbian)\
+  \ achieve mean accuracy < 48.4% at d=8 (none beats\n   doing nothing).\n3. d=8 bottleneck\
+  \ hypothesis SUPPORTED if: JEPA-d16 mean > JEPA-d8 mean + 10pp\n   (the bottleneck\
+  \ costs ≥10pp of accuracy).\n4. d=8 bottleneck hypothesis REFUTED if: JEPA-d16 mean\
+  \ ≤ JEPA-d8 mean + 5pp\n   (the bottleneck is not a major factor).\n5. Temporal-unification\
+  \ claim FALSIFIED if: JEPA fails spatially (<50%), since\n   the same objective\
+  \ applied temporally cannot succeed where it fails spatially.\n"
+hypothesis: 'A local JEPA training objective (predicting the latent code of spatially
+  adjacent
+
+  positions at each layer, with VICReg collapse prevention) applied to the P1-B
+
+  architecture (3-layer, kernel-3, stride-1, d=8, cross-layer weight sharing,
+
+  simultaneous training) will achieve ≥60% 5-category linear-probe accuracy on the
+
+  structured 16-bit input dataset. This is because: (1) predicting in latent space
+
+  avoids the reconstruction-objective misalignment that destroyed discriminative
+
+  information in Phase 1; (2) the spatial prediction task requires the encoder to
+
+  learn category-relevant spatial structure (blobs, periodicity, noise have
+
+  different spatial predictability patterns); (3) the architecture already produces
+
+  48.4% accuracy with random weights — a well-aligned objective should exceed this.
+
+
+  Secondary hypothesis: the d=8 bottleneck is NOT the primary cause of poor Phase
+  1
+
+  performance. If JEPA-d8 ≥ 60%, the bottleneck was never the problem (the objective
+
+  was). If JEPA-d16 exceeds JEPA-d8 by >10pp, then the bottleneck is a contributing
+
+  factor and should be reconsidered for the universal-node form.
+
+  '
+pre_registration_file: src/pre_registration.md
+proposed_method: "Step 1: Create src/training_objectives.py with four loss classes:\n\
+  \  - JEPALoss: bidirectional neighbor prediction at each layer, VICReg collapse\n\
+  \    prevention (variance penalty + covariance off-diagonal penalty). Predictor\n\
+  \    is a linear layer (d→d) per layer, not shared across layers.\n  - ContrastiveLoss:\
+  \ InfoNCE with random bit-flip augmentation (1-2 bits/16),\n    temperature τ=0.5,\
+  \ projection head MLP(88→44→22), L2 normalization.\n  - SFALoss: minimize ‖z[i]−z[i−1]‖²\
+  \ at each layer + variance=1 constraint.\n  - HebbianLoss: maximize y·x correlation\
+  \ with Oja normalization and\n    off-diagonal decorrelation penalty.\n\nStep 2:\
+  \ Modify src/hierarchical_encoder.py to return intermediate layer codes\n  (needed\
+  \ for JEPA, SFA, Hebbian losses computed at each layer). Add flag\n  return_intermediate=False\
+  \ for backward compatibility.\n\nStep 3: Modify src/node.py to support encoder-only\
+  \ mode (no decoder needed\n  for non-reconstruction objectives). Add encode_only()\
+  \ method.\n\nStep 4: Create src/run_phase1_v2.py experiment runner:\n  - 7 configs:\
+  \ P1-B-JEPA-d8, P1-B-Contrastive-d8, P1-B-SFA-d8,\n    P1-B-Hebbian-d8, P1-B-JEPA-d16,\
+  \ Untrained-d8, Untrained-d16\n  - 5 seeds each (42-46)\n  - 200 epochs, batch_size=64,\
+  \ Adam lr=1e-3\n  - Linear probe evaluation (sklearn LogisticRegression, 80/20 split)\n\
+  \  - Metrics: accuracy, sparsity, std across seeds, parameter count\n\nStep 5: Run\
+  \ all experiments, collect results in phase_1/objectives_results.csv\n\nStep 6:\
+  \ Create phase_1/objectives_report.md with:\n  - Per-objective mean ± std accuracy\
+  \ across seeds\n  - Comparison vs untrained baseline (paired t-test)\n  - Ranking\
+  \ of objectives\n  - d=8 vs d=16 comparison for JEPA\n  - Recommendation for Phase\
+  \ 2 temporal objective\n\nStep 7: Update src/pre_registration.md with this hypothesis\
+  \ and criteria.\n\nControl conditions (from previous experiments, no re-run needed):\n\
+  \  - Untrained P1-B d=8: 48.4% ± (from iter_002)\n  - Reconstruction P1-B d=8: 33.5%\
+  \ ± (from iter_002)\n  - Predictive coding P1-B d=8: 38.2% ± (from iter_002)\n\n\
+  Expected outcome: JEPA ≥ 60%, Contrastive ~50-55%, SFA ~45-55%,\nHebbian ~40-50%.\
+  \ If JEPA succeeds, it validates both the objective and\nthe temporal-unification\
+  \ path (Phase 2 uses same objective on time axis).\n"
+
+```
+
+## Strategic Research Manager's Notes
+### Strategic Guidance: Navigating Alternative Objectives & Bottleneck Dynamics
+
+We are pivoting at a critical juncture. The realization that local reconstruction degrades hierarchical representations below the untrained baseline (51.0%) is a major diagnostic success. We must now rigorously test whether non-reconstructive local objectives can leverage the hierarchical architecture without destroying its inherent discriminative capacity.
+
+I approve of staying in Phase 1 to resolve this core representation issue before moving to temporal dynamics. Your proposed plan is solid, but we must tighten the scientific discipline to ensure we do not fall into new "constructional" or "tuning" traps.
+
+---
+
+### 1. The Bottleneck-Objective Complementarity (The $d=8$ Insight)
+The manual guidance rightly asks if the $3:1$ bottleneck ($3d \to d$ at each node) is a bottleneck of capacity or a bottleneck of objective. 
+*   **The Squeeze:** A 3-layer hierarchy of kernel-3, stride-1 nodes forces a $24 \to 8$ dimension reduction at every single node. 
+*   **The Conflict:** Under a **reconstruction** objective, the network is forced to squeeze high-frequency, pixel-level details through this tight bottleneck. Because pixel noise and high-frequency variations dominate the L2 loss, abstract category boundaries are discarded first.
+*   **The Hope:** Under a **JEPA or Contrastive** objective, the network is trained to discard high-frequency, non-predictable noise and preserve only mutually predictable or invariant features. Therefore, **$d=8$ may be highly viable for JEPA even if it was a disaster for reconstruction.**
+*   **Action:** Your comparison of `JEPA-d8` vs `JEPA-d16` is highly critical. It will disentangle whether the failure mode of Phase 1 was absolute capacity ($d=8$ too small) or objective misalignment (reconstruction forcing the wrong information through the bottleneck).
+
+### 2. Strengthened Pre-Registration & Falsification Criteria
+To prevent post-hoc rationalizations, the Orchestrator will automatically write and commit your finalized hypothesis and falsification criteria to `src/pre_registration.md` before execution. Your criteria must be mathematically precise and compared directly to the *newly run control baselines*:
+*   **Rule of Margins:** An unsupervised training method is only successful if it actively *improves* upon doing nothing. Therefore, the hypothesis for any trained method (JEPA, Contrastive, SFA, Hebbian) is **falsified** if its mean classification accuracy does not exceed its corresponding untrained baseline ($d=8$ or $d=16$) by **at least 5 percentage points** (e.g., $\text{Accuracy}_{\text{JEPA-d8}} < \text{Accuracy}_{\text{Untrained-d8}} + 5\%$).
+*   **Direct Control:** Ensure `Untrained-d8` and `Untrained-d16` are evaluated using the exact same linear probe protocol within this run to ensure a perfectly fair control comparison.
+
+### 3. VICReg & Parameter-Tuning Hygiene
+You are proposing to use a VICReg-style loss (variance, covariance, and invariance penalties) to prevent representation collapse in JEPA. 
+*   **Skeptic Warning:** VICReg is notorious for being sensitive to the balance of its three loss components ($\lambda_{\text{var}}, \mu_{\text{cov}}, \nu_{\text{inv}}$). If you must perform an extensive, delicate hyperparameter sweep to find a single working combination, you must **not** report this as a robust discovery. 
+*   **Action:** Set reasonable, standard VICReg defaults (e.g., $\lambda=25, \mu=25, \nu=1$) and report the results honestly. If the objective is highly fragile or collapses under standard parameters, document this as a **null or fragile result**. Do not hide instability behind a post-hoc optimized parameter set.
+*   **Symmetry Check:** If JEPA works, we gain a massive strategic advantage: the exact same neighborhood-prediction objective can be applied along the time axis in Phase 2. Ensure your implementation of `JEPALoss` is mathematically general enough to support this future transition.
+
+## User Hint
+**Empfehlung für Iteration 3** Nicht zu Phase 2 (Zeit) weitergehen. Stattdessen **Phase 1 mit den richtigen Objectives** re-run: | ID:P1-F | Objective:Lokales JEPA | Warum jetzt: Sagt latenten Zustand voraus, nicht Pixel — der Kern-Fix für Kollaps |   | ID:P1-G | Objective:SimCLR-Kontrast (Augmentierungs-Paare) | Warum jetzt: Klassischer Kollaps-Killer |   | ID:P1-H | Objective:Slow Feature Analysis | Warum jetzt: Zeitlich, aber als Proxy: benachbarte Inputs als "zeitliche Nachbarn" |   Wenn P1-F (JEPA) die 80%-Hürde knackt, ist das gleichzeitig der Beweis für Phase 2: das gleiche lokale Objective funktioniert auch temporal. Zwei Phasen in einem Lauf.   **Eine konkrete Frage an den Strategisten:** Hat er den `d=8` Engpass als mögliche Mitursache erfasst? 24→8 ist eine 3:1 Kompression pro Schicht. Bei JEPA-Objectives ist das weniger kritisch (man prediziert im latenten Raum), aber bei SFA könnte es limitieren.
