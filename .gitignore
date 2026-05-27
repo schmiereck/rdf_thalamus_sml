@@ -1,0 +1,26 @@
+.venv/
+venv/
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+.idea/
+.vscode/
+*.log
+debug_*.txt
+*.py[cod]
+*.egg-info/
+.rdf_cache.json
+#archive/*/stdout.txt
+#archive/*/stderr.txt
+# Temporäre Simulationen & Machine Learning Caches
+cache/
+.cache/
+*.pt
+*.pth
+*.ckpt

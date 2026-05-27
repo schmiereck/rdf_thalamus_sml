@@ -1,0 +1,63 @@
+[roles]
+
+[agents.manager.top]
+adapter = 'GeminiManagerAdapter'
+model   = 'gemini-3.5-flash'
+#adapter = 'OpenRouterManagerAdapter'
+#model   = 'z-ai/glm-5.1'
+
+[agents.planner.top]
+#adapter = 'GeminiPlannerAdapter'
+#model   = 'gemini-3.5-flash'
+#adapter = 'OpenRouterPlannerAdapter'
+#model   = 'google/gemini-2.5-flash'
+adapter = 'OpenRouterPlannerAdapter'
+model   = 'z-ai/glm-5.1'
+
+[agents.executor.low]
+# Cheap Executor via OpenRouter (internal RDF coding tools).
+#adapter = 'OpenRouterExecutorAdapter'
+#model   = 'qwen/qwen3.6-35b-a3b'
+adapter = 'OpenRouterExecutorAdapter'
+model   = 'deepseek/deepseek-v4-flash'
+
+[agents.executor.medium]
+# Claude with Pro Plan (Login).
+#adapter = 'ClaudeCodeExecutorAdapter'
+#model   = 'claude-sonnet-4-6'
+# Gemini SDK (internal RDF coding tools).
+#adapter = "GeminiExecutorAdapter"
+#model   = "gemini-3.5-flash"  # Oder gemini-2.0-flash
+adapter = "OpenRouterExecutorAdapter"
+model   = "qwen/qwen3.6-plus"
+
+[agents.executor.high]
+#adapter = 'ClaudeCodeExecutorAdapter'
+#model   = 'claude-opus-4-7'
+adapter = 'OpenRouterExecutorAdapter'
+model   = 'moonshotai/kimi-k2.6'
+
+[claude_code]
+allowed_tools = 'Read,Write,Edit,Bash'
+dangerously_skip_permissions = false
+
+[limits]
+max_iterations = 100
+max_state_tokens = 8000
+planner_timeout_sec = 180
+executor_timeout_sec = 14400
+
+[agent_routing]
+default_complexity = 'medium'
+max_depth = 4
+
+[cache]
+ttl_hours = 6
+min_cache_tokens = 32768
+
+[git]
+auto_commit = true
+auto_push = true
+
+[ui]
+verbose = true
