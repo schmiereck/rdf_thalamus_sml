@@ -558,7 +558,7 @@ class HebbianLoss:
     Online Hebbian learning via Oja's rule applied directly to encoder nodes.
 
     For each node in the encoder, updates W_enc using:
-        W_enc <- W_enc + eta * (y^T @ x / B - (y^T @ y / B) @ W_enc)
+        W_enc <- W_enc + eta * (x^T @ y / B - W_enc @ (y^T @ y / B))
 
     where x is the flattened node input and y is the node output (code).
 
@@ -605,11 +605,11 @@ class HebbianLoss:
                     # Flatten input
                     x_flat = x_3d.reshape(B, -1)  # (B, d_in)
 
-                    # Oja's rule
-                    yTx = y.T @ x_flat / B  # (d_out, d_in)
+                    # Oja's rule: ΔW = x^T y / B - W @ (y^T y / B)
+                    xTy = x_flat.T @ y / B  # (d_in, d_out)
                     yTy = y.T @ y / B  # (d_out, d_out)
 
-                    delta_W = yTx - yTy @ node.W_enc
+                    delta_W = xTy - node.W_enc @ yTy
                     node.W_enc += self.eta * delta_W
                     node.b_enc += self.eta * y.mean(axis=0)
 
@@ -632,10 +632,10 @@ class HebbianLoss:
                     x_flat = x_3d.reshape(B, -1)  # (B, d_in)
 
                     # Oja's rule (accumulate, apply once)
-                    yTx = y.T @ x_flat / B  # (d_out, d_in)
+                    xTy = x_flat.T @ y / B  # (d_in, d_out)
                     yTy = y.T @ y / B  # (d_out, d_out)
 
-                    delta_W = yTx - yTy @ node.W_enc
+                    delta_W = xTy - node.W_enc @ yTy
                     accum_delta_W += delta_W
                     accum_delta_b += y.mean(axis=0)
 

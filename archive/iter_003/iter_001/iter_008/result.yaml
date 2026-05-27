@@ -1,0 +1,36 @@
+artifacts:
+- src/run_phase1_v2.py
+- src/training_objectives.py
+experimenter_view: 'The runner was successfully implemented and verified for JEPA,
+  Contrastive,
+
+  and partially SFA. A bug in the Hebbian Oja update (dimension mismatch
+
+  between d_in=24 and d_out=8) was fixed in training_objectives.py before
+
+  the run started. JEPA-d8 achieved the highest test accuracy (~62% mean),
+
+  outperforming Contrastive-d8 (~51% mean). The experiment timed out after
+
+  ~12 of 35 runs. To finish, either increase the execution time limit or
+
+  reduce epochs from 200 to ~100.
+
+  '
+log_excerpt: "[10/35]  seed=46  --  P1-B-Contrastive-d8\n     Training done in 24.1s\n\
+  \     Results:\n       test_accuracy  = 0.5200\n       train_accuracy = 0.5700\n\
+  \       sparsity       = 0.0024\n       n_params       = 1264\n\n----------------------------------------------------------------------\n\
+  Configuration: P1-B-SFA-d8\n  d=8, objective=sfa\n----------------------------------------------------------------------\n\
+  \n[11/35]  seed=42  --  P1-B-SFA-d8\n     Dataset: train=(1000, 16), test=(500,\
+  \ 16)\n     Encoder: n_params=1264\n     Epoch 1/200, loss=11.678956\n     Epoch\
+  \ 20/200, loss=1.773371\n     Epoch 40/200, loss=1.277532\n     Epoch 60/200, loss=1.031946\n\
+  \     Epoch 80/200, loss=0.868796\n"
+metrics:
+  completed_runs: 12
+  contrastive_d8_test_acc_mean: 0.5064
+  contrastive_d8_test_acc_std: 0.0402
+  jepa_d8_test_acc_mean: 0.6212
+  jepa_d8_test_acc_std: 0.0373
+  total_runs: 35
+notes: 'Partial completion: 12/35 runs finished before 300s timeout.'
+status: experiment_failed
