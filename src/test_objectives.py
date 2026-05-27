@@ -23,32 +23,39 @@ from src.hierarchical_encoder import HierarchicalEncoder
 def test_jepa():
     print("--- Testing JEPALoss ---")
     rng = np.random.default_rng(1)
-    B, d, n_layers = 8, 32, 3
+    B, P, d, n_layers = 8, 5, 32, 3
 
-    jepa = JEPALoss(n_layers=n_layers, d=d, temp=0.5, lr=1e-3)
+    jepa = JEPALoss(n_layers=n_layers, d=d, lr=1e-3)
 
-    # Create layer representations
-    layer_reps = [rng.standard_normal((B, d)) for _ in range(n_layers)]
+    # Create layer codes: each layer has shape (B, P, d)
+    codes = [rng.standard_normal((B, P, d)) for _ in range(n_layers)]
 
-    result = jepa.loss_and_grads(layer_reps)
+    result = jepa.loss_and_grads(codes)
 
     assert not np.isnan(result["loss"]), "JEPA loss is NaN"
     assert result["loss"] != 0.0, "JEPA loss is zero (should be non-zero)"
-    print(f"  loss = {result['loss']:.4f} (sim={result['sim_loss']:.4f}, "
+    print(f"  loss = {result['loss']:.4f} (pred={result['pred_loss']:.4f}, "
           f"var={result['var_loss']:.4f}, cov={result['cov_loss']:.4f})")
 
-    # Gradient shapes
-    grads = result["grads"]
+    # Predictor gradient shapes
+    p_grads = result["grads"]
     for l in range(n_layers):
-        if grads[l] is not None:
-            for wname in ("W1", "b1", "W2", "b2"):
-                assert not np.any(np.isnan(grads[l][wname])), f"NaN in layer {l} {wname}"
-                assert np.all(np.isfinite(grads[l][wname])), f"Inf in layer {l} {wname}"
+        assert p_grads[l]["W_pred"].shape == (d, d), f"Layer {l} W_pred shape mismatch"
+        assert p_grads[l]["b_pred"].shape == (d,), f"Layer {l} b_pred shape mismatch"
+        assert not np.any(np.isnan(p_grads[l]["W_pred"])), f"NaN in layer {l} W_pred"
+        assert np.all(np.isfinite(p_grads[l]["W_pred"])), f"Inf in layer {l} W_pred"
+
+    # Code gradient shapes
+    c_grads = result["code_grads"]
+    for l in range(n_layers):
+        assert c_grads[l].shape == (B, P, d), f"Layer {l} code_grad shape mismatch"
+        assert not np.any(np.isnan(c_grads[l])), f"NaN in layer {l} code_grad"
+        assert np.all(np.isfinite(c_grads[l])), f"Inf in layer {l} code_grad"
 
     # Check Adam update changes parameters
-    W1_0 = jepa.predictors[0]["W1"].copy()
-    jepa.step(layer_reps)
-    assert not np.allclose(jepa.predictors[0]["W1"], W1_0), "Predictor weights did not change after Adam step"
+    W_pred_0 = jepa.predictors[0]["W_pred"].copy()
+    jepa.step(codes)
+    assert not np.allclose(jepa.predictors[0]["W_pred"], W_pred_0), "Predictor weights did not change after Adam step"
 
     print("  [PASS]\n")
 

@@ -2,7 +2,7 @@
 Training objectives for Phase 1 -- pure NumPy implementations.
 
 Includes:
-  - JEPALoss          : Bidirectional JEPA with per-layer predictors + VICReg
+  - JEPALoss          : Spatial bidirectional JEPA with per-layer linear predictors + VICReg
   - ContrastiveLoss   : NT-Xent with 2-layer projection MLP
   - SFALoss           : Slowness (temporal difference) + variance penalty
   - HebbianLoss       : Oja's rule online updates on encoder nodes
@@ -53,251 +53,227 @@ class _Adam:
 class JEPALoss:
     """
     Joint Embedding Predictive Architecture (JEPA) loss with:
-    * Per-layer predictor networks (each layer has its own predictor)
-    * Bidirectional prediction between adjacent layers
+    * Per-layer linear predictors (d -> d)
+    * Spatial bidirectional prediction between adjacent positions within each layer
     * VICReg-style variance + covariance penalties (weight 25.0 each)
     * Adam updates for predictors
     """
 
-    def __init__(self, n_layers: int, d: int, temp: float = 0.5, lr: float = 1e-3):
+    def __init__(self, n_layers: int, d: int, lr: float = 1e-3):
         self.n_layers = n_layers
         self.d = d
-        self.temp = temp
         self.lr = lr
-        self.hidden = 4 * d  # default hidden size for predictors
 
-        # Per-layer predictors: each is a 2-layer MLP d -> hidden -> d
+        # Per-layer linear predictors: W_pred (d, d), b_pred (d,)
         self.predictors: list[dict] = []
         self.adams: list[_Adam] = []
         rng = np.random.default_rng(42)
         for _ in range(n_layers):
-            W1 = rng.standard_normal((d, self.hidden)) * np.sqrt(2.0 / d)
-            b1 = np.zeros(self.hidden)
-            W2 = rng.standard_normal((self.hidden, d)) * np.sqrt(2.0 / self.hidden)
-            b2 = np.zeros(d)
-            params = {"W1": W1, "b1": b1, "W2": W2, "b2": b2}
+            W_pred = rng.standard_normal((d, d)) * np.sqrt(2.0 / d)
+            b_pred = np.zeros(d)
+            params = {"W_pred": W_pred, "b_pred": b_pred}
             self.predictors.append(params)
             self.adams.append(_Adam(params, lr=lr))
 
     @staticmethod
-    def _l2_norm(x: np.ndarray) -> np.ndarray:
-        norm = np.linalg.norm(x, axis=-1, keepdims=True)
-        return x / np.maximum(norm, 1e-12)
-
-    def _predict(
-        self, x: np.ndarray, l: int
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Forward pass through predictor l. Returns (prediction, hidden, pre_norm)."""
-        p = self.predictors[l]
-        h = np.maximum(x @ p["W1"] + p["b1"], 0.0)
-        pre_norm = h @ p["W2"] + p["b2"]
-        out = self._l2_norm(pre_norm)
-        return out, h, pre_norm
-
-    @staticmethod
     def _variance_loss(z: np.ndarray, eps: float = 1.0) -> float:
-        std = np.sqrt(z.var(axis=0, ddof=0) + 1e-12)
+        """
+        Variance penalty: mean over dimensions of max(0, 1 - std_j).
+        z has shape (..., d); std is computed over all elements except the last dim.
+        """
+        M = np.prod(z.shape[:-1])
+        z_flat = z.reshape(-1, z.shape[-1])
+        std = np.sqrt(z_flat.var(axis=0, ddof=0) + 1e-12)
         return float(np.mean(np.maximum(0.0, eps - std)))
 
     @staticmethod
     def _covariance_loss(z: np.ndarray) -> float:
-        zc = z - z.mean(axis=0, keepdims=True)
-        B = z.shape[0]
-        cov = (zc.T @ zc) / max(B - 1, 1)
-        d = cov.shape[0]
+        """
+        Covariance penalty: (1/d) * sum_{j!=k} C_{j,k}^2.
+        z has shape (..., d); covariance is over all elements except the last dim.
+        """
+        M = np.prod(z.shape[:-1])
+        d = z.shape[-1]
+        z_flat = z.reshape(-1, d)
+        zc = z_flat - z_flat.mean(axis=0, keepdims=True)
+        cov = (zc.T @ zc) / M
         mask = 1.0 - np.eye(d)
         return float(np.sum(cov ** 2 * mask) / d)
 
-    def _predictor_grads(
-        self,
-        x: np.ndarray,
-        target: np.ndarray,
-        pred: np.ndarray,
-        h: np.ndarray,
-        pre_norm: np.ndarray,
-        params: dict,
-    ) -> dict:
-        """Compute gradients for a single predictor."""
-        B = x.shape[0]
-        d = self.d
-        H = self.hidden
-
-        # MSE gradient on L2-normalised vectors
-        d_pred = 2.0 * (pred - target) / B
-
-        # Variance gradient
-        std = np.sqrt(pred.var(axis=0, ddof=0) + 1e-12)
-        mask = (std < 1.0).astype(float)
-        dz_var = (
-            -(1.0 / (std + 1e-12))
-            * mask
-            * (pred - pred.mean(axis=0, keepdims=True))
-            * 2.0
-            / B
-        )
-        dz_var = dz_var / d
-        d_pred += 25.0 * dz_var
-
-        # Covariance gradient
-        zc = pred - pred.mean(axis=0, keepdims=True)
-        denom = max(B - 1, 1)
-        cov = (zc.T @ zc) / denom
-        mask = 1.0 - np.eye(d)
-        dC = 2.0 * cov * mask / d
-        dz_cov = (zc @ (dC + dC.T)) / denom
-        d_pred += 25.0 * dz_cov
-
-        # Backprop through L2 norm
-        norm = np.linalg.norm(pre_norm, axis=-1, keepdims=True)
-        d_pre = (d_pred - pred * np.sum(d_pred * pred, axis=-1, keepdims=True)) * norm
-
-        # Linear 2
-        dW2 = h.T @ d_pre / B
-        db2 = d_pre.mean(axis=0)
-        d_h = d_pre @ params["W2"].T
-
-        # ReLU
-        d_h *= (h > 0).astype(float)
-
-        # Linear 1
-        dW1 = x.T @ d_h / B
-        db1 = d_h.mean(axis=0)
-
-        return {"W1": dW1, "b1": db1, "W2": dW2, "b2": db2}
-
-    def forward(self, layer_reps: list[np.ndarray]) -> dict:
+    def forward(self, codes: list[np.ndarray]) -> dict:
         """
-        Compute JEPA loss for a stack of layer representations.
+        Compute JEPA loss for a stack of layer codes.
 
         Parameters
         ----------
-        layer_reps : list of np.ndarray, length n_layers
-            Each array has shape (B, d).
+        codes : list of np.ndarray, length n_layers
+            Each array has shape (B, P, d).
 
         Returns
         -------
-        dict with loss, sim_loss, var_loss, cov_loss, and intermediates.
+        dict with loss, pred_loss, var_loss, cov_loss, and intermediates.
         """
         total_loss = 0.0
-        total_sim = 0.0
+        total_pred = 0.0
         total_var = 0.0
         total_cov = 0.0
 
-        all_preds = []
-        all_hiddens = []
-        all_pre_norms = []
+        all_pred_data = []
 
-        for l in range(self.n_layers - 1):
-            rep_l = layer_reps[l]
-            rep_l1 = layer_reps[l + 1]
+        for l in range(self.n_layers):
+            Z = codes[l]  # (B, P, d)
+            B, P, d = Z.shape
+            W_pred = self.predictors[l]["W_pred"]  # (d, d)
+            b_pred = self.predictors[l]["b_pred"]  # (d,)
 
-            # Forward: predict l+1 from l
-            pred_f, h_f, pre_f = self._predict(rep_l, l)
-            # Backward: predict l from l+1
-            pred_b, h_b, pre_b = self._predict(rep_l1, l + 1)
+            # Extract neighbor pairs
+            z_p = Z[:, :-1, :]    # (B, P-1, d)
+            z_p1 = Z[:, 1:, :]    # (B, P-1, d)
 
-            # Similarity
-            sim_f = np.mean((pred_f - rep_l1) ** 2)
-            sim_b = np.mean((pred_b - rep_l) ** 2)
-            sim_loss = 0.5 * (sim_f + sim_b)
+            # Flatten for matmul
+            z_p_2d = z_p.reshape(B * (P - 1), d)    # (B*(P-1), d)
+            z_p1_2d = z_p1.reshape(B * (P - 1), d)  # (B*(P-1), d)
 
-            # VICReg
-            var_loss = self._variance_loss(pred_f) + self._variance_loss(pred_b)
-            cov_loss = self._covariance_loss(pred_f) + self._covariance_loss(pred_b)
+            # Predictions
+            zhat_p1 = z_p_2d @ W_pred + b_pred    # (B*(P-1), d)
+            zhat_p = z_p1_2d @ W_pred + b_pred    # (B*(P-1), d)
 
-            loss = sim_loss / self.temp + 25.0 * var_loss + 25.0 * cov_loss
+            # Errors
+            e1 = zhat_p1 - z_p1_2d  # predict p+1 from p
+            e2 = zhat_p - z_p_2d    # predict p from p+1
+
+            # Prediction loss = MSE over all 2*B*(P-1) prediction pairs
+            pred_loss = 0.5 * np.mean(e1 ** 2) + 0.5 * np.mean(e2 ** 2)
+
+            # VICReg on the raw codes Z
+            var_loss = self._variance_loss(Z)
+            cov_loss = self._covariance_loss(Z)
+
+            loss = pred_loss + 25.0 * var_loss + 25.0 * cov_loss
 
             total_loss += loss
-            total_sim += sim_loss
+            total_pred += pred_loss
             total_var += var_loss
             total_cov += cov_loss
 
-            all_preds.append((pred_f, pred_b))
-            all_hiddens.append((h_f, h_b))
-            all_pre_norms.append((pre_f, pre_b))
+            all_pred_data.append({
+                "Z": Z,
+                "z_p_2d": z_p_2d,
+                "z_p1_2d": z_p1_2d,
+                "zhat_p1": zhat_p1,
+                "zhat_p": zhat_p,
+                "e1": e1,
+                "e2": e2,
+                "B": B,
+                "P": P,
+            })
 
-        n_pairs = self.n_layers - 1
-        if n_pairs > 0:
-            total_loss /= n_pairs
-            total_sim /= n_pairs
-            total_var /= n_pairs
-            total_cov /= n_pairs
+        n_layers = self.n_layers
+        if n_layers > 0:
+            total_loss /= n_layers
+            total_pred /= n_layers
+            total_var /= n_layers
+            total_cov /= n_layers
 
         return {
             "loss": float(total_loss),
-            "sim_loss": float(total_sim),
+            "pred_loss": float(total_pred),
             "var_loss": float(total_var),
             "cov_loss": float(total_cov),
             "intermediates": {
-                "layer_reps": layer_reps,
-                "preds": all_preds,
-                "hiddens": all_hiddens,
-                "pre_norms": all_pre_norms,
+                "codes": codes,
+                "pred_data": all_pred_data,
             },
         }
 
-    def backward(self, cached: dict) -> list[dict | None]:
-        """Compute gradients for all predictors."""
-        layer_reps = cached["layer_reps"]
-        all_preds = cached["preds"]
-        all_hiddens = cached["hiddens"]
-        all_pre_norms = cached["pre_norms"]
+    def backward(self, cached: dict) -> tuple[list[dict], list[np.ndarray]]:
+        """
+        Compute gradients for all predictors and all layer codes.
 
-        all_grads: list[dict | None] = [None] * self.n_layers
+        Returns
+        -------
+        predictor_grads : list of dict, length n_layers
+            Each dict has keys "W_pred" and "b_pred".
+        code_grads : list of np.ndarray, length n_layers
+            Each array has shape (B, P, d).
+        """
+        codes = cached["codes"]
+        pred_data = cached["pred_data"]
 
-        for l in range(self.n_layers - 1):
-            rep_l = layer_reps[l]
-            rep_l1 = layer_reps[l + 1]
-            pred_f, pred_b = all_preds[l]
-            h_f, h_b = all_hiddens[l]
-            pre_f, pre_b = all_pre_norms[l]
-
-            # Forward predictor gradients (predictor[l])
-            grads_f = self._predictor_grads(
-                rep_l, rep_l1, pred_f, h_f, pre_f, self.predictors[l]
-            )
-
-            # Backward predictor gradients (predictor[l+1])
-            grads_b = self._predictor_grads(
-                rep_l1, rep_l, pred_b, h_b, pre_b, self.predictors[l + 1]
-            )
-
-            if all_grads[l] is None:
-                all_grads[l] = grads_f
-            else:
-                for k in grads_f:
-                    all_grads[l][k] += grads_f[k]  # type: ignore[index]
-
-            if all_grads[l + 1] is None:
-                all_grads[l + 1] = grads_b
-            else:
-                for k in grads_b:
-                    all_grads[l + 1][k] += grads_b[k]  # type: ignore[index]
-
-        # Average gradients where predictors were used twice
-        for l in range(1, self.n_layers - 1):
-            if all_grads[l] is not None:
-                for k in all_grads[l]:  # type: ignore[index]
-                    all_grads[l][k] /= 2.0  # type: ignore[index]
-
-        return all_grads
-
-    def step(self, layer_reps: list[np.ndarray]) -> dict:
-        """Forward, backward, and Adam update."""
-        fwd = self.forward(layer_reps)
-        grads = self.backward(fwd["intermediates"])
+        predictor_grads: list[dict] = []
+        code_grads: list[np.ndarray] = []
 
         for l in range(self.n_layers):
-            if grads[l] is not None:
-                self.adams[l].step(self.predictors[l], grads[l])
+            data = pred_data[l]
+            Z = data["Z"]
+            z_p_2d = data["z_p_2d"]
+            z_p1_2d = data["z_p1_2d"]
+            e1 = data["e1"]
+            e2 = data["e2"]
+            B = data["B"]
+            P = data["P"]
+            d = self.d
 
-        return fwd
+            W_pred = self.predictors[l]["W_pred"]
 
-    def loss_and_grads(self, layer_reps: list[np.ndarray]) -> dict:
+            denom = B * (P - 1) * d
+
+            # ---- Predictor gradients ----
+            dW_pred = (z_p_2d.T @ e1 + z_p1_2d.T @ e2) / denom
+            db_pred = (e1.sum(axis=0) + e2.sum(axis=0)) / denom
+
+            predictor_grads.append({
+                "W_pred": dW_pred,
+                "b_pred": db_pred,
+            })
+
+            # ---- Code gradients from prediction loss ----
+            dZ_pred = np.zeros_like(Z)  # (B, P, d)
+            e1_3d = e1.reshape(B, P - 1, d)
+            e2_3d = e2.reshape(B, P - 1, d)
+
+            # dZ[:, p, :]   gets  (e1 @ W^T - e2) / denom
+            # dZ[:, p+1, :] gets  (e2 @ W^T - e1) / denom
+            dZ_pred[:, :-1, :] += (e1_3d @ W_pred.T - e2_3d) / denom
+            dZ_pred[:, 1:, :] += (e2_3d @ W_pred.T - e1_3d) / denom
+
+            # ---- Code gradients from variance loss ----
+            M = B * P
+            z_flat = Z.reshape(-1, d)
+            mu = z_flat.mean(axis=0, keepdims=True)
+            std = np.sqrt(z_flat.var(axis=0, ddof=0) + 1e-12)
+            mask = (std < 1.0).astype(float)
+
+            dz_var_flat = -(25.0 / d) * mask * (z_flat - mu) / (M * std + 1e-12)
+            dZ_var = dz_var_flat.reshape(B, P, d)
+
+            # ---- Code gradients from covariance loss ----
+            zc = z_flat - mu  # (M, d)
+            cov = (zc.T @ zc) / M  # (d, d)
+            C_off = cov * (1.0 - np.eye(d))
+            dz_cov_flat = (25.0 * 4.0 / (M * d)) * (zc @ C_off)  # (M, d)
+            dZ_cov = dz_cov_flat.reshape(B, P, d)
+
+            dZ_total = dZ_pred + dZ_var + dZ_cov
+            code_grads.append(dZ_total)
+
+        return predictor_grads, code_grads
+
+    def step(self, codes: list[np.ndarray]) -> dict:
+        """Forward, backward, Adam update for predictors, and return everything."""
+        fwd = self.forward(codes)
+        p_grads, c_grads = self.backward(fwd["intermediates"])
+
+        for l in range(self.n_layers):
+            self.adams[l].step(self.predictors[l], p_grads[l])
+
+        return {**fwd, "predictor_grads": p_grads, "code_grads": c_grads}
+
+    def loss_and_grads(self, codes: list[np.ndarray]) -> dict:
         """Convenience: forward + backward."""
-        fwd = self.forward(layer_reps)
-        grads = self.backward(fwd["intermediates"])
-        return {**fwd, "grads": grads}
+        fwd = self.forward(codes)
+        p_grads, c_grads = self.backward(fwd["intermediates"])
+        return {**fwd, "grads": p_grads, "code_grads": c_grads}
 
 
 # ==============================================================================

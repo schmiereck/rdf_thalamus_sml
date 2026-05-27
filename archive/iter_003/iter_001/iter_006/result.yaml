@@ -1,0 +1,33 @@
+artifacts:
+- src/training_objectives.py
+- src/test_objectives.py
+experimenter_view: 'Successfully reimplemented JEPALoss from cross-layer prediction
+  to spatial
+
+  bidirectional neighbor prediction at each layer. Each layer''s predictor is
+
+  now a linear map (d,d) + (d,) bias that predicts adjacent positions within
+
+  the same layer, with VICReg variance and covariance penalties applied to
+
+  the raw pooled codes. All six self-tests pass, including predictor gradient
+
+  shape checks, code gradient checks, and Adam weight update verification.
+
+  '
+log_excerpt: "--- Testing JEPALoss ---\n  loss = 23.3730 (pred=3.1218, var=0.0527,\
+  \ cov=0.7573)\n  [PASS]\n\n--- Testing ContrastiveLoss ---\n  loss = 3.4174\n  [PASS]\n\
+  \n--- Testing SFALoss ---\n  loss = 14.8407 (slow=0.0098, var=0.5932)\n  step check:\
+  \ before=14.8407, after=14.8229\n  [PASS]\n\n--- Testing HebbianLoss (Oja's rule)\
+  \ ---\n  monitoring loss = -0.1126\n  weight change = 0.000341\n  [PASS]\n\n---\
+  \ Testing Encoder backward_from_code_grads ---\n  [mode=none]\n    [OK]\n  [mode=within_layer]\n\
+  \    [OK]\n  [mode=cross_layer]\n    [OK]\n  [PASS]\n\n--- Testing forward consistency\
+  \ ---\n  [PASS]\n\n  ALL SELF-TESTS PASSED\n"
+metrics:
+  all_tests_passed: 6
+  jepa_cov_loss: 0.7573
+  jepa_loss: 23.373
+  jepa_pred_loss: 3.1218
+  jepa_var_loss: 0.0527
+notes: Spatial JEPALoss implemented and all tests pass.
+status: ok
