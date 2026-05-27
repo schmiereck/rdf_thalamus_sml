@@ -299,7 +299,7 @@ class HierarchicalEncoder:
 
                         # Embedding update
                         if layer_idx == 0:
-                            accum_embed_grad /= n_out * B
+                            accum_embed_grad /= n_out
                             self.embedding -= lr * accum_embed_grad
 
                         epoch_loss += float(node.local_loss(current[:, 0:3, :]))
@@ -329,7 +329,7 @@ class HierarchicalEncoder:
                                         accum_embed_grad[idx_arr[b]] += d_x[b, k, :]
 
                         if layer_idx == 0:
-                            accum_embed_grad /= n_out * B
+                            accum_embed_grad /= n_out
                             self.embedding -= lr * accum_embed_grad
 
                         epoch_loss += float(

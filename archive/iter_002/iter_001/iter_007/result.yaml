@@ -1,0 +1,18 @@
+artifacts:
+- src/hierarchical_encoder.py
+experimenter_view: 'Corrected the embedding gradient scaling bug. `grads["x_3d"]`
+  is already averaged over the batch (1/B) inside the node''s loss/MSE calculations.
+  Summing these over batch size B yields the correct average gradient over the batch.
+  Dividing by B again was incorrectly scaling the learning signal by 1/B^2. Both the
+  shared and ''none'' mode blocks were updated, and all self-tests passed successfully
+  across all sharing modes.
+
+  '
+log_excerpt: "[Mode: none]\n...\nTraining completed, 9 loss entries  [OK]\n\n[Mode:\
+  \ within_layer]\n...\nTraining completed, 9 loss entries  [OK]\n\n[Mode: cross_layer]\n\
+  ...\nTraining completed, 9 loss entries  [OK]\nCross-layer weight sync verified\
+  \  [OK]\n\n------------------------------------------------------------\n  ALL SELF-TESTS\
+  \ PASSED\n============================================================\n"
+metrics: {}
+notes: Fixed batch gradient scaling; self-tests pass.
+status: ok
