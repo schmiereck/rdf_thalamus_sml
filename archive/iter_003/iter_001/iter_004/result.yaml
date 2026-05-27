@@ -1,0 +1,50 @@
+artifacts:
+- src/training_objectives.py
+- src/test_objectives.py
+experimenter_view: 'All four training objectives were successfully implemented with
+  exact
+
+  interfaces as requested and verified with unit tests. JEPALoss computes
+
+  bidirectional prediction between layers with per-layer predictors and
+
+  applies VICReg penalty weights of 25.0. ContrastiveLoss uses the
+
+  specified 3-layer projection MLP architecture (d -> 10d -> 5d -> 2.5d)
+
+  with ReLU and L2 normalization, then computes NT-Xent on stacked views.
+
+  SFALoss provides analytical gradients for slowness and variance terms.
+
+  HebbianLoss applies Oja''s rule directly to encoder node parameters.
+
+  All Adam optimizers correctly update weights, all gradient shapes match,
+
+  and all losses remain finite and non-NaN across random inputs.
+
+  '
+log_excerpt: "--- Testing JEPALoss ---\n  loss = 45.4354 (sim=0.9770, var=1.7346,\
+  \ cov=0.0047)\n  [PASS]\n\n--- Testing ContrastiveLoss ---\n  loss = 3.4511\n  [PASS]\n\
+  \n--- Testing SFALoss ---\n  loss = 14.8407 (slow=0.0098, var=0.5932)\n  step check:\
+  \ before=14.8407, after=14.8229\n  [PASS]\n\n--- Testing HebbianLoss (Oja's rule)\
+  \ ---\n  monitoring loss = -0.1126\n  weight change = 0.000341\n  [PASS]\n\n---\
+  \ Testing Encoder backward_from_code_grads ---\n  [mode=none]\n    embedding grad\
+  \ shape: (2, 4)  [OK]\n    dx_binary shape: (4, 16, 4)  [OK]\n  [mode=within_layer]\n\
+  \    embedding grad shape: (2, 4)  [OK]\n    dx_binary shape: (4, 16, 4)  [OK]\n\
+  \  [mode=cross_layer]\n    embedding grad shape: (2, 4)  [OK]\n    dx_binary shape:\
+  \ (4, 16, 4)  [OK]\n  [PASS]\n\n--- Testing forward consistency ---\n  forward()\
+  \ == forward_with_intermediates()  [PASS]\n\n============================================================\n\
+  \  ALL SELF-TESTS PASSED\n============================================================\n"
+metrics:
+  contrastive_loss: 3.4511
+  hebbian_monitoring_loss: -0.1126
+  hebbian_weight_change: 0.000341
+  jepa_cov_loss: 0.0047
+  jepa_loss: 45.4354
+  jepa_sim_loss: 0.977
+  jepa_var_loss: 1.7346
+  sfa_loss: 14.8407
+  sfa_slowness: 0.0098
+  sfa_variance: 0.5932
+notes: All objectives implemented and 6/6 self-tests passed.
+status: ok

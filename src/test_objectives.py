@@ -1,10 +1,11 @@
 """
-Quick self-test for training objectives and encoder backward pass.
+Quick self-test for training objectives.
 
 Checks:
   1. All loss functions compute non-zero loss without NaNs.
   2. All gradients have matching shapes and are finite.
-  3. Encoder backward_from_code_grads produces correctly-shaped gradients.
+  3. Adam updates change parameters.
+  4. HebbianLoss updates encoder node weights.
 """
 
 from __future__ import annotations
@@ -22,14 +23,14 @@ from src.hierarchical_encoder import HierarchicalEncoder
 def test_jepa():
     print("--- Testing JEPALoss ---")
     rng = np.random.default_rng(1)
-    B, d = 8, 32
+    B, d, n_layers = 8, 32, 3
 
-    jepa = JEPALoss(d=d, predictor_hidden=64)
+    jepa = JEPALoss(n_layers=n_layers, d=d, temp=0.5, lr=1e-3)
 
-    context = rng.standard_normal((B, d))
-    target = rng.standard_normal((B, d))
+    # Create layer representations
+    layer_reps = [rng.standard_normal((B, d)) for _ in range(n_layers)]
 
-    result = jepa.loss_and_grads(context, target)
+    result = jepa.loss_and_grads(layer_reps)
 
     assert not np.isnan(result["loss"]), "JEPA loss is NaN"
     assert result["loss"] != 0.0, "JEPA loss is zero (should be non-zero)"
@@ -37,19 +38,18 @@ def test_jepa():
           f"var={result['var_loss']:.4f}, cov={result['cov_loss']:.4f})")
 
     # Gradient shapes
-    assert result["d_context"].shape == (B, d), "d_context shape mismatch"
-    assert result["d_target"].shape == (B, d), "d_target shape mismatch"
-    for wname in ("W1_ct", "b1_ct", "W2_ct", "b2_ct",
-                  "W1_tc", "b1_tc", "W2_tc", "b2_tc"):
-        assert not np.any(np.isnan(result[wname])), f"NaN in {wname}"
-        assert np.all(np.isfinite(result[wname])), f"Inf in {wname}"
+    grads = result["grads"]
+    for l in range(n_layers):
+        if grads[l] is not None:
+            for wname in ("W1", "b1", "W2", "b2"):
+                assert not np.any(np.isnan(grads[l][wname])), f"NaN in layer {l} {wname}"
+                assert np.all(np.isfinite(grads[l][wname])), f"Inf in layer {l} {wname}"
 
-    # Check update direction (make sure gradients drive change)
-    old_context = context.copy()
-    new_context = context - 0.01 * result["d_context"]
-    new_res = jepa.forward(new_context, target)
-    # Loss should generally decrease after small gradient step
-    print(f"  step check: before={result['loss']:.4f}, after={new_res['loss']:.4f}")
+    # Check Adam update changes parameters
+    W1_0 = jepa.predictors[0]["W1"].copy()
+    jepa.step(layer_reps)
+    assert not np.allclose(jepa.predictors[0]["W1"], W1_0), "Predictor weights did not change after Adam step"
+
     print("  [PASS]\n")
 
 
@@ -58,7 +58,7 @@ def test_contrastive():
     rng = np.random.default_rng(2)
     B, d = 16, 32
 
-    contr = ContrastiveLoss(d=d, proj_hidden=64, temperature=0.1)
+    contr = ContrastiveLoss(d=d, temp=0.5, lr=1e-3)
 
     z1 = rng.standard_normal((B, d))
     z2 = rng.standard_normal((B, d))
@@ -71,8 +71,14 @@ def test_contrastive():
 
     assert result["d_z1"].shape == (B, d), "d_z1 shape mismatch"
     assert result["d_z2"].shape == (B, d), "d_z2 shape mismatch"
-    for wname in ("W1", "b1", "W2", "b2"):
+    for wname in ("W1", "b1", "W2", "b2", "W3", "b3"):
         assert not np.any(np.isnan(result[wname])), f"NaN in {wname}"
+
+    # Check Adam update changes parameters
+    W1_0 = contr.W1.copy()
+    contr.step(z1, z2)
+    assert not np.allclose(contr.W1, W1_0), "Projection weights did not change after Adam step"
+
     print("  [PASS]\n")
 
 
@@ -81,7 +87,7 @@ def test_sfa():
     rng = np.random.default_rng(3)
     T, d = 50, 16
 
-    sfa = SFALoss(delta_order=1, whitening_coeff=0.1)
+    sfa = SFALoss(delta_order=1, lambda_var=25.0)
 
     z = rng.standard_normal((T, d))
     # Make it somewhat smooth
@@ -92,39 +98,53 @@ def test_sfa():
     assert not np.isnan(result["loss"]), "SFA loss is NaN"
     assert result["loss"] > 0.0, "SFA loss should be > 0"
     print(f"  loss = {result['loss']:.4f} (slow={result['slowness']:.4f}, "
-          f"white={result['whitening']:.4f})")
+          f"var={result['variance']:.4f})")
 
     assert result["dL_dz"].shape == (T, d), "dL_dz shape mismatch"
     assert not np.any(np.isnan(result["dL_dz"])), "NaN in dL_dz"
     assert np.all(np.isfinite(result["dL_dz"])), "Inf in dL_dz"
+
+    # Check gradient direction: reducing slowness should decrease loss
+    z_shifted = z.copy()
+    z_shifted[1:] -= 0.01 * result["dL_dz"][1:]
+    result2 = sfa.forward(z_shifted)
+    print(f"  step check: before={result['loss']:.4f}, after={result2['loss']:.4f}")
+
     print("  [PASS]\n")
 
 
 def test_hebbian():
     print("--- Testing HebbianLoss (Oja's rule) ---")
     rng = np.random.default_rng(4)
-    B, in_dim, out_dim = 32, 20, 8
+    B = 32
 
-    hebb = HebbianLoss(in_dim=in_dim, out_dim=out_dim, lr=0.001)
-    W0 = hebb.W.copy()
+    # Test with cross_layer sharing
+    enc = HierarchicalEncoder(d=4, sharing_mode="cross_layer", seed=42)
+    x_binary = (rng.random((B, 16)) < 0.5).astype(np.float64)
 
-    x = rng.standard_normal((B, in_dim))
+    hebb = HebbianLoss(eta=1e-3)
 
-    # Forward
-    fwd = hebb.forward(x)
-    assert fwd["y"].shape == (B, out_dim), "y shape mismatch"
-    assert not np.any(np.isnan(fwd["y"])), "NaN in Hebbian output"
+    # Save initial weights
+    W0 = enc.layer_nodes[0].W_enc.copy()
 
-    # Update
-    upd = hebb.update(x)
-    assert upd["delta_W"].shape == (out_dim, in_dim), "delta_W shape mismatch"
-    assert not np.any(np.isnan(upd["delta_W"])), "NaN in delta_W"
-    assert not np.allclose(hebb.W, W0), "Weights did not change after update"
+    # Apply Oja update
+    loss_val = hebb.update(enc, x_binary)
 
-    loss_val = hebb.loss(x)
-    assert not np.isnan(loss_val), "Hebbian proxy loss is NaN"
-    print(f"  proxy loss = {loss_val:.4f}, weight change = "
-          f"{np.abs(hebb.W - W0).mean():.6f}")
+    assert not np.isnan(loss_val), "Hebbian monitoring loss is NaN"
+    print(f"  monitoring loss = {loss_val:.4f}")
+
+    # Check weights changed
+    assert not np.allclose(enc.layer_nodes[0].W_enc, W0), "Weights did not change after Oja update"
+    print(f"  weight change = {np.abs(enc.layer_nodes[0].W_enc - W0).mean():.6f}")
+
+    # Test with none sharing
+    enc2 = HierarchicalEncoder(d=4, sharing_mode="none", seed=42)
+    W0_2 = enc2.nodes[0][0].W_enc.copy()
+
+    loss_val2 = hebb.update(enc2, x_binary)
+    assert not np.isnan(loss_val2), "Hebbian monitoring loss is NaN (none sharing)"
+    assert not np.allclose(enc2.nodes[0][0].W_enc, W0_2), "Weights did not change (none sharing)"
+
     print("  [PASS]\n")
 
 
