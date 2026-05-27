@@ -162,35 +162,14 @@ def train_jepa_epoch(
                 alpha=alpha,
             )
 
-            if adam_spatial is not None:
-                adam_spatial.step(
-                    {
-                        "W_enc": encoder.master_spatial.W_enc,
-                        "b_enc": encoder.master_spatial.b_enc,
-                        "W_dec": encoder.master_spatial.W_dec,
-                        "b_dec": encoder.master_spatial.b_dec,
-                    },
-                    grads["dL_dspatial"],
-                )
-
-            if adam_temporal is not None and encoder.variant != "P3-C":
-                adam_temporal.step(
-                    {
-                        "W_enc": encoder.master_temporal.W_enc,
-                        "b_enc": encoder.master_temporal.b_enc,
-                        "W_dec": encoder.master_temporal.W_dec,
-                        "b_dec": encoder.master_temporal.b_dec,
-                    },
-                    grads["dL_dtemporal"],
-                )
-            elif adam_temporal is not None and encoder.variant == "P3-C":
-                # P3-C: spatial and temporal are same object;
-                # gradients from both axes must be combined
+            if encoder.variant == "P3-C":
+                # P3-C: spatial and temporal share the same master node.
+                # Use a SINGLE Adam step with combined gradients.
                 combined = {
                     k: grads["dL_dspatial"][k] + grads["dL_dtemporal"][k]
                     for k in grads["dL_dspatial"]
                 }
-                adam_temporal.step(
+                adam_spatial.step(
                     {
                         "W_enc": encoder.master_spatial.W_enc,
                         "b_enc": encoder.master_spatial.b_enc,
@@ -199,6 +178,28 @@ def train_jepa_epoch(
                     },
                     combined,
                 )
+            else:
+                if adam_spatial is not None:
+                    adam_spatial.step(
+                        {
+                            "W_enc": encoder.master_spatial.W_enc,
+                            "b_enc": encoder.master_spatial.b_enc,
+                            "W_dec": encoder.master_spatial.W_dec,
+                            "b_dec": encoder.master_spatial.b_dec,
+                        },
+                        grads["dL_dspatial"],
+                    )
+
+                if adam_temporal is not None:
+                    adam_temporal.step(
+                        {
+                            "W_enc": encoder.master_temporal.W_enc,
+                            "b_enc": encoder.master_temporal.b_enc,
+                            "W_dec": encoder.master_temporal.W_dec,
+                            "b_dec": encoder.master_temporal.b_dec,
+                        },
+                        grads["dL_dtemporal"],
+                    )
 
             if adam_embedding is not None:
                 # Embedding is frozen per design, but we keep the hook
@@ -360,7 +361,8 @@ def run_single_experiment(
                 lr=lr,
             )
         else:
-            # P3-C: share the same Adam for the single master node
+            # P3-C: spatial and temporal share the same master node,
+            # so we use a single Adam optimizer.
             adam_temporal = adam_spatial
 
     # Training

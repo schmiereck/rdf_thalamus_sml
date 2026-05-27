@@ -1,0 +1,52 @@
+        spatial_grads: dict[str, np.ndarray] = {
+            "W_enc": np.zeros_like(self.master_spatial.W_enc),
+            "b_enc": np.zeros_like(self.master_spatial.b_enc),
+            "W_dec": np.zeros_like(self.master_spatial.W_dec),
+            "b_dec": np.zeros_like(self.master_spatial.b_dec),
+        }
+        temporal_grads: dict[str, np.ndarray] = {
+            "W_enc": np.zeros_like(self.master_temporal.W_enc),
+            "b_enc": np.zeros_like(self.master_temporal.b_enc),
+            "W_dec": np.zeros_like(self.master_temporal.W_dec),
+            "b_dec": np.zeros_like(self.master_temporal.b_dec),
+        }
+
+        # ====================================================================
+        #  TEMPORAL BACKWARD (process layers in reverse) — vectorised
+        # ====================================================================
+
+        # Initial gradient comes only from JEPA code_grads, not from pooling
+        x_final = fwd["temporal_outputs"][-1]          # (B, T_final, S_final, d_out)
+        dL_dx = np.zeros_like(x_final)
+
+        # Add external temporal JEPA gradients for the last layer
+        dL_dx = dL_dx + dL_dtemporal_codes[-1] * (1.0 - alpha)
+
+        for l in reversed(range(self.n_temporal_layers)):
+            dL_dx_total = dL_dx
+
+            node_inputs = fwd["temporal_inputs"][l]         # (B, T_l_out, S_final, 3, d)
+            code_out = fwd["temporal_outputs"][l]           # (B, T_l_out, S_final, d_out)
+
+            # --- Backprop through tanh activation ---
+            dL_dz = dL_dx_total * (1.0 - code_out ** 2)    # (B, T_l_out, S_final, d_out)
+
+            # Flatten all positions at once
+            B, n_pos, S, _, d_in = node_inputs.shape
+            dL_dz_flat = dL_dz.reshape(B * n_pos * S, d_out)
+            inp_flat = node_inputs.reshape(B * n_pos * S, 3 * d_in)
+
+            # Parameter gradients (sum across all positions + batch)
+            dW_enc = inp_flat.T @ dL_dz_flat / B
+            db_enc = dL_dz_flat.mean(axis=0)
+
+            temporal_grads["W_enc"] += dW_enc
+            temporal_grads["b_enc"] += db_enc
+            dW_dec = np.zeros_like(self.master_temporal.W_dec)
+            db_dec = np.zeros_like(self.master_temporal.b_dec)
+            temporal_grads["W_dec"] += dW_dec
+            temporal_grads["b_dec"] += db_dec
+
+            # Gradient w.r.t. input
+            dL_dx_flat = dL_dz_flat @ self.master_temporal.W_enc.T   # (B*n_pos*S, 3*d)
+            dL_dx_reshaped = dL_dx_flat.reshape(B, n_pos, S, 3, d_in)  # (B, n_pos, S, 3, d)

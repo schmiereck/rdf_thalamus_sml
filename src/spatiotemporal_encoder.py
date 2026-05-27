@@ -334,20 +334,19 @@ class SpatiotemporalEncoder:
             "b_dec": np.zeros_like(self.master_spatial.b_dec),
         }
         temporal_grads: dict[str, np.ndarray] = {
-            "W_enc": np.zeros_like(self.master_spatial.W_enc),
-            "b_enc": np.zeros_like(self.master_spatial.b_enc),
-            "W_dec": np.zeros_like(self.master_spatial.W_dec),
-            "b_dec": np.zeros_like(self.master_spatial.b_dec),
+            "W_enc": np.zeros_like(self.master_temporal.W_enc),
+            "b_enc": np.zeros_like(self.master_temporal.b_enc),
+            "W_dec": np.zeros_like(self.master_temporal.W_dec),
+            "b_dec": np.zeros_like(self.master_temporal.b_dec),
         }
 
         # ====================================================================
         #  TEMPORAL BACKWARD (process layers in reverse) — vectorised
         # ====================================================================
 
-        # Gradient from average pooling
+        # Initial gradient comes only from JEPA code_grads, not from pooling
         x_final = fwd["temporal_outputs"][-1]          # (B, T_final, S_final, d_out)
-        T_final, S_final = x_final.shape[1], x_final.shape[2]
-        dL_dx = np.full_like(x_final, 1.0 / (T_final * S_final))
+        dL_dx = np.zeros_like(x_final)
 
         # Add external temporal JEPA gradients for the last layer
         dL_dx = dL_dx + dL_dtemporal_codes[-1] * (1.0 - alpha)
@@ -372,13 +371,13 @@ class SpatiotemporalEncoder:
 
             temporal_grads["W_enc"] += dW_enc
             temporal_grads["b_enc"] += db_enc
-            dW_dec = np.zeros_like(self.master_spatial.W_dec)
-            db_dec = np.zeros_like(self.master_spatial.b_dec)
+            dW_dec = np.zeros_like(self.master_temporal.W_dec)
+            db_dec = np.zeros_like(self.master_temporal.b_dec)
             temporal_grads["W_dec"] += dW_dec
             temporal_grads["b_dec"] += db_dec
 
             # Gradient w.r.t. input
-            dL_dx_flat = dL_dz_flat @ self.master_spatial.W_enc.T   # (B*n_pos*S, 3*d)
+            dL_dx_flat = dL_dz_flat @ self.master_temporal.W_enc.T   # (B*n_pos*S, 3*d)
             dL_dx_reshaped = dL_dx_flat.reshape(B, n_pos, S, 3, d_in)  # (B, n_pos, S, 3, d)
 
             # Scatter gradient into layer input (3 kernel offsets → 3 slice-adds)
@@ -475,9 +474,9 @@ class SpatiotemporalEncoder:
         return count
 
 
-# ======================================================================
+# ==============================================================================
 #  Self-test
-# ======================================================================
+# ==============================================================================
 
 if __name__ == "__main__":
     print("=" * 65)

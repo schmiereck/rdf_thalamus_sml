@@ -1,0 +1,26 @@
+artifacts:
+- src/spatiotemporal_encoder.py
+- src/run_phase3.py
+experimenter_view: "All three critical bugs were successfully identified and fixed:\n\
+  1. Temporal backward now uses self.master_temporal.W_enc.T instead of\n   self.master_spatial.W_enc.T,\
+  \ restoring correct gradient flow.\n2. Removed the spurious average-pooling gradient\
+  \ from backward();\n   dL_dx now starts as np.zeros_like(x_final), so only JEPA\
+  \ code_grads\n   drive training.\n3. P3-C now uses a SINGLE Adam step with combined\
+  \ spatial+temporal\n   gradients, preventing double-application of spatial gradients\
+  \ and\n   corrupted running statistics.\nThe self-test passes for all three variants.\
+  \ The full experiment suite\n(4 variants × 5 seeds = 20 runs) was launched in the\
+  \ background.\n"
+log_excerpt: "--- Variant: P3-A ---\n  Parameter count = 3200\n  Forward pass: all\
+  \ shapes correct  [OK]\n  Backward pass: all gradient shapes correct  [OK]\n  Embedding\
+  \ gradient is zeros (frozen)  [OK]\n  Gradient magnitudes non-zero  [OK]\n--- Variant:\
+  \ P3-B ---\n  Forward pass: all shapes correct  [OK]\n  Backward pass: all gradient\
+  \ shapes correct  [OK]\n--- Variant: P3-C ---\n  Parameter count = 1600\n  P3-C:\
+  \ spatial and temporal nodes are same object  [OK]\n  Forward pass: all shapes correct\
+  \  [OK]\n  Backward pass: all gradient shapes correct  [OK]\nALL SELF-TESTS PASSED\n"
+metrics:
+  p3_a_params: 3200
+  p3_b_params: 3200
+  p3_c_params: 1600
+  self_test_passed: 1
+notes: Bugs fixed, self-test passes, full run launched in background.
+status: ok
