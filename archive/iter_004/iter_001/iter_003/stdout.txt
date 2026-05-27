@@ -1,0 +1,82 @@
+
+[Tool Call: read_file({'path': 'src/pre_registration.md'})]
+
+[Tool Result: # RDF Scientific Pre-Registration
+
+*   **Iteration:** 004
+*   **Pre-Registration File:** src/pre_registration.md
+
+## 1. Hypothesis
+A UniversalNode (kernel-3, d=16) trained with JEPA on spatial data produces weights
+that transfer to the temporal axis without retraining: when applied to temporal
+triplets (state_{t-2}, state_{t-1}, state_t), the spatially-trained node yields
+periodic-vs-random classification accuracy ≥10pp above an untrained-weight baseline.
+
+Additionally, a P2-D node trained from ...]
+
+Now I can see the current content. I need to replace the F0 entry with the new one, and keep F1, F2, F3 in order after it. Let me write the updated file:
+
+
+
+[Tool Call: write_file({'content': '# RDF Scientific Pre-Registration\n\n*   **Iteration:** 004\n*   **Pre-Registration File:** src/pre_registration.md\n\n## 1. Hypothesis\nA UniversalNode (kernel-3, d=16) trained with JEPA on spatial data produces weights\nthat transfer to the temporal axis without retraining: when applied to temporal\ntriplets (state_{t-2}, state_{t-1}, state_t), the spatially-trained node yields\nperiodic-vs-random classification accuracy ≥10pp above an untrained-weight baseline.\n\nAdditionally, a P2-D node trained from scratch on temporal data with JEPA achieves\n≥60% periodic-vs-random classification accuracy and ≥55% next-step prediction accuracy,\nconfirming the JEPA objective works along the temporal axis.\n\nThe P2-D approach (three-temporal-slot node) is architecturally identical to the\nspatial node, differing only in which axis provides the three inputs. Success here\nwould validate the core universal-node claim: one node type, one set of weights,\napplicable along any axis.\n\n## 2. Falsification Criterion\nThe hypothesis is falsified if ANY of the following hold:\n\nF0 (Zero-Shot Transfer JEPA Loss): If Loss_spatial_trained / Loss_untrained >= 0.85 on temporal JEPA loss, the spatial -> temporal transfer has FAILED. This is the most rigorous test of whether spatially-trained weights encode general local-pattern structure vs. axis-specific structure.\n\nF1 (Transfer failure): Spatially-trained weights applied temporally yield\nperiodic-vs-random classification accuracy ≤5pp above the untrained-weight\ntemporal baseline. This would mean the node learns axis-specific (spatial)\nstructure, not a general local-pattern operation.\n\nF2 (Temporal JEPA failure): P2-D trained from scratch on temporal data with\nJEPA fails to reach ≥60% periodic-vs-random classification. This would mean\nthe JEPA objective does not generalize to temporal structure.\n\nF3 (P2-D non-competitiveness): P2-D (temporal training) performs ≥20pp worse\nthan the best alternative (P2-A/B/C) on the classification task. This would\nmean the kernel-3 temporal node is fundamentally inferior to dedicated temporal\nmechanisms, undermining the universal-node architecture.\n\n## 3. Proposed Method\n## Phase 2: Temporal Integration at a Single Node\n\n### Step 1: Temporal Dataset & Infrastructure (planner sub-agent)\nCreate the temporal experiment infrastructure:\n- **src/temporal_dataset.py**: Generate temporal sequences of d=16 vectors\n  - Periodic sequences (periods 3, 4, 7, 11) — labeled "periodic"\n  - Random walk sequences over a small state set — labeled "random"\n  - Irregular/semi-random sequences (Markov with varying transition probs)\n  - Each discrete state (A, B, C, D, ...) mapped to a fixed d=16 random embedding\n  - Sequences of length 32, with stride-1 sliding window for temporal triplets\n- **src/temporal_encoder.py**: Implement the four temporal integration mechanisms:\n  - P2-D: Three-temporal-slot node (reuse UniversalNode, inputs = state_{t-2}, state_{t-1}, state_t)\n  - P2-A: Multi-tick-rate node (updates every N steps, pools lower outputs)\n  - P2-B: Recurrent state node (hidden state + GRU-like gating)\n  - P2-C: Output-as-input loop (output at t-1 fed as additional input at t)\n- Evaluation: next-step prediction accuracy + periodic-vs-random linear-probe classification\n\n### Step 2: P2-D Zero-Shot Transfer Test (medium sub-agent)\nLoad Phase 1 JEPA-d16 trained weights, apply UniversalNode to temporal triplets.\n- Run on all sequence types with 5 seeds (different random embeddings)\n- Evaluate: (a) periodic-vs-random classification, (b) next-step prediction\n- Compare against untrained-weight baseline (same architecture, random weights)\n- This is the CRITICAL test: does spatial → temporal transfer work?\n\n### Step 3: P2-D Temporal Training (medium sub-agent)\nTrain P2-D from scratch on temporal data with JEPA objective.\n- Use the same JEPALoss from src/training_objectives.py\n- Temporal JEPA: predict neighbor codes in the time dimension\n- Train for 200 epochs, 5 seeds, d=16\n- Evaluate on same tasks as Step 2\n\n### Step 4: P2-A/B/C Baselines (medium sub-agent)\nImplement and train P2-A, P2-B, P2-C with same compute budget.\n- Each trained with appropriate local objectives\n- 5 seeds each\n- Same evaluation tasks\n\n### Step 5: Analysis & Report (high sub-agent)\n- Statistical comparison across all methods\n- Test falsification criteria F0, F1, F2, F3\n- If F1 is NOT triggered (transfer works): document as strongest evidence for\n  universal node hypothesis\n- If F1 IS triggered (transfer fails): analyze WHY spatial weights don\'t transfer\n  — is it the weight structure, the input distribution shift, or fundamental\n  axis-specificity?\n- Produce phase_2/REPORT.md\n\n### Files to create/modify:\n- NEW: src/temporal_dataset.py\n- NEW: src/temporal_encoder.py\n- NEW: src/run_phase2.py\n- NEW: src/test_temporal.py\n- NEW: phase_2/REPORT.md\n- MODIFY: src/pre_registration.md (update with Phase 2 plan and criteria)\n\n---\n*Created automatically by the RDF Orchestrator prior to iteration execution.*\n', 'path': 'src/pre_registration.md'})]
+
+[Tool Result: Successfully wrote to src/pre_registration.md]
+
+
+[Tool Call: read_file({'path': 'src/pre_registration.md'})]
+
+[Tool Result: # RDF Scientific Pre-Registration
+
+*   **Iteration:** 004
+*   **Pre-Registration File:** src/pre_registration.md
+
+## 1. Hypothesis
+A UniversalNode (kernel-3, d=16) trained with JEPA on spatial data produces weights
+that transfer to the temporal axis without retraining: when applied to temporal
+triplets (state_{t-2}, state_{t-1}, state_t), the spatially-trained node yields
+periodic-vs-random classification accuracy ≥10pp above an untrained-weight baseline.
+
+Additionally, a P2-D node trained from ...]
+
+The file has been updated successfully. Let me verify the Falsification Criterion section specifically:
+
+
+
+[Tool Call: read_file({'path': 'src/pre_registration.md', 'start_line': 21, 'end_line': 37})]
+
+[Tool Result: --- lines 21 to 37 of 97 ---
+## 2. Falsification Criterion
+The hypothesis is falsified if ANY of the following hold:
+
+F0 (Zero-Shot Transfer JEPA Loss): If Loss_spatial_trained / Loss_untrained >= 0.85 on temporal JEPA loss, the spatial -> temporal transfer has FAILED. This is the most rigorous test of whether spatially-trained weights encode general local-pattern structure vs. axis-specific structure.
+
+F1 (Transfer failure): Spatially-trained weights applied temporally yield
+periodic-vs-random ...]
+
+Done. Here's a summary of what was updated in `src/pre_registration.md`:
+
+**New F0 criterion added:**
+> **F0 (Zero-Shot Transfer JEPA Loss):** If Loss_spatial_trained / Loss_untrained >= 0.85 on temporal JEPA loss, the spatial -> temporal transfer has FAILED. This is the most rigorous test of whether spatially-trained weights encode general local-pattern structure vs. axis-specific structure.
+
+**Order preserved:** F0 → F1 → F2 → F3
+
+**Additional fix:** Updated the Step 5 analysis line to reference all four criteria: "Test falsification criteria F0, F1, F2, F3" (previously only listed F1, F2, F3).
+
+[NUDGE RESPONSE]
+```yaml
+status: ok
+artifacts:
+  - src/pre_registration.md
+metrics: {}
+log_excerpt: |
+  Successfully wrote to src/pre_registration.md
+  Verified F0 (Zero-Shot Transfer JEPA Loss) is present.
+  Verified F1, F2, F3 follow in correct order.
+  Verified Step 5 analysis references updated to include F0.
+experimenter_view: |
+  The pre-registration document `src/pre_registration.md` was successfully updated.
+  The new F0 criterion regarding Zero-Shot Transfer JEPA Loss (Loss_ratio >= 0.85) has been inserted
+  as the primary falsification check, emphasizing the rigor of testing spatial-to-temporal weight transfer.
+  The remaining criteria F1, F2, and F3 were preserved in their original order and format.
+notes: "F0 falsification criterion inserted and document structure verified."
+```

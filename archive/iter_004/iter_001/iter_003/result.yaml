@@ -1,0 +1,27 @@
+artifacts:
+- src/pre_registration.md
+experimenter_view: 'The pre-registration document `src/pre_registration.md` was successfully
+  updated.
+
+  The new F0 criterion regarding Zero-Shot Transfer JEPA Loss (Loss_ratio >= 0.85)
+  has been inserted
+
+  as the primary falsification check, emphasizing the rigor of testing spatial-to-temporal
+  weight transfer.
+
+  The remaining criteria F1, F2, and F3 were preserved in their original order and
+  format.
+
+  '
+log_excerpt: 'Successfully wrote to src/pre_registration.md
+
+  Verified F0 (Zero-Shot Transfer JEPA Loss) is present.
+
+  Verified F1, F2, F3 follow in correct order.
+
+  Verified Step 5 analysis references updated to include F0.
+
+  '
+metrics: {}
+notes: F0 falsification criterion inserted and document structure verified.
+status: ok

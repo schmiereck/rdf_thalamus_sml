@@ -21,9 +21,7 @@ applicable along any axis.
 ## 2. Falsification Criterion
 The hypothesis is falsified if ANY of the following hold:
 
-F0 (Spatial baseline failure): The spatially-trained Phase-1 encoder fails to achieve
->20% test accuracy on its native spatial task. If the spatial training itself is
-broken, no valid transfer claim can be made.
+F0 (Zero-Shot Transfer JEPA Loss): If Loss_spatial_trained / Loss_untrained >= 0.85 on temporal JEPA loss, the spatial -> temporal transfer has FAILED. This is the most rigorous test of whether spatially-trained weights encode general local-pattern structure vs. axis-specific structure.
 
 F1 (Transfer failure): Spatially-trained weights applied temporally yield
 periodic-vs-random classification accuracy ≤5pp above the untrained-weight
@@ -79,7 +77,7 @@ Implement and train P2-A, P2-B, P2-C with same compute budget.
 
 ### Step 5: Analysis & Report (high sub-agent)
 - Statistical comparison across all methods
-- Test falsification criteria F1, F2, F3
+- Test falsification criteria F0, F1, F2, F3
 - If F1 is NOT triggered (transfer works): document as strongest evidence for
   universal node hypothesis
 - If F1 IS triggered (transfer fails): analyze WHY spatial weights don't transfer
