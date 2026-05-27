@@ -1,0 +1,21 @@
+artifacts:
+- src/pre_registration.md
+- src/harness.py
+experimenter_view: "Created pre_registration.md with corrected hypothesis (P0-A exempt\
+  \ from ρ≥0.6, \noff-diagonal-only Spearman computation) and falsification criteria.\
+  \ Created \nharness.py with DatasetGenerator, SimilarityEvaluator, EncoderBase ABC,\
+  \ and \nutility functions (sparsity, MSE, numpy-only logistic regression). \nSelf-test\
+  \ revealed two issues: (1) ρ symbol causes UnicodeEncodeError on \nWindows cp1252\
+  \ console — needs ASCII-safe formatting, (2) spearmanr correctly \nwarns on constant\
+  \ inputs (expected for one-hot codes) but returns NaN which \nthe test should handle\
+  \ gracefully. Also forgot to create src/encoders/__init__.py.\n"
+log_excerpt: "=== Harness Self-Test ===\n[OK] Dataset: base=(8, 3), all=(88, 3)\n\
+  C:\\...\\src\\harness.py:150: ConstantInputWarning: An input array is constant;\
+  \ the correlation coefficient is not defined.\n  rho, p_value = spearmanr(inv_ham_pairs,\
+  \ cos_sim_pairs)\nTraceback (most recent call last):\n  File \"src/harness.py\"\
+  , line 371, in <module>\n    _self_test()\n  File \"src/harness.py\", line 326,\
+  \ in _self_test\n    print(f\"[OK] Similarity eval: ρ={rho}, p={p_val}, pairs={n_pairs}\"\
+  )\nUnicodeEncodeError: 'charmap' codec can't encode character '\\u03c1'\n"
+metrics: {}
+notes: Harness requires unicode cleanup and __init__.py creation; core logic is sound.
+status: code_error
