@@ -1,0 +1,32 @@
+artifacts: []
+experimenter_view: 'The UniversalNode numerical gradient check was executed successfully
+  without
+
+  crashes. Four out of five gradients (W_enc, b_enc, W_dec, b_dec) pass with
+
+  relative errors well below typical thresholds (all < 1e-5). However, the
+
+  gradient with respect to the input tensor x_3d fails catastrophically with a
+
+  relative error of ~1.98, indicating a likely bug in the analytical gradient
+
+  derivation or implementation for that variable. This suggests the forward pass
+
+  may be correct, but the input gradient is incorrectly computed.
+
+  '
+log_excerpt: "============================================================\n  UniversalNode\
+  \ -- Numerical Gradient Check\n============================================================\n\
+  \     W_enc:  rel_err = 4.15e-08  PASS\n     b_enc:  rel_err = 8.80e-09  PASS\n\
+  \     W_dec:  rel_err = 5.55e-06  PASS\n     b_dec:  rel_err = 8.28e-08  PASS\n\
+  \      x_3d:  rel_err = 1.98e+00  FAIL\n------------------------------------------------------------\n\
+  \  SOME GRADIENTS FAILED -- check the derivation!\n============================================================\n"
+metrics:
+  W_dec_rel_err: 5.55e-06
+  W_enc_rel_err: 4.15e-08
+  b_dec_rel_err: 8.28e-08
+  b_enc_rel_err: 8.8e-09
+  x_3d_rel_err: 1.98e00
+notes: Gradient check for x_3d input fails; code runs but scientific objective not
+  met.
+status: experiment_failed
