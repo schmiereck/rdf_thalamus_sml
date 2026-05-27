@@ -162,6 +162,69 @@ class P2AEncoder:
         codes_repeated = np.repeat(codes_blocks, self.N, axis=1)
         return codes_repeated[:, :T, :]
 
+    def compute_gradients(self, x: np.ndarray, dL_dcodes: np.ndarray) -> dict:
+        """
+        Backpropagate code gradients through the average-pooling and node.
+
+        Parameters
+        ----------
+        x : np.ndarray, shape (B, T, d)
+        dL_dcodes : np.ndarray, shape (B, T, d_out)
+
+        Returns
+        -------
+        dict with keys 'W_enc', 'b_enc'
+        """
+        B, T, d = x.shape
+        assert d == self.d
+
+        # Pad dL_dcodes to multiple of N
+        pad_len = (self.N - T % self.N) % self.N
+        if pad_len > 0:
+            dL_dcodes_padded = np.concatenate(
+                [dL_dcodes, np.zeros((B, pad_len, self.d_out), dtype=dL_dcodes.dtype)], axis=1
+            )
+        else:
+            dL_dcodes_padded = dL_dcodes
+
+        T_pad = dL_dcodes_padded.shape[1]
+        n_blocks = T_pad // self.N
+
+        # Sum gradients over each block (gradient of average-pooling)
+        dL_dcodes_blocks = dL_dcodes_padded.reshape(B, n_blocks, self.N, self.d_out)
+        dL_dcodes_summed = dL_dcodes_blocks.sum(axis=2)  # (B, n_blocks, d_out)
+        dL_dcodes_flat = dL_dcodes_summed.reshape(-1, self.d_out)  # (B*n_blocks, d_out)
+
+        # Recompute forward intermediates
+        if pad_len > 0:
+            x_padded = np.concatenate([x, np.zeros((B, pad_len, d), dtype=x.dtype)], axis=1)
+        else:
+            x_padded = x
+
+        blocks = x_padded.reshape(B, n_blocks, self.N, d)
+        pooled = blocks.mean(axis=2)
+        pooled_expanded = np.repeat(pooled[:, :, None, :], self.N, axis=2)
+        pooled_flat = pooled_expanded.reshape(-1, self.N, d)
+
+        # Forward through node to get codes
+        codes_flat = self.node.forward(pooled_flat)  # (B*n_blocks, d_out)
+
+        # Backprop through tanh
+        dL_dz = dL_dcodes_flat * (1.0 - codes_flat ** 2)  # (B*n_blocks, d_out)
+
+        # Flatten pooled input
+        pooled_3d_flat = pooled_flat.reshape(-1, self.node.d_in)  # (B*n_blocks, 3*d)
+
+        # Gradients for node parameters
+        dW_enc = pooled_3d_flat.T @ dL_dz / B
+        db_enc = dL_dz.mean(axis=0)
+
+        return {"W_enc": dW_enc, "b_enc": db_enc}
+
+    def apply_encoder_gradients(self, grads: dict, lr: float) -> None:
+        self.node.W_enc -= lr * grads["W_enc"]
+        self.node.b_enc -= lr * grads["b_enc"]
+
 
 # ---------------------------------------------------------------------------
 #  P2-B: Recurrent RNN
@@ -400,6 +463,11 @@ if __name__ == "__main__":
     out_a = enc_a.forward(x)
     assert out_a.shape == (B, T, 16), f"Expected (4, 64, 16), got {out_a.shape}"
     print(f"  Input: {x.shape} -> Output: {out_a.shape}  [OK]")
+
+    grads_a = enc_a.compute_gradients(x, dL[:, :, :16])
+    assert grads_a["W_enc"].shape == enc_a.node.W_enc.shape
+    assert grads_a["b_enc"].shape == enc_a.node.b_enc.shape
+    print("  Gradient shapes: PASS")
 
     # --- P2-B ---
     print("\n--- P2-B ---")

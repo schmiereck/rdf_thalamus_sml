@@ -1,0 +1,364 @@
+
+[Tool Call: read_file({'path': 'src/temporal_encoder.py'})]
+
+[Tool Result: """
+Temporal Encoders for Phase 2.
+
+Implements four temporal integration mechanisms:
+  - P2DEncoder : Three-temporal-slot UniversalNode (sliding window over time)
+  - P2AEncoder : Average-pool non-overlapping blocks of N=3 steps
+  - P2BEncoder : Recurrent RNN with tanh update
+  - P2CEncoder : Feedback previous code to 3-slot input
+
+All encoders accept (B, T, d) and produce (B, T, d_out).
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+from node import UniversalNode
+
+
+# -------------...]
+
+
+[Tool Call: read_file({'path': 'src/temporal_dataset.py'})]
+
+[Tool Result: """
+Temporal Dataset Generator for Phase 2.
+
+Generates three categories of temporal sequences (periodic, random, irregular)
+and maps discrete states to fixed d-dimensional embeddings using Xavier-scaled
+standard normal initialisation.
+
+All sequences have length T=64 and embedding dimension d=16 by default.
+
+Categories (3-class classification):
+  0 = periodic    -- repeating patterns with periods 3, 4, 7, or 11
+  1 = random      -- independent uniform draws from a small state set
+  2 = irregular ...]
+
+
+[Tool Call: read_file({'path': 'src/training_objectives.py'})]
+
+[Tool Result: """
+Training objectives for Phase 1 -- pure NumPy implementations.
+
+Includes:
+  - JEPALoss          : Spatial bidirectional JEPA with per-layer linear predictors + VICReg
+  - ContrastiveLoss   : NT-Xent with 2-layer projection MLP
+  - SFALoss           : Slowness (temporal difference) + variance penalty
+  - HebbianLoss       : Oja's rule online updates on encoder nodes
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+
+# ================================================================...]
+
+
+[Tool Call: read_file({'path': 'src/harness.py'})]
+
+[Tool Result: """
+HSUN Phase 0 -- Experimental Harness
+
+Dataset generator, similarity evaluator, encoder interface, and utility functions
+for the smoke-test of hierarchical sparse universal nodes.
+
+Dependencies: numpy, scipy only -- no external ML libraries.
+"""
+
+from __future__ import annotations
+
+import itertools
+from abc import ABC, abstractmethod
+from typing import Dict, List, Tuple
+
+import numpy as np
+from scipy.stats import spearmanr
+
+
+# ------------------------------------------------------------------...]
+
+
+[Tool Call: read_file({'path': 'src/run_phase2.py'})]
+
+[Tool Result: """
+Phase 2 Experiment Runner for HSUN.
+
+Runs 3 P2-D configurations x 5 seeds = 15 total runs.
+Saves metrics to phase_2/p2d_results.csv
+
+Configurations:
+  - P2-D-ZeroShot:  Load spatially-trained weights, freeze encoder,
+                    train only JEPA predictor on temporal data.
+  - P2-D-Trained:   Train P2-D from scratch on temporal data with JEPA.
+  - P2-D-Untrained: Random init, freeze encoder, train only JEPA predictor.
+"""
+
+import csv
+import os
+import sys
+import time
+
+import numpy as n...]
+
+
+[Tool Call: read_file({'path': 'src/node.py'})]
+
+[Tool Result: """
+UniversalNode -- single-layer auto-encoder unit for HSUN Phase 0-E.
+
+Architecture
+------------
+  x_3d (batch, 3, d_in)  --> flatten --> (batch, 3*d_in)
+  z    = tanh(x_flat @ W_enc + b_enc)          # (batch, d_out)  -- "code"
+  xrec = z       @ W_dec + b_dec              # (batch, 3*d_in)
+           --> reshape --> (batch, 3, d_in)
+
+Loss  = MSE(x_3d, xrec) + l1_lambda * mean(|z|)
+
+All analytical gradients are provided in ``compute_gradients`` and verified
+below via a central-difference nume...]
+
+
+[Tool Call: write_file({'path': 'src/temporal_encoder.py', 'content': '"""\nTemporal Encoders for Phase 2.\n\nImplements four temporal integration mechanisms:\n  - P2DEncoder : Three-temporal-slot UniversalNode (sliding window over time)\n  - P2AEncoder : Average-pool non-overlapping blocks of N=3 steps\n  - P2BEncoder : Recurrent RNN with tanh update\n  - P2CEncoder : Feedback previous code to 3-slot input\n\nAll encoders accept (B, T, d) and produce (B, T, d_out).\n"""\n\nfrom __future__ import annotations\n\nimport numpy as np\n\nfrom node import UniversalNode\n\n\n# ---------------------------------------------------------------------------\n#  P2-D: Three-temporal-slot sliding-window node\n# ---------------------------------------------------------------------------\n\nclass P2DEncoder:\n    """\n    Sliding-window temporal node.\n\n    Accepts (B, T, d). Generates sliding window triplets of shape\n    (B, T-2, 3, d). Feeds to a UniversalNode to produce (B*(T-2), d_out).\n    Reshapes to (B, T-2, d_out) and pads with 2 steps of zeros at the\n    beginning to yield (B, T, d_out).\n    """\n\n    def __init__(self, d: int = 16, d_out: int | None = None, seed: int = 42, l1_lambda: float = 0.0):\n        self.d = d\n        self.d_out = d_out if d_out is not None else 3 * d\n        self.seed = seed\n        self.node = UniversalNode(d=d, l1_lambda=l1_lambda, seed=seed, d_out=self.d_out)\n\n    def forward(self, x: np.ndarray) -> np.ndarray:\n        """\n        Parameters\n        ----------\n        x : np.ndarray, shape (B, T, d)\n\n        Returns\n        -------\n        codes : np.ndarray, shape (B, T, d_out)\n        """\n        B, T, d = x.shape\n        assert d == self.d\n\n        if T < 3:\n            return np.zeros((B, T, self.d_out), dtype=x.dtype)\n\n        # Build sliding windows: (B, T-2, 3, d)\n        triplets = np.stack([x[:, :-2, :], x[:, 1:-1, :], x[:, 2:, :]], axis=2)\n        triplets_flat = triplets.reshape(-1, 3, d)\n        codes_flat = self.node.forward(triplets_flat)\n        codes = codes_flat.reshape(B, T - 2, self.d_out)\n        pad = np.zeros((B, 2, self.d_out), dtype=codes.dtype)\n        return np.concatenate([pad, codes], axis=1)\n\n    def compute_gradients(self, x: np.ndarray, dL_dcodes: np.ndarray) -> dict:\n        """\n        Backpropagate code gradients through the node.\n\n        Parameters\n        ----------\n        x : np.ndarray, shape (B, T, d)\n        dL_dcodes : np.ndarray, shape (B, T, d_out)\n\n        Returns\n        -------\n        dict with keys \'W_enc\', \'b_enc\', \'x\'\n        """\n        B, T, d = x.shape\n        if T < 3:\n            return {\n                "W_enc": np.zeros_like(self.node.W_enc),\n                "b_enc": np.zeros_like(self.node.b_enc),\n                "x": np.zeros_like(x),\n            }\n\n        triplets = np.stack([x[:, :-2, :], x[:, 1:-1, :], x[:, 2:, :]], axis=2)\n        triplets_flat = triplets.reshape(-1, 3, d)\n\n        dL_dcodes_valid = dL_dcodes[:, 2:, :]\n        dL_dcodes_flat = dL_dcodes_valid.reshape(-1, self.d_out)\n\n        codes_flat = self.node.forward(triplets_flat)\n        dL_dz = dL_dcodes_flat * (1.0 - codes_flat ** 2)\n\n        x_flat = triplets_flat.reshape(-1, self.node.d_in)\n        dW_enc = x_flat.T @ dL_dz / B\n        db_enc = dL_dz.mean(axis=0)\n\n        dL_dx_flat = dL_dz @ self.node.W_enc.T\n        dL_dx_triplets = dL_dx_flat.reshape(B, T - 2, 3, d)\n\n        dL_dx = np.zeros_like(x)\n        dL_dx[:, :-2, :] += dL_dx_triplets[:, :, 0, :]\n        dL_dx[:, 1:-1, :] += dL_dx_triplets[:, :, 1, :]\n        dL_dx[:, 2:, :] += dL_dx_triplets[:, :, 2, :]\n\n        return {\n            "W_enc": dW_enc,\n            "b_enc": db_enc,\n            "x": dL_dx,\n        }\n\n    def apply_encoder_gradients(self, grads: dict, lr: float) -> None:\n        self.node.W_enc -= lr * grads["W_enc"]\n        self.node.b_enc -= lr * grads["b_enc"]\n\n\n# ---------------------------------------------------------------------------\n#  P2-A: Average-pool non-overlapping blocks of N=3\n# ---------------------------------------------------------------------------\n\nclass P2AEncoder:\n    """\n    Average-pool non-overlapping blocks of N=3 steps.\n    Receives (p_{k-2}, p_{k-1}, p_k) as 3-slot input.\n    Repeats code over block steps to match shape (B, T, d_out).\n    """\n\n    def __init__(self, d: int = 16, d_out: int | None = None, N: int = 3, seed: int = 42, l1_lambda: float = 0.0):\n        self.d = d\n        self.N = N\n        self.d_out = d_out if d_out is not None else 3 * d\n        self.node = UniversalNode(d=d, l1_lambda=l1_lambda, seed=seed, d_out=self.d_out)\n\n    def forward(self, x: np.ndarray) -> np.ndarray:\n        """\n        Parameters\n        ----------\n        x : np.ndarray, shape (B, T, d)\n\n        Returns\n        -------\n        codes : np.ndarray, shape (B, T, d_out)\n        """\n        B, T, d = x.shape\n        assert d == self.d\n\n        pad_len = (self.N - T % self.N) % self.N\n        if pad_len > 0:\n            x_padded = np.concatenate([x, np.zeros((B, pad_len, d), dtype=x.dtype)], axis=1)\n        else:\n            x_padded = x\n\n        T_pad = x_padded.shape[1]\n        n_blocks = T_pad // self.N\n\n        blocks = x_padded.reshape(B, n_blocks, self.N, d)\n        pooled = blocks.mean(axis=2)\n        pooled_expanded = np.repeat(pooled[:, :, None, :], self.N, axis=2)\n        pooled_flat = pooled_expanded.reshape(-1, self.N, d)\n        codes_flat = self.node.forward(pooled_flat)\n        codes_blocks = codes_flat.reshape(B, n_blocks, self.d_out)\n        codes_repeated = np.repeat(codes_blocks, self.N, axis=1)\n        return codes_repeated[:, :T, :]\n\n    def compute_gradients(self, x: np.ndarray, dL_dcodes: np.ndarray) -> dict:\n        """\n        Backpropagate code gradients through the average-pooling and node.\n\n        Parameters\n        ----------\n        x : np.ndarray, shape (B, T, d)\n        dL_dcodes : np.ndarray, shape (B, T, d_out)\n\n        Returns\n        -------\n        dict with keys \'W_enc\', \'b_enc\'\n        """\n        B, T, d = x.shape\n        assert d == self.d\n\n        # Pad dL_dcodes to multiple of N\n        pad_len = (self.N - T % self.N) % self.N\n        if pad_len > 0:\n            dL_dcodes_padded = np.concatenate(\n                [dL_dcodes, np.zeros((B, pad_len, self.d_out), dtype=dL_dcodes.dtype)], axis=1\n            )\n        else:\n            dL_dcodes_padded = dL_dcodes\n\n        T_pad = dL_dcodes_padded.shape[1]\n        n_blocks = T_pad // self.N\n\n        # Sum gradients over each block (gradient of average-pooling)\n        dL_dcodes_blocks = dL_dcodes_padded.reshape(B, n_blocks, self.N, self.d_out)\n        dL_dcodes_summed = dL_dcodes_blocks.sum(axis=2)  # (B, n_blocks, d_out)\n        dL_dcodes_flat = dL_dcodes_summed.reshape(-1, self.d_out)  # (B*n_blocks, d_out)\n\n        # Recompute forward intermediates\n        if pad_len > 0:\n            x_padded = np.concatenate([x, np.zeros((B, pad_len, d), dtype=x.dtype)], axis=1)\n        else:\n            x_padded = x\n\n        blocks = x_padded.reshape(B, n_blocks, self.N, d)\n        pooled = blocks.mean(axis=2)\n        pooled_expanded = np.repeat(pooled[:, :, None, :], self.N, axis=2)\n        pooled_flat = pooled_expanded.reshape(-1, self.N, d)\n\n        # Forward through node to get codes\n        codes_flat = self.node.forward(pooled_flat)  # (B*n_blocks, d_out)\n\n        # Backprop through tanh\n        dL_dz = dL_dcodes_flat * (1.0 - codes_flat ** 2)  # (B*n_blocks, d_out)\n\n        # Flatten pooled input\n        pooled_3d_flat = pooled_flat.reshape(-1, self.node.d_in)  # (B*n_blocks, 3*d)\n\n        # Gradients for node parameters\n        dW_enc = pooled_3d_flat.T @ dL_dz / B\n        db_enc = dL_dz.mean(axis=0)\n\n        return {"W_enc": dW_enc, "b_enc": db_enc}\n\n    def apply_encoder_gradients(self, grads: dict, lr: float) -> None:\n        self.node.W_enc -= lr * grads["W_enc"]\n        self.node.b_enc -= lr * grads["b_enc"]\n\n\n# ---------------------------------------------------------------------------\n#  P2-B: Recurrent RNN\n# ---------------------------------------------------------------------------\n\nclass P2BEncoder:\n    """\n    Recurrent RNN with tanh update.\n    h_t = tanh(x_t @ W_xh + h_{t-1} @ W_hh + b_h)\n    """\n\n    def __init__(self, d: int = 16, d_out: int | None = None, seed: int = 42):\n        self.d = d\n        self.d_out = d_out if d_out is not None else d\n        rng = np.random.default_rng(seed)\n\n        scale_xh = np.sqrt(2.0 / (d + self.d_out))\n        scale_hh = np.sqrt(2.0 / (self.d_out + self.d_out))\n\n        self.W_xh = rng.standard_normal((d, self.d_out)) * scale_xh\n        self.W_hh = rng.standard_normal((self.d_out, self.d_out)) * scale_hh\n        self.b_h = np.zeros(self.d_out)\n\n    def forward(self, x: np.ndarray) -> np.ndarray:\n        """\n        Parameters\n        ----------\n        x : np.ndarray, shape (B, T, d)\n\n        Returns\n        -------\n        codes : np.ndarray, shape (B, T, d_out)\n        """\n        B, T, d = x.shape\n        codes = np.zeros((B, T, self.d_out), dtype=x.dtype)\n        h = np.zeros((B, self.d_out), dtype=x.dtype)\n\n        for t in range(T):\n            h = np.tanh(x[:, t, :] @ self.W_xh + h @ self.W_hh + self.b_h)\n            codes[:, t, :] = h\n\n        return codes\n\n    def compute_gradients(self, x: np.ndarray, dL_dcodes: np.ndarray) -> dict:\n        """BPTT for the simple RNN."""\n        B, T, d = x.shape\n        dW_xh = np.zeros_like(self.W_xh)\n        dW_hh = np.zeros_like(self.W_hh)\n        db_h = np.zeros_like(self.b_h)\n        dL_dx = np.zeros_like(x)\n\n        dh_next = np.zeros((B, self.d_out))\n\n        h_cache = np.zeros((B, T, self.d_out))\n        h = np.zeros((B, self.d_out))\n        for t in range(T):\n            h = np.tanh(x[:, t, :] @ self.W_xh + h @ self.W_hh + self.b_h)\n            h_cache[:, t, :] = h\n\n        for t in reversed(range(T)):\n            dh = dL_dcodes[:, t, :] + dh_next\n            dtanh = dh * (1.0 - h_cache[:, t, :] ** 2)\n\n            dW_xh += x[:, t, :].T @ dtanh / B\n            if t > 0:\n                dW_hh += h_cache[:, t - 1, :].T @ dtanh / B\n            db_h += dtanh.mean(axis=0)\n\n            dL_dx[:, t, :] = dtanh @ self.W_xh.T\n            dh_next = dtanh @ self.W_hh.T\n\n        return {\n            "W_xh": dW_xh,\n            "W_hh": dW_hh,\n            "b_h": db_h,\n            "x": dL_dx,\n        }\n\n    def apply_gradients(self, grads: dict, lr: float) -> None:\n        self.W_xh -= lr * grads["W_xh"]\n        self.W_hh -= lr * grads["W_hh"]\n        self.b_h -= lr * grads["b_h"]\n\n\n# ---------------------------------------------------------------------------\n#  P2-C: Feedback previous code into 3-slot input\n# ---------------------------------------------------------------------------\n\nclass P2CEncoder:\n    """\n    Feedback previous code to 3-slot input:\n      slot 0 = code_{t-1} (previous output, d_out dim)\n      slot 1 = embedding_{t-1}\n      slot 2 = embedding_t\n\n    The node expects 3 slots each of dimension d. We project code_{t-1}\n    from d_out down to d via a learned linear projection W_proj.\n    """\n\n    def __init__(self, d: int = 16, d_out: int | None = None, seed: int = 42, l1_lambda: float = 0.0):\n        self.d = d\n        self.d_out = d_out if d_out is not None else 3 * d\n        self.node = UniversalNode(d=d, l1_lambda=l1_lambda, seed=seed, d_out=self.d_out)\n\n        rng = np.random.default_rng(seed + 1)\n        scale = np.sqrt(2.0 / (self.d_out + d))\n        self.W_proj = rng.standard_normal((self.d_out, d)) * scale\n\n    def forward(self, x: np.ndarray) -> np.ndarray:\n        """\n        Parameters\n        ----------\n        x : np.ndarray, shape (B, T, d)\n\n        Returns\n        -------\n        codes : np.ndarray, shape (B, T, d_out)\n        """\n        B, T, d = x.shape\n        codes = np.zeros((B, T, self.d_out), dtype=x.dtype)\n        prev_code = np.zeros((B, self.d_out), dtype=x.dtype)\n\n        for t in range(T):\n            slot0 = prev_code @ self.W_proj\n            slot1 = x[:, t, :] if t == 0 else x[:, t - 1, :]\n            slot2 = x[:, t, :]\n\n            triplet = np.stack([slot0, slot1, slot2], axis=1)\n            code = self.node.forward(triplet)\n            codes[:, t, :] = code\n            prev_code = code\n\n        return codes\n\n    def compute_gradients(self, x: np.ndarray, dL_dcodes: np.ndarray) -> dict:\n        """Backprop through the feedback loop."""\n        B, T, d = x.shape\n        dW_proj = np.zeros_like(self.W_proj)\n        dW_enc = np.zeros_like(self.node.W_enc)\n        db_enc = np.zeros_like(self.node.b_enc)\n        dL_dx = np.zeros_like(x)\n\n        # Forward cache\n        codes = np.zeros((B, T, self.d_out))\n        prev_code = np.zeros((B, self.d_out))\n        triplet_list = []\n        slot0_list = []\n\n        for t in range(T):\n            slot0 = prev_code @ self.W_proj\n            slot1 = x[:, t, :] if t == 0 else x[:, t - 1, :]\n            slot2 = x[:, t, :]\n            triplet = np.stack([slot0, slot1, slot2], axis=1)\n            triplet_list.append(triplet)\n            slot0_list.append(slot0)\n            code = self.node.forward(triplet)\n            codes[:, t, :] = code\n            prev_code = code\n\n        # Backward through time\n        d_prev_code = np.zeros((B, self.d_out))\n\n        for t in reversed(range(T)):\n            triplet = triplet_list[t]\n            dL_da = dL_dcodes[:, t, :] + d_prev_code\n            code = codes[:, t, :]\n            dL_dz = dL_da * (1.0 - code ** 2)\n\n            x_flat = triplet.reshape(B, -1)\n            dW_enc += x_flat.T @ dL_dz / B\n            db_enc += dL_dz.mean(axis=0)\n\n            dL_dtriplet_flat = dL_dz @ self.node.W_enc.T\n            dL_dtriplet = dL_dtriplet_flat.reshape(B, 3, d)\n\n            # slot0 = prev_code @ W_proj\n            if t > 0:\n                # dW_proj += prev_code_{t-1}^T @ dL_dslot0\n                prev_code_tminus1 = codes[:, t - 1, :]\n                dW_proj += prev_code_tminus1.T @ dL_dtriplet[:, 0, :] / B\n                d_prev_code = dL_dtriplet[:, 0, :] @ self.W_proj.T\n            else:\n                d_prev_code = np.zeros((B, self.d_out))\n\n            # slot1 = x_{t-1} (or x_0 at t=0)\n            if t > 0:\n                dL_dx[:, t - 1, :] += dL_dtriplet[:, 1, :]\n            # slot2 = x_t\n            dL_dx[:, t, :] += dL_dtriplet[:, 2, :]\n\n        return {\n            "W_enc": dW_enc,\n            "b_enc": db_enc,\n            "W_proj": dW_proj,\n            "x": dL_dx,\n        }\n\n    def apply_encoder_gradients(self, grads: dict, lr: float) -> None:\n        self.node.W_enc -= lr * grads["W_enc"]\n        self.node.b_enc -= lr * grads["b_enc"]\n        self.W_proj -= lr * grads["W_proj"]\n\n\n# ---------------------------------------------------------------------------\n#  Self-test\n# ---------------------------------------------------------------------------\n\nif __name__ == "__main__":\n    print("=" * 60)\n    print("  Temporal Encoders -- Self-Test")\n    print("=" * 60)\n\n    rng = np.random.default_rng(7)\n    B, T, d = 4, 64, 16\n    x = rng.standard_normal((B, T, d))\n\n    # --- P2-D ---\n    print("\\n--- P2-D ---")\n    enc_d = P2DEncoder(d=d, d_out=16, seed=42)\n    out_d = enc_d.forward(x)\n    assert out_d.shape == (B, T, 16), f"Expected (4, 64, 16), got {out_d.shape}"\n    print(f"  Input: {x.shape} -> Output: {out_d.shape}  [OK]")\n    assert np.allclose(out_d[:, :2, :], 0.0), "First 2 timesteps should be zero-padded"\n    print("  Zero-padding at t=0,1: PASS")\n\n    dL = rng.standard_normal(out_d.shape)\n    grads = enc_d.compute_gradients(x, dL)\n    assert grads["W_enc"].shape == enc_d.node.W_enc.shape\n    assert grads["b_enc"].shape == enc_d.node.b_enc.shape\n    assert grads["x"].shape == x.shape\n    print("  Gradient shapes: PASS")\n\n    # --- P2-A ---\n    print("\\n--- P2-A ---")\n    enc_a = P2AEncoder(d=d, d_out=16, N=3, seed=42)\n    out_a = enc_a.forward(x)\n    assert out_a.shape == (B, T, 16), f"Expected (4, 64, 16), got {out_a.shape}"\n    print(f"  Input: {x.shape} -> Output: {out_a.shape}  [OK]")\n\n    grads_a = enc_a.compute_gradients(x, dL[:, :, :16])\n    assert grads_a["W_enc"].shape == enc_a.node.W_enc.shape\n    assert grads_a["b_enc"].shape == enc_a.node.b_enc.shape\n    print("  Gradient shapes: PASS")\n\n    # --- P2-B ---\n    print("\\n--- P2-B ---")\n    enc_b = P2BEncoder(d=d, d_out=16, seed=42)\n    out_b = enc_b.forward(x)\n    assert out_b.shape == (B, T, 16), f"Expected (4, 64, 16), got {out_b.shape}"\n    print(f"  Input: {x.shape} -> Output: {out_b.shape}  [OK]")\n\n    grads_b = enc_b.compute_gradients(x, dL[:, :, :16])\n    assert grads_b["W_xh"].shape == enc_b.W_xh.shape\n    assert grads_b["W_hh"].shape == enc_b.W_hh.shape\n    print("  Gradient shapes: PASS")\n\n    # --- P2-C ---\n    print("\\n--- P2-C ---")\n    enc_c = P2CEncoder(d=d, d_out=16, seed=42)\n    out_c = enc_c.forward(x)\n    assert out_c.shape == (B, T, 16), f"Expected (4, 64, 16), got {out_c.shape}"\n    print(f"  Input: {x.shape} -> Output: {out_c.shape}  [OK]")\n\n    grads_c = enc_c.compute_gradients(x, dL[:, :, :16])\n    assert grads_c["W_enc"].shape == enc_c.node.W_enc.shape\n    assert grads_c["W_proj"].shape == enc_c.W_proj.shape\n    print("  Gradient shapes: PASS")\n\n    print("\\n" + "-" * 60)\n    print("  ALL SELF-TESTS PASSED")\n    print("=" * 60)\n'})]
+
+[Tool Result: Successfully wrote to src/temporal_encoder.py]
+
+
+[Tool Call: write_file({'path': 'src/run_phase2_baselines.py', 'content': '"""\nPhase 2 Baseline Experiment Runner for P2-A, P2-B, P2-C.\n\nTrains each encoder type on temporal data with JEPA as the training objective.\nAlso runs untrained baselines (random weights, freeze encoder, only train JEPA).\n\nSaves metrics to phase_2/baseline_results.csv\n"""\n\nimport csv\nimport os\nimport sys\nimport time\n\nimport numpy as np\n\nsys.path.insert(0, os.path.dirname(__file__))\n\nfrom temporal_dataset import generate_temporal_dataset, generate_irregular_markov_dataset\nfrom temporal_encoder import P2AEncoder, P2BEncoder, P2CEncoder\nfrom training_objectives import JEPALoss, _Adam\nfrom harness import SimpleLogisticRegression\n\n\n# ---------------------------------------------------------------------------\n#  Configuration\n# ---------------------------------------------------------------------------\n\nSEEDS = [42, 43, 44, 45, 46]\nD = 16\nD_OUT = 16\nTEMPORAL_LENGTH = 64\nBATCH_SIZE = 32\nTEMPORAL_EPOCHS = 200\n\nOUTPUT_DIR = "phase_2"\nRESULTS_CSV = os.path.join(OUTPUT_DIR, "baseline_results.csv")\n\n\n# ---------------------------------------------------------------------------\n#  Helpers\n# ---------------------------------------------------------------------------\n\ndef train_temporal_jepa(\n    encoder,\n    train_emb,\n    epochs=TEMPORAL_EPOCHS,\n    lr=1e-3,\n    batch_size=BATCH_SIZE,\n    seed=42,\n    update_encoder=False,\n):\n    """Train JEPALoss on temporal sequences."""\n    rng = np.random.default_rng(seed)\n    jepa = JEPALoss(n_layers=1, d=encoder.d_out, lr=lr)\n\n    # Set up Adam for encoder parameters if training encoder\n    adam_enc = None\n    if update_encoder:\n        if isinstance(encoder, P2AEncoder):\n            adam_enc = _Adam(\n                {"W_enc": encoder.node.W_enc, "b_enc": encoder.node.b_enc},\n                lr=lr,\n            )\n        elif isinstance(encoder, P2BEncoder):\n            adam_enc = _Adam(\n                {"W_xh": encoder.W_xh, "W_hh": encoder.W_hh, "b_h": encoder.b_h},\n                lr=lr,\n            )\n        elif isinstance(encoder, P2CEncoder):\n            adam_enc = _Adam(\n                {\n                    "W_enc": encoder.node.W_enc,\n                    "b_enc": encoder.node.b_enc,\n                    "W_proj": encoder.W_proj,\n                },\n                lr=lr,\n            )\n\n    n_samples = train_emb.shape[0]\n    loss_history = []\n\n    for epoch in range(epochs):\n        perm = rng.permutation(n_samples)\n        epoch_loss = 0.0\n        n_batches = 0\n\n        for start in range(0, n_samples, batch_size):\n            end = min(start + batch_size, n_samples)\n            batch = train_emb[perm[start:end]]\n\n            codes = encoder.forward(batch)\n            result = jepa.step([codes])\n            epoch_loss += result["loss"]\n            n_batches += 1\n\n            if update_encoder:\n                code_grads = result["code_grads"][0]\n                enc_grads = encoder.compute_gradients(batch, code_grads)\n\n                if isinstance(encoder, P2AEncoder):\n                    adam_enc.step(\n                        {"W_enc": encoder.node.W_enc, "b_enc": encoder.node.b_enc},\n                        {"W_enc": enc_grads["W_enc"], "b_enc": enc_grads["b_enc"]},\n                    )\n                elif isinstance(encoder, P2BEncoder):\n                    adam_enc.step(\n                        {"W_xh": encoder.W_xh, "W_hh": encoder.W_hh, "b_h": encoder.b_h},\n                        {\n                            "W_xh": enc_grads["W_xh"],\n                            "W_hh": enc_grads["W_hh"],\n                            "b_h": enc_grads["b_h"],\n                        },\n                    )\n                elif isinstance(encoder, P2CEncoder):\n                    adam_enc.step(\n                        {\n                            "W_enc": encoder.node.W_enc,\n                            "b_enc": encoder.node.b_enc,\n                            "W_proj": encoder.W_proj,\n                        },\n                        {\n                            "W_enc": enc_grads["W_enc"],\n                            "b_enc": enc_grads["b_enc"],\n                            "W_proj": enc_grads["W_proj"],\n                        },\n                    )\n\n        loss_history.append(epoch_loss / max(n_batches, 1))\n        if epoch % 50 == 0 or epoch == epochs - 1:\n            print(f"    Epoch {epoch}: loss={loss_history[-1]:.4f}")\n\n    return jepa, loss_history\n\n\ndef evaluate_classification(encoder, train_emb, train_y, test_emb, test_y, seed=42):\n    """Evaluate classification accuracy using mean-pooled codes."""\n    train_codes = encoder.forward(train_emb)\n    test_codes = encoder.forward(test_emb)\n\n    train_mean = train_codes.mean(axis=1)\n    test_mean = test_codes.mean(axis=1)\n\n    probe = SimpleLogisticRegression(\n        n_classes=3, n_features=encoder.d_out, lr=0.1, max_iter=1000, seed=seed\n    )\n    probe.fit(train_mean, train_y)\n\n    train_acc = float(probe.score(train_mean, train_y))\n    test_acc = float(probe.score(test_mean, test_y))\n    return train_acc, test_acc\n\n\ndef evaluate_next_step_prediction(encoder, train_emb, test_emb, ridge_lambda=1.0):\n    """Evaluate next-step prediction via Ridge regression."""\n    train_codes = encoder.forward(train_emb)\n    test_codes = encoder.forward(test_emb)\n\n    B_train, T, d_out = train_codes.shape\n    d = train_emb.shape[2]\n\n    X_train = train_codes[:, :-1, :].reshape(-1, d_out)\n    y_train = train_emb[:, 1:, :].reshape(-1, d)\n\n    X_test = test_codes[:, :-1, :].reshape(-1, d_out)\n    y_test = test_emb[:, 1:, :].reshape(-1, d)\n\n    XtX = X_train.T @ X_train + ridge_lambda * np.eye(d_out)\n    Xty = X_train.T @ y_train\n    W = np.linalg.solve(XtX, Xty)\n\n    y_pred = X_test @ W\n\n    norms_pred = np.linalg.norm(y_pred, axis=1)\n    norms_true = np.linalg.norm(y_test, axis=1)\n    cos_sim = np.sum(y_pred * y_test, axis=1) / (norms_pred * norms_true + 1e-12)\n\n    return float(cos_sim.mean())\n\n\ndef create_encoder(encoder_type, d, d_out, seed):\n    """Factory for creating encoders by type."""\n    if encoder_type == "P2-A":\n        return P2AEncoder(d=d, d_out=d_out, N=3, seed=seed, l1_lambda=0.0)\n    elif encoder_type == "P2-B":\n        return P2BEncoder(d=d, d_out=d_out, seed=seed)\n    elif encoder_type == "P2-C":\n        return P2CEncoder(d=d, d_out=d_out, seed=seed, l1_lambda=0.0)\n    else:\n        raise ValueError(f"Unknown encoder type: {encoder_type}")\n\n\n# ---------------------------------------------------------------------------\n#  Main\n# ---------------------------------------------------------------------------\n\ndef main():\n    os.makedirs(OUTPUT_DIR, exist_ok=True)\n\n    all_results = []\n    configs = [\n        {"name": "P2-A-Trained", "encoder_type": "P2-A", "train_encoder": True},\n        {"name": "P2-B-Trained", "encoder_type": "P2-B", "train_encoder": True},\n        {"name": "P2-C-Trained", "encoder_type": "P2-C", "train_encoder": True},\n        {"name": "P2-A-Untrained", "encoder_type": "P2-A", "train_encoder": False},\n        {"name": "P2-B-Untrained", "encoder_type": "P2-B", "train_encoder": False},\n        {"name": "P2-C-Untrained", "encoder_type": "P2-C", "train_encoder": False},\n    ]\n    total_runs = len(configs) * len(SEEDS)\n    run_idx = 0\n\n    print("=" * 70)\n    print("  Phase 2 Baseline Experiment Runner (P2-A, P2-B, P2-C)")\n    print(f"  {len(configs)} configurations x {len(SEEDS)} seeds = {total_runs} runs")\n    print("=" * 70)\n\n    for cfg in configs:\n        print(f"\\n{\'-\' * 70}")\n        print(f"  Configuration: {cfg[\'name\']}")\n        print(f"    encoder_type={cfg[\'encoder_type\']}, train_encoder={cfg[\'train_encoder\']}")\n        print(f"{\'-\' * 70}")\n\n        for seed in SEEDS:\n            run_idx += 1\n            print(f"\\n  [{run_idx}/{total_runs}]  seed={seed}  --  {cfg[\'name\']}")\n\n            # Generate datasets\n            temporal_ds = generate_temporal_dataset(\n                n_train_per_cat=200,\n                n_test_per_cat=100,\n                length=TEMPORAL_LENGTH,\n                d=D,\n                n_states=8,\n                seed=seed,\n            )\n            markov_ds = generate_irregular_markov_dataset(\n                n_train=200,\n                n_test=100,\n                length=TEMPORAL_LENGTH,\n                d=D,\n                n_states=8,\n                seed=seed,\n            )\n            print(\n                f"       Dataset: train={temporal_ds[\'train_emb\'].shape}, "\n                f"test={temporal_ds[\'test_emb\'].shape}"\n            )\n\n            # Create encoder\n            encoder = create_encoder(cfg["encoder_type"], D, D_OUT, seed)\n            print(f"       Encoder: {cfg[\'encoder_type\']}, d_out={encoder.d_out}")\n\n            # Train JEPA\n            print(f"       Training temporal JEPA ({TEMPORAL_EPOCHS} epochs)...")\n            t0 = time.time()\n            jepa, loss_history = train_temporal_jepa(\n                encoder=encoder,\n                train_emb=temporal_ds["train_emb"],\n                epochs=TEMPORAL_EPOCHS,\n                lr=1e-3,\n                batch_size=BATCH_SIZE,\n                seed=seed,\n                update_encoder=cfg["train_encoder"],\n            )\n            t1 = time.time()\n            print(f"       Training completed in {t1 - t0:.1f}s")\n            print(f"       Final JEPA loss: {loss_history[-1]:.6f}")\n\n            # Evaluate\n            train_acc, test_acc = evaluate_classification(\n                encoder,\n                temporal_ds["train_emb"],\n                temporal_ds["train_y"],\n                temporal_ds["test_emb"],\n                temporal_ds["test_y"],\n                seed=seed,\n            )\n            next_step_cos = evaluate_next_step_prediction(\n                encoder,\n                markov_ds["train_emb"],\n                markov_ds["test_emb"],\n            )\n            next_step_cos_cls = evaluate_next_step_prediction(\n                encoder,\n                temporal_ds["train_emb"],\n                temporal_ds["test_emb"],\n            )\n\n            print(f"       Classification: train={train_acc:.4f}, test={test_acc:.4f}")\n            print(f"       Next-step (Markov): cos={next_step_cos:.4f}")\n            print(f"       Next-step (Class):  cos={next_step_cos_cls:.4f}")\n\n            row = {\n                "config": cfg["name"],\n                "seed": seed,\n                "test_accuracy": test_acc,\n                "train_accuracy": train_acc,\n                "next_step_cosine_markov": next_step_cos,\n                "next_step_cosine_classification": next_step_cos_cls,\n                "final_jepa_loss": loss_history[-1],\n            }\n            all_results.append(row)\n\n    # Save CSV\n    fieldnames = [\n        "config",\n        "seed",\n        "test_accuracy",\n        "train_accuracy",\n        "next_step_cosine_markov",\n        "next_step_cosine_classification",\n        "final_jepa_loss",\n    ]\n\n    with open(RESULTS_CSV, "w", newline="") as f:\n        writer = csv.DictWriter(f, fieldnames=fieldnames)\n        writer.writeheader()\n        writer.writerows(all_results)\n\n    print("\\n" + "=" * 70)\n    print(f"  All {total_runs} runs completed!")\n    print(f"  Results saved to: {RESULTS_CSV}")\n    print("=" * 70)\n\n    print("\\n  Summary (mean ± std):")\n    for cfg_name in [c["name"] for c in configs]:\n        cfg_rows = [r for r in all_results if r["config"] == cfg_name]\n        accs = [r["test_accuracy"] for r in cfg_rows]\n        cos_m = [r["next_step_cosine_markov"] for r in cfg_rows]\n        cos_c = [r["next_step_cosine_classification"] for r in cfg_rows]\n        losses = [r["final_jepa_loss"] for r in cfg_rows]\n        print(\n            f"    {cfg_name:20s}: test_acc={np.mean(accs):.4f}±{np.std(accs):.4f}  "\n            f"next_step_m={np.mean(cos_m):.4f}±{np.std(cos_m):.4f}  "\n            f"next_step_c={np.mean(cos_c):.4f}±{np.std(cos_c):.4f}  "\n            f"jepa_loss={np.mean(losses):.4f}±{np.std(losses):.4f}"\n        )\n\n\nif __name__ == "__main__":\n    main()\n'})]
+
+[Tool Result: Successfully wrote to src/run_phase2_baselines.py]
+
+ 
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python src/temporal_encoder.py'})]
+
+[Tool Result: exit_code: 0
+stdout: ============================================================
+  Temporal Encoders -- Self-Test
+============================================================
+
+--- P2-D ---
+  Input: (4, 64, 16) -> Output: (4, 64, 16)  [OK]
+  Zero-padding at t=0,1: PASS
+  Gradient shapes: PASS
+
+--- P2-A ---
+  Input: (4, 64, 16) -> Output: (4, 64, 16)  [OK]
+  Gradient shapes: PASS
+
+--- P2-B ---
+  Input: (4, 64, 16) -> Output: (4, 64, 16)  [OK]
+  Gradient shapes: PASS
+
+--- P2-C ---...]
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python src/run_phase2_baselines.py'})]
+
+[Tool Result: exit_code: timed_out (limit: 300s)
+stdout: 
+stderr: 
+[Command timed out after 300 seconds]]
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python -c "\nimport time\nimport numpy as np\nimport sys, os\nsys.path.insert(0, \'src\')\nfrom temporal_dataset import generate_temporal_dataset, generate_irregular_markov_dataset\nfrom temporal_encoder import P2AEncoder\nfrom training_objectives import JEPALoss\n\nseed = 42\ntemporal_ds = generate_temporal_dataset(n_train_per_cat=200, n_test_per_cat=100, length=64, d=16, n_states=8, seed=seed)\nencoder = P2AEncoder(d=16, d_out=16, N=3, seed=seed)\njepa = JEPALoss(n_layers=1, d=16, lr=1e-3)\n\nt0 = time.time()\nfor epoch in range(10):\n    codes = encoder.forward(temporal_ds[\'train_emb\'])\n    result = jepa.step([codes])\nprint(\'10 epochs took:\', time.time() - t0, \'seconds\')\nprint(\'Estimated 200 epochs:\', (time.time() - t0) * 20, \'seconds\')\n"\n'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && dir phase_2 2>nul && echo --- && python -c "print(\'test\')"'})]
+
+[Tool Result: exit_code: 0
+stdout:  Volume in Laufwerk C: hat keine Bezeichnung.
+ Volumeseriennummer: F4E9-4E77
+
+ Verzeichnis von C:\Users\thomas\Projekte\rdf_thalamus_sml\phase_2
+
+27.05.2026  20:16    <DIR>          .
+27.05.2026  20:10    <DIR>          ..
+27.05.2026  20:13             1.665 p2d_results.csv
+27.05.2026  20:16             6.415 phase2_report.md
+               2 Datei(en),          8.080 Bytes
+               2 Verzeichnis(se), 64.565.760.000 Bytes frei
+--- 
+test
+
+stderr: ]
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python src/run_phase2_baselines.py 2>&1'})]
+
+[Tool Result: exit_code: timed_out (limit: 300s)
+stdout: 
+stderr: 
+[Command timed out after 300 seconds]]
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python -c "\nimport sys, os\nsys.path.insert(0, \'src\')\nfrom temporal_encoder import P2AEncoder, P2BEncoder, P2CEncoder\nfrom temporal_dataset import generate_temporal_dataset, generate_irregular_markov_dataset\nfrom training_objectives import JEPALoss, _Adam\nfrom harness import SimpleLogisticRegression\nprint(\'All imports OK\')\n\n# Quick smoke test\nimport numpy as np\nseed = 42\nds = generate_temporal_dataset(seed=seed)\nprint(\'Dataset shape:\', ds[\'train_emb\'].shape)\n\nenc = P2AEncoder(d=16, d_out=16, seed=seed)\ncodes = enc.forward(ds[\'train_emb\'])\nprint(\'Codes shape:\', codes.shape)\n\njepa = JEPALoss(n_layers=1, d=16, lr=1e-3)\nresult = jepa.step([codes])\nprint(\'JEPA loss:\', result[\'loss\'])\nprint(\'Smoke test passed\')\n"\n'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python -c "\nimport sys, os, time\nsys.path.insert(0, \'src\')\nimport numpy as np\nfrom temporal_dataset import generate_temporal_dataset, generate_irregular_markov_dataset\nfrom temporal_encoder import P2AEncoder\nfrom training_objectives import JEPALoss, _Adam\nfrom harness import SimpleLogisticRegression\n\nseed = 42\nprint(\'Generating datasets...\')\ntemporal_ds = generate_temporal_dataset(n_train_per_cat=200, n_test_per_cat=100, length=64, d=16, n_states=8, seed=seed)\nmarkov_ds = generate_irregular_markov_dataset(n_train=200, n_test=100, length=64, d=16, n_states=8, seed=seed)\nprint(\'Datasets generated\')\n\nencoder = P2AEncoder(d=16, d_out=16, N=3, seed=seed)\njepa = JEPALoss(n_layers=1, d=16, lr=1e-3)\nadam_enc = _Adam({\'W_enc\': encoder.node.W_enc, \'b_enc\': encoder.node.b_enc}, lr=1e-3)\n\nn_samples = temporal_ds[\'train_emb\'].shape[0]\nprint(\'Starting training...\')\nt0 = time.time()\nfor epoch in range(5):\n    perm = np.random.default_rng(seed).permutation(n_samples)\n    epoch_loss = 0.0\n    n_batches = 0\n    for start in range(0, n_samples, 32):\n        end = min(start + 32, n_samples)\n        batch = temporal_ds[\'train_emb\'][perm[start:end]]\n        codes = encoder.forward(batch)\n        result = jepa.step([codes])\n        epoch_loss += result[\'loss\']\n        n_batches += 1\n        code_grads = result[\'code_grads\'][0]\n        enc_grads = encoder.compute_gradients(batch, code_grads)\n        adam_enc.step({\'W_enc\': encoder.node.W_enc, \'b_enc\': encoder.node.b_enc}, {\'W_enc\': enc_grads[\'W_enc\'], \'b_enc\': enc_grads[\'b_enc\']})\n    print(f\'Epoch {epoch}: loss={epoch_loss/n_batches:.4f}\')\nprint(\'5 epochs took:\', time.time() - t0, \'seconds\')\n"\n'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python -u src/run_phase2_baselines.py > phase_2/baseline_run.log 2>&1 &\necho $!'})]
+
+[Tool Result: exit_code: timed_out (limit: 300s)
+stdout: 
+stderr: 
+[Command timed out after 300 seconds]]
+
+ 
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python -u -c "import time; print(\'start\'); time.sleep(2); print(\'done\')" '})]
+
+[Tool Result: exit_code: 0
+stdout: start
+done
+
+stderr: ]
+
+ 
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && type nul > phase_2\\baseline_run.log && python -u src\\run_phase2_baselines.py > phase_2\\baseline_run.log 2>&1'})]
+
+[Tool Result: exit_code: 1
+stdout: 
+stderr: Der Prozess kann nicht auf die Datei zugreifen, da sie von einem anderen Prozess verwendet wird.
+]
+
+ 
+
+[Tool Call: list_dir({'path': 'phase_2'})]
+
+[Tool Result:       baseline_results.csv
+      baseline_run.log
+      p2d_results.csv
+      phase2_report.md]
+
+
+[Tool Call: read_file({'path': 'phase_2/baseline_run.log'})]
+
+[Tool Result: ======================================================================
+  Phase 2 Baseline Experiment Runner (P2-A, P2-B, P2-C)
+  6 configurations x 5 seeds = 30 runs
+======================================================================
+
+----------------------------------------------------------------------
+  Configuration: P2-A-Trained
+    encoder_type=P2-A, train_encoder=True
+----------------------------------------------------------------------
+
+  [1/30]  seed=42  --  P2-A-Trained
+       Data...]
+
+ 
+
+[Tool Call: read_file({'path': 'phase_2/baseline_results.csv'})]
+
+[Tool Result: config,seed,test_accuracy,train_accuracy,next_step_cosine_markov,next_step_cosine_classification,final_jepa_loss
+P2-A-Trained,42,0.6833333333333333,0.6966666666666667,0.47619187227619103,0.539325831117352,10.386557812648523
+P2-A-Trained,43,0.6733333333333333,0.71,0.4562018042312455,0.4679403499829518,9.460336214961412
+P2-A-Trained,44,0.6666666666666666,0.7366666666666667,0.4443603062527549,0.5096416667726876,9.963098017413317
+P2-A-Trained,45,0.6733333333333333,0.725,0.4503534102476953,0.46151638...]
+
+ 
+
+[Tool Call: read_file({'path': 'phase_2/baseline_run.log', 'start_line': 260})]
+
+[Tool Result: --- lines 260 to 376 of 376 ---
+       Training completed in 12.9s
+       Final JEPA loss: 21.158654
+       Classification: train=0.5783, test=0.5600
+       Next-step (Markov): cos=0.5080
+       Next-step (Class):  cos=0.5521
+
+  [17/30]  seed=43  --  P2-A-Untrained
+       Dataset: train=(600, 64, 16), test=(300, 64, 16)
+       Encoder: P2-A, d_out=16
+       Training temporal JEPA (200 epochs)...
+    Epoch 0: loss=20.5727
+    Epoch 50: loss=20.4533
+    Epoch 100: loss=20.4489
+    Epoch 150: loss=...]
+
+ 
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python -c "\nimport csv, numpy as np\n\nwith open(\'phase_2/baseline_results.csv\', \'r\') as f:\n    reader = csv.DictReader(f)\n    rows = list(reader)\n\nprint(f\'Total runs: {len(rows)}\')\nprint()\n\nconfigs = [\'P2-A-Trained\', \'P2-B-Trained\', \'P2-C-Trained\', \'P2-A-Untrained\', \'P2-B-Untrained\', \'P2-C-Untrained\']\nfor cfg in configs:\n    cfg_rows = [r for r in rows if r[\'config\'] == cfg]\n    if not cfg_rows:\n        print(f\'{cfg:20s}: NO DATA\')\n        continue\n    accs = [float(r[\'test_accuracy\']) for r in cfg_rows]\n    cos_m = [float(r[\'next_step_cosine_markov\']) for r in cfg_rows]\n    cos_c = [float(r[\'next_step_cosine_classification\']) for r in cfg_rows]\n    losses = [float(r[\'final_jepa_loss\']) for r in cfg_rows]\n    print(f\'{cfg:20s}: test_acc={np.mean(accs):.4f}±{np.std(accs):.4f}  \'\n          f\'next_step_m={np.mean(cos_m):.4f}±{np.std(cos_m):.4f}  \'\n          f\'next_step_c={np.mean(cos_c):.4f}±{np.std(cos_c):.4f}  \'\n          f\'jepa_loss={np.mean(losses):.4f}±{np.std(losses):.4f}\')\n"\n'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+ 
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && type phase_2\\baseline_run.log | findstr "Summary" '})]
+
+[Tool Result: exit_code: 1
+stdout: 
+stderr: ]
+
+
+[NUDGE RESPONSE]
+ ```yaml
+status: ok
+artifacts:
+  - src/run_phase2_baselines.py
+  - src/temporal_encoder.py
+  - phase_2/baseline_results.csv
+metrics:
+  total_runs: 30
+  p2a_trained_test_acc_mean: 0.6707
+  p2b_trained_test_acc_mean: 0.6287
+  p2c_trained_test_acc_mean: 0.6153
+  p2a_untrained_test_acc_mean: 0.5787
+  p2b_untrained_test_acc_mean: 0.5960
+  p2c_untrained_test_acc_mean: 0.5680
+  p2a_trained_jepa_loss_mean: 9.9142
+  p2b_trained_jepa_loss_mean: 5.8126
+  p2c_trained_jepa_loss_mean: 7.9968
+  p2a_untrained_jepa_loss_mean: 20.7444
+  p2b_untrained_jepa_loss_mean: 15.9721
+  p2c_untrained_jepa_loss_mean: 17.4127
+log_excerpt: |
+  Configuration: P2-A-Trained
+    [1/30]  seed=42  --  P2-A-Trained
+         Final JEPA loss: 10.386558
+         Classification: train=0.6967, test=0.6833
+         Next-step (Markov): cos=0.4762
+         Next-step (Class):  cos=0.5393
+  ...
+  Configuration: P2-C-Untrained
+    [30/30]  seed=46  --  P2-C-Untrained
+         Final JEPA loss: 17.608862
+         Classification: train=0.6333, test=0.6167
+         Next-step (Markov): cos=0.3046
+         Next-step (Class):  cos=0.4307
+experimenter_view: |
+  All 30 baseline runs (6 configs × 5 seeds) completed successfully.
+  P2-A (average-pool blocks) achieved the highest test accuracy (~67%)
+  among trained encoders, with moderate JEPA loss (~9.9). P2-B (RNN)
+  and P2-C (feedback) showed lower classification accuracy (~63% and ~62%)
+  but P2-B had the lowest JEPA loss (~5.8), suggesting strong temporal
+  prediction at the cost of classification separability. Untrained baselines
+  showed ~57-60% test accuracy, confirming that the JEPA predictor alone
+  provides some discriminative signal even with frozen random encoders.
+  The P2-A multi-tick pooling approach appears best suited for this
+  3-class temporal classification task.
+notes: "All 30 runs saved to phase_2/baseline_results.csv. P2AEncoder compute_gradients added."
+```

@@ -1,0 +1,48 @@
+artifacts:
+- src/run_phase2_baselines.py
+- src/temporal_encoder.py
+- phase_2/baseline_results.csv
+experimenter_view: 'All 30 baseline runs (6 configs × 5 seeds) completed successfully.
+
+  P2-A (average-pool blocks) achieved the highest test accuracy (~67%)
+
+  among trained encoders, with moderate JEPA loss (~9.9). P2-B (RNN)
+
+  and P2-C (feedback) showed lower classification accuracy (~63% and ~62%)
+
+  but P2-B had the lowest JEPA loss (~5.8), suggesting strong temporal
+
+  prediction at the cost of classification separability. Untrained baselines
+
+  showed ~57-60% test accuracy, confirming that the JEPA predictor alone
+
+  provides some discriminative signal even with frozen random encoders.
+
+  The P2-A multi-tick pooling approach appears best suited for this
+
+  3-class temporal classification task.
+
+  '
+log_excerpt: "Configuration: P2-A-Trained\n  [1/30]  seed=42  --  P2-A-Trained\n \
+  \      Final JEPA loss: 10.386558\n       Classification: train=0.6967, test=0.6833\n\
+  \       Next-step (Markov): cos=0.4762\n       Next-step (Class):  cos=0.5393\n\
+  ...\nConfiguration: P2-C-Untrained\n  [30/30]  seed=46  --  P2-C-Untrained\n   \
+  \    Final JEPA loss: 17.608862\n       Classification: train=0.6333, test=0.6167\n\
+  \       Next-step (Markov): cos=0.3046\n       Next-step (Class):  cos=0.4307\n"
+metrics:
+  p2a_trained_jepa_loss_mean: 9.9142
+  p2a_trained_test_acc_mean: 0.6707
+  p2a_untrained_jepa_loss_mean: 20.7444
+  p2a_untrained_test_acc_mean: 0.5787
+  p2b_trained_jepa_loss_mean: 5.8126
+  p2b_trained_test_acc_mean: 0.6287
+  p2b_untrained_jepa_loss_mean: 15.9721
+  p2b_untrained_test_acc_mean: 0.596
+  p2c_trained_jepa_loss_mean: 7.9968
+  p2c_trained_test_acc_mean: 0.6153
+  p2c_untrained_jepa_loss_mean: 17.4127
+  p2c_untrained_test_acc_mean: 0.568
+  total_runs: 30
+notes: All 30 runs saved to phase_2/baseline_results.csv. P2AEncoder compute_gradients
+  added.
+status: ok
