@@ -1,0 +1,52 @@
+artifacts:
+- test_training.py
+experimenter_view: 'The hierarchical encoder successfully trains for 5 epochs per
+  layer with
+
+  cross-layer weight sharing (sharing_mode=''cross_layer'', d=8). Training loss
+
+  decreases monotonically across all three layers: Layer 0 from 0.000072 to
+
+  0.000055; Layer 1 from 0.000051 to 0.000043; Layer 2 from 0.000053 to 0.000044.
+
+  The embedding matrix changes by max absolute value 0.000244 (from an initial
+
+  uniform range of ±0.01) — a small but non-zero update, indicating that the
+
+  gradient signal successfully reaches back to the embedding layer. Cross-layer
+
+  weight sync is verified (all layers share identical W_enc). Loss values are
+
+  very low overall, suggesting the auto-encoder reconstruction task is relatively
+
+  easy for binary data with d=8 per slot. Future work may explore longer training,
+
+  sparsity induction, or the effect of downstream classification.
+
+  '
+log_excerpt: "[4] Training for 5 epochs per layer...\n  Layer 0:\n    Epoch  1:  loss\
+  \ = 0.000072\n    Epoch  2:  loss = 0.000067\n    Epoch  3:  loss = 0.000063\n \
+  \   Epoch  4:  loss = 0.000059\n    Epoch  5:  loss = 0.000055\n  Layer 1:\n   \
+  \ Epoch  1:  loss = 0.000051\n    Epoch  2:  loss = 0.000048\n    Epoch  3:  loss\
+  \ = 0.000047\n    Epoch  4:  loss = 0.000045\n    Epoch  5:  loss = 0.000043\n \
+  \ Layer 2:\n    Epoch  1:  loss = 0.000053\n    Epoch  2:  loss = 0.000050\n   \
+  \ Epoch  3:  loss = 0.000048\n    Epoch  4:  loss = 0.000046\n    Epoch  5:  loss\
+  \ = 0.000044\n[6] Embedding change analysis:\n    Max absolute change: 0.00024407\n\
+  [7] Cross-layer weight sync check:\n    Layer 1 W_enc == Layer 0 W_enc: True\n \
+  \   Layer 2 W_enc == Layer 0 W_enc: True\n    All layers share weights: True\n"
+metrics:
+  cross_layer_sync: true
+  d_out: 24
+  loss_layer0_epoch5: 5.5e-05
+  loss_layer1_epoch5: 4.3e-05
+  loss_layer2_epoch5: 4.4e-05
+  max_embedding_change: 0.00024407
+  n_layers: 3
+  n_test: 500
+  n_train: 1000
+  nodes_per_layer:
+  - 14
+  - 12
+  - 10
+notes: Test training script written and executed successfully; all requirements satisfied.
+status: ok
