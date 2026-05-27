@@ -16,7 +16,11 @@ def get_encoder(encoder_id):
 from .lookup_table import LookupTableEncoder
 from .spatial_pooler import SpatialPoolerEncoder
 from .som import SOMEncoder
+from .sparse_autoencoder import SparseAutoencoder
+from .predictive_coding import PredictiveCodingEncoder
 
 register_encoder("p0-a", LookupTableEncoder)
 register_encoder("p0-b", SpatialPoolerEncoder)
 register_encoder("p0-c", SOMEncoder)
+register_encoder("p0-d", SparseAutoencoder)
+register_encoder("p0-e", PredictiveCodingEncoder)
