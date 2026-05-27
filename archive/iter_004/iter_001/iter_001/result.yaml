@@ -1,0 +1,37 @@
+artifacts:
+- src/pre_registration.md
+- src/temporal_dataset.py
+- src/temporal_encoder.py
+- src/run_phase2.py
+- src/test_temporal.py
+experimenter_view: "All Phase 2 infrastructure has been successfully implemented and\
+  \ validated:\n\n1. Pre-registration updated with F0 criterion at the top, keeping\
+  \ F1-F3.\n2. Temporal dataset generator creates 200 train / 100 test sequences per\n\
+  \   category (periodic, random, irregular) with length 64 and d=16 embeddings\n\
+  \   using Xavier-scaled standard normal initialization.\n3. Held-out irregular Markov\
+  \ dataset generator for next-step prediction.\n4. Four temporal encoders implemented:\n\
+  \   - P2DEncoder: Sliding-window UniversalNode with zero-padding\n   - P2AEncoder:\
+  \ Average-pool non-overlapping N=3 blocks\n   - P2BEncoder: Recurrent tanh RNN\n\
+  \   - P2CEncoder: Feedback loop with learned projection\n5. JEPALoss integration\
+  \ verified with gradient backpropagation.\n6. Linear probe and next-step prediction\
+  \ (Ridge regression) pipelines ready.\n7. run_phase2.py implements all 3 configurations\
+  \ (Zero-Shot, Trained, Untrained)\n   across 5 seeds with full evaluation metrics.\n\
+  \nAll self-tests pass. The main experiment runner is ready to execute.\nThe experiments\
+  \ over seeds 42-46 have not yet been run due to execution limit.\n"
+log_excerpt: "============================================================\n  Temporal\
+  \ Dataset -- Self-Test\n============================================================\n\
+  \  Train sequences: (600, 64)\n  Train embeddings: (600, 64, 16)\n  Train labels:\
+  \ (600,)\n  Test sequences: (300, 64)\n  Test embeddings: (300, 64, 16)\n  Test\
+  \ labels: (300,)\n  Embedding table: (8, 16)\n  Embedding lookup consistency: PASS\n\
+  \  Held-out Markov dataset: PASS\n\n  ALL SELF-TESTS PASSED\n============================================================\n\
+  \n============================================================\n  Temporal Encoders\
+  \ -- Self-Test\n============================================================\n\n\
+  --- P2-D ---\n  Input: (4, 64, 16) -> Output: (4, 64, 16)  [OK]\n  Zero-padding\
+  \ at t=0,1: PASS\n  Gradient shapes: PASS\n\n--- P2-A ---\n  Input: (4, 64, 16)\
+  \ -> Output: (4, 64, 16)  [OK]\n\n--- P2-B ---\n  Input: (4, 64, 16) -> Output:\
+  \ (4, 64, 16)  [OK]\n  Gradient shapes: PASS\n\n--- P2-C ---\n  Input: (4, 64, 16)\
+  \ -> Output: (4, 64, 16)  [OK]\n  Gradient shapes: PASS\n\n------------------------------------------------------------\n\
+  \  ALL SELF-TESTS PASSED\n============================================================\n"
+metrics: {}
+notes: Infrastructure complete and tested; main experiments pending execution.
+status: ok

@@ -21,6 +21,10 @@ applicable along any axis.
 ## 2. Falsification Criterion
 The hypothesis is falsified if ANY of the following hold:
 
+F0 (Spatial baseline failure): The spatially-trained Phase-1 encoder fails to achieve
+>20% test accuracy on its native spatial task. If the spatial training itself is
+broken, no valid transfer claim can be made.
+
 F1 (Transfer failure): Spatially-trained weights applied temporally yield
 periodic-vs-random classification accuracy ≤5pp above the untrained-weight
 temporal baseline. This would mean the node learns axis-specific (spatial)
