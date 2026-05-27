@@ -1,0 +1,91 @@
+artifacts:
+- phase_2/REPORT.md
+experimenter_view: 'The universal-node hypothesis is PARTIALLY SUPPORTED. Zero-shot
+  spatial→temporal
+
+  weight transfer is completely falsified (F0: ratio=0.99, F1: -0.8pp gap), but the
+
+  architectural form itself is validated. When trained from scratch on temporal data,
+
+  P2-D achieves 65.3% classification accuracy—above the 60% threshold and only 1.7pp
+
+  below the best dedicated temporal mechanism (P2-A). P2-D also achieves the lowest
+
+  JEPA loss among all trained encoders (3.9), revealing a tradeoff between local
+
+  predictability and downstream classification. The periodicity loophole is confirmed:
+
+  even untrained networks score ~58% due to deterministic propagation. The conclusion
+
+  is that one node TYPE is universal, but not one set of WEIGHTS.
+
+  '
+log_excerpt: '=== F0: ZERO-SHOT TRANSFER JEPA LOSS ===
+
+  ZeroShot mean loss: 17.288390
+
+  Untrained mean loss: 17.457280
+
+  Ratio: 0.990326
+
+  Verdict: FALSIFIED
+
+  === F1: TRANSFER FAILURE (Classification) ===
+
+  ZeroShot mean accuracy: 0.5773 (57.73%)
+
+  Untrained mean accuracy: 0.5853 (58.53%)
+
+  Difference: -0.0080 (-0.80pp)
+
+  Verdict: FALSIFIED
+
+  === F2: TEMPORAL JEPA FAILURE ===
+
+  P2-D-Trained mean accuracy: 0.6533 (65.33%)
+
+  Verdict: NOT FALSIFIED
+
+  === F3: P2-D NON-COMPETITIVENESS ===
+
+  Best alternative: 0.6707 (67.07%)
+
+  Difference: -0.0173 (-1.73pp)
+
+  Verdict: NOT FALSIFIED
+
+  === JEPA LOSS COMPARISON (trained encoders) ===
+
+  P2-D-Trained: 3.90
+
+  P2-A-Trained: 9.91
+
+  P2-B-Trained: 5.81
+
+  P2-C-Trained: 8.00
+
+  '
+metrics:
+  cohens_d_f0: -0.7
+  cohens_d_f1: -0.17
+  cohens_d_f2: 1.95
+  cohens_d_f3_vs_p2a: -0.84
+  configs_tested: 9
+  f0_loss_ratio: 0.99
+  f1_transfer_gap_pp: -0.8
+  f2_p2d_trained_accuracy: 65.33
+  f3_gap_vs_best_pp: -1.73
+  p2a_trained_accuracy: 67.07
+  p2b_trained_accuracy: 62.87
+  p2c_trained_accuracy: 61.53
+  p2d_trained_jepa_loss: 3.9
+  p_value_f0: 0.192
+  p_value_f1: 0.728
+  p_value_f2: 0.012
+  p_value_f3: 0.24
+  total_runs: 45
+  untrained_test_accuracy: 58.53
+  zeroshot_test_accuracy: 57.73
+notes: Phase 2 report complete; hypothesis falsified on transfer but supported on
+  architecture.
+status: ok

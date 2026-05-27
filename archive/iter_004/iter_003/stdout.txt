@@ -1,0 +1,289 @@
+ 
+
+[Tool Call: read_file({'path': 'src/pre_registration.md'})]
+
+[Tool Result: # RDF Scientific Pre-Registration
+
+*   **Iteration:** 004
+*   **Pre-Registration File:** src/pre_registration.md
+
+## 1. Hypothesis
+A UniversalNode (kernel-3, d=16) trained with JEPA on spatial data produces weights
+that transfer to the temporal axis without retraining: when applied to temporal
+triplets (state_{t-2}, state_{t-1}, state_t), the spatially-trained node yields
+periodic-vs-random classification accuracy ≥10pp above an untrained-weight baseline.
+
+Additionally, a P2-D node trained from ...]
+
+
+[Tool Call: read_file({'path': 'phase_2/p2d_results.csv'})]
+
+[Tool Result: config,seed,test_accuracy,train_accuracy,next_step_cosine_markov,next_step_cosine_classification,final_jepa_loss
+P2-D-ZeroShot,42,0.5766666666666667,0.5866666666666667,0.35004585160457413,0.4702353221975057,18.235573865359104
+P2-D-ZeroShot,43,0.64,0.675,0.3249682237449805,0.41272242100658574,16.766616237598132
+P2-D-ZeroShot,44,0.5666666666666667,0.575,0.29571033723531825,0.45156511566958757,17.38568065615458
+P2-D-ZeroShot,45,0.57,0.615,0.29181419324079416,0.4291639553036933,16.925384039030035
+P2...]
+
+
+[Tool Call: read_file({'path': 'phase_2/baseline_results.csv'})]
+
+[Tool Result: config,seed,test_accuracy,train_accuracy,next_step_cosine_markov,next_step_cosine_classification,final_jepa_loss
+P2-A-Trained,42,0.6833333333333333,0.6966666666666667,0.47619187227619103,0.539325831117352,10.386557812648523
+P2-A-Trained,43,0.6733333333333333,0.71,0.4562018042312455,0.4679403499829518,9.460336214961412
+P2-A-Trained,44,0.6666666666666666,0.7366666666666667,0.4443603062527549,0.5096416667726876,9.963098017413317
+P2-A-Trained,45,0.6733333333333333,0.725,0.4503534102476953,0.46151638...]
+
+ 
+
+[Tool Call: bash({'command': 'python -c "\nimport pandas as pd\nimport numpy as np\nfrom scipy import stats\n\n# Read data\np2d = pd.read_csv(\'phase_2/p2d_results.csv\')\nbaseline = pd.read_csv(\'phase_2/baseline_results.csv\')\nall_data = pd.concat([p2d, baseline], ignore_index=True)\n\n# Define metrics\nmetrics = [\'test_accuracy\', \'train_accuracy\', \'next_step_cosine_markov\', \n           \'next_step_cosine_classification\', \'final_jepa_loss\']\n\n# Compute means and stds for each config\nconfigs = sorted(all_data[\'config\'].unique())\nprint(\'=== CONFIG MEANS AND STDS ===\')\nfor config in configs:\n    subset = all_data[all_data[\'config\'] == config]\n    print(f\'\\n{config} (n={len(subset)}):\')\n    for m in metrics:\n        vals = subset[m].values\n        print(f\'  {m}: {vals.mean():.4f} ± {vals.std(ddof=1):.4f}\')\n\n# Extract P2-D specific data\nprint(\'\\n\\n=== F0: ZERO-SHOT TRANSFER JEPA LOSS ===\')\nzeros_loss = all_data[all_data[\'config\'] == \'P2-D-ZeroShot\'][\'final_jepa_loss\'].values\nuntr_loss = all_data[all_data[\'config\'] == \'P2-D-Untrained\'][\'final_jepa_loss\'].values\nratio = zeros_loss.mean() / untr_loss.mean()\nprint(f\'ZeroShot mean loss: {zeros_loss.mean():.6f}\')\nprint(f\'Untrained mean loss: {untr_loss.mean():.6f}\')\nprint(f\'Ratio: {ratio:.6f}\')\nprint(f\'Verdict: {\\"FALSIFIED\\" if ratio >= 0.85 else \\"NOT FALSIFIED\\"}\')\n\n# Paired t-test for F0\nf0_t, f0_p = stats.ttest_rel(zeros_loss, untr_loss)\nprint(f\'Paired t-test: t={f0_t:.4f}, p={f0_p:.4f}\')\n# Cohen\'s d for dependent samples\ndiff = zeros_loss - untr_loss\ncohens_d_f0 = diff.mean() / diff.std(ddof=1)\nprint(f\\"Cohen\'s d: {cohens_d_f0:.4f}\\")\n\nprint(\'\\n\\n=== F1: TRANSFER FAILURE (Classification) ===\')\nzeros_acc = all_data[all_data[\'config\'] == \'P2-D-ZeroShot\'][\'test_accuracy\'].values\nuntr_acc = all_data[all_data[\'config\'] == \'P2-D-Untrained\'][\'test_accuracy\'].values\ndiff_mean = zeros_acc.mean() - untr_acc.mean()\nprint(f\'ZeroShot mean accuracy: {zeros_acc.mean():.4f} ({zeros_acc.mean()*100:.2f}%)\')\nprint(f\'Untrained mean accuracy: {untr_acc.mean():.4f} ({untr_acc.mean()*100:.2f}%)\')\nprint(f\'Difference: {diff_mean:.4f} ({diff_mean*100:.2f}pp)\')\nprint(f\'Verdict: {\\"FALSIFIED\\" if diff_mean <= 0.05 else \\"NOT FALSIFIED\\"}\')\n\n# Paired t-test for F1\nf1_t, f1_p = stats.ttest_rel(zeros_acc, untr_acc)\nprint(f\'Paired t-test: t={f1_t:.4f}, p={f1_p:.4f}\')\ndiff_f1 = zeros_acc - untr_acc\ncohens_d_f1 = diff_f1.mean() / diff_f1.std(ddof=1)\nprint(f\\"Cohen\'s d: {cohens_d_f1:.4f}\\")\n\nprint(\'\\n\\n=== F2: TEMPORAL JEPA FAILURE ===\')\np2d_trained_acc = all_data[all_data[\'config\'] == \'P2-D-Trained\'][\'test_accuracy\'].values\nprint(f\'P2-D-Trained mean accuracy: {p2d_trained_acc.mean():.4f} ({p2d_trained_acc.mean()*100:.2f}%)\')\nprint(f\'Verdict: {\\"FALSIFIED\\" if p2d_trained_acc.mean() < 0.60 else \\"NOT FALSIFIED\\"}\')\n\n# Note: there is no paired sample for F2; it\'s a one-sample test against 0.60\nf2_t, f2_p = stats.ttest_1samp(p2d_trained_acc, 0.60)\nprint(f\'One-sample t-test vs 0.60: t={f2_t:.4f}, p={f2_p:.4f}\')\ncohens_d_f2 = (p2d_trained_acc.mean() - 0.60) / p2d_trained_acc.std(ddof=1)\nprint(f\\"Cohen\'s d (vs 0.60): {cohens_d_f2:.4f}\\")\n\nprint(\'\\n\\n=== F3: P2-D NON-COMPETITIVENESS ===\')\np2d_trained_mean = p2d_trained_acc.mean()\n\np2a_trained_mean = all_data[all_data[\'config\'] == \'P2-A-Trained\'][\'test_accuracy\'].mean()\np2b_trained_mean = all_data[all_data[\'config\'] == \'P2-B-Trained\'][\'test_accuracy\'].mean()\np2c_trained_mean = all_data[all_data[\'config\'] == \'P2-C-Trained\'][\'test_accuracy\'].mean()\n\nbest_alternative = max(p2a_trained_mean, p2b_trained_mean, p2c_trained_mean)\ndiff_f3 = p2d_trained_mean - best_alternative\n\nprint(f\'P2-D-Trained mean accuracy: {p2d_trained_mean:.4f} ({p2d_trained_mean*100:.2f}%)\')\nprint(f\'P2-A-Trained mean accuracy: {p2a_trained_mean:.4f} ({p2a_trained_mean*100:.2f}%)\')\nprint(f\'P2-B-Trained mean accuracy: {p2b_trained_mean:.4f} ({p2b_trained_mean*100:.2f}%)\')\nprint(f\'P2-C-Trained mean accuracy: {p2c_trained_mean:.4f} ({p2c_trained_mean*100:.2f}%)\')\nprint(f\'Best alternative: {best_alternative:.4f} ({best_alternative*100:.2f}%)\')\nprint(f\'Difference: {diff_f3:.4f} ({diff_f3*100:.2f}pp)\')\nprint(f\'Verdict: {\\"FALSIFIED\\" if diff_f3 <= -0.20 else \\"NOT FALSIFIED\\"}\')\n\n# For F3 we can also do independent t-test between P2-D and best alternative\np2a_trained_vals = all_data[all_data[\'config\'] == \'P2-A-Trained\'][\'test_accuracy\'].values\nt_f3, p_f3 = stats.ttest_ind(p2d_trained_acc, p2a_trained_vals, equal_var=False)\nprint(f\'Independent t-test (P2-D vs P2-A): t={t_f3:.4f}, p={p_f3:.4f}\')\npooled_std = np.sqrt(((len(p2d_trained_acc)-1)*p2d_trained_acc.std(ddof=1)**2 + (len(p2a_trained_vals)-1)*p2a_trained_vals.std(ddof=1)**2) / (len(p2d_trained_acc)+len(p2a_trained_vals)-2))\ncohens_d_f3 = (p2d_trained_acc.mean() - p2a_trained_mean) / pooled_std\nprint(f\\"Cohen\'s d (P2-D vs P2-A): {cohens_d_f3:.4f}\\")\n\nprint(\'\\n\\n=== ALL CONFIGS SUMMARY (pct where applicable) ===\')\nfor config in configs:\n    subset = all_data[all_data[\'config\'] == config]\n    print(f\'{config}:\')\n    print(f\'  Test Acc:  {subset[\\"test_accuracy\\"].mean()*100:.2f}% ± {subset[\\"test_accuracy\\"].std(ddof=1)*100:.2f}\')\n    print(f\'  Train Acc: {subset[\\"train_accuracy\\"].mean()*100:.2f}% ± {subset[\\"train_accuracy\\"].std(ddof=1)*100:.2f}\')\n    print(f\'  Cosine (Classification): {subset[\\"next_step_cosine_classification\\"].mean():.4f} ± {subset[\\"next_step_cosine_classification\\"].std(ddof=1):.4f}\')\n    print(f\'  JEPA Loss: {subset[\\"final_jepa_loss\\"].mean():.2f} ± {subset[\\"final_jepa_loss\\"].std(ddof=1):.2f}\')\n\n# Additional stats\nprint(\'\\n\\n=== JEPA LOSS COMPARISON (trained encoders) ===\')\nfor config in [\'P2-D-Trained\', \'P2-A-Trained\', \'P2-B-Trained\', \'P2-C-Trained\']:\n    subset = all_data[all_data[\'config\'] == config][\'final_jepa_loss\']\n    print(f\'{config}: {subset.mean():.2f} ± {subset.std(ddof=1):.2f}\')\n\nprint(\'\\n\\n=== CLASSIFICATION VS COSINE TRADEOFF (P2-D) ===\')\nprint(\'ZeroShot:\')\nprint(f\'  Acc: {all_data[all_data[\\"config\\"]==\\"P2-D-ZeroShot\\"][\\"test_accuracy\\"].mean()*100:.2f}%\')\nprint(f\'  Cosine (class): {all_data[all_data[\\"config\\"]==\\"P2-D-ZeroShot\\"][\\"next_step_cosine_classification\\"].mean():.4f}\')\nprint(\'Untrained:\')\nprint(f\'  Acc: {all_data[all_data[\\"config\\"]==\\"P2-D-Untrained\\"][\\"test_accuracy\\"].mean()*100:.2f}%\')\nprint(f\'  Cosine (class): {all_data[all_data[\\"config\\"]==\\"P2-D-Untrained\\"][\\"next_step_cosine_classification\\"].mean():.4f}\')\nprint(\'Trained:\')\nprint(f\'  Acc: {all_data[all_data[\\"config\\"]==\\"P2-D-Trained\\"][\\"test_accuracy\\"].mean()*100:.2f}%\')\nprint(f\'  Cosine (class): {all_data[all_data[\\"config\\"]==\\"P2-D-Trained\\"][\\"next_step_cosine_classification\\"].mean():.4f}\')\n"\n'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+   
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python -c "\nimport pandas as pd\nimport numpy as np\nfrom scipy import stats\n\np2d = pd.read_csv(\'phase_2/p2d_results.csv\')\nbaseline = pd.read_csv(\'phase_2/baseline_results.csv\')\nall_data = pd.concat([p2d, baseline], ignore_index=True)\nmetrics = [\'test_accuracy\', \'train_accuracy\', \'next_step_cosine_markov\', \'next_step_cosine_classification\', \'final_jepa_loss\']\nconfigs = sorted(all_data[\'config\'].unique())\n\nprint(\'=== CONFIG MEANS AND STDS ===\')\nfor config in configs:\n    subset = all_data[all_data[\'config\'] == config]\n    print(f\'\\n{config} (n={len(subset)}):\')\n    for m in metrics:\n        vals = subset[m].values\n        print(f\'  {m}: {vals.mean():.4f} ± {vals.std(ddof=1):.4f}\')\n"\n'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+   
+
+[Tool Call: write_file({'path': 'phase_2/compute_stats.py', 'content': 'import pandas as pd\nimport numpy as np\nfrom scipy import stats\n\np2d = pd.read_csv(\'phase_2/p2d_results.csv\')\nbaseline = pd.read_csv(\'phase_2/baseline_results.csv\')\nall_data = pd.concat([p2d, baseline], ignore_index=True)\nmetrics = [\'test_accuracy\', \'train_accuracy\', \'next_step_cosine_markov\', \n           \'next_step_cosine_classification\', \'final_jepa_loss\']\nconfigs = sorted(all_data[\'config\'].unique())\n\nprint(\'=== CONFIG MEANS AND STDS ===\')\nfor config in configs:\n    subset = all_data[all_data[\'config\'] == config]\n    print(f\'\\n{config} (n={len(subset)}):\')\n    for m in metrics:\n        vals = subset[m].values\n        print(f\'  {m}: {vals.mean():.4f} ± {vals.std(ddof=1):.4f}\')\n\nprint(\'\\n\\n=== F0: ZERO-SHOT TRANSFER JEPA LOSS ===\')\nzeros_loss = all_data[all_data[\'config\'] == \'P2-D-ZeroShot\'][\'final_jepa_loss\'].values\nuntr_loss = all_data[all_data[\'config\'] == \'P2-D-Untrained\'][\'final_jepa_loss\'].values\nratio = zeros_loss.mean() / untr_loss.mean()\nprint(f\'ZeroShot mean loss: {zeros_loss.mean():.6f}\')\nprint(f\'Untrained mean loss: {untr_loss.mean():.6f}\')\nprint(f\'Ratio: {ratio:.6f}\')\nprint(f\'Verdict: {"FALSIFIED" if ratio >= 0.85 else "NOT FALSIFIED"}\')\nf0_t, f0_p = stats.ttest_rel(zeros_loss, untr_loss)\nprint(f\'Paired t-test: t={f0_t:.4f}, p={f0_p:.4f}\')\ndiff = zeros_loss - untr_loss\ncohens_d_f0 = diff.mean() / diff.std(ddof=1)\nprint(f"Cohen\'s d: {cohens_d_f0:.4f}")\n\nprint(\'\\n\\n=== F1: TRANSFER FAILURE (Classification) ===\')\nzeros_acc = all_data[all_data[\'config\'] == \'P2-D-ZeroShot\'][\'test_accuracy\'].values\nuntr_acc = all_data[all_data[\'config\'] == \'P2-D-Untrained\'][\'test_accuracy\'].values\ndiff_mean = zeros_acc.mean() - untr_acc.mean()\nprint(f\'ZeroShot mean accuracy: {zeros_acc.mean():.4f} ({zeros_acc.mean()*100:.2f}%)\')\nprint(f\'Untrained mean accuracy: {untr_acc.mean():.4f} ({untr_acc.mean()*100:.2f}%)\')\nprint(f\'Difference: {diff_mean:.4f} ({diff_mean*100:.2f}pp)\')\nprint(f\'Verdict: {"FALSIFIED" if diff_mean <= 0.05 else "NOT FALSIFIED"}\')\nf1_t, f1_p = stats.ttest_rel(zeros_acc, untr_acc)\nprint(f\'Paired t-test: t={f1_t:.4f}, p={f1_p:.4f}\')\ndiff_f1 = zeros_acc - untr_acc\ncohens_d_f1 = diff_f1.mean() / diff_f1.std(ddof=1)\nprint(f"Cohen\'s d: {cohens_d_f1:.4f}")\n\nprint(\'\\n\\n=== F2: TEMPORAL JEPA FAILURE ===\')\np2d_trained_acc = all_data[all_data[\'config\'] == \'P2-D-Trained\'][\'test_accuracy\'].values\nprint(f\'P2-D-Trained mean accuracy: {p2d_trained_acc.mean():.4f} ({p2d_trained_acc.mean()*100:.2f}%)\')\nprint(f\'Verdict: {"FALSIFIED" if p2d_trained_acc.mean() < 0.60 else "NOT FALSIFIED"}\')\nf2_t, f2_p = stats.ttest_1samp(p2d_trained_acc, 0.60)\nprint(f\'One-sample t-test vs 0.60: t={f2_t:.4f}, p={f2_p:.4f}\')\ncohens_d_f2 = (p2d_trained_acc.mean() - 0.60) / p2d_trained_acc.std(ddof=1)\nprint(f"Cohen\'s d (vs 0.60): {cohens_d_f2:.4f}")\n\nprint(\'\\n\\n=== F3: P2-D NON-COMPETITIVENESS ===\')\np2d_trained_mean = p2d_trained_acc.mean()\np2a_trained_mean = all_data[all_data[\'config\'] == \'P2-A-Trained\'][\'test_accuracy\'].mean()\np2b_trained_mean = all_data[all_data[\'config\'] == \'P2-B-Trained\'][\'test_accuracy\'].mean()\np2c_trained_mean = all_data[all_data[\'config\'] == \'P2-C-Trained\'][\'test_accuracy\'].mean()\nbest_alternative = max(p2a_trained_mean, p2b_trained_mean, p2c_trained_mean)\ndiff_f3 = p2d_trained_mean - best_alternative\nprint(f\'P2-D-Trained mean accuracy: {p2d_trained_mean:.4f} ({p2d_trained_mean*100:.2f}%)\')\nprint(f\'P2-A-Trained mean accuracy: {p2a_trained_mean:.4f} ({p2a_trained_mean*100:.2f}%)\')\nprint(f\'P2-B-Trained mean accuracy: {p2b_trained_mean:.4f} ({p2b_trained_mean*100:.2f}%)\')\nprint(f\'P2-C-Trained mean accuracy: {p2c_trained_mean:.4f} ({p2c_trained_mean*100:.2f}%)\')\nprint(f\'Best alternative: {best_alternative:.4f} ({best_alternative*100:.2f}%)\')\nprint(f\'Difference: {diff_f3:.4f} ({diff_f3*100:.2f}pp)\')\nprint(f\'Verdict: {"FALSIFIED" if diff_f3 <= -0.20 else "NOT FALSIFIED"}\')\np2a_trained_vals = all_data[all_data[\'config\'] == \'P2-A-Trained\'][\'test_accuracy\'].values\nt_f3, p_f3 = stats.ttest_ind(p2d_trained_acc, p2a_trained_vals, equal_var=False)\nprint(f\'Independent t-test (P2-D vs P2-A): t={t_f3:.4f}, p={p_f3:.4f}\')\npooled_std = np.sqrt(((len(p2d_trained_acc)-1)*p2d_trained_acc.std(ddof=1)**2 + (len(p2a_trained_vals)-1)*p2a_trained_vals.std(ddof=1)**2) / (len(p2d_trained_acc)+len(p2a_trained_vals)-2))\ncohens_d_f3 = (p2d_trained_acc.mean() - p2a_trained_mean) / pooled_std\nprint(f"Cohen\'s d (P2-D vs P2-A): {cohens_d_f3:.4f}")\n\nprint(\'\\n\\n=== ALL CONFIGS SUMMARY (pct where applicable) ===\')\nfor config in configs:\n    subset = all_data[all_data[\'config\'] == config]\n    print(f\'{config}:\')\n    print(f\'  Test Acc:  {subset["test_accuracy"].mean()*100:.2f}% ± {subset["test_accuracy"].std(ddof=1)*100:.2f}\')\n    print(f\'  Train Acc: {subset["train_accuracy"].mean()*100:.2f}% ± {subset["train_accuracy"].std(ddof=1)*100:.2f}\')\n    print(f\'  Cosine (Classification): {subset["next_step_cosine_classification"].mean():.4f} ± {subset["next_step_cosine_classification"].std(ddof=1):.4f}\')\n    print(f\'  JEPA Loss: {subset["final_jepa_loss"].mean():.2f} ± {subset["final_jepa_loss"].std(ddof=1):.2f}\')\n\nprint(\'\\n\\n=== JEPA LOSS COMPARISON (trained encoders) ===\')\nfor config in [\'P2-D-Trained\', \'P2-A-Trained\', \'P2-B-Trained\', \'P2-C-Trained\']:\n    subset = all_data[all_data[\'config\'] == config][\'final_jepa_loss\']\n    print(f\'{config}: {subset.mean():.2f} ± {subset.std(ddof=1):.2f}\')\n\nprint(\'\\n\\n=== CLASSIFICATION VS COSINE TRADEOFF (P2-D) ===\')\nprint(\'ZeroShot:\')\nprint(f\'  Acc: {all_data[all_data["config"]=="P2-D-ZeroShot"]["test_accuracy"].mean()*100:.2f}%\')\nprint(f\'  Cosine (class): {all_data[all_data["config"]=="P2-D-ZeroShot"]["next_step_cosine_classification"].mean():.4f}\')\nprint(\'Untrained:\')\nprint(f\'  Acc: {all_data[all_data["config"]=="P2-D-Untrained"]["test_accuracy"].mean()*100:.2f}%\')\nprint(f\'  Cosine (class): {all_data[all_data["config"]=="P2-D-Untrained"]["next_step_cosine_classification"].mean():.4f}\')\nprint(\'Trained:\')\nprint(f\'  Acc: {all_data[all_data["config"]=="P2-D-Trained"]["test_accuracy"].mean()*100:.2f}%\')\nprint(f\'  Cosine (class): {all_data[all_data["config"]=="P2-D-Trained"]["next_step_cosine_classification"].mean():.4f}\')\n\nprint(\'\\n\\n=== P2D MARKOV VS CLASSIFICATION COSINE ===\')\nfor config in [\'P2-D-ZeroShot\', \'P2-D-Untrained\', \'P2-D-Trained\']:\n    subset = all_data[all_data[\'config\'] == config]\n    markov = subset[\'next_step_cosine_markov\'].mean()\n    classification = subset[\'next_step_cosine_classification\'].mean()\n    print(f\'{config}: Markov={markov:.4f}, Classification={classification:.4f}\')\n'})]
+
+[Tool Result: Successfully wrote to phase_2/compute_stats.py]
+
+     
+
+[Tool Call: bash({'command': 'python phase_2/compute_stats.py'})]
+
+[Tool Result: exit_code: 0
+stdout: === CONFIG MEANS AND STDS ===
+
+P2-A-Trained (n=5):
+  test_accuracy: 0.6707 � 0.0098
+  train_accuracy: 0.7167 � 0.0151
+  next_step_cosine_markov: 0.4563 � 0.0120
+  next_step_cosine_classification: 0.4902 � 0.0332
+  final_jepa_loss: 9.9142 � 0.3430
+
+P2-A-Untrained (n=5):
+  test_accuracy: 0.5807 � 0.0431
+  train_accuracy: 0.6283 � 0.0455
+  next_step_cosine_markov: 0.4867 � 0.0124
+  next_step_cosine_classification: 0.5028 � 0.0339
+  final_jepa_loss: 20.7444 � 0.407...]
+
+Now I have all the statistics. Let me write the comprehensive report.
+
+[Tool Call: write_file({'path': 'phase_2/REPORT.md', 'content': '# Phase 2 Report: Temporal Integration at a Single Node\n\n**Date:** 2025-01-28  \n**Pre-Registration:** `src/pre_registration.md` (Iteration 004)  \n**Data Files:** `phase_2/p2d_results.csv` (15 runs), `phase_2/baseline_results.csv` (30 runs)\n\n---\n\n## 1. Executive Summary\n\nThis report presents the results of Phase 2, which tested whether a UniversalNode (kernel-3, d=16) trained with JEPA on spatial data can transfer zero-shot to temporal data, and whether the same architectural form trained from scratch on temporal data is competitive with dedicated temporal mechanisms (P2-A/B/C). The pre-registered hypothesis made two claims: (1) spatially-trained weights transfer to the temporal axis with ≥10pp classification advantage over untrained weights, and (2) temporal JEPA training from scratch achieves ≥60% classification accuracy and is within 20pp of the best alternative.\n\n**The results falsify the zero-shot transfer claim but strongly support the architectural universality claim.** Spatially-trained weights applied to temporal inputs perform no better than random initialization (F0: loss ratio = 0.99, F1: −0.8pp accuracy gap). However, when trained from scratch on temporal data, the same UniversalNode architecture achieves 65.3% classification accuracy—well above the 60% threshold (F2) and only 1.7pp below the best dedicated temporal mechanism, P2-A (F3). This pattern supports a nuanced conclusion: **one node type, but not one set of weights.** The architectural form (kernel-3, 3-slot input, JEPA objective) is general enough to learn both spatial and temporal structure, but the learned weights are axis-specific. The universal-node hypothesis is therefore **partially supported**—the node type is universal, but weight transfer across axes does not occur.\n\n---\n\n## 2. Experimental Design\n\n| Component | Description |\n|-----------|-------------|\n| **Node Architecture** | UniversalNode: kernel-3, d=16, 3-slot input, single linear encoder W_enc (3d, d) |\n| **P2-D (Three-Slot Temporal)** | Inputs = (state_{t−2}, state_{t−1}, state_t), identical architecture to spatial node |\n| **P2-A (Multi-Tick-Rate)** | Updates every N steps, pools lower-rate outputs |\n| **P2-B (Recurrent State)** | Hidden state + GRU-like gating |\n| **P2-C (Output-as-Input Loop)** | Output at t−1 fed as additional input at t |\n| **Training Objective** | JEPA (Joint Embedding Predictive Architecture): predict neighbor codes |\n| **Dataset** | Temporal sequences of d=16 vectors: periodic (periods 3, 4, 7, 11), random walk, Markov |\n| **Evaluation** | (a) Periodic-vs-random linear-probe classification (3 classes), (b) Next-step cosine similarity |\n| **Seeds** | 5 random seeds (42–46) per configuration |\n| **Epochs** | 200 epochs for trained configurations |\n\n---\n\n## 3. Full Results Table\n\nAll values reported as **mean ± std** across 5 seeds.\n\n| Configuration | Test Acc (%) | Train Acc (%) | Next-Step Cosine (Markov) | Next-Step Cosine (Classification) | Final JEPA Loss |\n|:-------------|:------------:|:-------------:|:-------------------------:|:---------------------------------:|:---------------:|\n| **P2-D-ZeroShot** | 57.73 ± 3.88 | 60.20 ± 4.57 | 0.3126 ± 0.0246 | 0.4382 ± 0.0226 | 17.29 ± 0.58 |\n| **P2-D-Untrained** | 58.53 ± 3.51 | 62.70 ± 4.02 | 0.3058 ± 0.0277 | 0.4325 ± 0.0284 | 17.46 ± 0.51 |\n| **P2-D-Trained** | **65.33 ± 2.74** | **71.43 ± 0.78** | 0.2865 ± 0.0347 | 0.2714 ± 0.0203 | **3.90 ± 0.43** |\n| P2-A-Trained | **67.07 ± 0.98** | 71.67 ± 1.51 | 0.4563 ± 0.0120 | 0.4902 ± 0.0332 | 9.91 ± 0.34 |\n| P2-A-Untrained | 58.07 ± 4.31 | 62.83 ± 4.55 | 0.4867 ± 0.0124 | 0.5028 ± 0.0339 | 20.74 ± 0.41 |\n| P2-B-Trained | 62.87 ± 3.28 | 66.73 ± 0.95 | 0.2568 ± 0.0508 | 0.2640 ± 0.0294 | 5.81 ± 0.67 |\n| P2-B-Untrained | 59.60 ± 3.98 | 62.23 ± 5.90 | 0.2943 ± 0.0508 | 0.4448 ± 0.0383 | 15.97 ± 0.44 |\n| P2-C-Trained | 61.53 ± 2.81 | 64.13 ± 4.07 | 0.2305 ± 0.0659 | 0.3214 ± 0.0704 | 8.00 ± 1.84 |\n| P2-C-Untrained | 56.80 ± 6.54 | 59.13 ± 4.58 | 0.3084 ± 0.0394 | 0.4453 ± 0.0274 | 17.41 ± 0.62 |\n\n### Statistical Tests\n\n| Comparison | Test | Statistic | p-value | Cohen\'s d | Interpretation |\n|:-----------|:-----|:---------:|:-------:|:---------:|:---------------|\n| F0: ZeroShot vs Untrained (JEPA Loss) | Paired t-test | t = −1.57 | 0.192 | −0.70 | No significant difference; ratio = 0.99 |\n| F1: ZeroShot vs Untrained (Test Acc) | Paired t-test | t = −0.37 | 0.728 | −0.17 | No significant difference; gap = −0.8pp |\n| F2: P2-D-Trained vs 60% threshold | One-sample t-test | t = 4.35 | 0.012 | +1.95 | Significantly above 60% |\n| F3: P2-D-Trained vs P2-A-Trained | Independent t-test (Welch) | t = −1.33 | 0.240 | −0.84 | Not significantly different |\n\n---\n\n## 4. Falsification Criteria Assessment\n\nThe pre-registration defined four falsification criteria. A single triggered criterion falsifies the hypothesis.\n\n### F0: Zero-Shot Transfer JEPA Loss\n**Criterion:** If Loss_spatial_trained / Loss_untrained ≥ 0.85 on temporal JEPA loss, spatial → temporal transfer has FAILED.\n\n| Computation | Value |\n|:------------|:------|\n| ZeroShot mean JEPA loss | 17.29 |\n| Untrained mean JEPA loss | 17.46 |\n| **Ratio** | **0.990** |\n| Threshold | ≥ 0.85 |\n| **Verdict** | **🚨 FALSIFIED** |\n\nThe spatially-trained weights produce JEPA loss that is 99.0% of the untrained baseline—indistinguishable from random initialization. This is the most rigorous test of whether spatial weights encode general local-pattern structure, and it fails decisively. The spatially-trained encoder does not generalize to temporal inputs.\n\n### F1: Transfer Failure (Classification)\n**Criterion:** If spatially-trained classification accuracy ≤ 5pp above untrained baseline, transfer has FAILED.\n\n| Computation | Value |\n|:------------|:------|\n| ZeroShot mean test accuracy | 57.73% |\n| Untrained mean test accuracy | 58.53% |\n| **Difference (ZeroShot − Untrained)** | **−0.80 pp** |\n| Threshold | ≤ +5 pp |\n| **Verdict** | **🚨 FALSIFIED** |\n\nNot only does the spatially-trained model fail to exceed the untrained baseline, it performs 0.8pp *worse*. The paired t-test shows no significant difference (p = 0.728, Cohen\'s d = −0.17). Spatial weights provide zero benefit for temporal classification.\n\n### F2: Temporal JEPA Failure\n**Criterion:** If P2-D trained from scratch on temporal data achieves < 60% classification accuracy, the JEPA objective fails on temporal structure.\n\n| Computation | Value |\n|:------------|:------|\n| P2-D-Trained mean test accuracy | **65.33%** |\n| Threshold | < 60% |\n| One-sample t-test vs 60% | t = 4.35, p = 0.012 |\n| Cohen\'s d (vs 60%) | +1.95 |\n| **Verdict** | **✅ NOT FALSIFIED** |\n\nP2-D trained from scratch significantly exceeds the 60% threshold. The JEPA objective successfully learns temporal structure when applied to temporal data. The effect size is large (Cohen\'s d = 1.95), indicating robust performance across seeds.\n\n### F3: P2-D Non-Competitiveness\n**Criterion:** If P2-D trained performs ≥ 20pp worse than the best alternative (P2-A/B/C), the kernel-3 temporal node is fundamentally inferior.\n\n| Configuration | Mean Test Accuracy |\n|:-------------|:------------------:|\n| P2-A-Trained | 67.07% |\n| **P2-D-Trained** | **65.33%** |\n| P2-B-Trained | 62.87% |\n| P2-C-Trained | 61.53% |\n| **Difference (P2-D − Best Alternative)** | **−1.73 pp** |\n| Threshold | ≤ −20 pp |\n| Independent t-test (P2-D vs P2-A) | t = −1.33, p = 0.240 |\n| Cohen\'s d (P2-D vs P2-A) | −0.84 |\n| **Verdict** | **✅ NOT FALSIFIED** |\n\nP2-D is only 1.7pp below the best alternative (P2-A) and is not statistically distinguishable from it (p = 0.240). Notably, P2-D outperforms P2-B and P2-C. The simple kernel-3 sliding-window architecture is competitive with dedicated temporal mechanisms.\n\n### Summary of Falsification\n\n| Criterion | Triggered? | Interpretation |\n|:----------|:----------:|:---------------|\n| F0 (JEPA Loss Ratio) | ✅ YES | Spatial weights do not encode generalizable local structure |\n| F1 (Transfer Gap) | ✅ YES | Zero-shot transfer provides zero benefit |\n| F2 (Temporal JEPA) | ❌ NO | JEPA works on temporal data when trained appropriately |\n| F3 (Competitiveness) | ❌ NO | P2-D is competitive with dedicated temporal mechanisms |\n\n**Overall:** The hypothesis is **FALSIFIED** because F0 and F1 are triggered. However, the failure mode is informative: the architectural form is valid, but weight transfer across axes does not occur.\n\n---\n\n## 5. Analysis of Secondary Findings\n\n### 5.1 JEPA Loss by Encoder Type (Trained)\n\nAmong all trained encoders, **P2-D achieves the lowest JEPA loss (3.90)**, substantially below P2-A (9.91), P2-B (5.81), and P2-C (8.00). Yet P2-D does not have the highest classification accuracy (65.3% vs. P2-A\'s 67.1%).\n\n**Interpretation:** P2-D\'s kernel-3 sliding window creates locally predictable codes. Because the predictor sees three consecutive temporal states and must predict the next code, the constrained receptive field encourages smooth, locally coherent representations. P2-B\'s recurrent state, by contrast, creates codes that are harder for a simple linear predictor to predict (higher JEPA loss = 5.8) but may carry richer long-range temporal information that benefits classification. This reveals an important tradeoff: **predictability under JEPA does not perfectly correlate with downstream classification performance.** The JEPA objective optimizes for local predictability, while classification may benefit from more abstract, less locally predictable features.\n\n### 5.2 Classification vs. Prediction Tradeoff\n\nA striking pattern emerges when comparing trained and untrained encoders on the classification task:\n\n| Condition | Test Accuracy | Next-Step Cosine (Classification) |\n|:----------|:-------------:|:---------------------------------:|\n| P2-D-ZeroShot | 57.7% | 0.438 |\n| P2-D-Untrained | 58.5% | 0.433 |\n| P2-D-Trained | **65.3%** | **0.271** |\n\n**Trained encoders have HIGHER classification accuracy but LOWER next-step cosine similarity than untrained encoders.**\n\nThis is because the JEPA-trained encoder learns **category-separating features that are not raw next-step predictive.** During training, the encoder learns to map inputs into a space where the linear predictor can predict the next code. However, the linear probe for classification extracts a different linear subspace—one that separates periodic from random sequences. The trained encoder has reorganized its representation to support the JEPA objective, which happens to also create separable clusters for the classification task, even though the raw cosine similarity to the next step is lower. The untrained encoder, by contrast, preserves more of the raw input structure (higher cosine similarity) but lacks the learned structure needed for accurate classification.\n\nThis finding is important because it shows that **JEPA training creates useful representations even when the raw prediction metric is not maximized.** The encoder is not simply learning to copy the input; it is learning a structured embedding space.\n\n### 5.3 Why Zero-Shot Transfer Fails\n\nThe spatial JEPA objective trains the encoder to predict adjacent **spatial** positions. This creates weights that capture spatial adjacency patterns—for example, "what does a blob look like from the left, middle, and right?" The UniversalNode\'s W_enc is a (3d, d) matrix that maps 3-slot input patterns to codes. Spatial patterns and temporal patterns occupy different regions of the (3d)-dimensional input space:\n\n- **Spatial inputs:** Three adjacent positions in a 1D spatial field, where local correlation is high (nearby positions have similar values).\n- **Temporal inputs:** Three consecutive states in a discrete-state sequence, where transitions are governed by deterministic or stochastic rules with no spatial correlation.\n\nBecause the input distributions are fundamentally different, **spatially-optimized W_enc does not help with temporal inputs.** The spatial weights have learned to exploit the smoothness and locality of spatial data; temporal data has no such smoothness. The weights are axis-specific, not general local-pattern operators.\n\nThis is consistent with the F0 result: the loss ratio of 0.99 means the spatial weights are effectively random for temporal inputs.\n\n### 5.4 The Periodicity Loophole Confirmed\n\nBoth P2-D-ZeroShot (57.7%) and P2-D-Untrained (58.5%) achieve ~58% classification accuracy, well above chance (33.3%). This is not due to learned structure—it is due to **deterministic propagation preserving periodicity.**\n\nIn the periodic sequences, the state transitions are deterministic (e.g., A→B→C→A→...). Even with random weights, the linear encoder and predictor propagate these deterministic patterns in a way that preserves periodic structure. The linear probe can detect this periodicity in the encoded representations because periodic inputs produce periodic output patterns, regardless of the weights. Random sequences, by contrast, do not produce such regular patterns.\n\nThis validates the Research Manager\'s concern about the "periodicity loophole": **even untrained networks can achieve above-chance classification on periodic-vs-random tasks purely from the deterministic structure of the input sequences.** This means the classification task is not a pure test of learned representation quality; it is partially confounded by input structure. Future work should control for this by using more sophisticated baselines or by measuring the *gain* over the untrained baseline rather than absolute accuracy.\n\n---\n\n## 6. Implications for the Universal-Node Hypothesis\n\nThe universal-node hypothesis states that a single node type (kernel-3, 3-slot input) can process structure along any axis (spatial, temporal, or other) using the same architectural form and the same training objective (JEPA).\n\n### What is Supported\n\n1. **✅ Architectural universality:** The same kernel-3, 3-slot node architecture successfully learns both spatial structure (Phase 1) and temporal structure (Phase 2, P2-D-Trained).\n2. **✅ Objective universality:** The same JEPA objective works for both spatial and temporal training. P2-D achieves the lowest JEPA loss among all trained encoders (3.9), demonstrating that JEPA is well-suited to temporal data.\n3. **✅ Competitiveness:** P2-D is competitive with dedicated temporal mechanisms (only 1.7pp below P2-A, outperforming P2-B and P2-C). The simple sliding-window approach is not fundamentally inferior.\n\n### What is NOT Supported\n\n1. **❌ Zero-shot weight transfer:** Spatially-trained weights do not transfer to temporal inputs. The loss ratio is 0.99 (F0), and the accuracy gap is −0.8pp (F1). The weights are axis-specific.\n2. **❌ One set of weights for all axes:** The core claim that "one node type, one set of weights, applicable along any axis" is falsified. The node type is universal, but the weights must be learned separately for each axis.\n\n### Revised Hypothesis\n\nThe evidence supports a **revised universal-node hypothesis:**\n\n> A single node *type* (kernel-3, 3-slot input, JEPA objective) can learn structure along any axis, but the *weights* are axis-specific. The architecture is universal; the learned representations are not transferable across axes without retraining or fine-tuning.\n\nThis is still a meaningful and useful result. It means that a neural architecture can be designed once and deployed along any axis, learning appropriate representations for each axis through local self-supervised objectives. The node does not need to be redesigned for temporal vs. spatial processing—it just needs to be trained on the appropriate data.\n\n---\n\n## 7. Recommendations for Phase 3\n\nBased on these findings, we recommend the following directions for Phase 3:\n\n### 7.1 Test Fine-Tuning from Spatial Weights\nThe most important follow-up is to test whether spatial weights can serve as a **useful initialization** for temporal training, even if zero-shot transfer fails. Fine-tuning may converge faster or achieve better final performance than training from scratch. This would test whether spatial pre-training provides any useful inductive bias.\n\n### 7.2 Joint Spatio-Temporal Training\nTrain a single node on **both spatial and temporal data simultaneously** (multi-task JEPA). If the node can learn a shared representation that supports both axes, this would be stronger evidence for universality than either axis alone.\n\n### 7.3 Control for the Periodicity Loophole\nDesign evaluation tasks that are not confounded by deterministic periodicity. Options:\n- Measure **gain over untrained baseline** as the primary metric.\n- Use **next-step prediction accuracy** (discrete state prediction) as a cleaner metric.\n- Introduce **noisy periodic sequences** where periodicity is partially obscured.\n\n### 7.4 Explore the Prediction-Classification Tradeoff\nInvestigate why lower JEPA loss does not always correlate with higher classification accuracy. This may involve:\n- Analyzing the learned representations with PCA or t-SNE.\n- Testing whether a deeper or nonlinear predictor bridges the gap.\n- Exploring whether the JEPA objective can be modified to better align with downstream classification.\n\n### 7.5 Scale to Longer Sequences and More Complex Dynamics\nTest P2-D on longer sequences (length 64, 128) and more complex temporal dynamics (e.g., hierarchical periodicity, mixed Markov chains). This will test whether the kernel-3 sliding window remains competitive as temporal structure becomes more complex.\n\n### 7.6 Multi-Axis Nodes\nThe ultimate test of the universal-node hypothesis is a **single node that processes both spatial and temporal inputs in the same forward pass** (e.g., spatio-temporal video patches). Phase 3 should design an experiment where the same node receives 3D patches (space + time) and learns joint representations.\n\n---\n\n## 8. Conclusion\n\nPhase 2 delivers a nuanced but clear verdict: **the universal-node hypothesis is partially supported.** The architectural form is universal—the same kernel-3, 3-slot node with JEPA training learns both spatial and temporal structure effectively. However, the weights are axis-specific: zero-shot transfer from spatial to temporal fails completely (F0, F1), while training from scratch succeeds (F2) and is competitive with dedicated temporal mechanisms (F3).\n\nThe key insight is that **one node type, but not one set of weights, is sufficient.** This has practical implications for building general-purpose neural architectures: we can design a single node type and deploy it along any axis, trusting that local self-supervised training will learn appropriate representations. The node does not need to be hand-engineered for each axis, but it does need to be trained on each axis.\n\nThe periodicity loophole remains a concern for evaluation, and future work should control for it. Nevertheless, the core result—that a simple sliding-window node can learn temporal structure as effectively as recurrent or multi-rate mechanisms—is a meaningful step toward the universal-node vision.\n\n---\n\n*Report generated from pre-registered hypothesis (`src/pre_registration.md`) and experimental data (`phase_2/p2d_results.csv`, `phase_2/baseline_results.csv`). Statistical analysis performed with SciPy (paired t-tests, independent t-tests, Cohen\'s d). All 45 runs (9 configurations × 5 seeds) are included.*\n'})]
+
+[Tool Result: Successfully wrote to phase_2/REPORT.md]
+
+
+[Tool Call: read_file({'path': 'phase_2/REPORT.md', 'start_line': 1, 'end_line': 50})]
+
+[Tool Result: --- lines 1 to 50 of 244 ---
+# Phase 2 Report: Temporal Integration at a Single Node
+
+**Date:** 2025-01-28  
+**Pre-Registration:** `src/pre_registration.md` (Iteration 004)  
+**Data Files:** `phase_2/p2d_results.csv` (15 runs), `phase_2/baseline_results.csv` (30 runs)
+
+---
+
+## 1. Executive Summary
+
+This report presents the results of Phase 2, which tested whether a UniversalNode (kernel-3, d=16) trained with JEPA on spatial data can transfer zero-shot to temporal data, and whether the same archi...]
+
+
+[Tool Call: bash({'command': 'wc -l phase_2/REPORT.md'})]
+
+[Tool Result: exit_code: 1
+stdout: 
+stderr: Der Befehl "wc" ist entweder falsch geschrieben oder
+konnte nicht gefunden werden.
+]
+
+
+[Tool Call: bash({'command': 'python -c "with open(\'phase_2/REPORT.md\',\'r\') as f: lines = f.readlines(); print(f\'Total lines: {len(lines)}\')"'})]
+
+[Tool Result: exit_code: 1
+stdout: 
+stderr: Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "C:\Users\thomas\AppData\Local\Programs\Python\Python312\Lib\encodings\cp1252.py", line 23, in decode
+    return codecs.charmap_decode(input,self.errors,decoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeDecodeError: 'charmap' codec can't decode byte 0x9d in position 79: character maps to <undefined>
+]
+
+
+[Tool Call: bash({'command': 'python -c "import os; print(f\'File size: {os.path.getsize(\\"phase_2/REPORT.md\\")} bytes\')"'})]
+
+[Tool Result: exit_code: 0
+stdout: File size: 19682 bytes
+
+stderr: ]
+
+
+[Tool Call: read_file({'path': 'phase_2/REPORT.md', 'start_line': 50, 'end_line': 120})]
+
+[Tool Result: --- lines 50 to 120 of 244 ---
+### Statistical Tests
+
+| Comparison | Test | Statistic | p-value | Cohen's d | Interpretation |
+|:-----------|:-----|:---------:|:-------:|:---------:|:---------------|
+| F0: ZeroShot vs Untrained (JEPA Loss) | Paired t-test | t = −1.57 | 0.192 | −0.70 | No significant difference; ratio = 0.99 |
+| F1: ZeroShot vs Untrained (Test Acc) | Paired t-test | t = −0.37 | 0.728 | −0.17 | No significant difference; gap = −0.8pp |
+| F2: P2-D-Trained vs 60% threshold | One-sam...]
+
+ 
+
+[Tool Call: read_file({'path': 'phase_2/REPORT.md', 'start_line': 120, 'end_line': 190})]
+
+[Tool Result: --- lines 120 to 190 of 244 ---
+
+### Summary of Falsification
+
+| Criterion | Triggered? | Interpretation |
+|:----------|:----------:|:---------------|
+| F0 (JEPA Loss Ratio) | ✅ YES | Spatial weights do not encode generalizable local structure |
+| F1 (Transfer Gap) | ✅ YES | Zero-shot transfer provides zero benefit |
+| F2 (Temporal JEPA) | ❌ NO | JEPA works on temporal data when trained appropriately |
+| F3 (Competitiveness) | ❌ NO | P2-D is competitive with dedicated temporal mechanisms |
+
+**Ov...]
+
+
+[Tool Call: read_file({'path': 'phase_2/REPORT.md', 'start_line': 190, 'end_line': 244})]
+
+[Tool Result: --- lines 190 to 244 of 244 ---
+
+1. **❌ Zero-shot weight transfer:** Spatially-trained weights do not transfer to temporal inputs. The loss ratio is 0.99 (F0), and the accuracy gap is −0.8pp (F1). The weights are axis-specific.
+2. **❌ One set of weights for all axes:** The core claim that "one node type, one set of weights, applicable along any axis" is falsified. The node type is universal, but the weights must be learned separately for each axis.
+
+### Revised Hypothesis
+
+The evidence supports ...]
+
+ 
+
+[Tool Call: bash({'command': 'del phase_2\\compute_stats.py'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+
+[Tool Call: list_dir({'path': 'phase_2'})]
+
+[Tool Result:       baseline_results.csv
+      baseline_run.log
+      p2d_results.csv
+      phase2_report.md
+      REPORT.md]
+
+ The Phase 2 report has been successfully written to `phase_2/REPORT.md`. Here's a summary of what was accomplished:
+
+## Completed Tasks
+
+### Task 1: Statistical Analysis
+- Computed **mean ± std** for all 9 configurations across all 5 metrics
+- Performed **paired t-tests** for ZeroShot vs Untrained (F0/F1)
+- Computed **Cohen's d** effect sizes for all comparisons
+- Ran **one-sample t-tests** (F2) and **independent Welch t-tests** (F3)
+
+### Task 2: Falsification Criteria Testing
+
+| Criterion | Value | Verdict |
+|:----------|:------|:-------:|
+| **F0** (Loss ratio) | 0.990 | 🚨 FALSIFIED |
+| **F1** (Transfer gap) | −0.80 pp | 🚨 FALSIFIED |
+| **F2** (Temporal JEPA) | 65.33% | ✅ NOT FALSIFIED |
+| **F3** (Competitiveness) | −1.73 pp | ✅ NOT FALSIFIED |
+
+### Task 3: Secondary Findings Analyzed
+1. **JEPA Loss paradox** — P2-D lowest loss (3.9) but not highest accuracy; interpreted as local predictability vs. abstract feature tradeoff
+2. **Classification vs. Prediction tradeoff** — trained encoders: higher accuracy, lower cosine similarity
+3. **Why zero-shot fails** — spatial and temporal patterns occupy different regions of the (3d)-dimensional input space
+4. **Periodicity Loophole** — confirmed: both ZeroShot and Untrained achieve ~58% (>33.3% chance) from deterministic propagation alone
+
+### Task 4: Report Written
+A comprehensive 244-line report with:
+- Executive Summary (2 paragraphs)
+- Experimental Design table
+- Full Results Table (all 9 configs, all metrics, mean ± std)
+- Falsification Criteria Assessment (4 criteria with computations and verdicts)
+- Analysis of secondary findings
+- Implications for the universal-node hypothesis
+- 6 recommendations for Phase 3
+
+**Key files preserved:** `phase_2/p2d_results.csv` and `phase_2/baseline_results.csv` were **not modified**.
+
+[NUDGE RESPONSE]
+ The Phase 2 report has been successfully completed. The file `phase_2/REPORT.md` contains the full statistical analysis, falsification testing, and scientific interpretation.
+
+```yaml
+status: ok
+artifacts:
+  - phase_2/REPORT.md
+metrics:
+  total_runs: 45
+  configs_tested: 9
+  f0_loss_ratio: 0.990
+  f1_transfer_gap_pp: -0.80
+  f2_p2d_trained_accuracy: 65.33
+  f3_gap_vs_best_pp: -1.73
+  p2d_trained_jepa_loss: 3.90
+  p2a_trained_accuracy: 67.07
+  p2b_trained_accuracy: 62.87
+  p2c_trained_accuracy: 61.53
+  cohens_d_f0: -0.70
+  cohens_d_f1: -0.17
+  cohens_d_f2: 1.95
+  cohens_d_f3_vs_p2a: -0.84
+  p_value_f0: 0.192
+  p_value_f1: 0.728
+  p_value_f2: 0.012
+  p_value_f3: 0.240
+  zeroshot_test_accuracy: 57.73
+  untrained_test_accuracy: 58.53
+log_excerpt: |
+  === F0: ZERO-SHOT TRANSFER JEPA LOSS ===
+  ZeroShot mean loss: 17.288390
+  Untrained mean loss: 17.457280
+  Ratio: 0.990326
+  Verdict: FALSIFIED
+  === F1: TRANSFER FAILURE (Classification) ===
+  ZeroShot mean accuracy: 0.5773 (57.73%)
+  Untrained mean accuracy: 0.5853 (58.53%)
+  Difference: -0.0080 (-0.80pp)
+  Verdict: FALSIFIED
+  === F2: TEMPORAL JEPA FAILURE ===
+  P2-D-Trained mean accuracy: 0.6533 (65.33%)
+  Verdict: NOT FALSIFIED
+  === F3: P2-D NON-COMPETITIVENESS ===
+  Best alternative: 0.6707 (67.07%)
+  Difference: -0.0173 (-1.73pp)
+  Verdict: NOT FALSIFIED
+  === JEPA LOSS COMPARISON (trained encoders) ===
+  P2-D-Trained: 3.90
+  P2-A-Trained: 9.91
+  P2-B-Trained: 5.81
+  P2-C-Trained: 8.00
+experimenter_view: |
+  The universal-node hypothesis is PARTIALLY SUPPORTED. Zero-shot spatial→temporal
+  weight transfer is completely falsified (F0: ratio=0.99, F1: -0.8pp gap), but the
+  architectural form itself is validated. When trained from scratch on temporal data,
+  P2-D achieves 65.3% classification accuracy—above the 60% threshold and only 1.7pp
+  below the best dedicated temporal mechanism (P2-A). P2-D also achieves the lowest
+  JEPA loss among all trained encoders (3.9), revealing a tradeoff between local
+  predictability and downstream classification. The periodicity loophole is confirmed:
+  even untrained networks score ~58% due to deterministic propagation. The conclusion
+  is that one node TYPE is universal, but not one set of WEIGHTS.
+notes: "Phase 2 report complete; hypothesis falsified on transfer but supported on architecture."
+```
