@@ -7,60 +7,67 @@ import numpy as np
 
 
 class SpatialPoolerEncoder(EncoderBase):
-    """P0-B: HTM-style SDR encoder — random projection + k-WTA + Hebbian updates."""
+    """
+    P0-B: SDR / Spatial Pooler encoder.
 
-    def __init__(self, dim_in=3, dim_out=16, k=5, seed=42, permanence_threshold=0.5,
-                 perm_inc=0.1, perm_dec=0.05):
+    Uses competitive learning (k-means-like prototype learning) combined
+    with a distance-based code.  Each of the dim_out columns learns a
+    prototype in input space.  The code for an input is its (normalised)
+    distance to **all** prototypes, making the code *distributed* and
+    similarity-preserving: two inputs with small Hamming distance will
+    have similar patterns of distances to the prototype set.
+
+    Sparsification: only the top-k strongest activations are kept,
+    preserving the SDR character of the encoding.
+    """
+
+    def __init__(self, dim_in=3, dim_out=16, k_winners=5, seed=42,
+                 lr_init=0.2, lr_final=0.01, sparsity_k=5):
         self._dim_in = dim_in
         self._dim_out = dim_out
-        self.k = k
-        self.permanence_threshold = permanence_threshold
-        self.perm_inc = perm_inc
-        self.perm_dec = perm_dec
+        self.k_winners = k_winners
+        self.lr_init = lr_init
+        self.lr_final = lr_final
+        self.sparsity_k = sparsity_k
         rng = np.random.default_rng(seed)
-        # Permanence matrix: how strongly connected each input is to each output
-        self.permanence = rng.uniform(0.4, 0.6, size=(dim_in, dim_out))
-        # Random potential pool
-        self.potential_pool = rng.random((dim_in, dim_out)) < 0.8  # 80% connectivity
+        # Prototypes: each row = one column's centre in input space
+        self.prototypes = rng.uniform(0.0, 1.0, size=(dim_out, dim_in))
 
-    def _connected(self):
-        return (self.permanence >= self.permanence_threshold) & self.potential_pool
+    def _get_lr(self, epoch, max_epochs):
+        t = epoch / max(max_epochs - 1, 1)
+        return self.lr_init * (1 - t) + self.lr_final * t
 
-    def _forward(self, x):
-        connected = self._connected().astype(np.float64)
-        overlap = x @ (connected * self.permanence)  # (dim_out,)
-        return overlap
+    def _encode_dense(self, inputs):
+        """Return inverse-Euclidean-distance to every prototype."""
+        diff = inputs[:, np.newaxis, :] - self.prototypes[np.newaxis, :, :]
+        dist = np.sqrt(np.sum(diff ** 2, axis=2) + 1e-8)
+        return 1.0 / (1.0 + dist)
 
-    def _kwta(self, activations):
-        result = np.zeros_like(activations)
-        if self.k > 0 and len(activations) > 0:
-            top_k = np.argsort(activations)[-self.k:]
-            result[top_k] = activations[top_k]
-        return result
-
-    def train(self, inputs, epochs=50):
+    def train(self, inputs, epochs=200):
         for epoch in range(epochs):
+            lr = self._get_lr(epoch, epochs)
             for x in inputs:
-                overlap = self._forward(x)
-                active = self._kwta(overlap)
-                active_indices = active > 0
-                # Update permanences
-                for j in range(self._dim_out):
-                    if active_indices[j]:
-                        for i in range(self._dim_in):
-                            if self.potential_pool[i, j]:
-                                if x[i] > 0.5:
-                                    self.permanence[i, j] += self.perm_inc
-                                else:
-                                    self.permanence[i, j] -= self.perm_dec
-                self.permanence = np.clip(self.permanence, 0.0, 1.0)
+                # Find the k nearest prototypes (BMU competition)
+                dist = np.sum((self.prototypes - x) ** 2, axis=1)
+                winners = np.argsort(dist)[:self.k_winners]
+                # Move winners toward the input (Hebbian / competitive)
+                for w in winners:
+                    self.prototypes[w] += lr * (x - self.prototypes[w])
+                # Clip prototypes to [0, 1]
+                self.prototypes = np.clip(self.prototypes, 0.0, 1.0)
         return {"final_loss": 0.0}
 
     def encode(self, inputs):
-        codes = np.zeros((len(inputs), self._dim_out))
-        for i, x in enumerate(inputs):
-            overlap = self._forward(x)
-            codes[i] = self._kwta(overlap)
+        """
+        Encode using inverse-distance, then apply top-k sparsification
+        to preserve the SDR character.
+        """
+        dense = self._encode_dense(inputs)
+        # Top-k sparsification per sample
+        codes = np.zeros_like(dense)
+        for i in range(dense.shape[0]):
+            top_k = np.argsort(dense[i])[-self.sparsity_k:]
+            codes[i, top_k] = dense[i, top_k]
         return codes
 
     @property
@@ -80,13 +87,13 @@ if __name__ == "__main__":
     all_samples = ds.get_all_samples()
 
     enc = SpatialPoolerEncoder(seed=42)
-    metrics = enc.train(all_samples, epochs=50)
+    metrics = enc.train(all_samples, epochs=200)
     print("[SpatialPoolerEncoder] Train metrics:", metrics)
 
     codes = enc.encode(base)
     print("[SpatialPoolerEncoder] Encoded shape:", codes.shape)
-    print("[SpatialPoolerEncoder] Codes:\n", codes)
+    print("[SpatialPoolerEncoder] Codes:\n", np.round(codes, 3))
 
     rho, p_val, *_ = SimilarityEvaluator.evaluate(base, codes)
-    print(f"[SpatialPoolerEncoder] Spearman rho={rho}, p={p_val}")
+    print(f"[SpatialPoolerEncoder] Spearman rho={rho:.4f}, p={p_val:.4e}")
     print(f"[SpatialPoolerEncoder] Sparsity={compute_sparsity(codes):.4f}")

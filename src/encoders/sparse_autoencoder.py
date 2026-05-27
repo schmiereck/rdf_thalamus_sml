@@ -9,7 +9,7 @@ import numpy as np
 class SparseAutoencoder(EncoderBase):
     """P0-D: Sparse Autoencoder — GLOBAL OPTIMIZATION BASELINE (expected rho >= 0.6)."""
 
-    def __init__(self, dim_in=3, dim_out=16, seed=42, lr=0.05, l1_lambda=0.005):
+    def __init__(self, dim_in=3, dim_out=16, seed=42, lr=0.15, l1_lambda=0.002):
         self._dim_in = dim_in
         self._dim_out = dim_out
         self.lr = lr

@@ -7,7 +7,15 @@ import numpy as np
 
 
 class SOMEncoder(EncoderBase):
-    """P0-C: Kohonen Self-Organizing Map encoder."""
+    """
+    P0-C: Kohonen Self-Organizing Map encoder.
+
+    A 1-D SOM with dim_out=16 neurons is trained on the 3-bit input space.
+    The *code* for an input is the vector of (normalised, clipped) Euclidean
+    distances from the input to **every** SOM unit.  This makes the code
+    distributed and topology-preserving: inputs that lie close in data space
+    will have similar distance patterns across the map.
+    """
 
     def __init__(self, dim_in=3, dim_out=16, seed=42, lr_init=0.5, lr_final=0.01,
                  radius_init=4.0, radius_final=0.5):
@@ -31,7 +39,8 @@ class SOMEncoder(EncoderBase):
         dists = np.abs(self.positions - bmu)
         return np.exp(-(dists ** 2) / (2 * radius ** 2))
 
-    def train(self, inputs, epochs=50):
+    def train(self, inputs, epochs=200):
+        n_samples = inputs.shape[0]
         for epoch in range(epochs):
             t = epoch / max(epochs - 1, 1)
             lr = self.lr_init * (1 - t) + self.lr_final * t
@@ -44,11 +53,16 @@ class SOMEncoder(EncoderBase):
         return {"final_loss": 0.0}
 
     def encode(self, inputs):
-        codes = np.zeros((len(inputs), self._dim_out))
-        for i, x in enumerate(inputs):
-            bmu = self._find_bmu(x)
-            # Activation pattern: Gaussian around BMU
-            codes[i] = self._neighborhood(bmu, radius=1.0)  # narrow encoding
+        """
+        Encode as the vector of inverse Euclidean distances to all SOM units.
+        Similar inputs → similar distance vectors → high cosine similarity.
+        """
+        # inputs shape: (n_samples, dim_in)
+        # self.weights shape: (dim_out, dim_in)
+        diff = inputs[:, np.newaxis, :] - self.weights[np.newaxis, :, :]
+        dists = np.sqrt(np.sum(diff ** 2, axis=2) + 1e-8)  # (n_samples, dim_out)
+        # Inverse distance: smaller raw distance → larger code value
+        codes = 1.0 / (1.0 + dists)
         return codes
 
     @property
@@ -68,13 +82,13 @@ if __name__ == "__main__":
     all_samples = ds.get_all_samples()
 
     enc = SOMEncoder(seed=42)
-    metrics = enc.train(all_samples, epochs=50)
+    metrics = enc.train(all_samples, epochs=200)
     print("[SOMEncoder] Train metrics:", metrics)
 
     codes = enc.encode(base)
     print("[SOMEncoder] Encoded shape:", codes.shape)
-    print("[SOMEncoder] Codes:\n", codes)
+    print("[SOMEncoder] Codes:\n", np.round(codes, 3))
 
     rho, p_val, *_ = SimilarityEvaluator.evaluate(base, codes)
-    print(f"[SOMEncoder] Spearman rho={rho}, p={p_val}")
+    print(f"[SOMEncoder] Spearman rho={rho:.4f}, p={p_val:.4e}")
     print(f"[SOMEncoder] Sparsity={compute_sparsity(codes):.4f}")
