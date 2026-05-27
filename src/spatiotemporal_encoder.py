@@ -54,6 +54,13 @@ def _make_windows_3(x_in: np.ndarray, axis: int = 0) -> np.ndarray:
     -------
     windows : (B, N_l-2, M, 3, d)
     """
+    if axis == 1:
+        # Fast slicing for axis=1 — avoids np.take copies and is extremely fast
+        return np.stack([
+            x_in[:, :-2, ...],
+            x_in[:, 1:-1, ...],
+            x_in[:, 2:, ...],
+        ], axis=-2)
     return np.stack([
         np.take(x_in, range(0, x_in.shape[axis] - 2), axis=axis),
         np.take(x_in, range(1, x_in.shape[axis] - 1), axis=axis),
@@ -445,19 +452,8 @@ class SpatiotemporalEncoder:
         for key in spatial_grads:
             spatial_grads[key] /= n_total_spatial_positions
 
-        # --- Embedding gradient — fully vectorised ---
-        emb = fwd["embeddings"]  # (B, 16, 32, d)
-
-        diff0 = np.sum((emb - self.embedding[0:1]) ** 2, axis=-1)  # (B, 16, 32)
-        diff1 = np.sum((emb - self.embedding[1:2]) ** 2, axis=-1)  # (B, 16, 32)
-        x_binary_recovered = (diff1 < diff0).astype(int)            # (B, 16, 32)
-
-        mask0 = (x_binary_recovered == 0).astype(x_binary_recovered.dtype)
-        mask1 = (x_binary_recovered == 1).astype(x_binary_recovered.dtype)
-
+        # --- Embedding gradient — frozen (non-learned), so return zeros ---
         dL_dembedding = np.zeros_like(self.embedding)
-        dL_dembedding[0] = (dL_dx * mask0[..., np.newaxis]).sum(axis=(0, 1, 2))
-        dL_dembedding[1] = (dL_dx * mask1[..., np.newaxis]).sum(axis=(0, 1, 2))
 
         return {
             "dL_dspatial": spatial_grads,
@@ -554,8 +550,11 @@ if __name__ == "__main__":
         assert grads["dL_dembedding"].shape == (2, 16)
         print("  Backward pass: all gradient shapes correct  [OK]")
 
-        assert np.any(np.abs(grads["dL_dembedding"]) > 0), \
-            "Embedding gradient is all zeros"
+        # Embedding gradient should be zeros (frozen)
+        assert np.allclose(grads["dL_dembedding"], 0), \
+            "Embedding gradient should be zeros for frozen embedding"
+        print("  Embedding gradient is zeros (frozen)  [OK]")
+
         assert np.any(np.abs(grads["dL_dspatial"]["W_enc"]) > 0), \
             "Spatial W_enc gradient is all zeros"
         assert np.any(np.abs(grads["dL_dtemporal"]["W_enc"]) > 0), \

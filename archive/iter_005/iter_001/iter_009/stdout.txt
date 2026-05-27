@@ -1,0 +1,353 @@
+ 
+
+[Tool Call: list_dir({'path': '.'})]
+
+[Tool Result: [DIR] -p
+[DIR] .git
+      .gitignore
+[DIR] .venv
+      _compute_stats.py
+      _debug.txt
+      _fix_encoding.py
+      _fix_rho.py
+      _fix_st.py
+      _gen_report.py
+      _time_one.py
+      _tst.txt
+[DIR] archive
+      config.toml
+      current_state.md
+      experiment_log.md
+      goal.md
+      hyper_search.py
+      manager_log.md
+[DIR] phase_0
+[DIR] phase_1
+[DIR] phase_2
+[DIR] phase_3
+      RESEARCH-RESULT-001.md
+      RESEARCH-RESULT-002.md
+      RESEARCH-RESULT-003.md
+      RESEARCH-RES...]
+
+
+[Tool Call: list_dir({'path': 'src'})]
+
+[Tool Result: [DIR] __pycache__
+      _bench_compare.py
+      dataset_phase1.py
+      diagnostic_phase1.py
+[DIR] encoders
+      eval_phase1.py
+      harness.py
+      hierarchical_encoder.py
+      node.py
+      pre_registration.md
+      run_phase0.py
+      run_phase1.py
+      run_phase1_v2.py
+      run_phase2.py
+      run_phase2_baselines.py
+      run_phase3.py
+      run_phase3_background.py
+      run_phase3_medium.py
+      spatiotemporal_dataset.py
+      spatiotemporal_encoder.py
+      temporal_dataset.py
+   ...]
+
+ 
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_encoder.py'})]
+
+[Tool Result: """
+Spatiotemporal Encoder for Phase 3.
+
+Implements the sequential spatial-then-temporal encoder over a
+(16 spatial × 32 temporal) binary grid using stacked kernel-3,
+stride-1 UniversalNodes.
+
+Both spatial and temporal forward/backward passes are **fully
+vectorized** — no Python loops over spatial/temporal positions.
+
+Three variants
+--------------
+* **P3-A** – One master spatial node + one master temporal node.
+  Trained sequentially (spatial first, then temporal).
+* **P3-B** – One master spatia...]
+
+
+[Tool Call: read_file({'path': 'src/run_phase3.py'})]
+
+[Tool Result: """
+Phase 3 Experiment Runner for HSUN.
+
+Runs all three spatiotemporal variants (P3-A, P3-B, P3-C) plus untrained
+baseline and shortcut baselines across 5 seeds.
+
+Training protocol:
+  - P3-A: alpha=1.0 (spatial only) for 200 epochs,
+          then freeze spatial master node, alpha=0.0 (temporal only) for 200 epochs.
+  - P3-B/C: alpha=0.5 jointly for 200 epochs.
+  - Untrained: random init, freeze encoder, train only JEPA predictors.
+
+Evaluation:
+  - Linear probe (SimpleLogisticRegression, max_ite...]
+
+
+[Tool Call: list_dir({'path': 'phase_3'})]
+
+[Tool Result:       phase3_results.csv
+      run.log]
+
+
+[Tool Call: read_file({'path': 'src/node.py'})]
+
+[Tool Result: """
+UniversalNode -- single-layer auto-encoder unit for HSUN Phase 0-E.
+
+Architecture
+------------
+  x_3d (batch, 3, d_in)  --> flatten --> (batch, 3*d_in)
+  z    = tanh(x_flat @ W_enc + b_enc)          # (batch, d_out)  -- "code"
+  xrec = z       @ W_dec + b_dec              # (batch, 3*d_in)
+           --> reshape --> (batch, 3, d_in)
+
+Loss  = MSE(x_3d, xrec) + l1_lambda * mean(|z|)
+
+All analytical gradients are provided in ``compute_gradients`` and verified
+below via a central-difference nume...]
+
+ 
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_dataset.py'})]
+
+[Tool Result: """
+Spatiotemporal Dataset Generator for Phase 3.
+
+Generates four categories of spatiotemporal sequences on a 16x32 binary grid
+(16 spatial positions x 32 timesteps). Designed so that shortcut baselines
+(single-frame and temporal-average projections) achieve at-chance performance,
+forcing the model to reason about temporal dynamics.
+
+Classes (4-class classification):
+    0 = moving_blob       -- blob position follows a LINEAR trajectory (wrapped mod 16)
+    1 = expanding_blob    -- blob width os...]
+
+   
+
+[Tool Call: write_file({'content': '"""\nSpatiotemporal Encoder for Phase 3.\n\nImplements the sequential spatial-then-temporal encoder over a\n(16 spatial × 32 temporal) binary grid using stacked kernel-3,\nstride-1 UniversalNodes.\n\nBoth spatial and temporal forward/backward passes are **fully\nvectorized** — no Python loops over spatial/temporal positions.\n\nThree variants\n--------------\n* **P3-A** – One master spatial node + one master temporal node.\n  Trained sequentially (spatial first, then temporal).\n* **P3-B** – One master spatial node + one master temporal node\n  (separate objects, trained jointly with both losses).\n* **P3-C** – A *single* master node reused for *both* spatial and\n  temporal passes (strong universal hypothesis).\n\nArchitecture\n------------\nInput           : (B, S=16, T=32)  binary\nEmbedding       : (2, d) lookup — Xavier-initialised, frozen\nSpatial stages  : 3 × kernel-3 / stride-1 over the S axis\n                  (16 → 14 → 12 → 10 spatial positions)\nTranspose        : (B, 10, T, d_out)  →  (B, T, 10, d_out)\nTemporal stages  : 3 × kernel-3 / stride-1 over the T axis\n                  (32 → 30 → 28 → 26 temporal positions)\nAverage pool     : mean over remaining 10 spatial × 26 temporal positions\nOutput          : (B, d_out)  ==  (B, 16)\n"""\n\nfrom __future__ import annotations\n\nimport numpy as np\n\nfrom node import UniversalNode\n\n\n# ---------------------------------------------------------------------------\n#  Sliding-window helpers (fully vectorised, no Python loops)\n# ---------------------------------------------------------------------------\n\ndef _make_windows_3(x_in: np.ndarray, axis: int = 0) -> np.ndarray:\n    """\n    Build kernel-3 sliding windows along the given axis.\n\n    Parameters\n    ----------\n    x_in : (B, N_l, M, d)\n    axis : which axis the kernel slides over (typically 1)\n\n    Returns\n    -------\n    windows : (B, N_l-2, M, 3, d)\n    """\n    if axis == 1:\n        # Fast slicing for axis=1 — avoids np.take copies and is extremely fast\n        return np.stack([\n            x_in[:, :-2, ...],\n            x_in[:, 1:-1, ...],\n            x_in[:, 2:, ...],\n        ], axis=-2)\n    return np.stack([\n        np.take(x_in, range(0, x_in.shape[axis] - 2), axis=axis),\n        np.take(x_in, range(1, x_in.shape[axis] - 1), axis=axis),\n        np.take(x_in, range(2, x_in.shape[axis]    ), axis=axis),\n    ], axis=-2)\n\n\n# ---------------------------------------------------------------------------\n#  Spatiotemporal Encoder\n# ---------------------------------------------------------------------------\n\nclass SpatiotemporalEncoder:\n    """Sequential spatial→temporal encoder with configurable weight sharing."""\n\n    def __init__(\n        self,\n        variant: str = "P3-B",\n        d: int = 16,\n        d_out: int = 16,\n        n_spatial_layers: int = 3,\n        n_temporal_layers: int = 3,\n        l1_lambda: float = 0.002,\n        seed: int = 42,\n    ):\n        if variant not in ("P3-A", "P3-B", "P3-C"):\n            raise ValueError(\n                f"variant must be one of (\'P3-A\', \'P3-B\', \'P3-C\'), got \'{variant}\'"\n            )\n        if d_out != d:\n            raise ValueError(\n                f"d_out must equal d for dimension homogeneity, got d={d}, d_out={d_out}"\n            )\n\n        self.variant = variant\n        self.d = d\n        self.d_out = d_out\n        self.n_spatial_layers = n_spatial_layers\n        self.n_temporal_layers = n_temporal_layers\n        self.l1_lambda = l1_lambda\n        self.seed = seed\n\n        # --- Non-learned binary embedding (2, d) ---\n        rng = np.random.default_rng(seed)\n        scale = np.sqrt(2.0 / (1 + d))  # Xavier scale for (2, d)\n        self.embedding: np.ndarray = rng.standard_normal((2, d)) * scale\n\n        # --- Master nodes ---\n        self.master_spatial = UniversalNode(\n            d=d,\n            l1_lambda=l1_lambda,\n            seed=seed,\n            d_out=d_out,\n        )\n        if variant == "P3-C":\n            # Same object for both axes\n            self.master_temporal = self.master_spatial\n        else:\n            self.master_temporal = UniversalNode(\n                d=d,\n                l1_lambda=l1_lambda,\n                seed=seed + 100,\n                d_out=d_out,\n            )\n\n        # --- Positions per layer (kernel-3 stride-1 reduces dim by 2 each layer) ---\n        self.spatial_nodes_per_layer = [\n            16 - 2 * (l + 1) for l in range(n_spatial_layers)\n        ]  # e.g. [14, 12, 10]\n        self.temporal_nodes_per_layer = [\n            32 - 2 * (l + 1) for l in range(n_temporal_layers)\n        ]  # e.g. [30, 28, 26]\n\n    # ------------------------------------------------------------------\n    #  Helpers\n    # ------------------------------------------------------------------\n\n    def _embed(self, x_binary: np.ndarray) -> np.ndarray:\n        """\n        Map raw binary (B, S, T) → (B, S, T, d) via frozen lookup table.\n        """\n        idx = x_binary.astype(int)                     # (B, S, T)\n        return self.embedding[idx]                      # (B, S, T, d)\n\n    # ------------------------------------------------------------------\n    #  Forward — fully vectorised\n    # ------------------------------------------------------------------\n\n    def _forward_spatial_layer(\n        self,\n        x_in: np.ndarray,       # (B, S_l, T, d)\n        layer_idx: int,\n        store_inputs: bool = False,\n    ) -> tuple[np.ndarray, np.ndarray | None]:\n        """\n        Apply kernel-3 stride-1 sliding window over the S axis.\n\n        Returns\n        -------\n        x_out : (B, S_{l+1}, T, d_out)\n        node_inputs : (B, S_{l+1}, T, 3, d)  — only if store_inputs\n        """\n        node = self.master_spatial\n        B, S_l, T, d_in = x_in.shape\n\n        # Build all windows at once: (B, S_l-2, T, 3, d_in)\n        windows = _make_windows_3(x_in, axis=1)\n        n_pos = S_l - 2\n\n        if store_inputs:\n            node_inputs = windows.copy()  # (B, S_l-2, T, 3, d_in)\n        else:\n            node_inputs = None\n\n        # Flatten for node: (B * n_pos * T, 3, d_in)\n        x_3d = windows.reshape(B * n_pos * T, 3, d_in)\n        codes_flat = node.forward(x_3d)              # (B * n_pos * T, d_out)\n        # Reshape back: (B, n_pos, T, d_out)\n        x_out = codes_flat.reshape(B, n_pos, T, self.d_out)\n        return x_out, node_inputs\n\n    def _forward_temporal_layer(\n        self,\n        x_in: np.ndarray,       # (B, T_l, S_out, d)\n        layer_idx: int,\n        store_inputs: bool = False,\n    ) -> tuple[np.ndarray, np.ndarray | None]:\n        """\n        Apply kernel-3 stride-1 sliding window over the T axis.\n\n        Returns\n        -------\n        x_out : (B, T_{l+1}, S_out, d_out)\n        node_inputs : (B, T_{l+1}, S_out, 3, d)  — only if store_inputs\n        """\n        node = self.master_temporal\n        B, T_l, S_out, d_in = x_in.shape\n\n        # Build all windows at once: (B, T_l-2, S_out, 3, d_in)\n        windows = _make_windows_3(x_in, axis=1)\n        n_pos = T_l - 2\n\n        if store_inputs:\n            node_inputs = windows.copy()  # (B, T_l-2, S_out, 3, d_in)\n        else:\n            node_inputs = None\n\n        # Flatten for node: (B * n_pos * S_out, 3, d_in)\n        x_3d = windows.reshape(B * n_pos * S_out, 3, d_in)\n        codes_flat = node.forward(x_3d)              # (B * n_pos * S_out, d_out)\n        x_out = codes_flat.reshape(B, n_pos, S_out, self.d_out)\n        return x_out, node_inputs\n\n    # ------------------------------------------------------------------\n    #  Forward with intermediates\n    # ------------------------------------------------------------------\n\n    def forward_with_intermediates(self, x_binary: np.ndarray) -> dict:\n        """\n        Full forward pass storing all intermediates needed for backward.\n\n        Parameters\n        ----------\n        x_binary : np.ndarray, shape (B, S=16, T=32) or (B, S*T)\n\n        Returns\n        -------\n        dict with keys:\n            embeddings      : (B, 16, 32, d)\n            spatial_outputs  : list of 3 × (B, S_l_out, T, d)\n            spatial_inputs   : list of 3 × (B, S_l_out, T, 3, d)\n            temporal_outputs : list of 3 × (B, T_l_out, S_final, d)\n            temporal_inputs  : list of 3 × (B, T_l_out, S_final, 3, d)\n            pooled           : (B, d_out)  — mean-pooled final code\n        """\n        # Accept flat (B, S*T) and reshape\n        if x_binary.ndim == 2 and x_binary.shape[1] == 16 * 32:\n            x_binary = x_binary.reshape(-1, 16, 32)\n\n        B = x_binary.shape[0]\n\n        # --- Embed ---\n        emb = self._embed(x_binary)                  # (B, 16, 32, d)\n\n        # --- Spatial pass (3 layers) ---\n        spatial_outputs: list[np.ndarray] = []\n        spatial_inputs: list[np.ndarray] = []\n\n        x_spatial = emb\n        for l in range(self.n_spatial_layers):\n            x_out, inp_3d = self._forward_spatial_layer(\n                x_spatial, l, store_inputs=True\n            )\n            spatial_outputs.append(x_out)\n            spatial_inputs.append(inp_3d)             # type: ignore[arg-type]\n            x_spatial = x_out\n\n        # --- Transpose for temporal processing ---\n        x_spatial = x_spatial.transpose(0, 2, 1, 3)   # (B, T, S_final, d)\n\n        # --- Temporal pass (3 layers) ---\n        temporal_outputs: list[np.ndarray] = []\n        temporal_inputs: list[np.ndarray] = []\n\n        x_temporal = x_spatial\n        for l in range(self.n_temporal_layers):\n            x_out, inp_3d = self._forward_temporal_layer(\n                x_temporal, l, store_inputs=True\n            )\n            temporal_outputs.append(x_out)\n            temporal_inputs.append(inp_3d)             # type: ignore[arg-type]\n            x_temporal = x_out\n\n        # --- Average pool across space and time ---\n        pooled = x_temporal.mean(axis=(1, 2))          # (B, d_out)\n\n        return {\n            "embeddings": emb,\n            "spatial_outputs": spatial_outputs,\n            "spatial_inputs": spatial_inputs,\n            "temporal_outputs": temporal_outputs,\n            "temporal_inputs": temporal_inputs,\n            "pooled": pooled,\n        }\n\n    # ------------------------------------------------------------------\n    #  Backward — fully vectorised\n    # ------------------------------------------------------------------\n\n    def backward(\n        self,\n        fwd: dict,\n        dL_dspatial_codes: list[np.ndarray],\n        dL_dtemporal_codes: list[np.ndarray],\n        alpha: float = 0.5,\n    ) -> dict:\n        """\n        Propagate code-level gradients back through temporal and spatial\n        passes to produce gradients for the master nodes and the embedding.\n\n        Parameters\n        ----------\n        fwd : dict\n            The output of ``forward_with_intermediates``.\n        dL_dspatial_codes : list of np.ndarray\n            External JEPA gradients for each spatial layer.\n            Each has shape matching the corresponding spatial_output.\n        dL_dtemporal_codes : list of np.ndarray\n            External JEPA gradients for each temporal layer.\n            Each has shape matching the corresponding temporal_output.\n        alpha : float\n            Weighting: alpha for spatial gradients, (1-alpha) for temporal\n            when combining at the interface.  In practice the gradients\n            are processed axis by axis, but this controls the scaling.\n\n        Returns\n        -------\n        dict with keys:\n            \'dL_dspatial\'  : dict with W_enc, b_enc, W_dec, b_dec gradients\n            \'dL_dtemporal\' : dict with W_enc, b_enc, W_dec, b_dec gradients\n            \'dL_dembedding\': gradient table (2, d)\n        """\n        B = fwd["embeddings"].shape[0]\n        d = self.d\n        d_out = self.d_out\n\n        # Accumulator for each master node\'s parameters\n        spatial_grads: dict[str, np.ndarray] = {\n            "W_enc": np.zeros_like(self.master_spatial.W_enc),\n            "b_enc": np.zeros_like(self.master_spatial.b_enc),\n            "W_dec": np.zeros_like(self.master_spatial.W_dec),\n            "b_dec": np.zeros_like(self.master_spatial.b_dec),\n        }\n        temporal_grads: dict[str, np.ndarray] = {\n            "W_enc": np.zeros_like(self.master_spatial.W_enc),\n            "b_enc": np.zeros_like(self.master_spatial.b_enc),\n            "W_dec": np.zeros_like(self.master_spatial.W_dec),\n            "b_dec": np.zeros_like(self.master_spatial.b_dec),\n        }\n\n        # ====================================================================\n        #  TEMPORAL BACKWARD (process layers in reverse) — vectorised\n        # ====================================================================\n\n        # Gradient from average pooling\n        x_final = fwd["temporal_outputs"][-1]          # (B, T_final, S_final, d_out)\n        T_final, S_final = x_final.shape[1], x_final.shape[2]\n        dL_dx = np.full_like(x_final, 1.0 / (T_final * S_final))\n\n        # Add external temporal JEPA gradients for the last layer\n        dL_dx = dL_dx + dL_dtemporal_codes[-1] * (1.0 - alpha)\n\n        for l in reversed(range(self.n_temporal_layers)):\n            dL_dx_total = dL_dx\n\n            node_inputs = fwd["temporal_inputs"][l]         # (B, T_l_out, S_final, 3, d)\n            code_out = fwd["temporal_outputs"][l]           # (B, T_l_out, S_final, d_out)\n\n            # --- Backprop through tanh activation ---\n            dL_dz = dL_dx_total * (1.0 - code_out ** 2)    # (B, T_l_out, S_final, d_out)\n\n            # Flatten all positions at once\n            B, n_pos, S, _, d_in = node_inputs.shape\n            dL_dz_flat = dL_dz.reshape(B * n_pos * S, d_out)\n            inp_flat = node_inputs.reshape(B * n_pos * S, 3 * d_in)\n\n            # Parameter gradients (sum across all positions + batch)\n            dW_enc = inp_flat.T @ dL_dz_flat / B\n            db_enc = dL_dz_flat.mean(axis=0)\n\n            temporal_grads["W_enc"] += dW_enc\n            temporal_grads["b_enc"] += db_enc\n            dW_dec = np.zeros_like(self.master_spatial.W_dec)\n            db_dec = np.zeros_like(self.master_spatial.b_dec)\n            temporal_grads["W_dec"] += dW_dec\n            temporal_grads["b_dec"] += db_dec\n\n            # Gradient w.r.t. input\n            dL_dx_flat = dL_dz_flat @ self.master_spatial.W_enc.T   # (B*n_pos*S, 3*d)\n            dL_dx_reshaped = dL_dx_flat.reshape(B, n_pos, S, 3, d_in)  # (B, n_pos, S, 3, d)\n\n            # Scatter gradient into layer input (3 kernel offsets → 3 slice-adds)\n            dL_dlayer_input = np.zeros((B, n_pos + 2, S, d_in))\n            dL_dlayer_input[:, 0:n_pos,   :, :] += dL_dx_reshaped[:, :, :, 0, :]\n            dL_dlayer_input[:, 1:n_pos+1, :, :] += dL_dx_reshaped[:, :, :, 1, :]\n            dL_dlayer_input[:, 2:n_pos+2, :, :] += dL_dx_reshaped[:, :, :, 2, :]\n\n            if l > 0:\n                dL_dx = dL_dlayer_input\n                ext = dL_dtemporal_codes[l - 1] * (1.0 - alpha)\n                dL_dx = dL_dx + ext\n            else:\n                dL_dx = dL_dlayer_input  # (B, 32, S_final, d)\n\n        n_total_temporal_positions = sum(self.temporal_nodes_per_layer)\n        for key in temporal_grads:\n            temporal_grads[key] /= n_total_temporal_positions\n\n        # ====================================================================\n        #  SPATIAL BACKWARD — vectorised\n        # ====================================================================\n\n        # dL_dx is (B, 32, S_final, d) → transpose to (B, S_final, 32, d)\n        dL_dx = dL_dx.transpose(0, 2, 1, 3)\n\n        assert dL_dx.shape[1] == self.spatial_nodes_per_layer[-1], \\\n            (f"Mismatch: dL_dx spatial dim {dL_dx.shape[1]} vs "\n             f"expected {self.spatial_nodes_per_layer[-1]}")\n\n        for l in reversed(range(self.n_spatial_layers)):\n            dL_dx_total = dL_dx + dL_dspatial_codes[l] * alpha\n\n            node_inputs = fwd["spatial_inputs"][l]   # (B, S_l_out, T, 3, d)\n            code_out = fwd["spatial_outputs"][l]     # (B, S_l_out, T, d_out)\n\n            # --- Backprop through tanh ---\n            dL_dz = dL_dx_total * (1.0 - code_out ** 2)   # (B, S_l_out, T, d_out)\n\n            B, n_pos, T, _, d_in = node_inputs.shape\n            dL_dz_flat = dL_dz.reshape(B * n_pos * T, d_out)\n            inp_flat = node_inputs.reshape(B * n_pos * T, 3 * d_in)\n\n            # Parameter gradients\n            dW_enc = inp_flat.T @ dL_dz_flat / B\n            db_enc = dL_dz_flat.mean(axis=0)\n\n            spatial_grads["W_enc"] += dW_enc\n            spatial_grads["b_enc"] += db_enc\n            dW_dec = np.zeros_like(self.master_spatial.W_dec)\n            db_dec = np.zeros_like(self.master_spatial.b_dec)\n            spatial_grads["W_dec"] += dW_dec\n            spatial_grads["b_dec"] += db_dec\n\n            # Gradient w.r.t. input\n            dL_dx_flat = dL_dz_flat @ self.master_spatial.W_enc.T\n            dL_dx_reshaped = dL_dx_flat.reshape(B, n_pos, T, 3, d_in)  # (B, n_pos, T, 3, d)\n\n            # Scatter into layer input\n            dL_dlayer_input = np.zeros((B, n_pos + 2, T, d_in))\n            dL_dlayer_input[:, 0:n_pos,   :, :] += dL_dx_reshaped[:, :, :, 0, :]\n            dL_dlayer_input[:, 1:n_pos+1, :, :] += dL_dx_reshaped[:, :, :, 1, :]\n            dL_dlayer_input[:, 2:n_pos+2, :, :] += dL_dx_reshaped[:, :, :, 2, :]\n\n            if l > 0:\n                dL_dx = dL_dlayer_input\n            else:\n                dL_dx = dL_dlayer_input  # (B, 16, 32, d)\n\n        n_total_spatial_positions = sum(self.spatial_nodes_per_layer)\n        for key in spatial_grads:\n            spatial_grads[key] /= n_total_spatial_positions\n\n        # --- Embedding gradient — frozen (non-learned), so return zeros ---\n        dL_dembedding = np.zeros_like(self.embedding)\n\n        return {\n            "dL_dspatial": spatial_grads,\n            "dL_dtemporal": temporal_grads,\n            "dL_dembedding": dL_dembedding,\n        }\n\n    # ------------------------------------------------------------------\n    #  Parameter Count\n    # ------------------------------------------------------------------\n\n    def get_parameter_count(self) -> int:\n        count = 0  # embedding is frozen / non-learned\n        count += self.master_spatial.W_enc.size + self.master_spatial.b_enc.size\n        count += self.master_spatial.W_dec.size + self.master_spatial.b_dec.size\n        if self.variant != "P3-C":\n            count += self.master_temporal.W_enc.size + self.master_temporal.b_enc.size\n            count += self.master_temporal.W_dec.size + self.master_temporal.b_dec.size\n        return count\n\n\n# ======================================================================\n#  Self-test\n# ======================================================================\n\nif __name__ == "__main__":\n    print("=" * 65)\n    print("  SpatiotemporalEncoder -- Self-Test (vectorised)")\n    print("=" * 65)\n\n    rng = np.random.default_rng(7)\n    B, S, T = 4, 16, 32\n\n    for variant in ("P3-A", "P3-B", "P3-C"):\n        enc = SpatiotemporalEncoder(variant=variant, d=16, d_out=16, seed=42)\n        print(f"\\n--- Variant: {variant} ---")\n        print(f"  Parameter count = {enc.get_parameter_count()}")\n\n        if variant == "P3-C":\n            assert enc.master_spatial is enc.master_temporal\n            print("  P3-C: spatial and temporal nodes are same object  [OK]")\n        else:\n            assert enc.master_spatial is not enc.master_temporal\n            print("  Separate spatial/temporal nodes  [OK]")\n\n        # --- Forward pass ---\n        x_binary = (rng.random((B, S, T)) < 0.5).astype(np.float64)\n\n        fwd = enc.forward_with_intermediates(x_binary)\n\n        print(f"  embeddings shape  : {fwd[\'embeddings\'].shape}")\n        assert fwd["embeddings"].shape == (B, 16, 32, 16)\n\n        for l in range(enc.n_spatial_layers):\n            so = fwd["spatial_outputs"][l]\n            si = fwd["spatial_inputs"][l]\n            expected_spatial = S - 2 * (l + 1)\n            print(f"  spatial layer {l}: output {so.shape}, input {si.shape}")\n            assert so.shape == (B, expected_spatial, T, 16)\n            assert si.shape == (B, expected_spatial, T, 3, 16)\n\n        for l in range(enc.n_temporal_layers):\n            to_ = fwd["temporal_outputs"][l]\n            ti = fwd["temporal_inputs"][l]\n            expected_temporal = T - 2 * (l + 1)\n            print(f"  temporal layer {l}: output {to_.shape}, input {ti.shape}")\n            assert to_.shape == (B, expected_temporal, 10, 16)\n            assert ti.shape == (B, expected_temporal, 10, 3, 16)\n\n        print(f"  pooled shape      : {fwd[\'pooled\'].shape}")\n        assert fwd["pooled"].shape == (B, 16)\n        print("  Forward pass: all shapes correct  [OK]")\n\n        # --- Backward pass ---\n        dL_dspatial = [\n            rng.standard_normal(fwd["spatial_outputs"][l].shape)\n            for l in range(enc.n_spatial_layers)\n        ]\n        dL_dtemporal = [\n            rng.standard_normal(fwd["temporal_outputs"][l].shape)\n            for l in range(enc.n_temporal_layers)\n        ]\n\n        grads = enc.backward(fwd, dL_dspatial, dL_dtemporal, alpha=0.5)\n\n        for key in ("W_enc", "b_enc", "W_dec", "b_dec"):\n            assert grads["dL_dspatial"][key].shape == getattr(\n                enc.master_spatial, key\n            ).shape, f"Shape mismatch in spatial grads[{key}]"\n            assert grads["dL_dtemporal"][key].shape == getattr(\n                enc.master_temporal, key\n            ).shape, f"Shape mismatch in temporal grads[{key}]"\n\n        assert grads["dL_dembedding"].shape == (2, 16)\n        print("  Backward pass: all gradient shapes correct  [OK]")\n\n        # Embedding gradient should be zeros (frozen)\n        assert np.allclose(grads["dL_dembedding"], 0), \\\n            "Embedding gradient should be zeros for frozen embedding"\n        print("  Embedding gradient is zeros (frozen)  [OK]")\n\n        assert np.any(np.abs(grads["dL_dspatial"]["W_enc"]) > 0), \\\n            "Spatial W_enc gradient is all zeros"\n        assert np.any(np.abs(grads["dL_dtemporal"]["W_enc"]) > 0), \\\n            "Temporal W_enc gradient is all zeros"\n        print("  Gradient magnitudes non-zero  [OK]")\n\n    # --- Test with flat input (B, S*T) ---\n    print("\\n--- Flat input (B, S*T) ---")\n    enc_flat = SpatiotemporalEncoder(variant="P3-B", d=16, d_out=16, seed=42)\n    x_flat = (rng.random((B, 16 * 32)) < 0.5).astype(np.float64)\n    fwd_flat = enc_flat.forward_with_intermediates(x_flat)\n    assert fwd_flat["pooled"].shape == (B, 16)\n    print(f"  Flat input {x_flat.shape} -> pooled {fwd_flat[\'pooled\'].shape}  [OK]")\n\n    dL_ds_flat = [np.zeros_like(fwd_flat["spatial_outputs"][l]) for l in range(3)]\n    dL_dt_flat = [np.zeros_like(fwd_flat["temporal_outputs"][l]) for l in range(3)]\n    grads_flat = enc_flat.backward(fwd_flat, dL_ds_flat, dL_dt_flat, alpha=0.5)\n    print("  Backward with flat input: shapes correct  [OK]")\n\n    # --- Parameter count comparison ---\n    print("\\n--- Parameter Count Comparison ---")\n    count_a = SpatiotemporalEncoder("P3-A", d=16, d_out=16, seed=42).get_parameter_count()\n    count_b = SpatiotemporalEncoder("P3-B", d=16, d_out=16, seed=42).get_parameter_count()\n    count_c = SpatiotemporalEncoder("P3-C", d=16, d_out=16, seed=42).get_parameter_count()\n    print(f"  P3-A params = {count_a}")\n    print(f"  P3-B params = {count_b}")\n    print(f"  P3-C params = {count_c}")\n    assert count_a == count_b, "P3-A and P3-B should have identical parameter counts"\n    assert count_c == count_a // 2, "P3-C should have half the parameters of P3-A/B"\n    print("  P3-C has ~50% of P3-A/B parameters  [OK]")\n\n    print("\\n" + "-" * 65)\n    print("  ALL SELF-TESTS PASSED")\n    print("=" * 65)\n', 'path': 'src/spatiotemporal_encoder.py'})]
+
+[Tool Result: Successfully wrote to src/spatiotemporal_encoder.py]
+
+ 
+
+[Tool Call: read_file({'path': 'src/training_objectives.py'})]
+
+[Tool Result: """
+Training objectives for Phase 1 -- pure NumPy implementations.
+
+Includes:
+  - JEPALoss          : Spatial bidirectional JEPA with per-layer linear predictors + VICReg
+  - ContrastiveLoss   : NT-Xent with 2-layer projection MLP
+  - SFALoss           : Slowness (temporal difference) + variance penalty
+  - HebbianLoss       : Oja's rule online updates on encoder nodes
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+
+# ================================================================...]
+
+
+[Tool Call: read_file({'path': 'src/harness.py'})]
+
+[Tool Result: """
+HSUN Phase 0 -- Experimental Harness
+
+Dataset generator, similarity evaluator, encoder interface, and utility functions
+for the smoke-test of hierarchical sparse universal nodes.
+
+Dependencies: numpy, scipy only -- no external ML libraries.
+"""
+
+from __future__ import annotations
+
+import itertools
+from abc import ABC, abstractmethod
+from typing import Dict, List, Tuple
+
+import numpy as np
+from scipy.stats import spearmanr
+
+
+# ------------------------------------------------------------------...]
+
+ 
+
+[Tool Call: write_file({'content': '"""\nPhase 3 Parallel Experiment Runner for HSUN.\n\nRuns all four spatiotemporal variants (P3-A, P3-B, P3-C, Untrained)\nacross 5 seeds [42, 43, 44, 45, 46] for 200 epochs in parallel\nusing multiprocessing.Pool.\n\nResults are saved to individual CSV files per variant, plus shortcut\nbaselines and a parameter comparison summary.\n"""\n\nfrom __future__ import annotations\n\nimport csv\nimport os\nimport sys\nimport time\nfrom multiprocessing import Pool\nfrom typing import Dict, List\n\nimport numpy as np\n\nsys.path.insert(0, os.path.dirname(__file__))\n\nfrom spatiotemporal_dataset import (\n    generate_spatiotemporal_dataset,\n    evaluate_all_shortcut_baselines,\n    N_CLASSES,\n)\nfrom spatiotemporal_encoder import SpatiotemporalEncoder\nfrom training_objectives import JEPALoss, _Adam\nfrom harness import SimpleLogisticRegression\n\n\n# ---------------------------------------------------------------------------\n#  Configuration\n# ---------------------------------------------------------------------------\n\nSEEDS = [42, 43, 44, 45, 46]\nD = 16\nD_OUT = 16\nBATCH_SIZE = 32\nEPOCHS = 200\nLR = 1e-3\n\nOUTPUT_DIR = "phase_3"\n\n# CSV output paths\nP3A_CSV = os.path.join(OUTPUT_DIR, "p3a_results.csv")\nP3B_CSV = os.path.join(OUTPUT_DIR, "p3b_results.csv")\nP3C_CSV = os.path.join(OUTPUT_DIR, "p3c_results.csv")\nUNTRAINED_CSV = os.path.join(OUTPUT_DIR, "untrained_results.csv")\nSHORTCUT_CSV = os.path.join(OUTPUT_DIR, "shortcut_results.csv")\nPARAM_CSV = os.path.join(OUTPUT_DIR, "param_comparison.csv")\n\n\n# ---------------------------------------------------------------------------\n#  Helpers (replicated here for picklability in multiprocessing)\n# ---------------------------------------------------------------------------\n\ndef create_jepa_losses(n_layers: int, d: int, lr: float = LR) -> list[JEPALoss]:\n    """Create a JEPALoss object per layer."""\n    return [JEPALoss(n_layers=1, d=d, lr=lr) for _ in range(n_layers)]\n\n\ndef reshape_for_spatial_jepa(x: np.ndarray) -> np.ndarray:\n    """Reshape spatial layer output (B, S, T, d) -> (B*T, S, d) for JEPA."""\n    B, S, T, d = x.shape\n    return x.transpose(0, 2, 1, 3).reshape(B * T, S, d)\n\n\ndef reshape_spatial_grads_back(grad: np.ndarray, B: int, S: int, T: int, d: int) -> np.ndarray:\n    """Reshape JEPA code gradients (B*T, S, d) back to (B, S, T, d)."""\n    return grad.reshape(B, T, S, d).transpose(0, 2, 1, 3)\n\n\ndef reshape_for_temporal_jepa(x: np.ndarray) -> np.ndarray:\n    """Reshape temporal layer output (B, T, S, d) -> (B*S, T, d) for JEPA."""\n    B, T, S, d = x.shape\n    return x.transpose(0, 2, 1, 3).reshape(B * S, T, d)\n\n\ndef reshape_temporal_grads_back(grad: np.ndarray, B: int, T: int, S: int, d: int) -> np.ndarray:\n    """Reshape JEPA code gradients (B*S, T, d) back to (B, T, S, d)."""\n    return grad.reshape(B, S, T, d).transpose(0, 2, 1, 3)\n\n\ndef train_jepa_epoch(\n    encoder: SpatiotemporalEncoder,\n    spatial_jepas: list[JEPALoss],\n    temporal_jepas: list[JEPALoss],\n    train_grid: np.ndarray,\n    batch_size: int,\n    rng: np.random.Generator,\n    alpha: float,\n    adam_spatial: _Adam | None,\n    adam_temporal: _Adam | None,\n) -> dict:\n    """Train one epoch of JEPA on spatiotemporal data."""\n    n_samples = train_grid.shape[0]\n    perm = rng.permutation(n_samples)\n\n    total_spatial_loss = 0.0\n    total_temporal_loss = 0.0\n    total_combined_loss = 0.0\n    n_batches = 0\n\n    for start in range(0, n_samples, batch_size):\n        end = min(start + batch_size, n_samples)\n        batch = train_grid[perm[start:end]]\n\n        # Forward pass\n        fwd = encoder.forward_with_intermediates(batch)\n\n        # --- Spatial JEPA ---\n        spatial_losses = []\n        spatial_code_grads = []\n        for l in range(encoder.n_spatial_layers):\n            out = fwd["spatial_outputs"][l]\n            B, S_l, T, d = out.shape\n            jepa_in = reshape_for_spatial_jepa(out)\n            result = spatial_jepas[l].step([jepa_in])\n            spatial_losses.append(result["loss"])\n            cg = result["code_grads"][0]\n            cg_back = reshape_spatial_grads_back(cg, B, S_l, T, d)\n            spatial_code_grads.append(cg_back)\n\n        # --- Temporal JEPA ---\n        temporal_losses = []\n        temporal_code_grads = []\n        for l in range(encoder.n_temporal_layers):\n            out = fwd["temporal_outputs"][l]\n            B, T_l, S_f, d = out.shape\n            jepa_in = reshape_for_temporal_jepa(out)\n            result = temporal_jepas[l].step([jepa_in])\n            temporal_losses.append(result["loss"])\n            cg = result["code_grads"][0]\n            cg_back = reshape_temporal_grads_back(cg, B, T_l, S_f, d)\n            temporal_code_grads.append(cg_back)\n\n        # --- Backprop through encoder ---\n        if adam_spatial is not None or adam_temporal is not None:\n            grads = encoder.backward(\n                fwd,\n                dL_dspatial_codes=spatial_code_grads,\n                dL_dtemporal_codes=temporal_code_grads,\n                alpha=alpha,\n            )\n\n            if adam_spatial is not None:\n                adam_spatial.step(\n                    {\n                        "W_enc": encoder.master_spatial.W_enc,\n                        "b_enc": encoder.master_spatial.b_enc,\n                        "W_dec": encoder.master_spatial.W_dec,\n                        "b_dec": encoder.master_spatial.b_dec,\n                    },\n                    grads["dL_dspatial"],\n                )\n\n            if adam_temporal is not None and encoder.variant != "P3-C":\n                adam_temporal.step(\n                    {\n                        "W_enc": encoder.master_temporal.W_enc,\n                        "b_enc": encoder.master_temporal.b_enc,\n                        "W_dec": encoder.master_temporal.W_dec,\n                        "b_dec": encoder.master_temporal.b_dec,\n                    },\n                    grads["dL_dtemporal"],\n                )\n            elif adam_temporal is not None and encoder.variant == "P3-C":\n                combined = {\n                    k: grads["dL_dspatial"][k] + grads["dL_dtemporal"][k]\n                    for k in grads["dL_dspatial"]\n                }\n                adam_temporal.step(\n                    {\n                        "W_enc": encoder.master_spatial.W_enc,\n                        "b_enc": encoder.master_spatial.b_enc,\n                        "W_dec": encoder.master_spatial.W_dec,\n                        "b_dec": encoder.master_spatial.b_dec,\n                    },\n                    combined,\n                )\n\n        avg_spatial = float(np.mean(spatial_losses)) if spatial_losses else 0.0\n        avg_temporal = float(np.mean(temporal_losses)) if temporal_losses else 0.0\n        combined = alpha * avg_spatial + (1.0 - alpha) * avg_temporal\n\n        total_spatial_loss += avg_spatial\n        total_temporal_loss += avg_temporal\n        total_combined_loss += combined\n        n_batches += 1\n\n    return {\n        "spatial_loss": total_spatial_loss / n_batches,\n        "temporal_loss": total_temporal_loss / n_batches,\n        "combined_loss": total_combined_loss / n_batches,\n    }\n\n\ndef evaluate_classification(\n    encoder: SpatiotemporalEncoder,\n    train_grid: np.ndarray,\n    train_y: np.ndarray,\n    test_grid: np.ndarray,\n    test_y: np.ndarray,\n    seed: int = 42,\n) -> dict:\n    """Fit linear probe on pooled representations and compute accuracies."""\n    fwd_train = encoder.forward_with_intermediates(train_grid)\n    fwd_test = encoder.forward_with_intermediates(test_grid)\n\n    train_pooled = fwd_train["pooled"]\n    test_pooled = fwd_test["pooled"]\n\n    probe = SimpleLogisticRegression(\n        n_classes=N_CLASSES,\n        n_features=encoder.d_out,\n        lr=0.1,\n        max_iter=2000,\n        seed=seed,\n    )\n    probe.fit(train_pooled, train_y)\n\n    train_acc = float(probe.score(train_pooled, train_y))\n    test_acc = float(probe.score(test_pooled, test_y))\n\n    per_class = {}\n    for cls in range(N_CLASSES):\n        mask = test_y == cls\n        if mask.sum() > 0:\n            cls_acc = float(probe.score(test_pooled[mask], test_y[mask]))\n        else:\n            cls_acc = 0.0\n        per_class[f"class_{cls}_acc"] = cls_acc\n\n    return {\n        "train_acc": train_acc,\n        "test_acc": test_acc,\n        **per_class,\n    }\n\n\ndef run_single_experiment(args: tuple) -> dict:\n    """\n    Worker function for a single (variant, seed) experiment.\n\n    Parameters\n    ----------\n    args : tuple (variant, seed, epochs, batch_size, lr, update_encoder)\n\n    Returns\n    -------\n    dict with all metrics.\n    """\n    variant, seed, epochs, batch_size, lr, update_encoder = args\n\n    print(f"[START] Variant: {variant}, Seed: {seed}, Epochs: {epochs}")\n    rng = np.random.default_rng(seed)\n\n    # Generate dataset\n    ds = generate_spatiotemporal_dataset(\n        n_train_per_class=500,\n        n_test_per_class=200,\n        noise_flip_prob=0.10,\n        seed=seed,\n    )\n    train_grid = ds["train_grid"]\n    train_y = ds["train_y"]\n    test_grid = ds["test_grid"]\n    test_y = ds["test_y"]\n\n    # Create encoder\n    enc_variant = "P3-B" if variant == "Untrained" else variant\n    encoder = SpatiotemporalEncoder(\n        variant=enc_variant,\n        d=D,\n        d_out=D_OUT,\n        n_spatial_layers=3,\n        n_temporal_layers=3,\n        l1_lambda=0.0,\n        seed=seed,\n    )\n    param_count = encoder.get_parameter_count()\n\n    # Create JEPA losses\n    spatial_jepas = create_jepa_losses(encoder.n_spatial_layers, D_OUT, lr=lr)\n    temporal_jepas = create_jepa_losses(encoder.n_temporal_layers, D_OUT, lr=lr)\n\n    # Set up Adam optimizers for encoder\n    adam_spatial = None\n    adam_temporal = None\n    if update_encoder:\n        adam_spatial = _Adam(\n            {\n                "W_enc": encoder.master_spatial.W_enc,\n                "b_enc": encoder.master_spatial.b_enc,\n                "W_dec": encoder.master_spatial.W_dec,\n                "b_dec": encoder.master_spatial.b_dec,\n            },\n            lr=lr,\n        )\n        if encoder.variant != "P3-C":\n            adam_temporal = _Adam(\n                {\n                    "W_enc": encoder.master_temporal.W_enc,\n                    "b_enc": encoder.master_temporal.b_enc,\n                    "W_dec": encoder.master_temporal.W_dec,\n                    "b_dec": encoder.master_temporal.b_dec,\n                },\n                lr=lr,\n            )\n        else:\n            adam_temporal = adam_spatial\n\n    # Training\n    loss_history = []\n    t0 = time.time()\n\n    if variant == "P3-A":\n        # Phase 1: spatial only (alpha=1.0)\n        for epoch in range(epochs):\n            metrics = train_jepa_epoch(\n                encoder, spatial_jepas, temporal_jepas,\n                train_grid, batch_size, rng,\n                alpha=1.0,\n                adam_spatial=adam_spatial,\n                adam_temporal=None,\n            )\n            loss_history.append(metrics)\n\n        # Phase 2: freeze spatial, temporal only (alpha=0.0)\n        for epoch in range(epochs):\n            metrics = train_jepa_epoch(\n                encoder, spatial_jepas, temporal_jepas,\n                train_grid, batch_size, rng,\n                alpha=0.0,\n                adam_spatial=None,\n                adam_temporal=adam_temporal,\n            )\n            loss_history.append(metrics)\n    else:\n        # P3-B, P3-C, or Untrained: joint training with alpha=0.5\n        alpha = 0.5\n        for epoch in range(epochs):\n            metrics = train_jepa_epoch(\n                encoder, spatial_jepas, temporal_jepas,\n                train_grid, batch_size, rng,\n                alpha=alpha,\n                adam_spatial=adam_spatial if update_encoder else None,\n                adam_temporal=adam_temporal if update_encoder else None,\n            )\n            loss_history.append(metrics)\n\n    t1 = time.time()\n    training_time = t1 - t0\n\n    # Final losses\n    if variant == "P3-A":\n        final_spatial_loss = loss_history[epochs - 1]["spatial_loss"]\n        final_temporal_loss = loss_history[2 * epochs - 1]["temporal_loss"]\n    else:\n        final_spatial_loss = loss_history[-1]["spatial_loss"]\n        final_temporal_loss = loss_history[-1]["temporal_loss"]\n\n    # Evaluate classification\n    eval_results = evaluate_classification(\n        encoder, train_grid, train_y, test_grid, test_y, seed=seed\n    )\n\n    print(f"[DONE]  Variant: {variant}, Seed: {seed} -> test_acc={eval_results[\'test_acc\']:.4f} ({training_time:.1f}s)")\n\n    return {\n        "variant": variant,\n        "seed": seed,\n        "train_acc": eval_results["train_acc"],\n        "test_acc": eval_results["test_acc"],\n        "final_spatial_jepa_loss": final_spatial_loss,\n        "final_temporal_jepa_loss": final_temporal_loss,\n        "training_time_sec": training_time,\n        "param_count": param_count,\n        "class_0_acc": eval_results["class_0_acc"],\n        "class_1_acc": eval_results["class_1_acc"],\n        "class_2_acc": eval_results["class_2_acc"],\n        "class_3_acc": eval_results["class_3_acc"],\n    }\n\n\ndef run_shortcut_baselines(seed: int) -> list[dict]:\n    """Run shortcut baselines for a single seed and return rows."""\n    ds = generate_spatiotemporal_dataset(\n        n_train_per_class=500,\n        n_test_per_class=200,\n        noise_flip_prob=0.10,\n        seed=seed,\n    )\n    results = evaluate_all_shortcut_baselines(\n        ds["train_x"], ds["train_y"], ds["test_x"], ds["test_y"],\n        frames_to_test=[0, 8, 16, 24, 31],\n    )\n\n    rows = []\n    for name, res in results.items():\n        rows.append({\n            "seed": seed,\n            "baseline_name": name,\n            "train_acc": res["train_acc"],\n            "test_acc": res["test_acc"],\n        })\n    return rows\n\n\n# ---------------------------------------------------------------------------\n#  Main parallel runner\n# ---------------------------------------------------------------------------\n\ndef main():\n    os.makedirs(OUTPUT_DIR, exist_ok=True)\n\n    print("=" * 70)\n    print("  PHASE 3 PARALLEL EXPERIMENT RUNNER")\n    print(f"  Variants: P3-A, P3-B, P3-C, Untrained")\n    print(f"  Seeds: {SEEDS}")\n    print(f"  Epochs: {EPOCHS}")\n    print(f"  Workers: 5 (one per seed, all variants parallelised)")\n    print("=" * 70)\n\n    # Build the full task list: 4 variants × 5 seeds = 20 tasks\n    variants = ["P3-A", "P3-B", "P3-C", "Untrained"]\n    tasks = []\n    for variant in variants:\n        for seed in SEEDS:\n            update_encoder = (variant != "Untrained")\n            tasks.append((variant, seed, EPOCHS, BATCH_SIZE, LR, update_encoder))\n\n    total_tasks = len(tasks)\n    print(f"\\n  Total experiments to run: {total_tasks}")\n    print(f"  Starting parallel execution...\\n")\n\n    t_start = time.time()\n\n    # Run all experiments in parallel with 5 workers\n    with Pool(processes=5) as pool:\n        all_results = pool.map(run_single_experiment, tasks)\n\n    t_end = time.time()\n    print(f"\\n  All experiments completed in {t_end - t_start:.1f}s")\n\n    # ------------------------------------------------------------------\n    #  Save per-variant CSVs\n    # ------------------------------------------------------------------\n    fieldnames = [\n        "variant", "seed", "train_acc", "test_acc",\n        "final_spatial_jepa_loss", "final_temporal_jepa_loss",\n        "training_time_sec", "param_count",\n        "class_0_acc", "class_1_acc", "class_2_acc", "class_3_acc",\n    ]\n\n    variant_csv_map = {\n        "P3-A": P3A_CSV,\n        "P3-B": P3B_CSV,\n        "P3-C": P3C_CSV,\n        "Untrained": UNTRAINED_CSV,\n    }\n\n    for variant in variants:\n        rows = [r for r in all_results if r["variant"] == variant]\n        csv_path = variant_csv_map[variant]\n        with open(csv_path, "w", newline="") as f:\n            writer = csv.DictWriter(f, fieldnames=fieldnames)\n            writer.writeheader()\n            writer.writerows(rows)\n        print(f"  Saved {variant} results -> {csv_path}")\n\n    # ------------------------------------------------------------------\n    #  Run shortcut baselines (sequential, fast)\n    # ------------------------------------------------------------------\n    print(f"\\n{\'-\' * 70}")\n    print("  Running Shortcut Baselines")\n    print(f"{\'-\' * 70}")\n    shortcut_rows: list[dict] = []\n    for seed in SEEDS:\n        print(f"    Seed {seed}...")\n        rows = run_shortcut_baselines(seed)\n        shortcut_rows.extend(rows)\n        for row in rows:\n            print(f"      {row[\'baseline_name\']:30s}  test_acc={row[\'test_acc\']:.4f}")\n\n    with open(SHORTCUT_CSV, "w", newline="") as f:\n        writer = csv.DictWriter(f, fieldnames=["seed", "baseline_name", "train_acc", "test_acc"])\n        writer.writeheader()\n        writer.writerows(shortcut_rows)\n    print(f"\\n  Shortcut baseline results saved to: {SHORTCUT_CSV}")\n\n    # ------------------------------------------------------------------\n    #  Parameter comparison CSV\n    # ------------------------------------------------------------------\n    param_rows = []\n    for variant in variants:\n        rows = [r for r in all_results if r["variant"] == variant]\n        if rows:\n            param_rows.append({\n                "variant": variant,\n                "param_count": rows[0]["param_count"],\n                "n_seeds": len(rows),\n                "mean_test_acc": float(np.mean([r["test_acc"] for r in rows])),\n                "std_test_acc": float(np.std([r["test_acc"] for r in rows])),\n                "mean_train_acc": float(np.mean([r["train_acc"] for r in rows])),\n                "std_train_acc": float(np.std([r["train_acc"] for r in rows])),\n            })\n\n    with open(PARAM_CSV, "w", newline="") as f:\n        writer = csv.DictWriter(f, fieldnames=[\n            "variant", "param_count", "n_seeds",\n            "mean_test_acc", "std_test_acc",\n            "mean_train_acc", "std_train_acc",\n        ])\n        writer.writeheader()\n        writer.writerows(param_rows)\n    print(f"  Parameter comparison saved to: {PARAM_CSV}")\n\n    # ------------------------------------------------------------------\n    #  Final summary\n    # ------------------------------------------------------------------\n    print("\\n" + "=" * 70)\n    print("  FINAL SUMMARY — Mean ± Std of Test Accuracy")\n    print("=" * 70)\n    for variant in variants:\n        rows = [r for r in all_results if r["variant"] == variant]\n        if not rows:\n            continue\n        accs = [r["test_acc"] for r in rows]\n        s_losses = [r["final_spatial_jepa_loss"] for r in rows]\n        t_losses = [r["final_temporal_jepa_loss"] for r in rows]\n        print(\n            f"    {variant:15s}: test_acc={np.mean(accs):.4f}±{np.std(accs):.4f}  "\n            f"spatial_loss={np.mean(s_losses):.4f}±{np.std(s_losses):.4f}  "\n            f"temporal_loss={np.mean(t_losses):.4f}±{np.std(t_losses):.4f}"\n        )\n\n    print("\\n" + "=" * 70)\n    print("  ALL RUNS COMPLETE")\n    print("=" * 70)\n\n    return all_results\n\n\nif __name__ == "__main__":\n    main()\n', 'path': 'src/run_phase3_parallel.py'})]
+
+[Tool Result: Successfully wrote to src/run_phase3_parallel.py]
+
+ 
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python src/spatiotemporal_encoder.py'})]
+
+[Tool Result: exit_code: 0
+stdout: =================================================================
+  SpatiotemporalEncoder -- Self-Test (vectorised)
+=================================================================
+
+--- Variant: P3-A ---
+  Parameter count = 3200
+  Separate spatial/temporal nodes  [OK]
+  embeddings shape  : (4, 16, 32, 16)
+  spatial layer 0: output (4, 14, 32, 16), input (4, 14, 32, 3, 16)
+  spatial layer 1: output (4, 12, 32, 16), input (4, 12, 32, 3, 16)
+  spatial layer 2: output...]
+
+ 
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python src/run_phase3_parallel.py 2>&1'})]
+
+[Tool Result: exit_code: timed_out (limit: 300s)
+stdout: 
+stderr: 
+[Command timed out after 300 seconds]]
+
+ 
+
+[Tool Call: list_dir({'path': 'phase_3'})]
+
+[Tool Result:       phase3_results.csv
+      run.log]
+
+ 
+
+[Tool Call: write_file({'content': '"""\nBackground launcher for Phase 3 parallel experiments.\nRuns the full suite and logs output.\n"""\nimport sys\nimport os\n\n# Add src to path\nsys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))\n\nfrom run_phase3_parallel import main\n\nif __name__ == "__main__":\n    main()\n', 'path': 'run_phase3_bg.py'})]
+
+[Tool Result: Successfully wrote to run_phase3_bg.py]
+
+ 
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && start /B python run_phase3_bg.py > phase_3/run_parallel.log 2>&1 && echo "Started in background"'})]
+
+[Tool Result: exit_code: timed_out (limit: 300s)
+stdout: 
+stderr: 
+[Command timed out after 300 seconds]]
+
+ 
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && tasklist | findstr python'})]
+
+[Tool Result: exit_code: 0
+stdout: python.exe                   27228 Console                    1           504 K
+python.exe                   12268 Console                    1        49.664 K
+python.exe                   16484 Console                    1         5.480 K
+python.exe                    9620 Console                    1        95.696 K
+python.exe                   27968 Console                    1       186.560 K
+python.exe                   27352 Console                    1       178....]
+
+ 
+
+[Tool Call: read_file({'path': 'phase_3/run_parallel.log'})]
+
+[Tool Result: ]
+
+ 
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && type phase_3\\run_parallel.log 2>nul && echo "---EOF---" || echo "File not found or empty"'})]
+
+[Tool Result: exit_code: 0
+stdout: "---EOF---" 
+
+stderr: ]
+
+ 
+
+[Tool Call: list_dir({'path': 'phase_3'})]
+
+[Tool Result:       phase3_results.csv
+      run.log
+      run_parallel.log]
+
+ 
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && dir phase_3\\*.csv /b 2>nul'})]
+
+[Tool Result: exit_code: 0
+stdout: phase3_results.csv
+
+stderr: ]
+
+ 
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && for %f in (phase_3\\*.csv) do @echo %f - %~zf bytes'})]
+
+[Tool Result: exit_code: 0
+stdout: phase_3\phase3_results.csv - 549 bytes
+
+stderr: ]
+
+ 
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python -u run_phase3_bg.py > phase_3/run_parallel.log 2>&1 & echo "PID: %!"'})]
+
+[Tool Result: exit_code: 0
+stdout: "PID: %!"
+
+stderr: Der Prozess kann nicht auf die Datei zugreifen, da sie von einem anderen Prozess verwendet wird.
+]
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && dir phase_3\\*.csv /b 2>nul && for %f in (phase_3\\*.csv) do @echo %f - %~zf bytes'})]
+
+[Tool Result: exit_code: 0
+stdout: phase3_results.csv
+phase_3\phase3_results.csv - 549 bytes
+
+stderr: ]
+
+
+[NUDGE RESPONSE]
+```yaml
+status: experiment_failed
+artifacts:
+  - src/spatiotemporal_encoder.py
+  - src/run_phase3_parallel.py
+  - run_phase3_bg.py
+metrics: {}
+log_excerpt: |
+  [Command timed out after 300 seconds]
+  python.exe                   27228 Console                    1           504 K
+  python.exe                   12268 Console                    1        49.664 K
+  python.exe                   16484 Console                    1         5.480 K
+  python.exe                    9620 Console                    1        95.696 K
+  python.exe                   27968 Console                    1       186.560 K
+  python.exe                   27352 Console                    1       178.596 K
+  python.exe                   15144 Console                    1       179.328 K
+  python.exe                   14600 Console                    1       180.336 K
+  python.exe                   16216 Console                    1       188.252 K
+  python.exe                   29004 Console                    1         5.508 K
+  python.exe                    9164 Console                    1        94.300 K
+  python.exe                   28804 Console                    1       196.792 K
+  python.exe                   20456 Console                    1       181.708 K
+  python.exe                   24652 Console                    1       209.992 K
+  python.exe                   19980 Console                    1       184.432 K
+  python.exe                   26616 Console                    1       188.828 K
+experimenter_view: |
+  The spatiotemporal_encoder.py optimizations were successfully implemented
+  and self-tested (slicing for axis=1 in _make_windows_3, zeros for frozen
+  embedding gradient). The parallel runner script was created and launched.
+  However, the full 20-experiment suite (4 variants × 5 seeds × 200 epochs)
+  requires substantial runtime and did not complete within the 300s execution
+  window. Multiple python.exe worker processes are still active in the
+  background, indicating the suite is running. The expected output CSVs
+  (p3a_results.csv, p3b_results.csv, p3c_results.csv, untrained_results.csv,
+  shortcut_results.csv, param_comparison.csv) have not yet been written.
+  A follow-up iteration is needed to verify completion and collect results.
+notes: "Background processes still running; full suite needs more time to complete."
+```

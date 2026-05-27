@@ -1,0 +1,64 @@
+artifacts:
+- src/spatiotemporal_encoder.py
+- src/run_phase3_parallel.py
+- run_phase3_bg.py
+experimenter_view: 'The spatiotemporal_encoder.py optimizations were successfully
+  implemented
+
+  and self-tested (slicing for axis=1 in _make_windows_3, zeros for frozen
+
+  embedding gradient). The parallel runner script was created and launched.
+
+  However, the full 20-experiment suite (4 variants × 5 seeds × 200 epochs)
+
+  requires substantial runtime and did not complete within the 300s execution
+
+  window. Multiple python.exe worker processes are still active in the
+
+  background, indicating the suite is running. The expected output CSVs
+
+  (p3a_results.csv, p3b_results.csv, p3c_results.csv, untrained_results.csv,
+
+  shortcut_results.csv, param_comparison.csv) have not yet been written.
+
+  A follow-up iteration is needed to verify completion and collect results.
+
+  '
+log_excerpt: '[Command timed out after 300 seconds]
+
+  python.exe                   27228 Console                    1           504 K
+
+  python.exe                   12268 Console                    1        49.664 K
+
+  python.exe                   16484 Console                    1         5.480 K
+
+  python.exe                    9620 Console                    1        95.696 K
+
+  python.exe                   27968 Console                    1       186.560 K
+
+  python.exe                   27352 Console                    1       178.596 K
+
+  python.exe                   15144 Console                    1       179.328 K
+
+  python.exe                   14600 Console                    1       180.336 K
+
+  python.exe                   16216 Console                    1       188.252 K
+
+  python.exe                   29004 Console                    1         5.508 K
+
+  python.exe                    9164 Console                    1        94.300 K
+
+  python.exe                   28804 Console                    1       196.792 K
+
+  python.exe                   20456 Console                    1       181.708 K
+
+  python.exe                   24652 Console                    1       209.992 K
+
+  python.exe                   19980 Console                    1       184.432 K
+
+  python.exe                   26616 Console                    1       188.828 K
+
+  '
+metrics: {}
+notes: Background processes still running; full suite needs more time to complete.
+status: experiment_failed
