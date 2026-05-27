@@ -1,0 +1,910 @@
+
+[Tool Call: read_file({'path': 'src/pre_registration.md'})]
+
+[Tool Result: # RDF Scientific Pre-Registration
+
+*   **Iteration:** 002
+*   **Pre-Registration File:** src/pre_registration.md
+
+## 1. Hypothesis
+A hierarchical encoder using kernel-3 stride-1 Sparse Autoencoder nodes
+(3 layers over 16 binary inputs, d=8 per slot) with cross-layer weight
+sharing and recursive dimensions (dim_out = dim_in per slot = 8) achieves:
+(a) linear-probe accuracy ≥ 80% on five structured 16-bit input categories,
+and (b) accuracy within 15 percentage points of an independent-weights-per-node
+upper bound (P1-C), when both are trained with local reconstruction objectives
+(MSE + L1 sparsity) without end-to-end backpropagation.
+
+Specifically, the strict universal-node form (single weight matrix shared across
+all layers and positions, recursive d=8) does NOT sacrifice more than 15pp of
+classification accuracy relative to the fully independent per-node weights
+upper bound, confirming that the universal-node architecture is expressively
+viable for spatial hierarchy.
+
+## 2. Falsificati...]
+
+
+[Tool Call: read_file({'path': 'src/harness.py'})]
+
+[Tool Result: """
+HSUN Phase 0 -- Experimental Harness
+
+Dataset generator, similarity evaluator, encoder interface, and utility functions
+for the smoke-test of hierarchical sparse universal nodes.
+
+Dependencies: numpy, scipy only -- no external ML libraries.
+"""
+
+from __future__ import annotations
+
+import itertools
+from abc import ABC, abstractmethod
+from typing import Dict, List, Tuple
+
+import numpy as np
+from scipy.stats import spearmanr
+
+
+# ---------------------------------------------------------------------------
+# Dataset Generator
+# ---------------------------------------------------------------------------
+
+class DatasetGenerator:
+    """
+    Generates the Phase 0 dataset:
+      - 8 base states: all 3-bit binary tuples (0,0,0) ... (1,1,1)
+      - 10 noise variants per base state (bit-flip prob 0.1)
+      - Total: 88 samples
+    """
+
+    NUM_BITS = 3
+    NOISE_VARIANTS_PER_STATE = 10
+    FLIP_PROB = 0.1
+
+    def __init__(self, seed: int | None = None) -> None:
+        self.rng = np.random.def...]
+
+
+[Tool Call: list_dir({'path': 'src'})]
+
+[Tool Result: [DIR] __pycache__
+[DIR] encoders
+      harness.py
+      pre_registration.md
+      run_phase0.py]
+
+
+[Tool Call: read_file({'path': 'src/encoders/sparse_autoencoder.py'})]
+
+[Tool Result: import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from harness import EncoderBase
+import numpy as np
+
+
+class SparseAutoencoder(EncoderBase):
+    """P0-D: Sparse Autoencoder — GLOBAL OPTIMIZATION BASELINE (expected rho >= 0.6)."""
+
+    def __init__(self, dim_in=3, dim_out=16, seed=42, lr=0.15, l1_lambda=0.002):
+        self._dim_in = dim_in
+        self._dim_out = dim_out
+        self.lr = lr
+        self.l1_lambda = l1_lambda
+        rng = np.random.default_rng(seed)
+        # Xavier initialization
+        self.W1 = rng.standard_normal((dim_in, dim_out)) * np.sqrt(2.0 / dim_in)
+        self.b1 = np.zeros(dim_out)
+        self.W2 = rng.standard_normal((dim_out, dim_in)) * np.sqrt(2.0 / dim_out)
+        self.b2 = np.zeros(dim_in)
+
+    @staticmethod
+    def _relu(x):
+        return np.maximum(0, x)
+
+    @staticmethod
+    def _relu_deriv(x):
+        return (x > 0).astype(np.float64)
+
+    def _forward(self, x):
+        # x: shape (dim_in,) or (batch, di...]
+
+
+[Tool Call: read_file({'path': 'src/encoders/predictive_coding.py'})]
+
+[Tool Result: import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from harness import EncoderBase
+import numpy as np
+
+
+class PredictiveCodingEncoder(EncoderBase):
+    """
+    P0-E: Predictive Coding Encoder — local-error / Hebbian baseline.
+
+    A single hidden layer learns to predict the input via top-down weights.
+    The local prediction error drives learning in both forward and backward
+    pathways.  Lateral inhibition competes activations, producing a sparse,
+    distributed code.
+    """
+
+    def __init__(self, dim_in=3, dim_out=16, seed=42, lr=0.1, sparsity_threshold=0.05):
+        self._dim_in = dim_in
+        self._dim_out = dim_out
+        self.lr = lr
+        self.sparsity_threshold = sparsity_threshold
+        rng = np.random.default_rng(seed)
+        # Forward (bottom-up) weights
+        self.W_f = rng.standard_normal((dim_in, dim_out)) * 0.1
+        self.b_f = np.zeros(dim_out)
+        # Backward (top-down / prediction) weights
+        self.W_b = rn...]
+
+
+[Tool Call: read_file({'path': 'src/run_phase0.py'})]
+
+[Tool Result: """
+HSUN Phase 0 — Full Experiment Runner
+
+Runs all 5 encoders × 5 seeds, collects metrics, generates report.
+"""
+
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+
+import csv
+import time
+from collections import defaultdict
+
+import numpy as np
+
+from harness import DatasetGenerator, SimilarityEvaluator, compute_sparsity
+from encoders import ENCODER_REGISTRY
+
+SEEDS = [42, 43, 44, 45, 46]
+EPOCHS = 200  # Training epochs for iterative methods
+RESULTS_CSV = "phase_0/results.csv"
+REPORT_MD = "phase_0/REPORT.md"
+
+
+def run_single(encoder_id, encoder_class, seed):
+    """Run one encoder with one seed. Return dict of metrics."""
+    ds = DatasetGenerator(seed=seed)
+    base = ds.get_base_states()
+    all_samples = ds.get_all_samples()
+    
+    # Instantiate encoder
+    encoder = encoder_class(seed=seed)
+    
+    # Train
+    t0 = time.time()
+    train_metrics = encoder.train(all_samples, epochs=EPOCHS)
+    train_time = time.time() - t0
+    
+    # Encode base states...]
+
+
+[Tool Call: list_dir({'path': 'src/encoders'})]
+
+[Tool Result:       __init__.py
+[DIR] __pycache__
+      lookup_table.py
+      predictive_coding.py
+      som.py
+      sparse_autoencoder.py
+      spatial_pooler.py]
+
+Now I have a thorough understanding of the existing codebase, Phase 0 results, and the Manager's strategic guidance. Let me plan Phase 1.
+
+**Phase 1 Sub-Goals:**
+
+1. **Implementation + Experiment (planner)** — This is a complex multi-step task requiring: update pre-registration with Manager's 3 additions, implement 5 new source files, run the full experiment (5 configs + untrained baseline × 5 seeds), debug as needed, and generate the report. A planner can decompose and handle debugging iterations.
+
+2. **Results Verification (medium)** — Read the results, verify all falsification criteria, and produce the final synthesis.
+
+Let me start with the planner sub-goal:
+
+[Tool Call: run_agent({'complexity': 'planner', 'estimated_runtime_sec': 1800, 'iter_id': '002.1', 'task': '\n# Phase 1: Spatial Hierarchy without Time — Full Implementation & Experiment\n\nYou are implementing Phase 1 of the HSUN project. Read the existing codebase first, then implement everything, run the experiments, and generate the report.\n\n## Context\n\nPhase 0 (smoke test) is complete. The existing codebase is in `src/`:\n- `src/harness.py` — DatasetGenerator, SimilarityEvaluator, EncoderBase, SimpleLogisticRegression, utilities\n- `src/encoders/` — 5 encoder implementations from Phase 0 (lookup_table, spatial_pooler, som, sparse_autoencoder, predictive_coding)\n- `src/run_phase0.py` — the Phase 0 runner (pattern to follow)\n- `src/pre_registration.md` — needs updating for Phase 1\n\n## Manager\'s Strategic Requirements (MUST incorporate)\n\n### 1. Untrained Baseline Control\n- You MUST evaluate an **untrained (randomly initialized) control** of the exact same hierarchical architecture (including the input embedding layer).\n- The trained P1-B encoder must outperform this untrained baseline by at least **15 percentage points** in linear-probe accuracy. If not, the hypothesis is partially falsified — we must prove the local training objective actually extracts structured features.\n\n### 2. Sparsity Constraint\n- The average code sparsity (fraction of elements below 10^-3 in magnitude) for the trained P1-B codes must be ≥ 50%. If the model achieves ≥ 80% accuracy but fails this sparsity threshold, the hypothesis is falsified.\n\n### 3. Training Mechanics\n- You must document the training strategy clearly. Two options:\n  - **Progressive training**: Train layer 1 to convergence, copy weights to layers 2/3 (if sharing), freeze layer 1, train layer 2, etc.\n  - **Simultaneous training**: Train all layers simultaneously with local reconstruction losses; for shared weights, average gradients.\n- Choose one and document the rationale. The Manager warns that simultaneous training with gradient averaging causes "representation drift" (layer l+1 reconstructs a moving target from layer l). Progressive training is architecturally cleaner for shared weights: train layer 1, then copy the trained weights to layers 2 and 3, then run the full stack forward to compute top-layer codes for evaluation.\n\n## Deliverables\n\n### A. Update `src/pre_registration.md`\nUpdate the pre-registration file with the Phase 1 hypothesis, including:\n- The original falsification criteria (P1-B accuracy < 80%, or P1-C − P1-B > 15pp)\n- NEW: Untrained baseline criterion (trained P1-B must beat untrained by ≥ 15pp)\n- NEW: Sparsity criterion (P1-B code sparsity ≥ 50%)\n- NEW: Training mechanics specification (document progressive vs simultaneous choice)\n\n### B. Create `src/node.py` — UniversalNode class\n```\nclass UniversalNode:\n    """Single kernel-3 node: maps 3 input slots (each dim d) → 1 output (dim d)."""\n    \n    Encoder: Linear(3d, d) + tanh activation\n    Decoder: Linear(d, 3d) (for reconstruction training)\n    Loss: MSE(input_slots, reconstructed_slots) + λ * L1(code)\n    \n    __init__(self, d, l1_lambda, seed):\n        Initialize W_enc (3d × d), b_enc (d), W_dec (d × 3d), b_dec (3d)\n        Xavier initialization\n    \n    forward(self, x_3d) -> code:\n        x_3d: shape (batch, 3, d) — 3 input slots\n        Flatten to (batch, 3d), apply W_enc + b_enc, tanh → code (batch, d)\n    \n    reconstruct(self, code) -> x_hat_3d:\n        Apply W_dec + b_dec → (batch, 3d), reshape to (batch, 3, d)\n    \n    local_loss(self, x_3d) -> loss:\n        code = forward(x_3d)\n        recon = reconstruct(code)\n        mse = mean((x_3d - recon)^2)\n        l1 = l1_lambda * mean(|code|)\n        return mse + l1\n    \n    compute_gradients(self, x_3d) -> dict:\n        Compute gradients for W_enc, b_enc, W_dec, b_dec via backprop\n        (This is per-layer local backprop, NOT end-to-end)\n    \n    apply_gradients(self, grads, lr):\n        Update parameters\n    \n    share_parameters_from(self, other_node):\n        Copy W_enc, b_enc, W_dec, b_dec from another node\n```\n\n### C. Create `src/hierarchical_encoder.py` — HierarchicalEncoder class\n```\nclass HierarchicalEncoder:\n    """Stacked kernel-3 stride-1 nodes over 16 binary inputs."""\n    \n    __init__(self, n_input=16, d=8, n_layers=3, sharing_mode=\'cross_layer\', l1_lambda=0.002, seed=42):\n        sharing_mode: \'within_layer\' | \'cross_layer\' | \'none\'\n        \n        # Input embedding: map binary {0,1} → d-dimensional vectors\n        # 2 embeddings (for 0 and 1), shape (2, d)\n        self.embedding = learnable parameter shape (2, d)\n        \n        # Create nodes\n        if sharing_mode == \'cross_layer\':\n            # One UniversalNode shared across ALL layers and positions\n            self.shared_node = UniversalNode(d, l1_lambda, seed)\n        elif sharing_mode == \'within_layer\':\n            # One UniversalNode per layer, shared across positions within layer\n            self.layer_nodes = [UniversalNode(d, l1_lambda, seed+i) for i in range(n_layers)]\n        elif sharing_mode == \'none\':\n            # Independent node per position per layer\n            self.nodes = [[UniversalNode(d, l1_lambda, ...) for pos in range(positions)] \n                          for layer in range(n_layers)]\n    \n    forward(self, x_binary) -> top_codes:\n        x_binary: shape (batch, 16) — binary inputs\n        Step 1: Embed → shape (batch, 16, d)\n        Step 2: For each layer:\n            positions = 16 - layer * 2  (stride-1 kernel-3 reduces by 2 each layer)\n            Wait: with stride 1 and kernel 3, the output has len(input) - kernel + 1 positions\n            Actually: stride=1, kernel=3 → output_length = input_length - 2\n            Layer 0: 16 → 14 positions\n            Layer 1: 14 → 12 positions\n            Layer 2: 12 → 10 positions\n            For each position p in [0, output_length-1]:\n                Gather 3 slots: input[:, p:p+3, :] → shape (batch, 3, d)\n                Apply node.forward() → code[:, p, :] shape (batch, d)\n            Output: shape (batch, positions, d)\n        Step 3: Return top-layer codes flattened: shape (batch, 10 * d)\n    \n    train_layer(self, layer_idx, input_activations, epochs, lr, batch_size):\n        """Train a single layer using local reconstruction loss."""\n        # Extract all triplets from input_activations\n        # For each batch:\n        #   Forward through node → code\n        #   Reconstruct → x_hat\n        #   Compute loss + gradients\n        #   Apply gradients (averaging if shared across positions)\n    \n    train(self, dataset, epochs_per_layer=100, lr=0.01, batch_size=32):\n        """Progressive training: train layer by layer."""\n        # PROGRESSIVE TRAINING STRATEGY:\n        # 1. Train layer 0: input is embedding activations\n        #    For cross_layer sharing: after training, copy weights to layers 1, 2\n        # 2. Train layer 1: input is layer-0 outputs (frozen, no gradient to layer 0)\n        #    For cross_layer sharing: after training, copy weights to layer 2\n        # 3. Train layer 2: input is layer-1 outputs (frozen)\n        #\n        # Rationale: Progressive training avoids the representation drift problem.\n        # When weights are shared cross-layer, the node at each layer sees \n        # progressively more abstract inputs, but uses the same transformation.\n        # After each layer is trained, we freeze it and move up.\n    \n    encode(self, x_binary) -> top_codes_flat:\n        """Forward pass returning top-layer codes for evaluation."""\n```\n\n### D. Create `src/dataset_phase1.py` — Five structured 16-bit datasets\n```\ndef generate_phase1_dataset(n_train=200, n_test=100, seed=42):\n    """Generate 5 categories of 16-bit inputs with labels."""\n    \n    Category 0: Uniform random bits\n        - Each of 16 bits independently 0 or 1 with prob 0.5\n        - Labels: 0\n    \n    Category 1: Single-blob\n        - Pick random start position (0-12) and width (2-6)\n        - Set bits in [start, start+width) to 1, rest to 0\n        - Labels: 1\n    \n    Category 2: Two-blob\n        - Pick two non-overlapping intervals of width 2-4 each\n        - Set bits in both intervals to 1, rest to 0\n        - Labels: 2\n    \n    Category 3: Periodic patterns\n        - Pick period p ∈ {2, 3, 4} and random phase offset\n        - Pattern: bit[i] = 1 if (i + phase) % p < p//2 else 0\n        - Add optional slight noise (5% bit flip)\n        - Labels: 3\n    \n    Category 4: Mixed noise\n        - Pick a structured base from categories 1-3\n        - Flip 10-20% of bits randomly\n        - Labels: 4\n    \n    Returns: dict with \'train_x\', \'train_y\', \'test_x\', \'test_y\'\n    Total: 1000 train, 500 test\n```\n\n### E. Create `src/eval_phase1.py` — Evaluation module\n```python\ndef evaluate_hierarchical_encoder(encoder, dataset, seed=42):\n    """Evaluate a trained hierarchical encoder."""\n    \n    # 1. Encode train and test data\n    train_codes = encoder.encode(dataset[\'train_x\'])\n    test_codes = encoder.encode(dataset[\'test_x\'])\n    \n    # 2. Linear probe: train logistic regression on train codes, eval on test codes\n    # Use SimpleLogisticRegression from harness.py (or a new one with more iterations)\n    # lr=0.1, max_iter=500\n    \n    # 3. Compute code sparsity (fraction |code| < 1e-3)\n    \n    # 4. Compute per-layer reconstruction MSE\n    \n    # 5. Count total parameters\n    \n    return dict(test_accuracy, train_accuracy, sparsity, recon_mse_per_layer, n_params)\n```\n\n### F. Create `src/run_phase1.py` — Experiment runner\n\nRun these configurations × 5 seeds (42-46):\n\n| Config | sharing_mode    | d   | Description                          |\n|--------|-----------------|-----|--------------------------------------|\n| P1-A   | within_layer    | 8   | Standard CNN baseline                |\n| P1-B   | cross_layer     | 8   | Strict universal node (PRIMARY)      |\n| P1-C   | none            | 8   | Independent weights (upper bound)     |\n| P1-D   | cross_layer     | 4   | Strict universal, smaller d          |\n| P1-E   | cross_layer     | 8   | Non-recursive: d_out=16, wider       |\n\nPlus **untrained baseline**: same architecture as P1-B, but skip training (just random init + encode + linear probe).\n\nEach run:\n1. Generate dataset with seed\n2. Create HierarchicalEncoder with config\n3. Train (progressive, epochs_per_layer=100, lr=0.01, batch_size=32)\n4. Evaluate\n5. Record: config, seed, test_accuracy, train_accuracy, sparsity, recon_mse, n_params\n\nSave results to `phase_1/results.csv`.\n\n### G. Generate `phase_1/REPORT.md`\n\nInclude:\n- Summary table: config × metrics (test_accuracy mean±std, sparsity, params, recon_mse)\n- Untrained baseline vs trained P1-B comparison\n- P1-B vs P1-C gap analysis (primary hypothesis test: must be ≤ 15pp)\n- P1-D vs P1-B dimension comparison\n- P1-E vs P1-B recursive-constraint comparison\n- P1-A vs P1-B within-layer vs cross-layer comparison\n- Sparsity check: P1-B sparsity ≥ 50%?\n- Pass/fail on ALL criteria:\n  1. P1-B accuracy ≥ 80%\n  2. P1-C − P1-B ≤ 15pp\n  3. Trained P1-B − untrained baseline ≥ 15pp\n  4. P1-B sparsity ≥ 50%\n\n## Hyperparameters (fixed across all configs)\n- d = 8 per slot (except P1-D: d=4, P1-E: d_out=16 but d_in=8 for embedding)\n- l1_lambda = 0.002 (from Phase 0 P0-D tuning)\n- learning_rate = 0.01\n- epochs_per_layer = 100\n- batch_size = 32\n- 3 layers (output positions: 14, 12, 10)\n- seeds: 42, 43, 44, 45, 46\n- tanh activation in encoder\n- Linear decoder (no activation)\n\n## Important Implementation Notes\n\n1. **No external ML libraries** — use only numpy, scipy (consistent with project constraints)\n2. **Gradient computation**: You must implement manual backprop for the UniversalNode. The node has 3d→d encoder and d→3d decoder. Compute gradients analytically.\n3. **Progressive training**: Train layer 0 first (on embedding activations), freeze it, then train layer 1 (on frozen layer-0 outputs), etc. For cross-layer sharing: after training each layer, copy weights to all subsequent layers. Then re-train the next layer.\n4. **Weight sharing with gradient averaging**: When a node is shared across multiple positions, accumulate gradients from all positions, then average before applying the update.\n5. **P1-E (non-recursive)**: The node\'s encoder takes 3 slots of d_in=8 (input dim = 24) and outputs d_out=16. The decoder reconstructs back to 3×8. The embedding is still d=8, but the top-layer codes are 10 × 16 = 160 dimensions.\n6. **Embedding**: Use a learnable (2, d) lookup table for binary → d-dim. Initialize with small random values. The embedding IS trained during layer 0 training (gradients flow back through it).\n7. **Batch training**: For efficiency, process all positions in a layer simultaneously using batched matrix operations.\n\n## File paths\n- All source code: `src/` directory\n- Results: `phase_1/results.csv`\n- Report: `phase_1/REPORT.md`\n- Pre-registration: `src/pre_registration.md`\n\n## Success Criterion\nAll 25+5 runs complete successfully (no crashes), results.csv is populated, and REPORT.md contains the complete comparison with pass/fail assessment.\n'})]
+
+[Tool Result: {"error": "Wrong iter_id '002.1' for iteration 2. Use ids like '2.1', '2.2', etc. (not numbers from a previous or future iteration)."}]
+
+
+[Tool Call: run_agent({'complexity': 'planner', 'estimated_runtime_sec': 1800, 'iter_id': '2.1', 'task': '\n# Phase 1: Spatial Hierarchy without Time — Full Implementation & Experiment\n\nYou are implementing Phase 1 of the HSUN project. Read the existing codebase first, then implement everything, run the experiments, and generate the report.\n\n## Context\n\nPhase 0 (smoke test) is complete. The existing codebase is in `src/`:\n- `src/harness.py` — DatasetGenerator, SimilarityEvaluator, EncoderBase, SimpleLogisticRegression, utilities\n- `src/encoders/` — 5 encoder implementations from Phase 0 (lookup_table, spatial_pooler, som, sparse_autoencoder, predictive_coding)\n- `src/run_phase0.py` — the Phase 0 runner (pattern to follow)\n- `src/pre_registration.md` — needs updating for Phase 1\n\n## Manager\'s Strategic Requirements (MUST incorporate)\n\n### 1. Untrained Baseline Control\n- You MUST evaluate an **untrained (randomly initialized) control** of the exact same hierarchical architecture (including the input embedding layer).\n- The trained P1-B encoder must outperform this untrained baseline by at least **15 percentage points** in linear-probe accuracy. If not, the hypothesis is partially falsified — we must prove the local training objective actually extracts structured features.\n\n### 2. Sparsity Constraint\n- The average code sparsity (fraction of elements below 10^-3 in magnitude) for the trained P1-B codes must be ≥ 50%. If the model achieves ≥ 80% accuracy but fails this sparsity threshold, the hypothesis is falsified.\n\n### 3. Training Mechanics\n- You must document the training strategy clearly. Two options:\n  - **Progressive training**: Train layer 1 to convergence, copy weights to layers 2/3 (if sharing), freeze layer 1, train layer 2, etc.\n  - **Simultaneous training**: Train all layers simultaneously with local reconstruction losses; for shared weights, average gradients.\n- Choose one and document the rationale. The Manager warns that simultaneous training with gradient averaging causes "representation drift" (layer l+1 reconstructs a moving target from layer l). Progressive training is architecturally cleaner for shared weights: train layer 1, then copy the trained weights to layers 2 and 3, then run the full stack forward to compute top-layer codes for evaluation.\n\n## Deliverables\n\n### A. Update `src/pre_registration.md`\nUpdate the pre-registration file with the Phase 1 hypothesis, including:\n- The original falsification criteria (P1-B accuracy < 80%, or P1-C − P1-B > 15pp)\n- NEW: Untrained baseline criterion (trained P1-B must beat untrained by ≥ 15pp)\n- NEW: Sparsity criterion (P1-B code sparsity ≥ 50%)\n- NEW: Training mechanics specification (document progressive vs simultaneous choice)\n\n### B. Create `src/node.py` — UniversalNode class\n```python\nclass UniversalNode:\n    """Single kernel-3 node: maps 3 input slots (each dim d) to 1 output (dim d)."""\n    \n    # Encoder: Linear(3d, d) + tanh activation\n    # Decoder: Linear(d, 3d) (for reconstruction training)\n    # Loss: MSE(input_slots, reconstructed_slots) + lambda * L1(code)\n    \n    __init__(self, d, l1_lambda, seed):\n        Initialize W_enc (3d x d), b_enc (d), W_dec (d x 3d), b_dec (3d)\n        Xavier initialization\n    \n    forward(self, x_3d) -> code:\n        x_3d: shape (batch, 3, d) — 3 input slots\n        Flatten to (batch, 3d), apply W_enc + b_enc, tanh -> code (batch, d)\n    \n    reconstruct(self, code) -> x_hat_3d:\n        Apply W_dec + b_dec -> (batch, 3d), reshape to (batch, 3, d)\n    \n    local_loss(self, x_3d) -> loss:\n        code = forward(x_3d)\n        recon = reconstruct(code)\n        mse = mean((x_3d - recon)^2)\n        l1 = l1_lambda * mean(|code|)\n        return mse + l1\n    \n    compute_gradients(self, x_3d) -> dict:\n        Compute gradients for W_enc, b_enc, W_dec, b_dec via backprop\n        (This is per-layer local backprop, NOT end-to-end)\n    \n    apply_gradients(self, grads, lr):\n        Update parameters\n    \n    share_parameters_from(self, other_node):\n        Copy W_enc, b_enc, W_dec, b_dec from another node\n```\n\n### C. Create `src/hierarchical_encoder.py` — HierarchicalEncoder class\n```python\nclass HierarchicalEncoder:\n    """Stacked kernel-3 stride-1 nodes over 16 binary inputs."""\n    \n    __init__(self, n_input=16, d=8, n_layers=3, sharing_mode=\'cross_layer\', l1_lambda=0.002, seed=42):\n        sharing_mode: \'within_layer\' | \'cross_layer\' | \'none\'\n        \n        # Input embedding: map binary {0,1} to d-dimensional vectors\n        # 2 embeddings (for 0 and 1), shape (2, d)\n        self.embedding = learnable parameter shape (2, d)\n        \n        # Create nodes\n        if sharing_mode == \'cross_layer\':\n            # One UniversalNode shared across ALL layers and positions\n            self.shared_node = UniversalNode(d, l1_lambda, seed)\n        elif sharing_mode == \'within_layer\':\n            # One UniversalNode per layer, shared across positions within layer\n            self.layer_nodes = [UniversalNode(d, l1_lambda, seed+i) for i in range(n_layers)]\n        elif sharing_mode == \'none\':\n            # Independent node per position per layer\n            self.nodes = [[UniversalNode(d, l1_lambda, ...) for pos in range(positions)] \n                          for layer in range(n_layers)]\n    \n    forward(self, x_binary) -> top_codes:\n        x_binary: shape (batch, 16) — binary inputs\n        Step 1: Embed -> shape (batch, 16, d)\n        Step 2: For each layer:\n            positions = input_length - 2  (stride-1 kernel-3)\n            Layer 0: 16 -> 14 positions\n            Layer 1: 14 -> 12 positions  \n            Layer 2: 12 -> 10 positions\n            For each position p in [0, output_length-1]:\n                Gather 3 slots: input[:, p:p+3, :] -> shape (batch, 3, d)\n                Apply node.forward() -> code[:, p, :] shape (batch, d)\n            Output: shape (batch, positions, d)\n        Step 3: Return top-layer codes flattened: shape (batch, 10 * d)\n    \n    train_layer(self, layer_idx, input_activations, epochs, lr, batch_size):\n        """Train a single layer using local reconstruction loss."""\n        # Extract all triplets from input_activations\n        # For each batch:\n        #   Forward through node -> code\n        #   Reconstruct -> x_hat\n        #   Compute loss + gradients\n        #   Apply gradients (averaging if shared across positions)\n    \n    train(self, dataset, epochs_per_layer=100, lr=0.01, batch_size=32):\n        """Progressive training: train layer by layer."""\n        # PROGRESSIVE TRAINING STRATEGY:\n        # 1. Train layer 0: input is embedding activations\n        #    For cross_layer sharing: after training, copy weights to layers 1, 2\n        # 2. Train layer 1: input is layer-0 outputs (frozen, no gradient to layer 0)\n        #    For cross_layer sharing: after training, copy weights to layer 2\n        # 3. Train layer 2: input is layer-1 outputs (frozen)\n    \n    encode(self, x_binary) -> top_codes_flat:\n        """Forward pass returning top-layer codes for evaluation."""\n```\n\n### D. Create `src/dataset_phase1.py` — Five structured 16-bit datasets\n```python\ndef generate_phase1_dataset(n_train=200, n_test=100, seed=42):\n    """Generate 5 categories of 16-bit inputs with labels."""\n    \n    Category 0: Uniform random bits\n        - Each of 16 bits independently 0 or 1 with prob 0.5\n        - Labels: 0\n    \n    Category 1: Single-blob\n        - Pick random start position (0-12) and width (2-6)\n        - Set bits in [start, start+width) to 1, rest to 0\n        - Labels: 1\n    \n    Category 2: Two-blob\n        - Pick two non-overlapping intervals of width 2-4 each\n        - Set bits in both intervals to 1, rest to 0\n        - Labels: 2\n    \n    Category 3: Periodic patterns\n        - Pick period p in {2, 3, 4} and random phase offset\n        - Pattern: bit[i] = 1 if (i + phase) % p < p//2 else 0\n        - Add optional slight noise (5% bit flip)\n        - Labels: 3\n    \n    Category 4: Mixed noise\n        - Pick a structured base from categories 1-3\n        - Flip 10-20% of bits randomly\n        - Labels: 4\n    \n    Returns: dict with \'train_x\', \'train_y\', \'test_x\', \'test_y\'\n    Total: 1000 train, 500 test\n```\n\n### E. Create `src/eval_phase1.py` — Evaluation module\n```python\ndef evaluate_hierarchical_encoder(encoder, dataset, seed=42):\n    """Evaluate a trained hierarchical encoder."""\n    \n    # 1. Encode train and test data\n    train_codes = encoder.encode(dataset[\'train_x\'])\n    test_codes = encoder.encode(dataset[\'test_x\'])\n    \n    # 2. Linear probe: train logistic regression on train codes, eval on test codes\n    # Use SimpleLogisticRegression from harness.py or a new one with more iterations\n    # lr=0.1, max_iter=500\n    \n    # 3. Compute code sparsity (fraction |code| < 1e-3)\n    \n    # 4. Compute per-layer reconstruction MSE\n    \n    # 5. Count total parameters\n    \n    return dict(test_accuracy, train_accuracy, sparsity, recon_mse_per_layer, n_params)\n```\n\n### F. Create `src/run_phase1.py` — Experiment runner\n\nRun these configurations x 5 seeds (42-46):\n\n| Config | sharing_mode    | d   | Description                          |\n|--------|-----------------|-----|--------------------------------------|\n| P1-A   | within_layer    | 8   | Standard CNN baseline                |\n| P1-B   | cross_layer     | 8   | Strict universal node (PRIMARY)      |\n| P1-C   | none            | 8   | Independent weights (upper bound)     |\n| P1-D   | cross_layer     | 4   | Strict universal, smaller d          |\n| P1-E   | cross_layer     | d_in=8, d_out=16 | Non-recursive: wider output       |\n\nPlus **untrained baseline**: same architecture as P1-B, but skip training (just random init + encode + linear probe).\n\nEach run:\n1. Generate dataset with seed\n2. Create HierarchicalEncoder with config\n3. Train (progressive, epochs_per_layer=100, lr=0.01, batch_size=32)\n4. Evaluate\n5. Record: config, seed, test_accuracy, train_accuracy, sparsity, recon_mse, n_params\n\nSave results to `phase_1/results.csv`.\n\n### G. Generate `phase_1/REPORT.md`\n\nInclude:\n- Summary table: config x metrics (test_accuracy mean +/- std, sparsity, params, recon_mse)\n- Untrained baseline vs trained P1-B comparison\n- P1-B vs P1-C gap analysis (primary hypothesis test: must be <= 15pp)\n- P1-D vs P1-B dimension comparison\n- P1-E vs P1-B recursive-constraint comparison\n- P1-A vs P1-B within-layer vs cross-layer comparison\n- Sparsity check: P1-B sparsity >= 50%?\n- Pass/fail on ALL criteria:\n  1. P1-B accuracy >= 80%\n  2. P1-C - P1-B <= 15pp\n  3. Trained P1-B - untrained baseline >= 15pp\n  4. P1-B sparsity >= 50%\n\n## Hyperparameters (fixed across all configs)\n- d = 8 per slot (except P1-D: d=4, P1-E: d_out=16 but d_in=8 for embedding)\n- l1_lambda = 0.002 (from Phase 0 P0-D tuning)\n- learning_rate = 0.01\n- epochs_per_layer = 100\n- batch_size = 32\n- 3 layers (output positions: 14, 12, 10)\n- seeds: 42, 43, 44, 45, 46\n- tanh activation in encoder\n- Linear decoder (no activation)\n\n## Important Implementation Notes\n\n1. **No external ML libraries** — use only numpy, scipy (consistent with project constraints)\n2. **Gradient computation**: You must implement manual backprop for the UniversalNode. The node has 3d->d encoder and d->3d decoder. Compute gradients analytically.\n3. **Progressive training**: Train layer 0 first (on embedding activations), freeze it, then train layer 1 (on frozen layer-0 outputs), etc. For cross-layer sharing: after training each layer, copy weights to all subsequent layers. Then re-train the next layer.\n4. **Weight sharing with gradient averaging**: When a node is shared across multiple positions, accumulate gradients from all positions, then average before applying the update.\n5. **P1-E (non-recursive)**: The node\'s encoder takes 3 slots of d_in=8 (input dim = 24) and outputs d_out=16. The decoder reconstructs back to 3x8. The embedding is still d=8, but the top-layer codes are 10 x 16 = 160 dimensions.\n6. **Embedding**: Use a learnable (2, d) lookup table for binary to d-dim. Initialize with small random values. The embedding IS trained during layer 0 training (gradients flow back through it).\n7. **Batch training**: For efficiency, process all positions in a layer simultaneously using batched matrix operations.\n\n## File paths\n- All source code: `src/` directory\n- Results: `phase_1/results.csv`\n- Report: `phase_1/REPORT.md`\n- Pre-registration: `src/pre_registration.md`\n\n## Success Criterion\nAll 25+5 runs complete successfully (no crashes), results.csv is populated, and REPORT.md contains the complete comparison with pass/fail assessment.\n'})]
+
+[Tool Result: {"started": true, "iter_id": "2.1", "done": false, "final_result": null, "intermediate_state": "=== files in iter_2.1/ ===\n  checkpoint.yaml (13,832 B)\n  iter_001/result.yaml (471 B)\n  iter_001/stderr.txt (0 B)\n  iter_001/stdout.txt (36,034 B)\n  iter_001/task.md (1,548 B)\n  iter_002/result.yaml (1,443 B)\n  iter_002/stderr.txt (0 B)\n  iter_002/stdout.txt (3,132 B)\n  iter_002/task.md (106 B)\n  iter_003/result.yaml (1,450 B)\n  iter_003/stderr.txt (0 B)\n  iter_003/stdout.txt (15,605 B)\n  iter_003/task.md (876 B)\n  iter_004/result.yaml (1,204 B)\n  iter_004/stderr.txt (0 B)\n  iter_004/stdout.txt (16,467 B)\n  iter_004/task.md (2,377 B)\n  iter_005/result.yaml (706 B)\n  iter_005/stderr.txt (0 B)\n  iter_005/stdout.txt (31,326 B)\n  iter_005/task.md (2,432 B)\n  iter_006/result.yaml (2,176 B)\n  iter_006/stderr.txt (0 B)\n  iter_006/stdout.txt (10,387 B)\n  iter_006/task.md (596 B)\n  iter_007/result.yaml (1,022 B)\n  iter_007/stderr.txt (0 B)\n  iter_007/stdout.txt (9,319 B)\...]
+
+
+[Tool Call: poll_agent({'iter_id': '2.1'})]
+
+[Tool Result: {"done": true, "final_result": {"status": "ok", "metrics": {"p1_a_accuracy_mean": 0.1844, "p1_b_accuracy_mean": 0.1836, "p1_c_accuracy_mean": 0.1904, "p1_d_accuracy_mean": 0.1804, "p1_e_accuracy_mean": 0.2068, "untrained_accuracy_mean": 0.2976, "p1_b_sparsity_mean": 0.7, "p1_b_layer0_mse_mean": 7.33e-06, "p1_b_vs_untrained_gap": -0.114, "p1_c_vs_p1_b_gap": 0.0068}, "experimenter_view": "The Phase 1 primary scientific hypothesis was conclusively falsified across all pre-registered criteria.\nThe trained Universal Node (P1-B) achieved 18.36% classification accuracy, which is at chance level (20%)\nand 11.4 percentage points worse than the untrained baseline (29.76%).\nThe primary driver of this failure is a \"representation collapse\" phenomenon: the default small embedding\ninitialization scale (Uniform[-0.01, 0.01]) resulted in tiny inputs where the reconstruction MSE gradient\nwas completely dominated by the L1 sparsity penalty's constant gradient. This drove all codes and weights\nto...]
+
+The planner completed with very important results. Let me examine the details.
+
+[Tool Call: read_file({'path': 'src/node.py'})]
+
+[Tool Result: """
+UniversalNode -- single-layer auto-encoder unit for HSUN Phase 0-E.
+
+Architecture
+------------
+  x_3d (batch, 3, d_in)  --> flatten --> (batch, 3*d_in)
+  z    = tanh(x_flat @ W_enc + b_enc)          # (batch, d_out)  -- "code"
+  xrec = z       @ W_dec + b_dec              # (batch, 3*d_in)
+           --> reshape --> (batch, 3, d_in)
+
+Loss  = MSE(x_3d, xrec) + l1_lambda * mean(|z|)
+
+All analytical gradients are provided in ``compute_gradients`` and verified
+below via a central-difference numerical check.
+"""
+
+from __future__ import annotations
+
+from typing import Dict
+
+import numpy as np
+
+
+class UniversalNode:
+    """A single universal node implementing an encoder --> decoder pair."""
+
+    def __init__(
+        self,
+        d: int,
+        l1_lambda: float = 0.01,
+        seed: int = 42,
+        d_out: int | None = None,
+    ):
+        """
+        Parameters
+        ----------
+        d : int
+            Input dimensionality *per channel*.  The flattened input has
+            dimen...]
+
+
+[Tool Call: read_file({'path': 'src/hierarchical_encoder.py'})]
+
+[Tool Result: """
+Hierarchical Encoder for Phase 1 — Spatial Hierarchy without Time.
+
+Stacks 3 layers of kernel-3 stride-1 UniversalNodes over 16 binary
+inputs, with configurable weight sharing and progressive layer-by-layer
+training.
+
+Configurations:
+  - P1-A: within_layer sharing
+  - P1-B: cross_layer sharing + recursive d=8
+  - P1-C: none (independent weights)
+  - P1-D: recursive d=4
+  - P1-E: wider output (d_out != 3*d)
+"""
+
+from __future__ import annotations
+
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+import numpy as np
+from node import UniversalNode
+
+
+# ---------------------------------------------------------------------------
+# Hierarchical Encoder
+# ---------------------------------------------------------------------------
+
+class HierarchicalEncoder:
+    """Stacked kernel-3 stride-1 UniversalNodes over a 1-D binary input."""
+
+    def __init__(
+        self,
+        n_input: int = 16,
+        d: int = 8,
+        n_layers: int = 3,
+        sharing...]
+
+
+[Tool Call: read_file({'path': 'src/dataset_phase1.py'})]
+
+[Tool Result: """Generate Phase-1 dataset: 5 categories of 16-bit binary inputs."""
+
+import numpy as np
+
+
+def generate_phase1_dataset(n_train: int = 200, n_test: int = 100, seed: int = 42):
+    """Generate a dataset with 5 categories of 16-bit binary inputs.
+
+    Args:
+        n_train: Number of training samples per category.
+        n_test: Number of testing samples per category.
+        seed: Random seed for reproducibility.
+
+    Returns:
+        Dictionary with keys 'train_x', 'train_y', 'test_x', 'test_y'.
+    """
+    rng = np.random.default_rng(seed)
+
+    def cat0_uniform(count):
+        """Category 0: Uniform random bits."""
+        return (rng.random((count, 16)) < 0.5).astype(np.float64)
+
+    def cat1_single_blob(count):
+        """Category 1: Single-blob pattern."""
+        result = np.zeros((count, 16), dtype=np.float64)
+        for i in range(count):
+            start = rng.integers(0, 13)   # 0 to 12 inclusive
+            width = rng.integers(2, 7)    # 2 to 6 inclusive
+            end =...]
+
+
+[Tool Call: read_file({'path': 'src/eval_phase1.py'})]
+
+[Tool Result: """
+HSUN Phase 1 — Evaluation module.
+
+Evaluates a trained (or untrained) hierarchical encoder on the Phase-1
+5-category classification task, measuring downstream accuracy, code
+sparsity, and reconstruction fidelity.
+"""
+
+from __future__ import annotations
+
+import sys
+import os
+
+# Ensure the project root is on sys.path so that ``src.*`` imports work.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+import numpy as np
+
+from src.harness import SimpleLogisticRegression
+
+
+# ---------------------------------------------------------------------------
+# Evaluation
+# ---------------------------------------------------------------------------
+
+def evaluate_hierarchical_encoder(
+    encoder,
+    dataset: dict,
+    seed: int = 42,
+) -> dict:
+    """
+    Evaluate a trained hierarchical encoder.
+
+    Parameters
+    ----------
+    encoder : HierarchicalEncoder
+        A (possibly trained) hierarchical encoder instance.
+    dataset : dict
+        With keys ``'train_x'``, ``'train_y'...]
+
+
+[Tool Call: read_file({'path': 'src/run_phase1.py'})]
+
+[Tool Result: """
+Phase 1 Experiment Runner for HSUN.
+
+Runs 6 configurations x 5 seeds = 30 total runs.
+Saves metrics to phase_1/results.csv
+"""
+
+import csv
+import os
+import sys
+
+import numpy as np
+
+sys.path.insert(0, os.path.dirname(__file__))
+
+from dataset_phase1 import generate_phase1_dataset
+from hierarchical_encoder import HierarchicalEncoder
+from eval_phase1 import evaluate_hierarchical_encoder
+
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+SEEDS = [42, 43, 44, 45, 46]
+
+CONFIGS = [
+    {"name": "P1-A", "sharing_mode": "within_layer", "d": 8, "d_out": 24, "train": True},
+    {"name": "P1-B", "sharing_mode": "cross_layer", "d": 8, "d_out": 24, "train": True},
+    {"name": "P1-C", "sharing_mode": "none", "d": 8, "d_out": 24, "train": True},
+    {"name": "P1-D", "sharing_mode": "cross_layer", "d": 4, "d_out": 12, "train": True},
+    {"name": "P1-E", "sharing_mode": "cross...]
+
+
+[Tool Call: read_file({'path': 'phase_1/REPORT.md'})]
+
+[Tool Result: # HSUN Phase 1 \u2014 Spatial Hierarchy without Time: Full Experimental Report
+
+**Date:** 2025 \u2014 Auto-generated by experiment runner and Research Manager analysis  
+**Seeds:** 42, 43, 44, 45, 46 (5 runs per configuration)  
+**Raw data:** `phase_1/results.csv`  
+**Training log:** `phase_1/run.log`  
+**Pre-registration:** `src/pre_registration.md`
+
+---
+
+## 1. Summary Table
+
+| Configuration | Description | n_params | Test Accuracy (mean \u00b1 std) | Sparsity (mean \u00b1 std) | Layer 0 Recon MSE (mean) | Pass / Fail on Success Criteria |
+|---|---|---|---|---|---|---|
+| **P1-A** | Within-layer sharing; d=8, d_out=24; L1 \u03bb=0.002 | 3,616 | 0.1844 \u00b1 0.0233 | 1.0000 \u00b1 0.0000 | 2.16\u00d710\u207b\u2078 | FAIL (not primary config) |
+| **P1-B** | Cross-layer sharing; d=8, d_out=24; L1 \u03bb=0.002 | 3,616 | 0.1836 \u00b1 0.0237 | 0.7000 \u00b1 0.1716 | 7.33\u00d710\u207b\u2076 | **FAIL** (see Section 2\u20135) |
+| **P1-C** | No sharing (independent); d=8, d_out=24; L1 \u03bb=...]
+
+
+[Tool Call: read_file({'path': 'phase_1/results.csv'})]
+
+[Tool Result: config,seed,test_accuracy,train_accuracy,sparsity,recon_mse_l0,recon_mse_l1,recon_mse_l2,n_params
+P1-A,42,0.176,0.165,1.0,2.28114963434201e-08,1.429570171888778e-13,2.3751426941080215e-13,3616
+P1-A,43,0.182,0.18,1.0,1.8491487521541535e-08,1.5055803712654624e-12,2.9694381047846997e-13,3616
+P1-A,44,0.218,0.193,1.0,1.528425096269396e-08,2.1182636324467244e-13,2.0646747455622983e-13,3616
+P1-A,45,0.198,0.205,1.0,2.4407315323411072e-08,4.561720252320223e-13,2.7319582911121023e-13,3616
+P1-A,46,0.148,0.171,1.0,2.7062018490033852e-08,2.8202631822158543e-13,2.6754321891891643e-13,3616
+P1-B,42,0.2,0.235,0.875,4.3297782787917494e-06,3.0318759545918786e-06,8.770766548209252e-07,3616
+P1-B,43,0.212,0.195,0.4166666666666667,8.407570346143182e-06,1.6842693823778594e-05,1.2476354345354197e-05,3616
+P1-B,44,0.19,0.204,0.7083333333333334,1.0199993430716257e-05,1.027582432949552e-05,3.215602848332558e-06,3616
+P1-B,45,0.144,0.173,0.875,4.457142084538098e-06,1.1996020538891792e-06,1.5853505277043952e-06,3616
+...]
+
+
+[Tool Call: read_file({'path': 'src/pre_registration.md'})]
+
+[Tool Result: # RDF Scientific Pre-Registration
+
+*   **Iteration:** 002
+*   **Pre-Registration File:** src/pre_registration.md
+
+## 1. Hypothesis
+A hierarchical encoder using kernel-3 stride-1 Sparse Autoencoder nodes
+(3 layers over 16 binary inputs, d=8 per slot) with cross-layer weight
+sharing and recursive dimensions (dim_out = dim_in per slot = 8) achieves:
+(a) linear-probe accuracy ≥ 80% on five structured 16-bit input categories,
+and (b) accuracy within 15 percentage points of an independent-weights-per-node
+upper bound (P1-C), when both are trained with local reconstruction objectives
+(MSE + L1 sparsity) without end-to-end backpropagation.
+
+Specifically, the strict universal-node form (single weight matrix shared across
+all layers and positions, recursive d=8) does NOT sacrifice more than 15pp of
+classification accuracy relative to the fully independent per-node weights
+upper bound, confirming that the universal-node architecture is expressively
+viable for spatial hierarchy.
+
+**Untrained basel...]
+
+The planner completed with critical findings. Let me now read the detailed sub-iteration results to understand the full picture, particularly the hyperparameter search.
+
+[Tool Call: read_result_file({'filename': 'iter_010/stdout.txt', 'iter_num': 2})]
+
+[Tool Result: File not found: archive/iter_002/iter_010/stdout.txt]
+
+
+[Tool Call: list_dir({'path': 'src'})]
+
+[Tool Result: [DIR] __pycache__
+      dataset_phase1.py
+[DIR] encoders
+      eval_phase1.py
+      harness.py
+      hierarchical_encoder.py
+      node.py
+      pre_registration.md
+      run_phase0.py
+      run_phase1.py]
+
+
+[Tool Call: grep_search({'include_pattern': '*.py', 'pattern': 'hyper_search'})]
+
+[Tool Result: No matches found.]
+
+
+[Tool Call: list_dir({'path': 'phase_1'})]
+
+[Tool Result:       REPORT.md
+      results.csv
+      run.log]
+
+
+[Tool Call: read_file({'end_line': 50, 'path': 'src/node.py', 'start_line': 1})]
+
+[Tool Result: --- lines 1 to 50 of 307 ---
+"""
+UniversalNode -- single-layer auto-encoder unit for HSUN Phase 0-E.
+
+Architecture
+------------
+  x_3d (batch, 3, d_in)  --> flatten --> (batch, 3*d_in)
+  z    = tanh(x_flat @ W_enc + b_enc)          # (batch, d_out)  -- "code"
+  xrec = z       @ W_dec + b_dec              # (batch, 3*d_in)
+           --> reshape --> (batch, 3, d_in)
+
+Loss  = MSE(x_3d, xrec) + l1_lambda * mean(|z|)
+
+All analytical gradients are provided in ``compute_gradients`` and verified
+below via a central-difference numerical check.
+"""
+
+from __future__ import annotations
+
+from typing import Dict
+
+import numpy as np
+
+
+class UniversalNode:
+    """A single universal node implementing an encoder --> decoder pair."""
+
+    def __init__(
+        self,
+        d: int,
+        l1_lambda: float = 0.01,
+        seed: int = 42,
+        d_out: int | None = None,
+    ):
+        """
+        Parameters
+        ----------
+        d : int
+            Input dimensionality *per channel*.  The flattene...]
+
+I've identified a critical implementation bug. The UniversalNode's `d_out` was set to `3*d = 24` instead of `d = 8` for the recursive form, creating a 24→24 identity-like autoencoder with NO bottleneck. The correct recursive form requires `d_out = d = 8`, creating a true 3:1 compression (24→8→24). This fundamentally changes the training dynamics — with no bottleneck, L1 just collapses everything.
+
+I need to run a corrective experiment. Let me execute sub-goal 2 with the fixed architecture.
+
+[Tool Call: run_agent({'complexity': 'high', 'estimated_runtime_sec': 900, 'iter_id': '2.2', 'task': '\n# Phase 1b: Corrective Experiment — Fix d_out Bottleneck Bug\n\n## Critical Bug Identified\n\nThe Phase 1 implementation has a fundamental architectural error. The UniversalNode\'s `d_out` was set to `3*d` (24 for d=8) instead of `d` (8 for d=8). This means:\n\n- **Current (WRONG)**: Encoder 24→24, Decoder 24→24 — NO bottleneck, identity-like\n- **Correct (recursive form)**: Encoder 24→8, Decoder 8→24 — TRUE 3:1 compression\n\nThe recursive universal node form from goal.md states: "Output dim = input dim, fully recursive form" — meaning d_out = d (per-slot dimension), NOT d_out = 3*d (total input dimension). The output is ONE slot of dimension d, which feeds as a slot in the next layer.\n\nAdditionally, the embedding initialization scale (Uniform[-0.01, 0.01]) was too small, causing representation collapse.\n\n## Task\n\n### 1. Fix `src/run_phase1.py` — Correct the configurations\n\nChange the CONFIGS to use d_out = d (true recursive bottleneck):\n\n```python\nCONFIGS = [\n    {"name": "P1-A", "sharing_mode": "within_layer", "d": 8, "d_out": 8, "train": True},\n    {"name": "P1-B", "sharing_mode": "cross_layer", "d": 8, "d_out": 8, "train": True},\n    {"name": "P1-C", "sharing_mode": "none", "d": 8, "d_out": 8, "train": True},\n    {"name": "P1-D", "sharing_mode": "cross_layer", "d": 4, "d_out": 4, "train": True},\n    {"name": "P1-E", "sharing_mode": "cross_layer", "d": 8, "d_out": 16, "train": True},\n    {"name": "Untrained-P1-B", "sharing_mode": "cross_layer", "d": 8, "d_out": 8, "train": False},\n]\n```\n\nAlso add a k-WTA variant:\n```python\n    {"name": "P1-B-kwta", "sharing_mode": "cross_layer", "d": 8, "d_out": 8, "train": True, "kwta_k": 4},\n```\n\n### 2. Fix `src/hierarchical_encoder.py` — Two changes\n\n#### 2a. Fix embedding initialization\nChange from `Uniform[-0.01, 0.01]` to `Normal(0, 1.0)`:\n```python\nself.embedding = self.rng.standard_normal((2, d)) * 1.0\n```\n\n#### 2b. Remove the d_out slicing between layers\nSince d_out = d for the recursive form, the slicing `x = x[:, :, :self.d]` is unnecessary (and harmful when d_out != d). For the recursive configs (d_out == d), remove the slice. For P1-E (d_out=16), the slice should take the first d=8 dims. Keep the slicing logic but make it conditional:\n```python\nif x.shape[2] > self.d:\n    x = x[:, :, :self.d]\n```\nThis way, when d_out == d (most configs), no slicing occurs. When d_out > d (P1-E), we slice back.\n\n### 3. Add k-WTA support to `src/node.py`\n\nAdd a k-Winners-Take-All activation option alongside tanh:\n\nIn UniversalNode.__init__, add parameter `kwta_k=None`. If kwta_k is specified, after the tanh activation, zero out all but the top-k values:\n```python\ndef forward(self, x_3d):\n    batch = x_3d.shape[0]\n    x_flat = x_3d.reshape(batch, -1)\n    z = x_flat @ self.W_enc + self.b_enc\n    a = np.tanh(z)   # base activation\n    \n    if self.kwta_k is not None:\n        # k-WTA: keep only top-k activations per sample\n        k = min(self.kwta_k, self.d_out)\n        # For each sample, find top-k absolute values, zero rest\n        threshold = np.sort(np.abs(a), axis=1)[:, -k:k][:, 0:1]  # k-th largest\n        mask = np.abs(a) >= threshold\n        a = a * mask\n    \n    return a\n```\n\nAlso update compute_gradients to handle k-WTA: when k-WTA is active, the gradient through the zeroed-out units is zero. The tanh gradient `(1 - a^2)` should only be applied to the winning units:\n```python\n# In compute_gradients, after computing d_a (gradient w.r.t. code a):\nif self.kwta_k is not None:\n    # Recompute mask\n    k = min(self.kwta_k, self.d_out)\n    threshold = np.sort(np.abs(a), axis=1)[:, -k:k][:, 0:1]\n    mask = np.abs(a) >= threshold\n    d_a = d_a * mask  # zero gradient for losers\n\nd_z = d_a * (1.0 - a ** 2)  # tanh derivative (only for winners when k-WTA)\n```\n\nFor k-WTA, the L1 penalty is NOT needed (sparsity is enforced structurally). When kwta_k is set, use l1_lambda=0 for the loss computation (or just skip the L1 term).\n\n### 4. Update `src/hierarchical_encoder.py` to pass kwta_k to nodes\n\nIn HierarchicalEncoder.__init__, add `kwta_k=None` parameter. Pass it through to UniversalNode:\n```python\nUniversalNode(d=self.d, l1_lambda=self.l1_lambda, seed=..., d_out=self.d_out, kwta_k=kwta_k)\n```\n\nIn the train method, when kwta_k is set, use l1_lambda=0 (no L1, since k-WTA enforces sparsity).\n\n### 5. Run the corrected experiment\n\nExecute `python src/run_phase1.py` with the fixed configurations.\n\n### 6. Generate an updated `phase_1/REPORT.md`\n\nThe report should include:\n- A note explaining the d_out bug fix and embedding initialization fix\n- The corrected results table\n- All the same criteria checks as before:\n  1. P1-B accuracy ≥ 80%\n  2. P1-C − P1-B ≤ 15pp\n  3. Trained P1-B − untrained ≥ 15pp\n  4. P1-B sparsity ≥ 50%\n- Plus new analysis for P1-B-kwta\n\n### Key hyperparameters (same as before except where noted)\n- d_out = d (FIXED — recursive bottleneck)\n- Embedding: Normal(0, 1.0) (FIXED — was Uniform[-0.01, 0.01])\n- l1_lambda = 0.002 (for L1 configs; 0 for k-WTA config)\n- learning_rate = 0.01\n- epochs_per_layer = 100\n- batch_size = 32\n- seeds: 42, 43, 44, 45, 46\n- kwta_k = 4 (for P1-B-kwta, meaning 4 of 8 code dims active = 50% sparsity)\n\n### Important notes\n- The UniversalNode\'s gradient check (numerical vs analytical) must still pass after the k-WTA changes. The k-WTA gradient is straightforward: zero out gradient for losing units.\n- For the k-WTA config, sparsity should be structurally ~50% (4/8 active), which meets the ≥50% threshold.\n- The corrected architecture with d_out=8 means top-layer codes are 10×8 = 80 features (not 10×24 = 240 as before).\n- P1-C (none sharing) will have many more parameters since each of the ~36 positions (14+12+10) has its own 24→8 encoder and 8→24 decoder.\n\n### Success criterion\nAll 35 runs (7 configs × 5 seeds) complete successfully, results saved to phase_1/results.csv, and REPORT.md generated with corrected analysis.\n'})]
+
+[Tool Result: {"started": true, "iter_id": "2.2", "done": false, "final_result": null, "intermediate_state": "=== files in iter_2.2/ ===\n  checkpoint.yaml (6,716 B)\n  task.md (6,055 B)", "elapsed_sec": 900.0}]
+
+
+[Tool Call: poll_agent({'iter_id': '2.2'})]
+
+[Tool Result: {"done": true, "final_result": {"status": "experiment_failed", "artifacts": ["src/node.py", "src/hierarchical_encoder.py", "src/run_phase1.py", "phase_1/results.csv", "phase_1/REPORT.md", "phase_1/run.log"], "metrics": {"total_runs": 35, "p1_b_mean_test_accuracy": 0.3352, "p1_b_mean_sparsity": 0.0003, "p1_c_mean_test_accuracy": 0.3324, "untrained_p1_b_mean_test_accuracy": 0.4844, "p1_b_kwta_mean_test_accuracy": 0.3572, "p1_b_kwta_mean_sparsity": 0.5, "p1_a_n_params": 1264, "p1_c_n_params": 14992, "gradient_check_passed": 1}, "log_excerpt": "All 35 runs completed successfully!\nResults saved to: phase_1\\results.csv\n\nSummary (mean \u00b1 std over seeds):\n  P1-A           : test_acc=0.3424\u00b10.0211  sparsity=0.0033\u00b10.0031\n  P1-B           : test_acc=0.3352\u00b10.0305  sparsity=0.0003\u00b10.0005\n  P1-C           : test_acc=0.3324\u00b10.0251  sparsity=0.0023\u00b10.0025\n  P1-D           : test_acc=0.2392\u00b10.0647  sparsity=0.0007\u00b10.0015\n  P1-E           : test_acc...]
+
+
+[Tool Call: read_file({'path': 'phase_1/results.csv'})]
+
+[Tool Result: config,seed,test_accuracy,train_accuracy,sparsity,recon_mse_l0,recon_mse_l1,recon_mse_l2,n_params
+P1-A,42,0.382,0.377,0.008325,0.0019834267458420395,0.0034194307457575614,0.0028827651608619637,1264
+P1-A,43,0.324,0.362,0.0,0.0003513039977988774,0.00039201811757148515,0.0002498606631038549,1264
+P1-A,44,0.328,0.354,0.003275,0.0007616367195944663,0.000829466365708656,0.0008213798448914961,1264
+P1-A,45,0.346,0.367,0.004725,0.0023896965584859517,0.005511544084673944,0.005209626117869314,1264
+P1-A,46,0.332,0.367,0.0,0.00017060365833105056,0.00010631259577206861,5.3321303515357934e-05,1264
+P1-B,42,0.374,0.369,0.0,0.02403060466666255,0.07655801449331177,0.05602199643751106,1264
+P1-B,43,0.284,0.339,0.0,0.37932207900275156,0.09458482227811209,0.021222656306198392,1264
+P1-B,44,0.322,0.345,0.00045,0.1253176376384093,0.10342195047149212,0.08212634490413104,1264
+P1-B,45,0.352,0.374,0.00115,0.04358997876320535,0.045837503986916765,0.06871781247993038,1264
+P1-B,46,0.344,0.334,0.0,0.21391199322478147,0....]
+
+Now I have the complete picture from both Phase 1 runs. Let me analyze the results and run one more targeted diagnostic to determine the root cause before writing the final report.
+
+The critical finding is that **all trained configurations perform similarly (~33-35%)**, including P1-C with independent weights (upper bound). This means the architecture/sharing is NOT the bottleneck — the training objective is. I need to determine if ANY local objective can work with this architecture.
+
+[Tool Call: run_agent({'complexity': 'high', 'estimated_runtime_sec': 900, 'iter_id': '2.3', 'task': '\n# Phase 1 Diagnostic: Root Cause Analysis for Training Objective Failure\n\n## Context\n\nPhase 1 experiments (both original and corrected) show a fundamental problem:\n- All trained hierarchical configs (P1-A, P1-B, P1-C, P1-D, P1-E, P1-B-kwta) achieve ~33-36% accuracy\n- The untrained baseline achieves ~48% accuracy\n- P1-C (independent weights, upper bound) performs no better than P1-B (shared weights)\n- This means the weight sharing constraint is NOT the bottleneck — the training objective is\n\nThe reconstruction objective (MSE + L1) optimizes for local input reconstruction, which doesn\'t preserve class-discriminative information. We need to determine: is the architecture fundamentally limited, or is the reconstruction objective the problem?\n\n## Diagnostic Experiments\n\nRun these quick diagnostic experiments to identify the root cause. Use the EXISTING code in src/ — read node.py, hierarchical_encoder.py, dataset_phase1.py, eval_phase1.py first.\n\n### Experiment 1: Embedding-Only Baseline\nJust use the binary → d-dimensional embedding as features (no hierarchical processing). Train the embedding, then use the 16×d flattened embedding as features for the linear probe. This tells us: is the embedding itself sufficient for classification?\n\nImplementation: Create a simple script that:\n1. Generates the Phase 1 dataset\n2. Creates just the embedding (2, d) with Normal(0,1) init\n3. Trains the embedding for 100 epochs by minimizing reconstruction loss (each d-dim embedding vector reconstructs the binary input — but actually this doesn\'t make sense since there\'s only 1 bit per position)\n4. Actually, just use RANDOM embedding (Normal(0,1)), embed the 16 binary inputs, flatten to 16×8=128 features, run linear probe\n5. This gives us the "flat random projection" baseline\n\n### Experiment 2: Single-Layer (No Hierarchy) Baseline\nUse just one layer of UniversalNodes (kernel-3 stride-1) on the embedded input. Output: 14 positions × 8 dims = 112 features. Train with reconstruction + L1. This tells us: is the DEPTH the problem?\n\n### Experiment 3: Simultaneous Training\nModify the HierarchicalEncoder to train all layers simultaneously rather than progressively. All 3 layers train at the same time, with local reconstruction losses at each layer. For shared weights, gradients from all layers are averaged. This tests: does inter-layer coordination help?\n\n### Experiment 4: Predictive Coding Node\nReplace the UniversalNode\'s reconstruction objective with a predictive coding objective that includes lateral inhibition (adapted from P0-E which achieved rho=0.72 in Phase 0). The key differences:\n- Add lateral inhibition to the code: after tanh, apply a competition step that suppresses weakly-activated neurons\n- Use online (per-sample) gradient updates instead of batch\n- Apply a hard threshold to zero out very small activations\n\nFor the lateral inhibition, after computing code = tanh(z), apply:\n```python\n# Competition: subtract mean of top-k activations\n# This creates a form of k-WTA soft competition\ntop_k_mean = np.mean(np.sort(np.abs(code), axis=1)[:, -k:], axis=1, keepdims=True)\ncode = code * (np.abs(code) > top_k_mean * 0.5)\n```\n\n### Experiment 5: Increased L1 with Stronger Sparsity\nTry l1_lambda = 0.05 (25x the default) with the corrected architecture. This tests whether stronger L1 can create meaningful sparse codes without collapse (since Normal(0,1) embeddings prevent the previous collapse issue).\n\n## Implementation\n\nCreate a single script `src/diagnostic_phase1.py` that runs all 5 experiments with seeds [42, 43, 44, 45, 46]. For each experiment, report:\n- Test accuracy (mean ± std)\n- Code sparsity\n- Reconstruction MSE (where applicable)\n\nThe script should use the existing `src/dataset_phase1.py` and `src/eval_phase1.py` infrastructure.\n\nFor Experiment 3 (simultaneous training), you can modify HierarchicalEncoder\'s train() method or create a subclass. The key change: instead of training layer-by-layer progressively, run all layers for each batch:\n1. Forward pass through all layers to get activations\n2. Compute reconstruction loss at each layer\n3. Compute gradients at each layer\n4. For shared weights, average gradients across layers before applying\n5. Apply embedding gradients from layer 0\n\nFor Experiment 4 (predictive coding), modify the UniversalNode to add lateral inhibition in the forward pass and use online (per-sample) gradient updates in training.\n\n## Output\nSave results to `phase_1/diagnostic_results.csv` and print a summary table.\n\n## Success Criterion\nAll 5 experiments complete and produce interpretable results. We need to determine:\n- Can ANY local training objective reach ≥60% accuracy?\n- Is the hierarchy itself the problem (compare Exp 1 vs Exp 2 vs full hierarchy)?\n- Does simultaneous training help over progressive training?\n- Does lateral inhibition/predictive coding help?\n- Can stronger L1 create meaningful sparse codes?\n'})]
+
+[Tool Result: {"started": true, "iter_id": "2.3", "done": false, "final_result": null, "intermediate_state": "=== files in iter_2.3/ ===\n  checkpoint.yaml (5,441 B)\n  task.md (4,988 B)", "elapsed_sec": 900.0160000000033}]
+
+
+[Tool Call: poll_agent({'iter_id': '2.3'})]
+
+[Tool Result: {"done": true, "final_result": {"status": "ok", "artifacts": ["src/diagnostic_phase1.py", "phase_1/diagnostic_results.csv"], "metrics": {"exp1_random_embedding_test_acc": 0.4336, "exp2_single_layer_test_acc": 0.3976, "exp3_simultaneous_test_acc": 0.4152, "exp4_predictive_coding_test_acc": 0.3816, "exp5_strong_l1_test_acc": 0.3712, "untrained_baseline_test_acc": 0.5112, "best_diagnostic_test_acc": 0.4336, "exp4_sparsity": 0.7246}, "log_excerpt": "----------------------------------------------------------------------\nExperiment: Exp4-Predictive-Coding\n----------------------------------------------------------------------\nseed=42  |  test_acc=0.3880  train_acc=0.4090  sparsity=0.7830  (20.1s)\nseed=43  |  test_acc=0.4860  train_acc=0.5520  sparsity=0.6371  (20.1s)\nseed=44  |  test_acc=0.3080  train_acc=0.3490  sparsity=0.7372  (20.2s)\nseed=45  |  test_acc=0.5260  train_acc=0.5650  sparsity=0.6742  (20.1s)\nseed=46  |  test_acc=0.2000  train_acc=0.2000  sparsity=0.7917  (20.3s)\n\n---...]
+
+Excellent. All three sub-goals are complete. Let me read the diagnostic results in detail and the updated report, then write the comprehensive Phase 1 synthesis.
+
+[Tool Call: read_file({'path': 'phase_1/diagnostic_results.csv'})]
+
+[Tool Result: config,seed,test_accuracy,train_accuracy,sparsity,recon_mse_l0,recon_mse_l1,recon_mse_l2,n_params
+Exp1-Random-Embedding,42,0.428,0.473,0.0,nan,nan,nan,16
+Exp1-Random-Embedding,43,0.452,0.489,0.0,nan,nan,nan,16
+Exp1-Random-Embedding,44,0.412,0.458,0.0,nan,nan,nan,16
+Exp1-Random-Embedding,45,0.438,0.487,0.0,nan,nan,nan,16
+Exp1-Random-Embedding,46,0.438,0.461,0.0,nan,nan,nan,16
+Exp2-Single-Layer,42,0.402,0.422,0.0,0.001982219049151042,nan,nan,432
+Exp2-Single-Layer,43,0.378,0.417,0.0,0.00035094719406844843,nan,nan,432
+Exp2-Single-Layer,44,0.356,0.362,0.0,0.0007605164453765961,nan,nan,432
+Exp2-Single-Layer,45,0.402,0.418,0.0,0.0023887123924577164,nan,nan,432
+Exp2-Single-Layer,46,0.45,0.452,0.0,0.00017052675734331352,nan,nan,432
+Exp3-Simultaneous,42,0.404,0.47,0.0038583333333333334,0.012718688220466363,0.025208057275301565,0.030582986864455125,3616
+Exp3-Simultaneous,43,0.406,0.466,0.0033916666666666665,0.014271027924756931,0.048425575636642355,0.037035070129168554,3616
+Exp3-Simultaneous,44,0...]
+
+
+[Tool Call: read_file({'path': 'phase_1/REPORT.md'})]
+
+[Tool Result: # Phase 1 Corrective Experiment Report
+
+## Bug Fixes Applied
+
+### 1. d_out Bottleneck Bug (Critical)
+
+**Previous (WRONG):** `d_out = 3*d = 24` for all recursive configs  
+→ Encoder 24→24, Decoder 24→24 — effectively an identity mapping with no compression.
+
+**Fixed (CORRECT):** `d_out = d = 8` for recursive configs  
+→ Encoder 24→8, Decoder 8→24 — true 3:1 compression bottleneck.
+
+The recursive universal node form requires output dim = input dim **per slot**, meaning `d_out = d` (the per-slot dimension), not `d_out = 3*d` (the total flattened input dimension). The output of each node becomes ONE slot of dimension `d` that feeds into the next layer.
+
+### 2. Embedding Initialization Fix
+
+**Previous:** `Uniform[-0.01, 0.01]` — too small, causing representation collapse.  
+**Fixed:** `Normal(0, 1.0)` — stronger initial representations.
+
+### 3. Inter-layer Slicing Fix
+
+**Previous:** Unconditional `x = x[:, :, :self.d]` between layers.  
+**Fixed:** Conditional slicing — only when `d_out > d`...]
+
+Now I have all the data. Let me write the comprehensive Phase 1 synthesis.
+
+```yaml
+# --- Synthesised result (aggregate across all sub-agents) ---
+status: ok
+metrics:
+  # Phase 1 original (d_out=3d, tiny embeddings — representation collapse)
+  p1_b_original_accuracy: 0.1836
+  untrained_original_accuracy: 0.2976
+  # Phase 1 corrected (d_out=d, Normal(0,1) embeddings)
+  p1_b_corrected_accuracy: 0.3352
+  p1_c_corrected_accuracy: 0.3324
+  p1_a_corrected_accuracy: 0.3424
+  p1_d_corrected_accuracy: 0.2392
+  p1_e_corrected_accuracy: 0.3516
+  p1_b_kwta_accuracy: 0.3572
+  untrained_corrected_accuracy: 0.4844
+  # Phase 1 diagnostics
+  random_embedding_accuracy: 0.4336
+  single_layer_accuracy: 0.3976
+  simultaneous_training_accuracy: 0.4152
+  predictive_coding_accuracy: 0.3816
+  strong_l1_accuracy: 0.3712
+  # Sparsity
+  p1_b_sparsity: 0.0003
+  p1_b_kwta_sparsity: 0.5
+  predictive_coding_sparsity: 0.7246
+  # Key gaps
+  p1_c_minus_p1_b_pp: -0.28
+  trained_minus_untrained_pp: -14.92
+  # Parameter counts
+  p1_b_params: 1264
+  p1_c_params: 14992
+experimenter_view: |
+  Phase 1 (Spatial Hierarchy without Time) was executed in three sub-goals:
+
+  SUB-GOAL 2.1 (Planner): Original Phase 1 experiment revealed representation collapse.
+  The UniversalNode used d_out=3*d=24 (no bottleneck, identity-like autoencoder)
+  and Uniform[-0.01,0.01] embedding initialization. This caused the L1 penalty
+  to dominate the tiny reconstruction MSE, driving all weights to zero.
+  P1-B accuracy = 18.36% (chance level = 20%). Untrained baseline = 29.76%.
+  A hyperparameter search (128 configs) confirmed larger embeddings rescue accuracy
+  (up to 53.8%) but destroy sparsity (<1%). No config achieved both ≥80% accuracy
+  AND ≥50% sparsity.
+
+  SUB-GOAL 2.2 (Corrected architecture): Fixed two critical bugs: (1) d_out changed
+  from 3*d=24 to d=8, creating a true 3:1 compression bottleneck (24→8→24), and
+  (2) embedding initialization changed from Uniform[-0.01,0.01] to Normal(0,1.0).
+  Added k-WTA sparsification variant. All 35 runs completed. P1-B accuracy improved
+  to 33.5% but still far below 80%. L1 sparsity dropped to 0.03% (too weak with
+  Normal embeddings). k-WTA achieved exactly 50% sparsity structurally but only
+  35.7% accuracy. Critically, P1-C (independent weights) = 33.2%, identical to
+  P1-B (shared weights), confirming the weight sharing constraint has ZERO cost.
+
+  SUB-GOAL 2.3 (Diagnostics): Five targeted experiments identified the reconstruction
+  objective as the root cause. Results: random flat embedding = 43.4%, single layer =
+  39.8%, simultaneous training = 41.5%, predictive coding with lateral inhibition =
+  38.2%, strong L1 (25x default) = 37.1%. ALL trained configs underperform the
+  untrained baseline (~48-51%). Simultaneous training outperformed progressive
+  training (41.5% vs 33.5%), suggesting inter-layer coordination is beneficial.
+  Predictive coding achieved 72.5% sparsity but with high variance (20-53% across
+  seeds). The untrained hierarchical baseline at ~51% accuracy demonstrates the
+  architecture CAN represent task structure; training destroys it.
+
+  OVERALL ASSESSMENT:
+  - Criterion 1 (P1-B accuracy ≥ 80%): FALSIFIED (33.5%)
+  - Criterion 2 (P1-C − P1-B ≤ 15pp): PASS (−0.28pp — sharing has zero cost)
+  - Criterion 3 (trained − untrained ≥ 15pp): FALSIFIED (−14.92pp)
+  - Criterion 4 (P1-B sparsity ≥ 50%): FAIL for L1 (0.03%), PASS for k-WTA (50%)
+  The primary hypothesis is FALSIFIED, but the falsification reveals that the
+  reconstruction objective is the bottleneck, NOT the architecture.
+notes: "Phase 1 hypothesis falsified on accuracy and untrained-baseline criteria. Weight sharing confirmed to have zero cost. Reconstruction objective identified as root cause."
+artifacts:
+  - src/node.py
+  - src/hierarchical_encoder.py
+  - src/dataset_phase1.py
+  - src/eval_phase1.py
+  - src/run_phase1.py
+  - src/diagnostic_phase1.py
+  - src/pre_registration.md
+  - phase_1/results.csv
+  - phase_1/diagnostic_results.csv
+  - phase_1/REPORT.md
+# --- Planning and State ---
+analysis: |
+  Phase 1 tested whether a hierarchical encoder with shared-weight UniversalNodes
+  (kernel-3, stride-1, d=8, 3 layers over 16 binary inputs) trained with local
+  reconstruction objectives can produce representations that classify 5 structured
+  input categories at ≥80% accuracy.
+
+  Three sub-goals were executed:
+
+  1. ORIGINAL EXPERIMENT (2.1): Revealed representation collapse due to (a) d_out=3*d
+  creating no bottleneck, and (b) tiny embedding initialization making L1 dominate.
+  This was a bug, not a fundamental architectural limitation.
+
+  2. CORRECTED EXPERIMENT (2.2): Fixed both bugs. True bottleneck (24→8) and
+  Normal(0,1) embeddings. Accuracy improved from 18% to 33.5%, but still far below
+  80%. The k-WTA variant achieved 50% sparsity structurally but didn't help accuracy.
+  Most importantly: P1-C (independent weights) = P1-B (shared weights) at 33.2% vs
+  33.5%, proving the weight sharing constraint has ZERO cost.
+
+  3. DIAGNOSTICS (2.3): Five targeted experiments confirmed the reconstruction
+  objective is the root cause. Even simultaneous training (41.5%) and predictive
+  coding with lateral inhibition (38.2%) fail to beat the untrained baseline (51%).
+  The architecture CAN represent task structure; training destroys it.
+
+  The key insight is: reconstruction training optimizes for pixel-level fidelity,
+  which doesn't preserve category-discriminative information. Random projections
+  preserve more class structure because they spread variance across all dimensions
+  without compressing through a task-agnostic bottleneck.
+
+  POSITIVE findings for the HSUN project:
+  - Weight sharing has zero penalty (P1-B ≈ P1-C), supporting the universal-node hypothesis
+  - Simultaneous training outperforms progressive training (41.5% vs 33.5%)
+  - k-WTA successfully enforces structural sparsity (50%) without L1
+  - The untrained architecture at 51% shows the representational capacity exists
+
+  NEGATIVE findings:
+  - No local reconstruction objective reaches ≥60% accuracy
+  - L1 sparsity is incompatible with good representations (accuracy-sparsity trade-off)
+  - The 80% accuracy target may be too ambitious for purely unsupervised local training
+open_questions:
+  - "Can a non-reconstruction local objective (e.g., contrastive, SFA, Hebbian) reach ≥60% accuracy? Phase 4 objectives should be tested NOW."
+  - "Is 80% accuracy achievable with ANY local training on 5 categories of 16-bit inputs, or should we revise the success criterion?"
+  - "Can simultaneous training + a better objective close the gap to the untrained baseline?"
+  - "Does increasing d (e.g., d=16 or d=32) improve accuracy by providing a wider bottleneck?"
+  - "Can lateral inhibition (from P0-E predictive coding) be combined with simultaneous training to simultaneously achieve sparsity and accuracy?"
+  - "Is the tanh activation in the bottleneck preventing useful feature learning? Would ReLU or linear activation work better?"
+  - "Can a variance-maximization term (anti-collapse regularizer) prevent training from destroying discriminative structure?"
+chosen_direction: "Test Phase 4 training objectives (predictive coding, SFA, Hebbian, contrastive) on the corrected Phase 1 architecture with simultaneous training, before proceeding to Phase 2"
+hypothesis: "phase-2: the reconstruction objective is misaligned with classification; test alternative local objectives (predictive coding, SFA, Hebbian, contrastive) on the corrected hierarchical architecture with simultaneous training to determine if any local objective can reach ≥60% accuracy"
+rationale: |
+  Phase 1 was decomposed into three sub-goals: (1) original experiment revealing
+  representation collapse, (2) corrected experiment with true bottleneck and proper
+  embedding, and (3) diagnostic experiments identifying the reconstruction objective
+  as the root cause. This sequential approach allowed each finding to inform the
+  next. The critical insight — that weight sharing has zero cost but reconstruction
+  training destroys discriminative information — emerged from comparing P1-B vs P1-C
+  and trained vs untrained baselines. The next priority is testing alternative
+  training objectives (Phase 4 moved earlier), since no spatial-temporal experiment
+  (Phase 2/3) can succeed without a working training regime.
+# --- Meta ---
+campaign: phase-1-spatial-hierarchy
+campaign_status: ""
+state_update: |
+  # Current Research State — HSUN Project
+  **Last updated:** After Phase 1 completion (iter_2, sub-agents 2.1–2.3)
+
+  ## Goal
+  Investigate an architecture for unsupervised representation learning built from
+  a single, universal node type. Phase 1 (Spatial Hierarchy) is now complete.
+
+  ## Confirmed (with iter/sub-agent references)
+
+  1. **Weight sharing has ZERO expressivity penalty** (iter_2, 2.2):
+     - P1-B (cross-layer sharing, d=8): 33.52% ± 3.05%
+     - P1-C (independent weights, d=8): 33.24% ± 2.51%
+     - Gap: −0.28pp (well within 15pp threshold)
+     - This is the most POSITIVE finding for the universal-node hypothesis
+
+  2. **Reconstruction training is misaligned with classification** (iter_2, 2.2, 2.3):
+     - ALL trained configs (P1-A through P1-E, k-WTA, predictive coding, strong L1)
+       achieve 33–42% accuracy, below the untrained baseline at ~48–51%
+     - The autoencoder optimizes for pixel-level reconstruction, not category structure
+     - Simultaneous training (41.5%) outperforms progressive training (33.5%)
+
+  3. **d_out = 3*d creates no bottleneck (BUG, now fixed)** (iter_2, 2.1→2.2):
+     - Original: Encoder 24→24, Decoder 24→24 (identity-like, no compression)
+     - Corrected: Encoder 24→8, Decoder 8→24 (true 3:1 bottleneck)
+     - Original + tiny embeddings → representation collapse (all weights → 0)
+     - Corrected + Normal(0,1) embeddings → no collapse but accuracy still low
+
+  4. **L1 sparsity is incompatible with discriminative representations** (iter_2, 2.2):
+     - L1 λ=0.002 with Normal(0,1) embeddings → sparsity = 0.03% (ineffective)
+     - Stronger L1 doesn't help accuracy (diagnostic Exp5: 37.1%)
+     - Hyperparameter search: accuracy-sparsity trade-off is fundamental
+
+  5. **k-WTA successfully enforces structural sparsity** (iter_2, 2.2):
+     - P1-B-kwta with k=4/8: sparsity = 50.0% (exactly), accuracy = 35.7%
+     - Sparsity is guaranteed by construction, independent of training dynamics
+     - Does NOT solve the accuracy problem (still below untrained baseline)
+
+  6. **Predictive coding with lateral inhibition creates sparsity but unstable** (iter_2, 2.3):
+     - Mean accuracy: 38.2%, sparsity: 72.5%
+     - High variance across seeds: 20%–53% accuracy
+     - Lateral inhibition suppresses weakly-activated neurons, creating sparsity
+     - But also suppresses useful discriminative information
+
+  7. **The untrained baseline is a strong reference** (iter_2, 2.2, 2.3):
+     - Original architecture (tiny embeddings): ~30% accuracy
+     - Corrected architecture (Normal embeddings): ~48% accuracy
+     - Random flat embedding (16×8=128 features): ~43% accuracy
+     - Random 3-layer hierarchy: ~51% accuracy (best non-trained result)
+     - This means 51% is achievable with zero training — any useful training
+       should IMPROVE on this, not degrade it
+
+  8. **P1-D (d=4) is too small** (iter_2, 2.2):
+     - Accuracy: 23.9% (near chance), confirms d=4 bottleneck is too aggressive
+     - Supports d=8 as minimum viable per-slot dimension
+
+  9. **P1-E (d_out=16, wider) slightly outperforms P1-B (d_out=8, recursive)** (iter_2, 2.2):
+     - P1-E: 35.2% vs P1-B: 33.5% (+1.7pp)
+     - Wider code dimension provides slightly more capacity
+     - But still below untrained baseline
+
+  ## Refuted Hypotheses
+  - Phase 1 pre-registered hypothesis FALSIFIED on multiple counts:
+    (1) P1-B accuracy < 80% (observed: 33.5%)
+    (2) Trained P1-B − untrained < 15pp (observed: −14.9pp)
+    (3) P1-B sparsity < 50% with L1 (observed: 0.03%)
+  - The reconstruction + L1 training objective cannot produce discriminative
+    sparse codes in a hierarchical autoencoder with 3:1 bottleneck compression
+
+  ## Current Best Result
+  - **Untrained hierarchical encoder** (Normal(0,1) embeddings, d=8, d_out=8):
+    48.4% accuracy, but no sparsity (0.04%)
+  - **P1-B-kwta** (cross-layer sharing, k-WTA k=4):
+    35.7% accuracy, 50.0% sparsity — the only config meeting sparsity criterion
+  - **Simultaneous training** (diagnostic):
+    41.5% accuracy — best trained result, but still below untrained
+
+  ## In Progress
+  - Phase 4 training objectives should be tested NEXT (moved earlier from plan)
+  - Need a training objective that PRESERVES discriminative information
+    while enforcing sparsity
+
+  ## Open Questions (ordered by expected value)
+  1. **Can any non-reconstruction local objective reach ≥60%?** This is the
+     most critical question. If no local objective can beat random projections,
+     the HSUN architecture requires a fundamentally different approach.
+  2. **Is 80% accuracy achievable with any local training?** The untrained
+     baseline at 51% sets an upper bound for random projections. We need to
+     determine if supervised or semi-supervised signals are necessary.
+  3. **Can simultaneous training + better objective close the gap?**
+     Simultaneous training (41.5%) significantly outperforms progressive (33.5%).
+     Combined with a contrastive or Hebbian objective, could we reach ≥60%?
+  4. **Does increasing d improve accuracy?** d=8 gives 80 top-layer features.
+     d=16 would give 160 features — does the wider bottleneck help?
+  5. **Can lateral inhibition + simultaneous training work together?**
+     Predictive coding achieved 72% sparsity but unstable. Simultaneous training
+     gave best accuracy. Can they be combined?
+  6. **Is tanh the right activation for the bottleneck?** ReLU might allow
+     more expressive sparse codes (natural sparsity from ReLU dead neurons).
+  7. **Spatial-temporal symmetry (Phase 2):** Can a kernel-3 node trained
+     spatially be applied temporally without retraining? This remains untested.
+
+  ## Critical Design Decisions Made This Phase
+  - **d_out = d (recursive form):** Confirmed as correct (not 3*d)
+  - **Embedding: Normal(0,1):** Confirmed as necessary (not Uniform[-0.01,0.01])
+  - **Simultaneous training > progressive training:** For this task/architecture
+  - **k-WTA > L1 for sparsity:** Structural sparsity is more reliable than L1
+
+  ## Files Created This Phase
+  - src/node.py — UniversalNode with encoder/decoder, L1, k-WTA, gradient check
+  - src/hierarchical_encoder.py — 3-layer hierarchical encoder with weight sharing
+  - src/dataset_phase1.py — 5 structured 16-bit datasets
+  - src/eval_phase1.py — Linear probe evaluation module
+  - src/run_phase1.py — Experiment runner (7 configs × 5 seeds)
+  - src/diagnostic_phase1.py — 5 diagnostic experiments
+  - src/pre_registration.md — Updated with Phase 1 hypothesis + Manager's criteria
+  - phase_1/results.csv — Raw experimental results
+  - phase_1/diagnostic_results.csv — Diagnostic experiment results
+  - phase_1/REPORT.md — Full comparison report
+```

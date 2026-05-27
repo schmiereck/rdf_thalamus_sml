@@ -57,3 +57,67 @@ Fixed Unicode enco
 
 **Notes:** Phase 0 smoke test complete. 4/4 non-trivial encoders run end-to-end; 3/4 pass rho>=0.6 criterion; all local methods within 0.15 of global baseline. Report at phase_0/REPORT.md.
 
+
+---
+```yaml
+cached_tokens: 2233031
+campaign: phase-1-spatial-hierarchy
+cost_usd: 2.92354
+hypothesis: 'phase-2: the reconstruction objective is misaligned with classification;
+  test alternative local objectives (predictive coding, SFA, Hebbian, contrastive)
+  on the corrected hierarchical architecture with simultaneous training to determine
+  if any local objective can reach ≥60% accuracy'
+input_tokens: 8049498
+iter: 2
+metrics:
+  p1_a_corrected_accuracy: 0.3424
+  p1_b_corrected_accuracy: 0.3352
+  p1_b_kwta_accuracy: 0.3572
+  p1_b_kwta_sparsity: 0.5
+  p1_b_original_accuracy: 0.1836
+  p1_b_params: 1264
+  p1_b_sparsity: 0.0003
+  p1_c_corrected_accuracy: 0.3324
+  p1_c_minus_p1_b_pp: -0.28
+  p1_c_params: 14992
+  p1_d_corrected_accuracy: 0.2392
+  p1_e_corrected_accuracy: 0.3516
+  predictive_coding_accuracy: 0.3816
+  predictive_coding_sparsity: 0.7246
+  random_embedding_accuracy: 0.4336
+  simultaneous_training_accuracy: 0.4152
+  single_layer_accuracy: 0.3976
+  strong_l1_accuracy: 0.3712
+  trained_minus_untrained_pp: -14.92
+  untrained_corrected_accuracy: 0.4844
+  untrained_original_accuracy: 0.2976
+output_tokens: 227654
+status: ok
+```
+
+## iter_002: phase-2: the reconstruction objective is misaligned with classification; test alternative local objectives (predictive coding, SFA, Hebbian, contrastive) on the corrected hierarchical architecture with simultaneous training to determine if any local objective can reach ≥60% accuracy
+
+**Analysis:** Phase 1 tested whether a hierarchical encoder with shared-weight UniversalNodes
+(kernel-3, stride-1, d=8, 3 layers over 16 binary inputs) trained with local
+reconstruction objectives can produce representations that classify 5 structured
+input categories at ≥80% accuracy.
+
+Three sub-goals were executed:
+
+1. ORIGINAL EXPERIMENT (2.1): Revealed representation collapse due to (a) d_out=3*d
+creating n
+
+**Status:** ok
+
+**Metrics:** `{'p1_b_original_accuracy': 0.1836, 'untrained_original_accuracy': 0.2976, 'p1_b_corrected_accuracy': 0.3352, 'p1_c_corrected_accuracy': 0.3324, 'p1_a_corrected_accuracy': 0.3424, 'p1_d_corrected_accuracy': 0.2392, 'p1_e_corrected_accuracy': 0.3516, 'p1_b_kwta_accuracy': 0.3572, 'untrained_corrected_accuracy': 0.4844, 'random_embedding_accuracy': 0.4336, 'single_layer_accuracy': 0.3976, 'simultaneous_training_accuracy': 0.4152, 'predictive_coding_accuracy': 0.3816, 'strong_l1_accuracy': 0.3712, 'p1_b_sparsity': 0.0003, 'p1_b_kwta_sparsity': 0.5, 'predictive_coding_sparsity': 0.7246, 'p1_c_minus_p1_b_pp': -0.28, 'trained_minus_untrained_pp': -14.92, 'p1_b_params': 1264, 'p1_c_params': 14992}`
+
+**Experimenter view:** Phase 1 (Spatial Hierarchy without Time) was executed in three sub-goals:
+
+SUB-GOAL 2.1 (Planner): Original Phase 1 experiment revealed representation collapse.
+The UniversalNode used d_out=3*d=24 (no bottleneck, identity-like autoencoder)
+and Uniform[-0.01,0.01] embedding initialization. This caused the L1 penalty
+to dominate the tiny reconstruction MSE, driving all weights to zero.
+P1-B accuracy
+
+**Notes:** Phase 1 hypothesis falsified on accuracy and untrained-baseline criteria. Weight sharing confirmed to have zero cost. Reconstruction objective identified as root cause.
+
