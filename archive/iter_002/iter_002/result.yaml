@@ -1,0 +1,51 @@
+artifacts:
+- src/node.py
+- src/hierarchical_encoder.py
+- src/run_phase1.py
+- phase_1/results.csv
+- phase_1/REPORT.md
+- phase_1/run.log
+experimenter_view: 'The d_out bug fix (24→8 true bottleneck) and embedding init fix
+  (Normal(0,1.0))
+
+  were correctly implemented. All 35 runs completed and gradient checks passed.
+
+  However, the scientific success criteria were NOT met:
+
+  1. P1-B accuracy = 33.5% (target ≥80%) — the 3:1 bottleneck loses class-discriminative
+  info
+
+  2. P1-C − P1-B = −0.28 pp (PASS — sharing penalty is negligible)
+
+  3. Trained − Untrained = −14.9 pp (FAIL — training hurts vs random features)
+
+  4. P1-B sparsity = 0.03% (FAIL — L1=0.002 is too weak with Normal embeddings)
+
+  The k-WTA variant achieved exactly 50% sparsity structurally but only 35.7% accuracy.
+
+  The core issue: autoencoder reconstruction training is misaligned with classification.
+
+  The untrained Normal(0,1) baseline outperforms all trained configs (~48% vs ~34%).
+
+  '
+log_excerpt: "All 35 runs completed successfully!\nResults saved to: phase_1\\results.csv\n\
+  \nSummary (mean ± std over seeds):\n  P1-A           : test_acc=0.3424±0.0211  sparsity=0.0033±0.0031\n\
+  \  P1-B           : test_acc=0.3352±0.0305  sparsity=0.0003±0.0005\n  P1-C     \
+  \      : test_acc=0.3324±0.0251  sparsity=0.0023±0.0025\n  P1-D           : test_acc=0.2392±0.0647\
+  \  sparsity=0.0007±0.0015\n  P1-E           : test_acc=0.3516±0.0268  sparsity=0.0039±0.0030\n\
+  \  Untrained-P1-B : test_acc=0.4844±0.0413  sparsity=0.0004±0.0003\n  P1-B-kwta\
+  \      : test_acc=0.3572±0.0749  sparsity=0.5000±0.0000\n"
+metrics:
+  gradient_check_passed: 1
+  p1_a_n_params: 1264
+  p1_b_kwta_mean_sparsity: 0.5
+  p1_b_kwta_mean_test_accuracy: 0.3572
+  p1_b_mean_sparsity: 0.0003
+  p1_b_mean_test_accuracy: 0.3352
+  p1_c_mean_test_accuracy: 0.3324
+  p1_c_n_params: 14992
+  total_runs: 35
+  untrained_p1_b_mean_test_accuracy: 0.4844
+notes: All 35 runs completed. Bug fixes correct but criteria not met due to task misalignment
+  and weak sparsity regularization.
+status: experiment_failed

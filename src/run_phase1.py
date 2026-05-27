@@ -1,7 +1,7 @@
 """
 Phase 1 Experiment Runner for HSUN.
 
-Runs 6 configurations x 5 seeds = 30 total runs.
+Runs 7 configurations x 5 seeds = 35 total runs.
 Saves metrics to phase_1/results.csv
 """
 
@@ -25,12 +25,13 @@ from eval_phase1 import evaluate_hierarchical_encoder
 SEEDS = [42, 43, 44, 45, 46]
 
 CONFIGS = [
-    {"name": "P1-A", "sharing_mode": "within_layer", "d": 8, "d_out": 24, "train": True},
-    {"name": "P1-B", "sharing_mode": "cross_layer", "d": 8, "d_out": 24, "train": True},
-    {"name": "P1-C", "sharing_mode": "none", "d": 8, "d_out": 24, "train": True},
-    {"name": "P1-D", "sharing_mode": "cross_layer", "d": 4, "d_out": 12, "train": True},
+    {"name": "P1-A", "sharing_mode": "within_layer", "d": 8, "d_out": 8, "train": True},
+    {"name": "P1-B", "sharing_mode": "cross_layer", "d": 8, "d_out": 8, "train": True},
+    {"name": "P1-C", "sharing_mode": "none", "d": 8, "d_out": 8, "train": True},
+    {"name": "P1-D", "sharing_mode": "cross_layer", "d": 4, "d_out": 4, "train": True},
     {"name": "P1-E", "sharing_mode": "cross_layer", "d": 8, "d_out": 16, "train": True},
-    {"name": "Untrained-P1-B", "sharing_mode": "cross_layer", "d": 8, "d_out": 24, "train": False},
+    {"name": "Untrained-P1-B", "sharing_mode": "cross_layer", "d": 8, "d_out": 8, "train": False},
+    {"name": "P1-B-kwta", "sharing_mode": "cross_layer", "d": 8, "d_out": 8, "train": True, "kwta_k": 4},
 ]
 
 OUTPUT_DIR = "phase_1"
@@ -54,6 +55,8 @@ def main():
         print(f"  Configuration: {cfg['name']}")
         print(f"    sharing_mode={cfg['sharing_mode']}, d={cfg['d']}, d_out={cfg['d_out']}")
         print(f"    train={cfg['train']}")
+        if "kwta_k" in cfg:
+            print(f"    kwta_k={cfg['kwta_k']}")
         print(f"{'-' * 70}")
 
         for seed in SEEDS:
@@ -65,15 +68,19 @@ def main():
             print(f"       Dataset: train={dataset['train_x'].shape}, test={dataset['test_x'].shape}")
 
             # 2. Instantiate encoder
-            encoder = HierarchicalEncoder(
-                n_input=16,
-                d=cfg["d"],
-                n_layers=3,
-                sharing_mode=cfg["sharing_mode"],
-                l1_lambda=0.002,
-                seed=seed,
-                d_out=cfg["d_out"],
-            )
+            encoder_kwargs = {
+                "n_input": 16,
+                "d": cfg["d"],
+                "n_layers": 3,
+                "sharing_mode": cfg["sharing_mode"],
+                "l1_lambda": 0.002,
+                "seed": seed,
+                "d_out": cfg["d_out"],
+            }
+            if "kwta_k" in cfg:
+                encoder_kwargs["kwta_k"] = cfg["kwta_k"]
+
+            encoder = HierarchicalEncoder(**encoder_kwargs)
             print(f"       Encoder: n_params={encoder.get_parameter_count()}")
 
             # 3. Train (if not untrained)

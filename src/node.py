@@ -30,6 +30,7 @@ class UniversalNode:
         l1_lambda: float = 0.01,
         seed: int = 42,
         d_out: int | None = None,
+        kwta_k: int | None = None,
     ):
         """
         Parameters
@@ -43,11 +44,14 @@ class UniversalNode:
             RNG seed for reproducible Xavier initialisation.
         d_out : int or None
             Latent code dimensionality.  If None, defaults to ``3 * d``.
+        kwta_k : int or None
+            If set, apply k-Winners-Take-All: keep only top-k activations.
         """
         self.d = d
         self.d_in = 3 * d                    # flattened input dimension
         self.d_out = d_out if d_out is not None else 3 * d
         self.l1_lambda = l1_lambda
+        self.kwta_k = kwta_k
 
         rng = np.random.default_rng(seed)
 
@@ -81,8 +85,18 @@ class UniversalNode:
         batch = x_3d.shape[0]
         x_flat = x_3d.reshape(batch, -1)           # (batch, d_in)
         z = x_flat @ self.W_enc + self.b_enc        # (batch, d_out)
-        code = np.tanh(z)
-        return code
+        a = np.tanh(z)                             # (batch, d_out)
+
+        if self.kwta_k is not None:
+            # k-WTA: keep only top-k activations per sample
+            k = min(self.kwta_k, self.d_out)
+            # For each sample, find k-th largest absolute value
+            abs_a = np.abs(a)
+            threshold = np.sort(abs_a, axis=1)[:, -k][:, np.newaxis]  # k-th largest
+            mask = abs_a >= threshold
+            a = a * mask
+
+        return a
 
     def reconstruct(self, code: np.ndarray) -> np.ndarray:
         """
@@ -110,11 +124,15 @@ class UniversalNode:
         Compute the local (per-node) loss value.
 
         Returns a scalar float: MSE + l1_lambda * mean(|code|).
+        When kwta_k is active, L1 penalty is skipped (sparsity is structural).
         """
         code = self.forward(x_3d)
         recon = self.reconstruct(code)
         mse = float(np.mean((x_3d - recon) ** 2))
-        l1 = float(self.l1_lambda * np.mean(np.abs(code)))
+        if self.kwta_k is not None:
+            l1 = 0.0
+        else:
+            l1 = float(self.l1_lambda * np.mean(np.abs(code)))
         return mse + l1
 
     # ------------------------------------------------------------------
@@ -159,6 +177,15 @@ class UniversalNode:
         x_flat = x_3d.reshape(batch, D_in)            # (B, D_in)
         z = x_flat @ self.W_enc + self.b_enc          # (B, D_out)
         a = np.tanh(z)                                 # (B, D_out)  -- code
+
+        # Apply k-WTA mask if active (for gradient computation)
+        if self.kwta_k is not None:
+            k = min(self.kwta_k, self.d_out)
+            abs_a = np.abs(a)
+            threshold = np.sort(abs_a, axis=1)[:, -k][:, np.newaxis]
+            mask = abs_a >= threshold
+            a = a * mask
+
         r = a @ self.W_dec + self.b_dec               # (B, D_in)
 
         # --- gradient of MSE w.r.t. flat recon r ---
@@ -170,11 +197,21 @@ class UniversalNode:
 
         # --- dL/da ---
         d_a = d_r @ self.W_dec.T                       # (B, D_out)
-        # Add L1 gradient
-        d_a += self.l1_lambda / (batch * D_out) * np.sign(a)
+        # Add L1 gradient (only when not using k-WTA)
+        if self.kwta_k is None:
+            d_a += self.l1_lambda / (batch * D_out) * np.sign(a)
+
+        # Apply k-WTA mask to gradient (zero gradient for losing units)
+        if self.kwta_k is not None:
+            k = min(self.kwta_k, self.d_out)
+            abs_a_raw = np.abs(np.tanh(z))
+            threshold = np.sort(abs_a_raw, axis=1)[:, -k][:, np.newaxis]
+            mask = abs_a_raw >= threshold
+            d_a = d_a * mask
 
         # --- dL/dz (tanh derivative: d(tanh)/dz = 1 - tanh^2) ---
-        d_z = d_a * (1.0 - a ** 2)                     # (B, D_out)
+        # Only for winning units when k-WTA is active
+        d_z = d_a * (1.0 - np.tanh(z) ** 2)            # (B, D_out)
 
         # --- W_enc, b_enc ---
         d_W_enc = x_flat.T @ d_z                       # (D_in, D_out)
@@ -283,6 +320,8 @@ if __name__ == "__main__":
     D = 5
     D_OUT = 7
 
+    # Test without k-WTA
+    print("\n--- Without k-WTA ---")
     node = UniversalNode(d=D, l1_lambda=0.01, seed=42, d_out=D_OUT)
     x_3d = rng.standard_normal((BATCH, 3, D))
 
@@ -304,4 +343,28 @@ if __name__ == "__main__":
         print("  ALL GRADIENTS VERIFIED -- analytical approx numerical")
     else:
         print("  SOME GRADIENTS FAILED -- check the derivation!")
+
+    # Test with k-WTA
+    print("\n--- With k-WTA (k=3) ---")
+    node_kwta = UniversalNode(d=D, l1_lambda=0.0, seed=42, d_out=D_OUT, kwta_k=3)
+    x_3d_kwta = rng.standard_normal((BATCH, 3, D))
+
+    analytical_kwta = node_kwta.compute_gradients(x_3d_kwta)
+    numerical_kwta = _numerical_gradient(node_kwta, x_3d_kwta)
+
+    all_pass_kwta = True
+    for key in ("W_enc", "b_enc", "W_dec", "b_dec", "x_3d"):
+        a = analytical_kwta[key]
+        n = numerical_kwta[key]
+        rel_err = _relative_error(a, n)
+        ok = rel_err < 1e-5
+        status = "PASS" if ok else "FAIL"
+        all_pass_kwta = all_pass_kwta and ok
+        print(f"  {key:>8s}:  rel_err = {rel_err:.2e}  {status}")
+
+    print("-" * 60)
+    if all_pass_kwta:
+        print("  ALL k-WTA GRADIENTS VERIFIED -- analytical approx numerical")
+    else:
+        print("  SOME k-WTA GRADIENTS FAILED -- check the derivation!")
     print("=" * 60)

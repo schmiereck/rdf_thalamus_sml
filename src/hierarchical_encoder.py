@@ -39,6 +39,7 @@ class HierarchicalEncoder:
         l1_lambda: float = 0.002,
         seed: int = 42,
         d_out: int | None = None,
+        kwta_k: int | None = None,
     ):
         """
         Parameters
@@ -58,6 +59,8 @@ class HierarchicalEncoder:
             Master RNG seed.
         d_out : int | None
             Latent code dimensionality per node.  Defaults to ``3*d``.
+        kwta_k : int | None
+            If set, apply k-Winners-Take-All in each node.
         """
         if sharing_mode not in ("within_layer", "cross_layer", "none"):
             raise ValueError(
@@ -72,11 +75,13 @@ class HierarchicalEncoder:
         self.l1_lambda = l1_lambda
         self.seed = seed
         self.d_out = d_out if d_out is not None else 3 * d
+        self.kwta_k = kwta_k
 
         self.rng = np.random.default_rng(seed)
 
         # -- Learnable binary embedding (2, d) --
-        self.embedding: np.ndarray = self.rng.uniform(-0.01, 0.01, (2, d))
+        # Use Normal(0, 1.0) for stronger initial representations
+        self.embedding: np.ndarray = self.rng.standard_normal((2, d)) * 1.0
 
         # Number of nodes per layer (kernel-3 stride-1 sliding window)
         # Layer 0: 14, Layer 1: 12, Layer 2: 10 (for n_input=16, n_layers=3)
@@ -98,6 +103,7 @@ class HierarchicalEncoder:
                             l1_lambda=self.l1_lambda,
                             seed=node_seed,
                             d_out=self.d_out,
+                            kwta_k=kwta_k,
                         )
                     )
                     node_seed += 1
@@ -113,6 +119,7 @@ class HierarchicalEncoder:
                         l1_lambda=self.l1_lambda,
                         seed=seed + l_idx,
                         d_out=self.d_out,
+                        kwta_k=kwta_k,
                     )
                 )
 
@@ -188,8 +195,10 @@ class HierarchicalEncoder:
         for l in range(self.n_layers):
             x, _ = self._forward_layer(x, l)       # (batch, n_pos, d_out)
             if l < self.n_layers - 1:
-                x = x[:, :, : self.d]              # slice to d for next layer
-                # (supports P1-E where d_out != d)
+                # Only slice when d_out > d (e.g., P1-E with d_out=16, d=8)
+                # For recursive configs (d_out == d), no slicing needed
+                if x.shape[2] > self.d:
+                    x = x[:, :, : self.d]
 
         batch = x.shape[0]
         return x.reshape(batch, -1)                # (batch, 10 * d_out)
@@ -239,6 +248,9 @@ class HierarchicalEncoder:
 
         loss_history: list[float] = []
 
+        # When k-WTA is active, skip L1 penalty (sparsity is structural)
+        effective_l1 = 0.0 if self.kwta_k is not None else self.l1_lambda
+
         for layer_idx in range(self.n_layers):
             for epoch in range(epochs_per_layer):
                 perm = self.rng.permutation(n_samples)
@@ -255,7 +267,8 @@ class HierarchicalEncoder:
                     current = self._embed(batch_x)   # (B, 16, d)
                     for prev_l in range(layer_idx):
                         current = self._forward_layer_only(current, prev_l)
-                        current = current[:, :, : self.d]
+                        if current.shape[2] > self.d:
+                            current = current[:, :, : self.d]
 
                     n_out = self.n_nodes_per_layer[layer_idx]
 
@@ -406,7 +419,8 @@ class HierarchicalEncoder:
             # Propagate to next layer
             if layer_idx < self.n_layers - 1:
                 x, _ = self._forward_layer(x, layer_idx)
-                x = x[:, :, : self.d]
+                if x.shape[2] > self.d:
+                    x = x[:, :, : self.d]
 
         return mse_list
 
