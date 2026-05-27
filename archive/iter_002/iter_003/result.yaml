@@ -1,0 +1,82 @@
+artifacts:
+- src/diagnostic_phase1.py
+- phase_1/diagnostic_results.csv
+experimenter_view: 'The reconstruction objective (MSE + L1) is the confirmed root
+  cause of the
+
+  Phase 1 training failure. The untrained hierarchical architecture itself
+
+  achieves 51.1% test accuracy on average, demonstrating it can represent the
+
+  task structure. However, every trained variant degrades performance below
+
+  this baseline (best trained: Random Embedding at 43.4%; worst: Predictive
+
+  Coding at 38.2%). None of the tested modifications—simultaneous training,
+
+  lateral inhibition, or strong L1—produce discriminative sparse codes or
+
+  reach >60% accuracy. Lateral inhibition does create high sparsity (72%)
+
+  but destroys discriminative structure (high variance, 20-53% accuracy).
+
+  The conclusion is that local reconstruction objectives optimize for pixel-
+
+  level fidelity rather than category-level separation, making them
+
+  fundamentally misaligned with the classification task.
+
+  '
+log_excerpt: '----------------------------------------------------------------------
+
+  Experiment: Exp4-Predictive-Coding
+
+  ----------------------------------------------------------------------
+
+  seed=42  |  test_acc=0.3880  train_acc=0.4090  sparsity=0.7830  (20.1s)
+
+  seed=43  |  test_acc=0.4860  train_acc=0.5520  sparsity=0.6371  (20.1s)
+
+  seed=44  |  test_acc=0.3080  train_acc=0.3490  sparsity=0.7372  (20.2s)
+
+  seed=45  |  test_acc=0.5260  train_acc=0.5650  sparsity=0.6742  (20.1s)
+
+  seed=46  |  test_acc=0.2000  train_acc=0.2000  sparsity=0.7917  (20.3s)
+
+
+  ----------------------------------------------------------------------
+
+  Experiment: Exp5-Strong-L1
+
+  ----------------------------------------------------------------------
+
+  seed=42  |  test_acc=0.3540  train_acc=0.4320  sparsity=0.0044  (14.8s)
+
+  ...
+
+
+  Summary (mean over 5 seeds):
+
+  Exp1-Random-Embedding: test_acc=0.4336
+
+  Exp2-Single-Layer:     test_acc=0.3976
+
+  Exp3-Simultaneous:     test_acc=0.4152
+
+  Exp4-Predictive-Coding:test_acc=0.3816 (sparsity=0.7246)
+
+  Exp5-Strong-L1:        test_acc=0.3712
+
+  '
+metrics:
+  best_diagnostic_test_acc: 0.4336
+  exp1_random_embedding_test_acc: 0.4336
+  exp2_single_layer_test_acc: 0.3976
+  exp3_simultaneous_test_acc: 0.4152
+  exp4_predictive_coding_test_acc: 0.3816
+  exp4_sparsity: 0.7246
+  exp5_strong_l1_test_acc: 0.3712
+  untrained_baseline_test_acc: 0.5112
+notes: All 5 diagnostic experiments completed; reconstruction objective identified
+  as root cause.
+status: ok
