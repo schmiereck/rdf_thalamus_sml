@@ -1,9 +1,8 @@
-# RDF Scientific Pre-Registration
+# Research Manager Log - Iteration 005
 
-*   **Iteration:** 005
-*   **Pre-Registration File:** src/pre_registration.md
+## Iteration 005 -> Manager [Proposed Research Plan]
 
-## 1. Hypothesis
+**Proposed Hypothesis:**
 A single set of UniversalNode weights, trained jointly on both spatial and temporal
 JEPA objectives applied to a spatiotemporal input grid (16 binary pixels × 32 timesteps),
 can produce effective spatiotemporal representations. Specifically, P3-C (shared weights,
@@ -14,7 +13,7 @@ permanence). This would demonstrate that the zero-shot transfer failure was caus
 single-axis optimization, not by fundamental incompatibility between spatial and temporal
 processing in the UniversalNode architecture.
 
-## 2. Falsification Criterion
+**Proposed Falsification Criterion:**
 Primary: P3-C mean 4-class classification accuracy < P3-B mean accuracy - 15pp
 across the four spatiotemporal pattern benchmarks (each benchmark evaluated with
 5 seeds, linear probe on final code vector). This would prove that even under
@@ -28,7 +27,7 @@ shared-weight model is not viable even compared to the separately-trained baseli
 Tertiary: P3-C mean accuracy < 2× chance (< 50% for 4-class), indicating that
 shared weights under joint training produce representations barely above random.
 
-## 3. Proposed Method
+**Proposed Method:**
 STEP 1: Create spatiotemporal dataset generator (src/spatiotemporal_dataset.py)
 - Generate 4 pattern classes over a 16×32 binary spatiotemporal grid:
   * Class 0 — Moving blob: contiguous block of 1s that translates across spatial
@@ -100,4 +99,36 @@ Files to create/modify:
 - src/pre_registration.md (auto-generated from this plan)
 
 ---
-*Created automatically by the RDF Orchestrator prior to iteration execution.*
+
+## Iteration 005 -> Planner [Strategic Guidance]
+
+# Manager's Note: Strategic Guidance for Phase 3 (Unified Spatiotemporal Grid)
+
+I have reviewed your proposed research plan for Phase 3. The transition to a unified spatiotemporal grid is the logical next step, and your formulation of the **P3-A / P3-B / P3-C** comparison is excellent. It directly addresses the core tension of our project: **Is the universal node's parameter set truly unified across space and time, or is parameter specialization necessary?**
+
+To ensure scientific rigour and prevent technical dead-ends, you must address the following three strategic points before proceeding to execution.
+
+---
+
+### 1. Strict Architectural Compatibility for Shared Weights (The Dimension Constraint)
+In Phase 2, we established that the Universal Node operates on $3 \times d$ inputs and outputs a $d$-dimensional vector. For Phase 3's **P3-C (Fully Shared Weights)** to be mathematically viable:
+*   **Every single node** in both the spatial and temporal hierarchies must have the exact same weight shape: $\mathbb{R}^{3d} \to \mathbb{R}^d$.
+*   If your spatial Layer 0 operates directly on raw 1D binary pixels, its input dimension would be $3 \times 1$, making parameter sharing with higher layers or temporal layers impossible.
+*   **Mandate:** You must implement an explicit, non-learned (or separately trained) **pixel-embedding layer** at the very bottom of the spatial pipeline to project the raw binary inputs into $d$-dimensional space *before* they enter spatial Layer 0. This ensures dimension homogeneity across the entire spatiotemporal grid.
+
+### 2. The Construction-vs-Empirical Test: Guarding Against Shortcut Features
+We must ensure that the four spatiotemporal classes (Moving Blob, Expanding/Contracting Blob, Periodic Spatiotemporal, Object Permanence) cannot be distinguished via trivial "shortcuts" (e.g., a spatial-only slice or a static temporal average):
+*   **Design Check:** If a linear probe can classify the sequence with 90% accuracy using only the first frame, your dataset has a loophole. Ensure that the classes are balanced such that static spatial frames or non-spatial temporal averages are insufficient for high classification accuracy.
+*   **Representation Pooling:** Clearly define how the final spatiotemporal grid representation is aggregated for the linear probe. I suggest average-pooling across the remaining spatial positions to obtain a temporal sequence of shape $(T_{out}, d)$, and then either flattening or temporally pooling this sequence. Do not allow high-dimensional flattening of the raw grid to bypass the bottleneck, as this would allow the linear probe to reconstruct the raw inputs and solve the task trivially.
+
+### 3. Pre-Registration & Falsification Integrity
+Your proposed pre-registration criteria are clear and quantitative. 
+*   **Action:** Before running any training or evaluation scripts, you must write and commit your exact hypothesis and the three falsification criteria (Primary: $\text{Acc}_{\text{P3-C}} < \text{Acc}_{\text{P3-B}} - 15\text{pp}$; Secondary: $\text{Acc}_{\text{P3-C}} < \text{Acc}_{\text{P3-A}} - 20\text{pp}$; Tertiary: $\text{Acc}_{\text{P3-C}} < 50\%$) to `src/pre_registration.md`.
+*   **Skeptic's Boundary:** If P3-C fails the primary falsification criterion, you must report this as an honest, clean null result for the *strong* universal parameter hypothesis. We will not engage in post-hoc parameter tuning or loss-weight tweaking to "rescue" P3-C. Failing P3-C simply means that while the **architectural type** is universal, **parameter specialization per physical axis is a biological and mathematical necessity**—which is itself a highly valuable, publishable scientific finding.
+
+---
+
+**You are cleared to write the pre-registration file and proceed to the implementation of Phase 3.** Keep your language sober, report your metrics honestly, and let the data speak.
+
+---
+

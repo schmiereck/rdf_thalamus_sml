@@ -1,0 +1,100 @@
+falsification_criterion: 'Primary: P3-C mean 4-class classification accuracy < P3-B
+  mean accuracy - 15pp
+
+  across the four spatiotemporal pattern benchmarks (each benchmark evaluated with
+
+  5 seeds, linear probe on final code vector). This would prove that even under
+
+  joint optimization, a single weight set cannot serve both spatial and temporal
+
+  processing — the strong universal hypothesis is falsified and the practical
+
+  conclusion is "same architecture, per-axis weights."
+
+
+  Secondary: P3-C mean accuracy < P3-A mean accuracy - 20pp, confirming that the
+
+  shared-weight model is not viable even compared to the separately-trained baseline.
+
+
+  Tertiary: P3-C mean accuracy < 2× chance (< 50% for 4-class), indicating that
+
+  shared weights under joint training produce representations barely above random.
+
+  '
+hypothesis: 'A single set of UniversalNode weights, trained jointly on both spatial
+  and temporal
+
+  JEPA objectives applied to a spatiotemporal input grid (16 binary pixels × 32 timesteps),
+
+  can produce effective spatiotemporal representations. Specifically, P3-C (shared
+  weights,
+
+  joint training) will achieve mean classification accuracy within 15 percentage points
+  of
+
+  P3-B (separate spatial/temporal weights, joint training) on four spatiotemporal
+  pattern
+
+  benchmarks (moving blob, expanding/contracting blob, periodic spatiotemporal, object
+
+  permanence). This would demonstrate that the zero-shot transfer failure was caused
+  by
+
+  single-axis optimization, not by fundamental incompatibility between spatial and
+  temporal
+
+  processing in the UniversalNode architecture.
+
+  '
+pre_registration_file: src/pre_registration.md
+proposed_method: "STEP 1: Create spatiotemporal dataset generator (src/spatiotemporal_dataset.py)\n\
+  - Generate 4 pattern classes over a 16×32 binary spatiotemporal grid:\n  * Class\
+  \ 0 — Moving blob: contiguous block of 1s that translates across spatial\n    positions\
+  \ over time (varying speed, starting position, blob width)\n  * Class 1 — Expanding/contracting\
+  \ blob: blob whose spatial extent grows then\n    shrinks over time (varying max\
+  \ width, expansion rate)\n  * Class 2 — Periodic spatiotemporal: pattern repeating\
+  \ in both space and time\n    (varying spatial and temporal periods)\n  * Class\
+  \ 3 — Object permanence: blob present, disappears for k steps, reappears\n    at\
+  \ same position (varying gap length, blob position, blob width)\n- Each class: 500\
+  \ training samples, 200 test samples (per seed)\n- Add noise variants (10-20% pixel\
+  \ flip probability) for robustness testing\n\nSTEP 2: Create spatiotemporal encoder\
+  \ (src/spatiotemporal_encoder.py)\n- Architecture: sequential spatial-then-temporal\
+  \ processing with UniversalNode\n  * Spatial pass: 3 layers of kernel-3, stride-1\
+  \ nodes over 16 input pixels\n    Layer 0: 14 positions, Layer 1: 12, Layer 2: 10\
+  \ → top spatial code\n  * Temporal pass: 3 layers of kernel-3, stride-1 nodes over\
+  \ 32 timesteps\n    applied to the 10 top-layer spatial codes at each timestep\n\
+  \    Layer 0: 30 positions, Layer 1: 28, Layer 2: 26 → final temporal code\n  *\
+  \ Final representation: mean-pool the temporal top layer across spatial positions\n\
+  - Three variants sharing the same architecture code:\n  * P3A: W_spatial (trained\
+  \ separately) + W_temporal (trained separately)\n  * P3B: W_spatial + W_temporal\
+  \ (both trained jointly with combined loss)\n  * P3C: W_shared (single weight matrix\
+  \ for both passes, trained jointly)\n- UniversalNode: same as Phase 1/2 (kernel-3,\
+  \ 3-slot input, d=16, JEPA + VICReg)\n\nSTEP 3: Implement combined JEPA training\
+  \ (src/run_phase3.py)\n- JEPA objective for spatial axis: at each spatial layer,\
+  \ predict left and right\n  neighbor node outputs from current node output (bidirectional)\n\
+  - JEPA objective for temporal axis: at each temporal layer, predict past and\n \
+  \ future neighbor node outputs from current node output\n- VICReg collapse prevention\
+  \ on all node outputs (variance, covariance penalties)\n- Combined loss: alpha *\
+  \ spatial_jepa + (1-alpha) * temporal_jepa + vicreg\n  with alpha=0.5 (equal weighting)\n\
+  - Training: 200 epochs, Adam optimizer, lr=1e-3, batch_size=32\n- For P3-A: train\
+  \ spatial JEPA alone (200 epochs), then freeze spatial weights\n  and train temporal\
+  \ JEPA alone (200 epochs)\n- For P3-B: train both losses jointly (200 epochs) with\
+  \ separate W_s and W_t\n- For P3-C: train both losses jointly (200 epochs) with\
+  \ shared W\n\nSTEP 4: Evaluation protocol (src/evaluate_phase3.py)\n- Linear probe:\
+  \ train a single linear classifier (no hidden layer) on the\n  final code vectors,\
+  \ 4-class classification\n- Per-benchmark evaluation: compute accuracy for each\
+  \ of the 4 pattern types\n  separately, then compute mean accuracy\n- 5 seeds per\
+  \ variant for statistical significance\n- Compute: mean accuracy, std, P3-C vs P3-B\
+  \ gap, P3-C vs P3-A gap\n- Parameter count comparison across variants\n- Paired\
+  \ t-test between P3-C and P3-B across seeds\n- Also evaluate per-axis JEPA loss\
+  \ to diagnose any axis dominance\n\nSTEP 5: Create report (phase_3/REPORT.md)\n\
+  - Comparison table: P3-A, P3-B, P3-C accuracy (mean ± std) per benchmark\n- Gap\
+  \ analysis: P3-C - P3-B, P3-C - P3-A\n- Parameter count: P3-C should have ~50% of\
+  \ P3-B parameters\n- Per-axis JEPA loss analysis\n- Statistical significance tests\n\
+  - Recommendation: if P3-C within 15pp of P3-B → universality viable;\n  if not →\
+  \ per-axis weights are the practical path\n\nFiles to create/modify:\n- src/spatiotemporal_dataset.py\
+  \ (new)\n- src/spatiotemporal_encoder.py (new, reuses UniversalNode from Phase 1/2)\n\
+  - src/run_phase3.py (new)\n- src/evaluate_phase3.py (new)\n- src/test_spatiotemporal.py\
+  \ (new, self-tests)\n- phase_3/REPORT.md (new)\n- src/pre_registration.md (auto-generated\
+  \ from this plan)\n"
