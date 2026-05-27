@@ -1,0 +1,340 @@
+
+[Tool Call: list_dir({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src'})]
+
+[Tool Result: [DIR] __pycache__
+[DIR] encoders
+      harness.py
+      pre_registration.md
+      run_phase0.py]
+
+
+[Tool Call: read_file({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\encoders'})]
+
+[Tool Result: Error reading C:\Users\thomas\Projekte\rdf_thalamus_sml\src\encoders: [Errno 13] Permission denied: 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\encoders']
+
+
+[Tool Call: bash({'command': 'ls -la "C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\"'})]
+
+[Tool Result: exit_code: 1
+stdout: 
+stderr: Der Befehl "ls" ist entweder falsch geschrieben oder
+konnte nicht gefunden werden.
+]
+
+
+[Tool Call: bash({'command': 'dir "C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\"'})]
+
+[Tool Result: exit_code: 0
+stdout:  Volume in Laufwerk C: hat keine Bezeichnung.
+ Volumeseriennummer: F4E9-4E77
+
+ Verzeichnis von C:\Users\thomas\Projekte\rdf_thalamus_sml\src
+
+27.05.2026  10:09    <DIR>          .
+27.05.2026  10:24    <DIR>          ..
+27.05.2026  09:45    <DIR>          encoders
+27.05.2026  09:17            13.234 harness.py
+27.05.2026  10:37             5.424 pre_registration.md
+27.05.2026  10:20            11.663 run_phase0.py
+27.05.2026  10:21    <DIR>          __pycache__
+  ...]
+
+
+[Tool Call: read_file({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\harness.py'})]
+
+[Tool Result: """
+HSUN Phase 0 -- Experimental Harness
+
+Dataset generator, similarity evaluator, encoder interface, and utility functions
+for the smoke-test of hierarchical sparse universal nodes.
+
+Dependencies: numpy, scipy only -- no external ML libraries.
+"""
+
+from __future__ import annotations
+
+import itertools
+from abc import ABC, abstractmethod
+from typing import Dict, List, Tuple
+
+import numpy as np
+from scipy.stats import spearmanr
+
+
+# ------------------------------------------------------------------...]
+
+
+[Tool Call: bash({'command': 'dir "C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\encoders"'})]
+
+[Tool Result: exit_code: 0
+stdout:  Volume in Laufwerk C: hat keine Bezeichnung.
+ Volumeseriennummer: F4E9-4E77
+
+ Verzeichnis von C:\Users\thomas\Projekte\rdf_thalamus_sml\src\encoders
+
+27.05.2026  09:45    <DIR>          .
+27.05.2026  10:09    <DIR>          ..
+27.05.2026  09:26             1.937 lookup_table.py
+27.05.2026  10:07             4.433 predictive_coding.py
+27.05.2026  10:05             3.667 som.py
+27.05.2026  09:53             3.767 sparse_autoencoder.py
+27.05.2026  10:04             ...]
+
+
+[Tool Call: read_file({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\encoders\\sparse_autoencoder.py'})]
+
+[Tool Result: import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from harness import EncoderBase
+import numpy as np
+
+
+class SparseAutoencoder(EncoderBase):
+    """P0-D: Sparse Autoencoder — GLOBAL OPTIMIZATION BASELINE (expected rho >= 0.6)."""
+
+    def __init__(self, dim_in=3, dim_out=16, seed=42, lr=0.15, l1_lambda=0.002):
+        self._dim_in = dim_in
+        self._dim_out = dim_out
+        self.lr = lr
+        self.l1_lambda = l1_lambda
+        rng = np.random.default_...]
+
+
+[Tool Call: read_file({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\run_phase0.py'})]
+
+[Tool Result: """
+HSUN Phase 0 — Full Experiment Runner
+
+Runs all 5 encoders × 5 seeds, collects metrics, generates report.
+"""
+
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+
+import csv
+import time
+from collections import defaultdict
+
+import numpy as np
+
+from harness import DatasetGenerator, SimilarityEvaluator, compute_sparsity
+from encoders import ENCODER_REGISTRY
+
+SEEDS = [42, 43, 44, 45, 46]
+EPOCHS = 200  # Training epochs for iterative methods
+RESULTS_CSV = "phase_0/re...]
+
+
+[Tool Call: read_file({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\encoders\\__init__.py'})]
+
+[Tool Result: ENCODER_REGISTRY = {}
+
+
+def register_encoder(encoder_id, encoder_class):
+    ENCODER_REGISTRY[encoder_id] = encoder_class
+
+
+def get_encoder(encoder_id):
+    return ENCODER_REGISTRY.get(encoder_id)
+
+
+# ---------------------------------------------------------------------------
+# Register Phase 0 encoders
+# ---------------------------------------------------------------------------
+
+from .lookup_table import LookupTableEncoder
+from .spatial_pooler import SpatialPoolerEncoder
+from .som import SOMEn...]
+
+
+[Tool Call: read_file({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\encoders\\predictive_coding.py'})]
+
+[Tool Result: import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from harness import EncoderBase
+import numpy as np
+
+
+class PredictiveCodingEncoder(EncoderBase):
+    """
+    P0-E: Predictive Coding Encoder — local-error / Hebbian baseline.
+
+    A single hidden layer learns to predict the input via top-down weights.
+    The local prediction error drives learning in both forward and backward
+    pathways.  Lateral inhibition competes activations, producing a sparse,
+    dist...]
+
+Let me also look at some other files for context:
+
+
+
+[Tool Call: read_file({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\encoders\\lookup_table.py'})]
+
+[Tool Result: import os
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from harness import EncoderBase
+import numpy as np
+
+
+class LookupTableEncoder(EncoderBase):
+    """P0-A: One-hot lookup table — NEGATIVE CONTROL (expected rho ~ 0)."""
+
+    def __init__(self, dim_in=3, dim_out=8, seed=None):
+        self._dim_in = dim_in
+        self._dim_out = dim_out
+        self._mapping = {}  # state tuple -> one-hot index
+
+    def train(self, inputs, epochs=1):
+        # Just enumerate u...]
+
+Let me first look at the remaining encoder files to fully understand the project patterns:
+
+
+
+[Tool Call: read_file({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\encoders\\som.py'})]
+
+[Tool Result: import os
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from harness import EncoderBase
+import numpy as np
+
+
+class SOMEncoder(EncoderBase):
+    """
+    P0-C: Kohonen Self-Organizing Map encoder.
+
+    A 1-D SOM with dim_out=16 neurons is trained on the 3-bit input space.
+    The *code* for an input is the vector of (normalised, clipped) Euclidean
+    distances from the input to **every** SOM unit.  This makes the code
+    distributed and topology-preserving: inputs...]
+
+Now I understand the project structure. Let me implement the `UniversalNode` class in `src/node.py`:
+
+
+
+[Tool Call: write_file({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\node.py', 'content': '"""\nUniversalNode — single-layer auto-encoder unit for HSUN Phase 0-E.\n\nArchitecture\n------------\n  x_3d (batch, 3, d_in)  → flatten → (batch, 3*d_in)\n  z    = tanh(x_flat @ W_enc + b_enc)          # (batch, d_out)  – "code"\n  xrec = z       @ W_dec + b_dec              # (batch, 3*d_in)\n           → reshape → (batch, 3, d_in)\n\nLoss  = MSE(x_3d, xrec) + l1_lambda · mean(|z|)\n\nAll analytical gradients are provided in ``compute_gradients`` and verified\nbelow via a central-difference numerical check.\n"""\n\nfrom __future__ import annotations\n\nimport copy\nfrom typing import Dict\n\nimport numpy as np\n\n\nclass UniversalNode:\n    """A single universal node implementing an encoder → decoder pair."""\n\n    def __init__(\n        self,\n        d: int,\n        l1_lambda: float = 0.01,\n        seed: int = 42,\n        d_out: int | None = None,\n    ):\n        """\n        Parameters\n        ----------\n        d : int\n            Input dimensionality *per channel*.  The flattened input has\n            dimension ``3 * d`` (three channels).\n        l1_lambda : float\n            Weight for the L1 sparsity regulariser on the latent code.\n        seed : int\n            RNG seed for reproducible Xavier initialisation.\n        d_out : int or None\n            Latent code dimensionality.  If None, defaults to ``3 * d``.\n        """\n        self.d = d\n        self.d_in = 3 * d                    # flattened input dimension\n        self.d_out = d_out if d_out is not None else 3 * d\n        self.l1_lambda = l1_lambda\n\n        rng = np.random.default_rng(seed)\n\n        # ── Xavier (Glorot) initialisation ───────────────────────────────\n        # W_enc : (d_in, d_out)\n        scale_enc = np.sqrt(2.0 / (self.d_in + self.d_out))\n        self.W_enc = rng.standard_normal((self.d_in, self.d_out)) * scale_enc\n        self.b_enc = np.zeros(self.d_out)\n\n        # W_dec : (d_out, d_in)\n        scale_dec = np.sqrt(2.0 / (self.d_out + self.d_in))\n        self.W_dec = rng.standard_normal((self.d_out, self.d_in)) * scale_dec\n        self.b_dec = np.zeros(self.d_in)\n\n    # ------------------------------------------------------------------\n    # Forward pass helpers\n    # ------------------------------------------------------------------\n\n    def forward(self, x_3d: np.ndarray) -> np.ndarray:\n        """\n        Encode ``x_3d`` → latent code.\n\n        Parameters\n        ----------\n        x_3d : np.ndarray, shape (batch, 3, d)\n\n        Returns\n        -------\n        code : np.ndarray, shape (batch, d_out)\n        """\n        batch = x_3d.shape[0]\n        x_flat = x_3d.reshape(batch, -1)           # (batch, d_in)\n        z = x_flat @ self.W_enc + self.b_enc        # (batch, d_out)\n        code = np.tanh(z)\n        return code\n\n    def reconstruct(self, code: np.ndarray) -> np.ndarray:\n        """\n        Decode latent ``code`` → reconstructed ``x_3d``.\n\n        Parameters\n        ----------\n        code : np.ndarray, shape (batch, d_out)\n\n        Returns\n        -------\n        x_rec : np.ndarray, shape (batch, 3, d)\n        """\n        batch = code.shape[0]\n        x_hat_flat = code @ self.W_dec + self.b_dec  # (batch, d_in)\n        x_rec = x_hat_flat.reshape(batch, 3, self.d)  # (batch, 3, d)\n        return x_rec\n\n    # ------------------------------------------------------------------\n    # Loss\n    # ------------------------------------------------------------------\n\n    def local_loss(self, x_3d: np.ndarray) -> float:\n        """\n        Compute the local (per-node) loss value.\n\n        Returns a scalar float: ``MSE + l1_lambda * mean(|code|)``.\n        """\n        code = self.forward(x_3d)\n        recon = self.reconstruct(code)\n        mse = float(np.mean((x_3d - recon) ** 2))\n        l1 = float(self.l1_lambda * np.mean(np.abs(code)))\n        return mse + l1\n\n    # ------------------------------------------------------------------\n    # Analytical gradients\n    # ------------------------------------------------------------------\n\n    def compute_gradients(self, x_3d: np.ndarray) -> Dict[str, np.ndarray]:\n        r"""\n        Compute analytical gradients of the local loss w.r.t. all four\n        trainable parameters **and** the input ``x_3d``.\n\n        Returns a dict with keys:\n            \'W_enc\', \'b_enc\', \'W_dec\', \'b_dec\', \'x_3d\'\n\n        Derivation\n        ----------\n        Notation (summation over batch dim *B* implied in ``np.mean``):\n\n            x  = x_3d.reshape(B, d_in)           # flattened input\n            z  = x @ W_enc + b_enc                # pre-tanh\n            a  = tanh(z)                          # code / latent\n            r  = a @ W_dec + b_dec                # flattened recon\n            x̂  = r.reshape(B, 3, d)               # 3-D recon\n\n        Loss = mean((x_3d - x̂)²) + λ · mean(|a|)\n             = 1/(B·D) Σ(x_ij - r_ij)² + λ/(B·d_out) Σ|a_ij|\n        where D = d_in (for MSE) and the second term uses d_out dims.\n\n        Gradients via chain rule (mean-scaled):\n\n            dL/dr   = 2/(B·D) · (r - x)            # (B, D)\n            dL/dWdec = 1/B · aᵀ @ dL/dr             # (d_out, D)\n            dL/dbdec = 1/B · Σ_b(dL/dr)              # (D,)\n            dL/da   = dL/dr @ W_decᵀ + λ/(B·d_out)·sign(a)\n            dL/dz   = dL/da ⊙ (1 - a²)              # tanh derivative\n            dL/dWenc = 1/B · xᵀ @ dL/dz             # (D, d_out)\n            dL/dbenc = 1/B · Σ_b(dL/dz)              # (d_out,)\n            dL/dx   = dL/dz @ W_encᵀ  → reshape to (B,3,d)\n        """\n        batch = x_3d.shape[0]\n        D_in = self.d_in      # = 3 * d\n        D_out = self.d_out\n\n        # --- forward (need intermediates) ---\n        x_flat = x_3d.reshape(batch, D_in)            # (B, D_in)\n        z = x_flat @ self.W_enc + self.b_enc          # (B, D_out)\n        a = np.tanh(z)                                 # (B, D_out)  ← code\n        r = a @ self.W_dec + self.b_dec               # (B, D_in)\n        recon = r.reshape(batch, 3, self.d)           # (B, 3, d)\n\n        # --- 1) gradient of MSE w.r.t flat recon r ---\n        # MSE = mean((x_3d - recon)²) = mean((x_flat - r)²)\n        # d(MSE)/dr_ij = 2 / (B * D_in) * (r_ij - x_flat_ij)\n        d_r = 2.0 / (batch * D_in) * (r - x_flat)     # (B, D_in)\n\n        # --- 2) W_dec, b_dec ---\n        # dr/dWdec = aᵀ outer product  →  dL/dWdec = aᵀ @ dr   (already mean-scaled in dr)\n        # But wait: MSE = 1/(B·D) Σ(r-x)², and dr carries 2/(B·D) factor.\n        # dL/dWdec_ij = Σ_b dr_b_k · a_b_i   →  aᵀ @ dr\n        d_W_dec = a.T @ d_r / batch * (batch * D_in) / (batch * D_in)  # keep scaling from d_r\n        # Actually let me re-derive more carefully.\n        # We\'ll redo this cleanly below.\n        \n        # Clean re-derivation with explicit scaling:\n        # MSE = (1/(B*D_in)) * Σ_{b,i} (r_bi - x_bi)²\n        # d(MSE)/dr_bi = 2/(B*D_in) * (r_bi - x_bi)  -- this is d_r above\n        \n        # L1 = λ * (1/(B*D_out)) * Σ_{b,j} |a_bj|\n        # d(L1)/da_bj = λ/(B*D_out) * sign(a_bj)\n        \n        # dL/dW_dec: r = a @ W_dec + b_dec\n        #   d r_bk / d W_dec_jk = a_bj\n        #   dL/dW_dec_jk = Σ_{b,k} dL/d r_bk · a_bj  (wait, d r_bk / d W_dec_jk = a_bj)\n        #   Actually: r = a W_dec + b_dec, so r_bk = Σ_j a_bj W_dec_jk + b_dec_k\n        #   d r_bk / d W_dec_jk = a_bj\n        #   dL/dW_dec_jk = Σ_b dL/d r_bk · a_bj  (k index is fixed since W_dec_jk only affects r_bk)\n        #   = Σ_b (a_bj · d_r_bk)  →  (aᵀ @ d_r)_jk ... wait, let me be more careful.\n        #   dL/dW_dec_jk = Σ_b a_bj * d_r_bk\n        #   d_W_dec = aᵀ @ d_r  ... but need to check scaling.\n        #   d_r already has 2/(B*D_in). So:\n        d_W_dec = a.T @ d_r        # (D_out, D_in) — correct\n        d_b_dec = np.sum(d_r, axis=0)  # (D_in,)\n\n        # --- 3) dL/da ---\n        #   r_bk = Σ_j a_bj W_dec_jk + b_dec_k\n        #   dL/d a_bj = Σ_k dL/d r_bk · W_dec_jk  = (d_r @ W_decᵀ)_bj\n        d_a = d_r @ self.W_dec.T   # (B, D_out)\n        \n        # Add L1 gradient: d(L1)/da_bj = λ/(B·D_out) · sign(a_bj)\n        d_a += self.l1_lambda / (batch * D_out) * np.sign(a)\n\n        # --- 4) dL/dz (tanh derivative) ---\n        #   a = tanh(z) → da/dz = 1 - a²\n        d_z = d_a * (1.0 - a ** 2)   # (B, D_out)\n\n        # --- 5) W_enc, b_enc ---\n        #   z_bi = Σ_j x_flat_bj W_enc_ji + b_enc_i\n        #   dL/dW_enc_ji = Σ_b d_z_bi · x_flat_bj  →  xᵀ @ d_z\n        d_W_enc = x_flat.T @ d_z     # (D_in, D_out)\n        d_b_enc = np.sum(d_z, axis=0)  # (D_out,)\n\n        # --- 6) Gradient w.r.t input x_3d ---\n        #   dL/dx_flat_bj = Σ_i d_z_bi · W_enc_ji  →  d_z @ W_encᵀ\n        d_x_flat = d_z @ self.W_enc.T  # (B, D_in)\n        d_x_3d = d_x_flat.reshape(batch, 3, self.d)  # (B, 3, d)\n\n        return {\n            "W_enc": d_W_enc,\n            "b_enc": d_b_enc,\n            "W_dec": d_W_dec,\n            "b_dec": d_b_dec,\n            "x_3d": d_x_3d,\n        }\n\n    # ------------------------------------------------------------------\n    # Parameter updates\n    # ------------------------------------------------------------------\n\n    def apply_gradients(self, grads: Dict[str, np.ndarray], lr: float) -> None:\n        """\n        Subtract ``lr * grads[key]`` from each parameter.\n        """\n        self.W_enc -= lr * grads["W_enc"]\n        self.b_enc -= lr * grads["b_enc"]\n        self.W_dec -= lr * grads["W_dec"]\n        self.b_dec -= lr * grads["b_dec"]\n\n    # ------------------------------------------------------------------\n    # Parameter sharing\n    # ------------------------------------------------------------------\n\n    def share_parameters_from(self, other_node: "UniversalNode") -> None:\n        """Copy all parameters from ``other_node``."""\n        self.W_enc = other_node.W_enc.copy()\n        self.b_enc = other_node.b_enc.copy()\n        self.W_dec = other_node.W_dec.copy()\n        self.b_dec = other_node.b_dec.copy()\n\n\n# ======================================================================\n#  Numerical gradient check\n# ======================================================================\n\ndef _numerical_gradient(\n    node: UniversalNode,\n    x_3d: np.ndarray,\n    eps: float = 1e-6,\n) -> Dict[str, np.ndarray]:\n    """\n    Compute numerical gradients via central differences for all\n    trainable parameters + the input ``x_3d``.\n    """\n    grads: Dict[str, np.ndarray] = {}\n\n    for key in ("W_enc", "b_enc", "W_dec", "b_dec"):\n        param = getattr(node, key)\n        num_grad = np.zeros_like(param)\n        flat = param.ravel()\n        for idx in range(flat.size):\n            original = flat[idx]\n            flat[idx] = original + eps\n            loss_hi = node.local_loss(x_3d)\n            flat[idx] = original - eps\n            loss_lo = node.local_loss(x_3d)\n            flat[idx] = original\n            num_grad.ravel()[idx] = (loss_hi - loss_lo) / (2.0 * eps)\n        grads[key] = num_grad\n\n    # --- gradient w.r.t x_3d ---\n    # Temporarily perturb x_3d (node is stateless w.r.t x_3d).\n    num_x = np.zeros_like(x_3d)\n    flat_x = x_3d.ravel()\n    for idx in range(flat_x.size):\n        original = flat_x[idx]\n        flat_x[idx] = original + eps\n        loss_hi = node.local_loss(x_3d)\n        flat_x[idx] = original - eps\n        loss_lo = node.local_loss(x_3d)\n        flat_x[idx] = original\n        num_x.ravel()[idx] = (loss_hi - loss_lo) / (2.0 * eps)\n    grads["x_3d"] = num_x\n\n    return grads\n\n\ndef _relative_error(a: np.ndarray, b: np.ndarray) -> float:\n    """Compute the element-wise maximum relative error."""\n    diff = np.abs(a - b)\n    denom = np.maximum(np.abs(a), np.abs(b))\n    denom = np.where(denom < 1e-15, 1.0, denom)   # avoid div-by-zero\n    return float(np.max(diff / denom))\n\n\nif __name__ == "__main__":\n    print("=" * 60)\n    print("  UniversalNode — Numerical Gradient Check")\n    print("=" * 60)\n\n    rng = np.random.default_rng(7)\n    BATCH = 4\n    D = 5\n    D_OUT = 7\n\n    node = UniversalNode(d=D, l1_lambda=0.01, seed=42, d_out=D_OUT)\n    x_3d = rng.standard_normal((BATCH, 3, D))\n\n    analytical = node.compute_gradients(x_3d)\n    numerical = _numerical_gradient(node, x_3d)\n\n    all_pass = True\n    for key in ("W_enc", "b_enc", "W_dec", "b_dec", "x_3d"):\n        a = analytical[key]\n        n = numerical[key]\n        rel_err = _relative_error(a, n)\n        ok = rel_err < 1e-5\n        status = "✔ PASS" if ok else "✘ FAIL"\n        all_pass = all_pass and ok\n        print(f"  {key:>8s}:  rel_err = {rel_err:.2e}  {status}")\n\n    print("-" * 60)\n    if all_pass:\n        print("  ALL GRADIENTS VERIFIED — analytical ≈ numerical")\n    else:\n        print("  SOME GRADIENTS FAILED — check the derivation!")\n    print("=" * 60)\n'})]
+
+[Tool Result: Successfully wrote to C:\Users\thomas\Projekte\rdf_thalamus_sml\src\node.py]
+
+
+[Tool Call: bash({'command': 'cd "C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml" && python src\\node.py'})]
+
+[Tool Result: exit_code: 1
+stdout: ============================================================
+  UniversalNode � Numerical Gradient Check
+============================================================
+
+stderr: Traceback (most recent call last):
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\node.py", line 336, in <module>
+    print(f"  {key:>8s}:  rel_err = {rel_err:.2e}  {status}")
+  File "C:\Users\thomas\AppData\Local\Programs\Python\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    re...]
+
+
+[Tool Call: edit({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\node.py', 'old_string': '        ok = rel_err < 1e-5\n        status = "✔ PASS" if ok else "✘ FAIL"', 'new_string': '        ok = rel_err < 1e-5\n        status = "PASS" if ok else "FAIL"'})]
+
+[Tool Result: Unknown tool: edit]
+
+
+[Tool Call: read_file({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\node.py', 'start_line': 320})]
+
+[Tool Result: --- lines 320 to 343 of 343 ---
+    D_OUT = 7
+
+    node = UniversalNode(d=D, l1_lambda=0.01, seed=42, d_out=D_OUT)
+    x_3d = rng.standard_normal((BATCH, 3, D))
+
+    analytical = node.compute_gradients(x_3d)
+    numerical = _numerical_gradient(node, x_3d)
+
+    all_pass = True
+    for key in ("W_enc", "b_enc", "W_dec", "b_dec", "x_3d"):
+        a = analytical[key]
+        n = numerical[key]
+        rel_err = _relative_error(a, n)
+        ok = rel_err < 1e-5
+        status = "✔ PASS" if ok else "✘...]
+
+The Unicode characters are causing encoding issues on Windows. Let me fix that and also clean up the derivation comments.
+
+
+
+[Tool Call: write_file({'content': '"""\nUniversalNode -- single-layer auto-encoder unit for HSUN Phase 0-E.\n\nArchitecture\n------------\n  x_3d (batch, 3, d_in)  --> flatten --> (batch, 3*d_in)\n  z    = tanh(x_flat @ W_enc + b_enc)          # (batch, d_out)  -- "code"\n  xrec = z       @ W_dec + b_dec              # (batch, 3*d_in)\n           --> reshape --> (batch, 3, d_in)\n\nLoss  = MSE(x_3d, xrec) + l1_lambda * mean(|z|)\n\nAll analytical gradients are provided in ``compute_gradients`` and verified\nbelow via a central-difference numerical check.\n"""\n\nfrom __future__ import annotations\n\nfrom typing import Dict\n\nimport numpy as np\n\n\nclass UniversalNode:\n    """A single universal node implementing an encoder --> decoder pair."""\n\n    def __init__(\n        self,\n        d: int,\n        l1_lambda: float = 0.01,\n        seed: int = 42,\n        d_out: int | None = None,\n    ):\n        """\n        Parameters\n        ----------\n        d : int\n            Input dimensionality *per channel*.  The flattened input has\n            dimension ``3 * d`` (three channels).\n        l1_lambda : float\n            Weight for the L1 sparsity regulariser on the latent code.\n        seed : int\n            RNG seed for reproducible Xavier initialisation.\n        d_out : int or None\n            Latent code dimensionality.  If None, defaults to ``3 * d``.\n        """\n        self.d = d\n        self.d_in = 3 * d                    # flattened input dimension\n        self.d_out = d_out if d_out is not None else 3 * d\n        self.l1_lambda = l1_lambda\n\n        rng = np.random.default_rng(seed)\n\n        # -- Xavier (Glorot) initialisation --\n        # W_enc : (d_in, d_out)\n        scale_enc = np.sqrt(2.0 / (self.d_in + self.d_out))\n        self.W_enc = rng.standard_normal((self.d_in, self.d_out)) * scale_enc\n        self.b_enc = np.zeros(self.d_out)\n\n        # W_dec : (d_out, d_in)\n        scale_dec = np.sqrt(2.0 / (self.d_out + self.d_in))\n        self.W_dec = rng.standard_normal((self.d_out, self.d_in)) * scale_dec\n        self.b_dec = np.zeros(self.d_in)\n\n    # ------------------------------------------------------------------\n    # Forward pass helpers\n    # ------------------------------------------------------------------\n\n    def forward(self, x_3d: np.ndarray) -> np.ndarray:\n        """\n        Encode x_3d --> latent code.\n\n        Parameters\n        ----------\n        x_3d : np.ndarray, shape (batch, 3, d)\n\n        Returns\n        -------\n        code : np.ndarray, shape (batch, d_out)\n        """\n        batch = x_3d.shape[0]\n        x_flat = x_3d.reshape(batch, -1)           # (batch, d_in)\n        z = x_flat @ self.W_enc + self.b_enc        # (batch, d_out)\n        code = np.tanh(z)\n        return code\n\n    def reconstruct(self, code: np.ndarray) -> np.ndarray:\n        """\n        Decode latent code --> reconstructed x_3d.\n\n        Parameters\n        ----------\n        code : np.ndarray, shape (batch, d_out)\n\n        Returns\n        -------\n        x_rec : np.ndarray, shape (batch, 3, d)\n        """\n        batch = code.shape[0]\n        x_hat_flat = code @ self.W_dec + self.b_dec  # (batch, d_in)\n        x_rec = x_hat_flat.reshape(batch, 3, self.d)  # (batch, 3, d)\n        return x_rec\n\n    # ------------------------------------------------------------------\n    # Loss\n    # ------------------------------------------------------------------\n\n    def local_loss(self, x_3d: np.ndarray) -> float:\n        """\n        Compute the local (per-node) loss value.\n\n        Returns a scalar float: MSE + l1_lambda * mean(|code|).\n        """\n        code = self.forward(x_3d)\n        recon = self.reconstruct(code)\n        mse = float(np.mean((x_3d - recon) ** 2))\n        l1 = float(self.l1_lambda * np.mean(np.abs(code)))\n        return mse + l1\n\n    # ------------------------------------------------------------------\n    # Analytical gradients\n    # ------------------------------------------------------------------\n\n    def compute_gradients(self, x_3d: np.ndarray) -> Dict[str, np.ndarray]:\n        r"""\n        Compute analytical gradients of the local loss w.r.t. all four\n        trainable parameters **and** the input x_3d.\n\n        Returns a dict with keys:\n            \'W_enc\', \'b_enc\', \'W_dec\', \'b_dec\', \'x_3d\'\n\n        Notation (B = batch size):\n\n            x  = x_3d.reshape(B, D_in)           where D_in = 3*d\n            z  = x @ W_enc + b_enc                (B, D_out)\n            a  = tanh(z)                          (B, D_out)  -- code\n            r  = a @ W_dec + b_dec                (B, D_in)\n            xhat = r.reshape(B, 3, d)\n\n        Loss = mean((x_3d - xhat)^2) + lambda * mean(|a|)\n             = 1/(B*D_in) * sum_{b,i}(r_bi - x_bi)^2\n               + lambda/(B*D_out) * sum_{b,j}|a_bj|\n\n        Chain rule:\n            dL/dr   = 2/(B*D_in) * (r - x)                        (B, D_in)\n            dL/dWdec = a^T @ dL/dr                                 (D_out, D_in)\n            dL/dbdec = sum_b(dL/dr)                                (D_in,)\n            dL/da   = dL/dr @ W_dec^T + lambda/(B*D_out)*sign(a)   (B, D_out)\n            dL/dz   = dL/da * (1 - a^2)                           (B, D_out)\n            dL/dWenc = x^T @ dL/dz                                 (D_in, D_out)\n            dL/dbenc = sum_b(dL/dz)                                (D_out,)\n            dL/dx   = dL/dz @ W_enc^T  --> reshape to (B, 3, d)\n        """\n        batch = x_3d.shape[0]\n        D_in = self.d_in       # = 3 * d\n        D_out = self.d_out\n\n        # --- forward (need intermediates) ---\n        x_flat = x_3d.reshape(batch, D_in)            # (B, D_in)\n        z = x_flat @ self.W_enc + self.b_enc          # (B, D_out)\n        a = np.tanh(z)                                 # (B, D_out)  -- code\n        r = a @ self.W_dec + self.b_dec               # (B, D_in)\n\n        # --- gradient of MSE w.r.t. flat recon r ---\n        d_r = 2.0 / (batch * D_in) * (r - x_flat)     # (B, D_in)\n\n        # --- W_dec, b_dec ---\n        d_W_dec = a.T @ d_r                            # (D_out, D_in)\n        d_b_dec = np.sum(d_r, axis=0)                  # (D_in,)\n\n        # --- dL/da ---\n        d_a = d_r @ self.W_dec.T                       # (B, D_out)\n        # Add L1 gradient\n        d_a += self.l1_lambda / (batch * D_out) * np.sign(a)\n\n        # --- dL/dz (tanh derivative: d(tanh)/dz = 1 - tanh^2) ---\n        d_z = d_a * (1.0 - a ** 2)                     # (B, D_out)\n\n        # --- W_enc, b_enc ---\n        d_W_enc = x_flat.T @ d_z                       # (D_in, D_out)\n        d_b_enc = np.sum(d_z, axis=0)                  # (D_out,)\n\n        # --- Gradient w.r.t. input x_3d ---\n        d_x_flat = d_z @ self.W_enc.T                  # (B, D_in)\n        d_x_3d = d_x_flat.reshape(batch, 3, self.d)    # (B, 3, d)\n\n        return {\n            "W_enc": d_W_enc,\n            "b_enc": d_b_enc,\n            "W_dec": d_W_dec,\n            "b_dec": d_b_dec,\n            "x_3d": d_x_3d,\n        }\n\n    # ------------------------------------------------------------------\n    # Parameter updates\n    # ------------------------------------------------------------------\n\n    def apply_gradients(self, grads: Dict[str, np.ndarray], lr: float) -> None:\n        """\n        Subtract lr * grads[key] from each parameter.\n        """\n        self.W_enc -= lr * grads["W_enc"]\n        self.b_enc -= lr * grads["b_enc"]\n        self.W_dec -= lr * grads["W_dec"]\n        self.b_dec -= lr * grads["b_dec"]\n\n    # ------------------------------------------------------------------\n    # Parameter sharing\n    # ------------------------------------------------------------------\n\n    def share_parameters_from(self, other_node: "UniversalNode") -> None:\n        """Copy all parameters from other_node."""\n        self.W_enc = other_node.W_enc.copy()\n        self.b_enc = other_node.b_enc.copy()\n        self.W_dec = other_node.W_dec.copy()\n        self.b_dec = other_node.b_dec.copy()\n\n\n# ======================================================================\n#  Numerical gradient check\n# ======================================================================\n\ndef _numerical_gradient(\n    node: UniversalNode,\n    x_3d: np.ndarray,\n    eps: float = 1e-6,\n) -> Dict[str, np.ndarray]:\n    """\n    Compute numerical gradients via central differences for all\n    trainable parameters + the input x_3d.\n    """\n    grads: Dict[str, np.ndarray] = {}\n\n    for key in ("W_enc", "b_enc", "W_dec", "b_dec"):\n        param = getattr(node, key)\n        num_grad = np.zeros_like(param)\n        flat = param.ravel()\n        for idx in range(flat.size):\n            original = flat[idx]\n            flat[idx] = original + eps\n            loss_hi = node.local_loss(x_3d)\n            flat[idx] = original - eps\n            loss_lo = node.local_loss(x_3d)\n            flat[idx] = original\n            num_grad.ravel()[idx] = (loss_hi - loss_lo) / (2.0 * eps)\n        grads[key] = num_grad\n\n    # --- gradient w.r.t x_3d ---\n    # Temporarily perturb x_3d (node is stateless w.r.t x_3d).\n    num_x = np.zeros_like(x_3d)\n    flat_x = x_3d.ravel()\n    for idx in range(flat_x.size):\n        original = flat_x[idx]\n        flat_x[idx] = original + eps\n        loss_hi = node.local_loss(x_3d)\n        flat_x[idx] = original - eps\n        loss_lo = node.local_loss(x_3d)\n        flat_x[idx] = original\n        num_x.ravel()[idx] = (loss_hi - loss_lo) / (2.0 * eps)\n    grads["x_3d"] = num_x\n\n    return grads\n\n\ndef _relative_error(a: np.ndarray, b: np.ndarray) -> float:\n    """Compute the element-wise maximum relative error."""\n    diff = np.abs(a - b)\n    denom = np.maximum(np.abs(a), np.abs(b))\n    denom = np.where(denom < 1e-15, 1.0, denom)   # avoid div-by-zero\n    return float(np.max(diff / denom))\n\n\nif __name__ == "__main__":\n    print("=" * 60)\n    print("  UniversalNode -- Numerical Gradient Check")\n    print("=" * 60)\n\n    rng = np.random.default_rng(7)\n    BATCH = 4\n    D = 5\n    D_OUT = 7\n\n    node = UniversalNode(d=D, l1_lambda=0.01, seed=42, d_out=D_OUT)\n    x_3d = rng.standard_normal((BATCH, 3, D))\n\n    analytical = node.compute_gradients(x_3d)\n    numerical = _numerical_gradient(node, x_3d)\n\n    all_pass = True\n    for key in ("W_enc", "b_enc", "W_dec", "b_dec", "x_3d"):\n        a = analytical[key]\n        n = numerical[key]\n        rel_err = _relative_error(a, n)\n        ok = rel_err < 1e-5\n        status = "PASS" if ok else "FAIL"\n        all_pass = all_pass and ok\n        print(f"  {key:>8s}:  rel_err = {rel_err:.2e}  {status}")\n\n    print("-" * 60)\n    if all_pass:\n        print("  ALL GRADIENTS VERIFIED -- analytical approx numerical")\n    else:\n        print("  SOME GRADIENTS FAILED -- check the derivation!")\n    print("=" * 60)\n', 'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\node.py'})]
+
+[Tool Result: Successfully wrote to C:\Users\thomas\Projekte\rdf_thalamus_sml\src\node.py]
+
+
+[Tool Call: bash({'command': 'cd "C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml" && python src\\node.py'})]
+
+[Tool Result: exit_code: 0
+stdout: ============================================================
+  UniversalNode -- Numerical Gradient Check
+============================================================
+     W_enc:  rel_err = 4.15e-08  PASS
+     b_enc:  rel_err = 8.80e-09  PASS
+     W_dec:  rel_err = 5.55e-06  PASS
+     b_dec:  rel_err = 8.28e-08  PASS
+      x_3d:  rel_err = 1.98e+00  FAIL
+------------------------------------------------------------
+  SOME GRADIENTS FAILED -- check the derivation!
+===...]
+
+The `x_3d` gradient is failing because the analytical gradient is missing the direct path from the MSE loss to the input `x_3d`. Let me trace through the chain rule carefully and fix it.
+
+The loss has two paths back to `x_3d`:
+1. **Indirect:** `x_flat → z → a → r → MSE` (backprop through the network)
+2. **Direct:** `x_flat` appears directly in the MSE term: `MSE = mean((x_flat - r)^2)`
+
+The direct gradient contribution is `d(MSE)/dx_flat = -d_r`, which is missing from my current computation.
+
+
+
+[Tool Call: read_file({'end_line': 185, 'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\node.py', 'start_line': 135})]
+
+[Tool Result: --- lines 135 to 185 of 305 ---
+            z  = x @ W_enc + b_enc                (B, D_out)
+            a  = tanh(z)                          (B, D_out)  -- code
+            r  = a @ W_dec + b_dec                (B, D_in)
+            xhat = r.reshape(B, 3, d)
+
+        Loss = mean((x_3d - xhat)^2) + lambda * mean(|a|)
+             = 1/(B*D_in) * sum_{b,i}(r_bi - x_bi)^2
+               + lambda/(B*D_out) * sum_{b,j}|a_bj|
+
+        Chain rule:
+            dL/dr   = 2/(B*D_in) * (r - x)            ...]
+
+I found the issue. The gradient w.r.t. `x_3d` is missing the **direct** contribution from the MSE loss because `x_flat` appears explicitly in `mean((x_flat - r)^2)`. I need to add `-d_r` to `d_x_flat`.
+
+
+
+[Tool Call: read_file({'end_line': 195, 'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\node.py', 'start_line': 180})]
+
+[Tool Result: --- lines 180 to 195 of 305 ---
+        d_W_enc = x_flat.T @ d_z                       # (D_in, D_out)
+        d_b_enc = np.sum(d_z, axis=0)                  # (D_out,)
+
+        # --- Gradient w.r.t. input x_3d ---
+        d_x_flat = d_z @ self.W_enc.T                  # (B, D_in)
+        d_x_3d = d_x_flat.reshape(batch, 3, self.d)    # (B, 3, d)
+
+        return {
+            "W_enc": d_W_enc,
+            "b_enc": d_b_enc,
+            "W_dec": d_W_dec,
+            "b_dec": d_b_dec,
+            "...]
+
+
+[NUDGE RESPONSE]
+I need to fix the `x_3d` gradient — it was missing the **direct** contribution from the MSE loss where `x_flat` appears explicitly in `mean((x_flat - r)^2)`. The total gradient is `d_x_flat = d_z @ W_enc.T - d_r`.
+
