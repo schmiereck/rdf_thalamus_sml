@@ -1,0 +1,49 @@
+artifacts:
+- test_scale.py
+experimenter_view: 'The experiment conclusively demonstrates that the default embedding
+
+  initialization (Uniform[-0.01, 0.01]) causes representation collapse,
+
+  yielding test accuracy of 0.1920 (essentially random guessing for 5 classes)
+
+  and an average code magnitude near zero (0.000972).
+
+
+  Increasing the initialization scale dramatically mitigates this collapse.
+
+  Normal(0, 1) achieves the highest test accuracy at 0.5040, a +31.2 percentage
+
+  point improvement over the baseline.
+
+
+  A striking secondary finding is that untrained encoders with large scale
+
+  initializations (e.g., Normal(0, 1) at 0.5160) perform as well as or better
+
+  than their trained counterparts. This indicates that the random projection
+
+  itself is highly informative, and the current training process (specifically
+
+  the L1 sparsity penalty or learning dynamics) may be actively degrading these
+
+  useful initial representations rather than improving them.
+
+  '
+log_excerpt: "==============================================================================================================\n\
+  \  TRAINED ENCODERS ONLY -- QUICK LOOKUP\n==============================================================================================================\n\
+  Method                     Test Acc  vs Baseline   Sparsity   Avg |Code|\n--------------------------------------------------------------------------------------------------------------\n\
+  Uniform [-0.01, 0.01]        0.1920      +0.0000     0.6787     0.000972\nUniform\
+  \ [-0.1,  0.1]         0.3400      +0.1480     0.0290     0.013191\nUniform [-1.0,\
+  \  1.0]         0.4320      +0.2400     0.0030     0.203097\nNormal(0, 1)      \
+  \           0.5040      +0.3120     0.0045     0.172756\nNormal(0, 0.5)        \
+  \       0.4120      +0.2200     0.0142     0.049724\n==============================================================================================================\n"
+metrics:
+  trained_normal_0_0_5_test_acc: 0.412
+  trained_normal_0_1_test_acc: 0.504
+  trained_uniform_0_01_test_acc: 0.192
+  trained_uniform_0_1_test_acc: 0.34
+  trained_uniform_1_1_test_acc: 0.432
+  untrained_normal_0_1_test_acc: 0.516
+notes: Larger embedding scale (Normal(0,1)) prevents representation collapse and boosts
+  test accuracy from ~19% to ~50%.
+status: ok
