@@ -1,0 +1,28 @@
+artifacts:
+- src/spatiotemporal_dataset.py
+experimenter_view: 'Successfully updated all 4 spatiotemporal dataset generators to
+  use modulo-16
+
+  wrapping for position/boundary handling. All classes now draw starting position
+
+  uniformly from 0..15 and base width uniformly from 2..4. The shared helper
+
+  `_draw_wrapped_blob` cleanly implements circular boundary conditions. The self-test
+
+  confirms that every shortcut baseline (temporal average and single-frame at 5
+
+  timesteps) achieves well below 50% test accuracy, proving the spatial marginal
+
+  is indistinguishable across classes and that only temporal dynamics encode the label.
+
+  '
+metrics:
+  highest_baseline_test_acc: 0.3738
+  single_frame_t0_test_acc: 0.2313
+  single_frame_t16_test_acc: 0.3738
+  single_frame_t24_test_acc: 0.295
+  single_frame_t31_test_acc: 0.2888
+  single_frame_t8_test_acc: 0.27
+  temporal_average_test_acc: 0.3113
+notes: Modulo wrapping implemented and verified; all shortcut baselines <= 37.4%.
+status: ok

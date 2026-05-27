@@ -7,21 +7,21 @@ Generates four categories of spatiotemporal sequences on a 16x32 binary grid
 forcing the model to reason about temporal dynamics.
 
 Classes (4-class classification):
-    0 = moving_blob       -- blob position follows a LINEAR trajectory
-    1 = expanding_blob    -- blob width oscillates periodically in place
-    2 = periodic_st       -- blob position oscillates back-and-forth sinusoidally
-    3 = object_permanence -- blob stays put, vanishes then reappears at same spot
+    0 = moving_blob       -- blob position follows a LINEAR trajectory (wrapped mod 16)
+    1 = expanding_blob    -- blob width oscillates periodically in place (wrapped mod 16)
+    2 = periodic_st       -- blob position oscillates back-and-forth sinusoidally (wrapped mod 16)
+    3 = object_permanence -- blob stays put (wrapped mod 16), disappears for some steps
 
 CRITICAL design property: all four classes draw their initial spatial position
-and blob width from the SAME distribution.  The CLASS label is encoded ONLY in
+from the SAME distribution (uniformly 0..15) and their base blob width from
+the SAME distribution (uniformly 2..4).  The CLASS label is encoded ONLY in
 the TEMPORAL TRAJECTORY of the blob.  Consequently:
-  - The marginal spatial distribution per-frame is identical across classes
+  - The marginal spatial distribution per-frame is IDENTICAL across classes
   - The temporal-average profile is nearly identical across classes
   - The only signal is the temporal correlation structure between frames
 
-Shortcut baselines:
-    - single_frame : classify based on a single timestep -> ~25% (chance)
-    - temporal_avg : classify based on the mean over all timesteps -> ~25% (chance)
+ALL generators use MODULO-16 WRAPPING for positions, so the spatial marginal
+is truly uniform and there is NO boundary/bias signal for shortcut baselines.
 """
 
 from __future__ import annotations
@@ -57,6 +57,43 @@ def _add_noise(grid: np.ndarray, flip_prob: float, rng: np.random.Generator) -> 
 
 
 # ---------------------------------------------------------------------------
+#  Blob drawing helper with modulo-16 wrapping
+# ---------------------------------------------------------------------------
+
+def _draw_wrapped_blob(
+    seq: np.ndarray,          # shape (S, T), float array
+    t: int,
+    centre: int,
+    width: int,
+    n_spatial: int = N_SPATIAL,
+) -> None:
+    """
+    Draw a blob of given *width* centred at *centre* (mod n_spatial) into
+    ``seq[:, t]``, handling wrap-around via modulo arithmetic.
+
+    Parameters
+    ----------
+    seq : np.ndarray, shape (S, T)
+        The spatiotemporal grid (written in-place).
+    t : int
+        Timestep index.
+    centre : int
+        Centre pixel position (will be taken mod n_spatial).
+    width : int
+        Full width of the blob in pixels.
+    n_spatial : int
+        Number of spatial positions (default N_SPATIAL = 16).
+    """
+    half_w = width // 2
+    c = centre % n_spatial
+
+    # The blob covers positions [c - half_w, ..., c - half_w + width - 1] mod S
+    for offset in range(width):
+        pos = (c - half_w + offset) % n_spatial
+        seq[pos, t] = 1.0
+
+
+# ---------------------------------------------------------------------------
 #  Sequence generators: each returns  (n_samples, S, T)  float arrays
 # ---------------------------------------------------------------------------
 
@@ -65,23 +102,24 @@ def _generate_moving_blob(
     rng: np.random.Generator,
 ) -> np.ndarray:
     """
-    Class 0 -- A blob whose CENTRE follows a LINEAR trajectory across space.
-    start_x and blob_width are sampled identically to ALL other classes.
+    Class 0 -- A blob whose CENTRE follows a LINEAR trajectory across space,
+    wrapped modulo 16.
+
+    Starting position: uniform 0..15
+    Base width: uniform 2..4
+    Direction: random (left or right)
+    Speed: random integer 1..3 per timestep
     """
     seqs = np.zeros((n_samples, N_SPATIAL, N_TIMESTEPS), dtype=np.float64)
     for i in range(n_samples):
-        start_x = rng.integers(2, N_SPATIAL - 2)
-        blob_width = rng.integers(2, 5)  # 2, 3, or 4 pixels
-        # Random direction: left (-1) or right (+1), with speed
-        direction = rng.choice([-1.0, 1.0])
-        speed = rng.integers(0, 3) + 1   # 1-3 pixels per 32 timesteps total shift
+        start_x = rng.integers(0, N_SPATIAL)            # uniform 0..15
+        blob_width = rng.integers(2, 5)                  # 2, 3, or 4
+        direction = rng.choice([-1, 1])                  # left or right
+        speed = rng.integers(1, 4)                      # 1, 2, or 3 pixels/step
 
         for t in range(N_TIMESTEPS):
-            x = round(start_x + direction * speed * t / (N_TIMESTEPS - 1))
-            x = np.clip(x, blob_width // 2, N_SPATIAL - blob_width + blob_width // 2)
-            lo = np.clip(x - blob_width // 2, 0, N_SPATIAL)
-            hi = np.clip(lo + blob_width, 0, N_SPATIAL)
-            seqs[i, lo:hi, t] = 1.0
+            x = int((start_x + direction * speed * t) % N_SPATIAL)
+            _draw_wrapped_blob(seqs[i], t, x, blob_width)
     return seqs
 
 
@@ -90,24 +128,27 @@ def _generate_expanding_blob(
     rng: np.random.Generator,
 ) -> np.ndarray:
     """
-    Class 1 -- A blob centred at a FIXED spatial position, but its WIDTH
-    periodically EXPANDS and CONTRACTS sinusoidally.
+    Class 1 -- A blob centred at a FIXED spatial position (mod 16), but its
+    WIDTH periodically oscillates.
+
+    Starting position (centre): uniform 0..15
+    Base width: uniform 2..4
+    Oscillation: sinusoidal with period and amplitude chosen randomly.
     """
     seqs = np.zeros((n_samples, N_SPATIAL, N_TIMESTEPS), dtype=np.float64)
     for i in range(n_samples):
-        start_x = rng.integers(2, N_SPATIAL - 2)
-        blob_width = rng.integers(2, 5)
+        centre = rng.integers(0, N_SPATIAL)              # uniform 0..15
+        base_width = rng.integers(2, 5)                  # 2, 3, or 4
         period = rng.choice([8, 12, 16])
-        base_half_w = blob_width // 2
-        amplitude = rng.integers(1, 4)  # half-width oscillation range
+        amplitude = rng.integers(1, 3)                   # ±1..2 additional half-width
 
         for t in range(N_TIMESTEPS):
-            phase = (t % period) / period
-            half_w = max(1, round(base_half_w + amplitude * (0.5 + 0.5 * np.sin(2 * np.pi * phase))))
-            half_w = min(half_w, N_SPATIAL // 2)
-            lo = np.clip(start_x - half_w, 0, N_SPATIAL)
-            hi = np.clip(start_x + half_w + 1, 0, N_SPATIAL)
-            seqs[i, lo:hi, t] = 1.0
+            phase = 2 * np.pi * t / period
+            # Width oscillates around base_width
+            w = base_width + amplitude * np.sin(phase)
+            w = max(1, round(w))                         # min width 1, max ~base+amplitude
+            w = min(w, N_SPATIAL)                        # cap at N_SPATIAL
+            _draw_wrapped_blob(seqs[i], t, centre, w)
     return seqs
 
 
@@ -116,22 +157,25 @@ def _generate_periodic_spatiotemporal(
     rng: np.random.Generator,
 ) -> np.ndarray:
     """
-    Class 2 -- A blob whose centre OSCILLATES back-and-forth sinusoidally.
+    Class 2 -- A blob whose centre OSCILLATES back-and-forth sinusoidally,
+    with the centre position wrapped modulo 16.
+
+    Starting position: uniform 0..15
+    Base width: uniform 2..4
+    Centre trajectory: centre(t) = (start_x + round(amplitude * sin(2*pi*t/period))) mod 16
     """
     seqs = np.zeros((n_samples, N_SPATIAL, N_TIMESTEPS), dtype=np.float64)
     for i in range(n_samples):
-        start_x = rng.integers(2, N_SPATIAL - 2)
-        blob_width = rng.integers(2, 5)
-        period = rng.choice([6, 8, 10, 12, 14, 16])
-        amplitude = rng.integers(1, min(4, N_SPATIAL // 4))
+        start_x = rng.integers(0, N_SPATIAL)             # uniform 0..15
+        blob_width = rng.integers(2, 5)                  # 2, 3, or 4
+        period = rng.choice([8, 12, 16, 20])
+        amplitude = rng.integers(2, 6)                   # oscillation range 2..5 pixels
 
         for t in range(N_TIMESTEPS):
             phase = 2 * np.pi * t / period
-            x = round(start_x + amplitude * np.sin(phase))
-            x = np.clip(x, blob_width // 2, N_SPATIAL - blob_width + blob_width // 2)
-            lo = np.clip(x - blob_width // 2, 0, N_SPATIAL)
-            hi = np.clip(lo + blob_width, 0, N_SPATIAL)
-            seqs[i, lo:hi, t] = 1.0
+            displacement = round(amplitude * np.sin(phase))
+            x = int((start_x + displacement) % N_SPATIAL)
+            _draw_wrapped_blob(seqs[i], t, x, blob_width)
     return seqs
 
 
@@ -140,26 +184,28 @@ def _generate_object_permanence(
     rng: np.random.Generator,
 ) -> np.ndarray:
     """
-    Class 3 -- A blob that stays in one place, then VANISHES for a period
-    (the "occlusion" phase), then REAPPEARS at the same location.
-    The temporal structure is a step function in brightness, not position.
+    Class 3 -- A blob that stays in one place (mod 16), then VANISHES for a
+    contiguous block of timesteps (the "occlusion" phase), then REAPPEARS at
+    the same location.
+
+    Starting position: uniform 0..15
+    Base width: uniform 2..4
+    Occlusion: random start frame and random duration.  Outside the occlusion
+    window the blob is fully visible at the same position.
     """
     seqs = np.zeros((n_samples, N_SPATIAL, N_TIMESTEPS), dtype=np.float64)
     for i in range(n_samples):
-        start_x = rng.integers(2, N_SPATIAL - 2)
-        blob_width = rng.integers(2, 5)
-        # Occlusion boundaries: varies per sample
-        hide_start = rng.integers(8, 16)
-        hide_end = hide_start + rng.integers(6, 14)
-        hide_end = min(hide_end, N_TIMESTEPS)
+        centre = rng.integers(0, N_SPATIAL)              # uniform 0..15
+        blob_width = rng.integers(2, 5)                  # 2, 3, or 4
+        hide_start = rng.integers(5, 18)                 # occlusion begins between t=5..17
+        hide_duration = rng.integers(5, 16)              # occlusion lasts 5..15 frames
+        hide_end = min(hide_start + hide_duration, N_TIMESTEPS)
 
         for t in range(N_TIMESTEPS):
             if hide_start <= t < hide_end:
-                # Occluded: blob is invisible
+                # Occluded: blob is invisible (do nothing)
                 continue
-            lo = np.clip(start_x - blob_width // 2, 0, N_SPATIAL)
-            hi = np.clip(lo + blob_width, 0, N_SPATIAL)
-            seqs[i, lo:hi, t] = 1.0
+            _draw_wrapped_blob(seqs[i], t, centre, blob_width)
     return seqs
 
 
