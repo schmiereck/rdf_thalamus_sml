@@ -1,0 +1,72 @@
+falsification_criterion: "The hypothesis is falsified if EITHER:\n(1) Any non-trivial\
+  \ encoder (P0-B through P0-E) fails to achieve Spearman ρ ≥ 0.6\n    between code\
+  \ cosine similarity and input inverse Hamming distance, OR\n(2) Any locally-trained\
+  \ encoder (P0-B SDR, P0-C SOM, P0-E Predictive Coding)\n    achieves ρ more than\
+  \ 0.15 below the P0-D Sparse Autoencoder baseline.\nAdditionally, if any implementation\
+  \ cannot run end-to-end (crashes, fails to\nconverge, or produces NaN/constant outputs),\
+  \ the smoke test fails.\n"
+hypothesis: 'With 3 binary inputs (8 possible states), all five encoder types can
+  be trained
+
+  end-to-end, and each non-trivial encoder (P0-B SDR, P0-C SOM, P0-D Sparse AE,
+
+  P0-E Predictive Coding) will produce codes where the Spearman rank correlation
+
+  between pairwise code cosine similarity and pairwise input inverse Hamming distance
+
+  is ≥ 0.6. Furthermore, the locally-trained encoders (P0-B, P0-C, P0-E) will
+
+  achieve similarity preservation within 0.15 (absolute ρ difference) of the
+
+  globally-trained sparse autoencoder (P0-D) baseline at this trivial scale.
+
+  '
+pre_registration_file: src/pre_registration.md
+proposed_method: "Step-by-step experiment:\n\n1. BUILD HARNESS (src/harness.py):\n\
+  \   - Dataset generator: enumerate all 8 binary-3-tuples, plus 10 noise variants\n\
+  \     per state (bit-flip probability 0.1), yielding ~88 samples.\n   - Similarity\
+  \ evaluator: compute all 28 unique pairwise input Hamming distances\n     (for the\
+  \ 8 base states) and their inverse; compute all pairwise code cosine\n     similarities;\
+  \ return Spearman ρ.\n   - Abstract Encoder interface with train(), encode(), and\
+  \ dim_out property.\n   - Linear probe helper: simple logistic regression on codes\
+  \ to classify input\n     category (for later phases, but scaffolded now).\n\n2.\
+  \ IMPLEMENT ENCODERS:\n   - src/encoders/lookup_table.py (P0-A): One-hot embedding\
+  \ of 3-bit input.\n     dim_out=8. Trivial — just maps each state to a unit vector.\n\
+  \   - src/encoders/spatial_pooler.py (P0-B): HTM-style SDR. Input projected via\n\
+  \     random matrix, k-WTA sparsification (k=5 for d=16). Hebbian-like permanence\n\
+  \     update to input. dim_out=16.\n   - src/encoders/som.py (P0-C): Kohonen SOM\
+  \ on a 1D grid of size 16. Competitive\n     winner-take-all with neighborhood update.\
+  \ dim_out=16 (grid node weights as code).\n   - src/encoders/sparse_autoencoder.py\
+  \ (P0-D): Single-layer autoencoder with\n     hidden dimension 16, ReLU activation,\
+  \ L1 sparsity penalty (λ=0.01).\n     Trained via reconstruction loss (MSE + L1).\
+  \ This is the global-optimization\n     baseline.\n   - src/encoders/predictive_coding.py\
+  \ (P0-E): ngclearn-inspired local-error node.\n     Single layer with top-down prediction\
+  \ error as local learning signal.\n     Lateral inhibition for sparsity. dim_out=16.\n\
+  \n3. RUN EXPERIMENT (src/run_phase0.py):\n   - Instantiate each encoder with dim_out=16\
+  \ (except P0-A which is dim_out=8).\n   - Train each on the dataset (50 epochs for\
+  \ iterative methods; 1 pass for P0-A).\n   - Encode all 8 base states and 80 noise\
+  \ variants.\n   - Compute pairwise cosine similarity of base-state codes.\n   -\
+  \ Compute Spearman ρ between code cosine similarity and inverse Hamming distance.\n\
+  \   - Also compute: sparsity of codes (fraction of near-zero activations),\n   \
+  \  reconstruction error (where applicable), training time.\n   - Run 5 seeds (42,\
+  \ 43, 44, 45, 46) for each method to assess variance.\n\n4. GENERATE REPORT (phase_0/REPORT.md):\n\
+  \   - Table of Spearman ρ (mean ± std across seeds) for each method.\n   - Table\
+  \ of code sparsity, reconstruction error, training time.\n   - Scatter plots of\
+  \ cosine similarity vs inverse Hamming distance for each method.\n   - Explicit\
+  \ pass/fail against success criteria.\n   - Recommendation: which method(s) to carry\
+  \ forward as the Phase-1 baseline.\n\n5. FILES TO CREATE/MODIFY:\n   - src/harness.py\
+  \ (new) — dataset, metrics, encoder interface\n   - src/encoders/__init__.py (new)\
+  \ — registry\n   - src/encoders/lookup_table.py (new) — P0-A\n   - src/encoders/spatial_pooler.py\
+  \ (new) — P0-B\n   - src/encoders/som.py (new) — P0-C\n   - src/encoders/sparse_autoencoder.py\
+  \ (new) — P0-D\n   - src/encoders/predictive_coding.py (new) — P0-E\n   - src/run_phase0.py\
+  \ (new) — main experiment runner\n   - phase_0/REPORT.md (generated) — comparison\
+  \ report\n   - src/pre_registration.md (generated) — this plan, committed\n\nControl:\
+  \ P0-A (lookup table) is the lower bound — it must pass ρ ≥ 0.6 trivially\n(since\
+  \ identical inputs → identical one-hot → cosine=1, different inputs → different\n\
+  one-hot → cosine=0, and Hamming distance perfectly orders the off-diagonal).\nP0-D\
+  \ (sparse AE, global optimization) is the upper-bound reference for local methods.\n\
+  All encoders receive identical input data and are evaluated on identical metrics.\n\
+  \nKey parameter: d = 16 for all non-trivial encoders. This is chosen to be large\n\
+  enough for sparse distributed representations of 8 states (sparsity ~5/16 ≈ 31%)\n\
+  while matching the recursability constraint (dim_out is a fixed vector dimension\n\
+  that could equal a slot dimension in later phases).\n"
