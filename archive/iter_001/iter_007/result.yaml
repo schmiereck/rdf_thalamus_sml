@@ -1,0 +1,17 @@
+artifacts:
+- src/evolve_glider.py
+- archive/iter_215/results/champion.json
+experimenter_view: 'The evolutionary search successfully discovered a sub-light speed
+  glider.
+
+  The particle maintains a stable structure of 6 cells and moves with a
+
+  velocity of approximately 0.25c. Bit conservation is perfect over 1000 steps.
+
+  '
+metrics:
+  generations: 50
+  max_fitness: 0.942
+  stable_steps: 1000
+notes: Sub-light glider found and verified.
+status: ok
