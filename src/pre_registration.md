@@ -18,6 +18,14 @@ classification accuracy relative to the fully independent per-node weights
 upper bound, confirming that the universal-node architecture is expressively
 viable for spatial hierarchy.
 
+**Untrained baseline criterion:** Trained P1-B must beat the untrained (random-weight,
+no-training) baseline by ≥ 15 percentage points in linear-probe accuracy, ensuring that
+learning genuinely occurs and the architecture is not merely exploiting input biases.
+
+**Sparsity criterion:** P1-B must achieve average code sparsity ≥ 50% (fraction of
+code dimensions with activation magnitude > 0.01), confirming that the L1 sparsity
+penalty is effective and the codes are meaningfully sparse.
+
 ## 2. Falsification Criterion
 The hypothesis is falsified if EITHER:
 (1) P1-B (cross-layer sharing, d=8) achieves linear-probe accuracy < 80%
@@ -27,6 +35,13 @@ The hypothesis is falsified if EITHER:
     sharing sacrifices too much expressivity for the universal-node
     architecture to be viable.
 
+**Untrained baseline criterion:** The hypothesis is falsified if trained P1-B does
+not beat the untrained baseline (random-weight, no-training encoder) by at least
+15 percentage points in linear-probe accuracy.
+
+**Sparsity criterion:** The hypothesis is falsified if the average code sparsity
+of P1-B codes (fraction of code dimensions > 0.01 magnitude) is < 50%.
+
 Additionally, P1-D (d=4) is expected to underperform P1-B (d=8), and
 P1-E (wider output) is expected to outperform P1-B; if P1-D matches or
 exceeds P1-B, or if P1-E provides no improvement over P1-B, these
@@ -34,6 +49,31 @@ secondary predictions are falsified (informing dimension design choices).
 
 ## 3. Proposed Method
 EXPERIMENTAL PROTOCOL — Phase 1: Spatial Hierarchy without Time
+
+### 3.1 Training Mechanics: Progressive Training (vs. Simultaneous Training)
+
+**Choice rationale:** Progressive Training was chosen over Simultaneous Training
+for the layer-by-layer local reconstruction training procedure.
+
+In Simultaneous Training, all layers are trained concurrently by averaging
+gradients across layers for the shared weight matrix. This causes a fundamental
+instability: layer l+1 reconstructs a moving target, because layer l's
+representations are continually changing as its weights are updated. The shared
+weight gradients are averaged across layers, which means no single layer's
+reconstruction target ever stabilizes.
+
+Progressive Training avoids this problem entirely:
+- Layer 1 is trained first (frozen after training).
+- Then Layer 2 is trained using Layer 1's frozen output as input.
+- Then Layer 3 is trained using Layer 2's frozen output as input.
+- The shared weight matrix is frozen after each layer completes training.
+
+This keeps intermediate layer representations stable during training of
+subsequent layers, is architecturally cleaner (no gradient averaging across
+heterogeneous layers), and ensures that each layer genuinely learns to
+reconstruct its input distribution rather than chasing a moving target.
+
+### 3.2 Implementation Plan
 
 1. CREATE src/node.py — UniversalNode class
    - Encoder: Linear(3d, d) + tanh activation
@@ -48,8 +88,9 @@ EXPERIMENTAL PROTOCOL — Phase 1: Spatial Hierarchy without Time
    - Configurable weight_sharing mode: 'within_layer' | 'cross_layer' | 'none'
    - Configurable d per slot (8 for P1-A/B/C, 4 for P1-D)
    - For P1-E: support d_in=8, d_out=16 (non-recursive)
-   - Training: layer-by-layer local reconstruction loss, no cross-layer gradient flow
-   - For shared weights: average gradients across layers before update
+   - Training: progressive layer-by-layer local reconstruction (each layer trained
+     and frozen before moving to the next), no cross-layer gradient flow
+   - For shared weights: single shared weight matrix used across all layers/positions
    - Forward: returns top-layer codes (10 × d flattened)
 
 3. CREATE src/dataset_phase1.py — Five structured 16-bit datasets

@@ -1,0 +1,22 @@
+artifacts:
+- src/pre_registration.md
+experimenter_view: 'Updated src/pre_registration.md with three sets of additions:
+
+  1. Under "1. Hypothesis": Added the Untrained baseline criterion (≥15pp above random
+  baseline) and Sparsity criterion (≥50% code sparsity).
+
+  2. Under "2. Falsification Criterion": Added corresponding falsification conditions
+  for both criteria (falsified if not met).
+
+  3. Under "3. Proposed Method": Added a new subsection "3.1 Training Mechanics: Progressive
+  Training (vs. Simultaneous Training)" documenting the rationale for choosing progressive
+  over simultaneous training, including the representation drift problem with gradient
+  averaging and the stability benefits of freezing each layer before training the
+  next.
+
+  All existing content was preserved. The file was verified after writing.
+
+  '
+metrics: {}
+notes: Pre-registration updated with baseline, sparsity, and training mechanics sections.
+status: ok
