@@ -175,3 +175,58 @@ KEY RESULTS:
 
 **Notes:** JEPA confirmed; bottleneck refuted; Phase 2 temporal path cleared.
 
+
+---
+```yaml
+cached_tokens: 1772918
+campaign: phase-2-temporal-integration
+cost_usd: 2.52331
+hypothesis: 'phase-4: zero-shot spatial→temporal weight transfer is falsified; P2-D
+  with temporal JEPA is competitive (65.3%, only 1.7pp below P2-A); node type is universal
+  but weights are axis-specific'
+input_tokens: 5232950
+iter: 4
+metrics:
+  cohens_d_f0: -0.7
+  cohens_d_f2: 1.95
+  f0_loss_ratio: 0.9903
+  f1_transfer_gap_pp: -0.8
+  f2_p2d_trained_accuracy: 65.33
+  f2_p2d_trained_std: 2.74
+  f3_gap_vs_best_pp: -1.73
+  p2a_trained_accuracy: 67.07
+  p2b_trained_accuracy: 62.87
+  p2c_trained_accuracy: 61.53
+  p2d_trained_jepa_loss: 3.9
+  p_value_f2: 0.012
+  total_runs: 45
+  untrained_test_accuracy: 58.53
+  zeroshot_test_accuracy: 57.73
+output_tokens: 131112
+status: ok
+```
+
+## iter_004: phase-4: zero-shot spatial→temporal weight transfer is falsified; P2-D with temporal JEPA is competitive (65.3%, only 1.7pp below P2-A); node type is universal but weights are axis-specific
+
+**Analysis:** Phase 2 tested four pre-registered falsification criteria for the spatial→temporal
+transfer of UniversalNode weights. Two criteria are triggered (F0, F1) and two are
+not (F2, F3), yielding a partial falsification.
+
+The core finding is nuanced: the node TYPE is universal (kernel-3, 3-slot input,
+JEPA objective works on both spatial and temporal data), but the WEIGHTS are
+axis-specific. Spatially-tr
+
+**Status:** ok
+
+**Metrics:** `{'f0_loss_ratio': 0.9903, 'f1_transfer_gap_pp': -0.8, 'f2_p2d_trained_accuracy': 65.33, 'f2_p2d_trained_std': 2.74, 'f3_gap_vs_best_pp': -1.73, 'p2d_trained_jepa_loss': 3.9, 'p2a_trained_accuracy': 67.07, 'p2b_trained_accuracy': 62.87, 'p2c_trained_accuracy': 61.53, 'zeroshot_test_accuracy': 57.73, 'untrained_test_accuracy': 58.53, 'total_runs': 45, 'cohens_d_f0': -0.7, 'cohens_d_f2': 1.95, 'p_value_f2': 0.012}`
+
+**Experimenter view:** Phase 2 tested the universal-node hypothesis: can a spatially-trained UniversalNode
+transfer zero-shot to temporal data, and is the kernel-3 temporal architecture
+competitive with dedicated temporal mechanisms?
+
+SUB-GOAL 4.1 (Planner): Built full temporal infrastructure (temporal_dataset.py,
+temporal_encoder.py, run_phase2.py, test_tempal.py). Ran P2-D experiments (15 runs).
+Zero-shot transfer is 
+
+**Notes:** Phase 2 complete: zero-shot transfer falsified (F0+F1), but P2-D competitive and JEPA works temporally (F2+F3).
+

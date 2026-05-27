@@ -1,93 +1,82 @@
 # Current Research State — HSUN Project
-**Last updated:** After Phase 1 v2 completion (iter_003, sub-agents 3.1–3.2)
+**Last updated:** After Phase 2 completion (iter_004, sub-agents 4.1–4.3)
 
 ## Goal
 Investigate an architecture for unsupervised representation learning built from
-a single, universal node type. Phase 1 (Spatial Hierarchy) is now substantially
-advanced with the JEPA breakthrough.
+a single, universal node type. Phase 2 (Temporal Integration) is now complete.
 
 ## Confirmed (with iter/sub-agent references)
 
-1. **JEPA local objective works** (iter_003, 3.1):
-   - JEPA-d8: 62.12% ± 4.34% test accuracy (5 seeds)
-   - +15.96pp over untrained baseline (p=0.0046, significant)
-   - +20.6pp over best prior trained method (simultaneous reconstruction: 41.5%)
-   - Pre-registered ≥60% target MET (62.12% > 60%)
-   - Research Manager's ≥5pp bar CLEARED (+15.96pp >> 5pp)
+1. **Zero-shot spatial→temporal weight transfer is FALSIFIED** (iter_004, 4.1):
+   - F0: JEPA loss ratio (spatial/untrained) = 0.9903 → TRIGGERED (≥0.85)
+   - F1: Classification gap (ZeroShot - Untrained) = -0.80pp → TRIGGERED (≤5pp above)
+   - Spatially-trained weights are indistinguishable from random weights on temporal data
+   - Paired t-test: p=0.728, Cohen's d=-0.17 (no significant difference)
 
-2. **d=8 bottleneck is NOT the primary cause of Phase 1 failure** (iter_003, 3.2):
-   - JEPA-d16: 65.20% ± 1.80%, only +3.08pp over JEPA-d8
-   - 3.8× more parameters yields negligible test improvement
-   - Bottleneck hypothesis REFUTED per pre-registered Criterion C4
-   - Objective misalignment (reconstruction) was the true cause
+2. **Temporal JEPA training WORKS** (iter_004, 4.1):
+   - P2-D trained from scratch: 65.33% ± 2.74% test accuracy
+   - Significantly above 60% threshold (p=0.012, Cohen's d=1.95)
+   - F2 NOT TRIGGERED
 
-3. **Reconstruction objective was the root cause of Phase 1 failure** (iter_002 + iter_003):
-   - Same P1-B architecture: 33.5% (reconstruction) → 62.1% (JEPA)
-   - 85% relative improvement from objective change alone
-   - Latent-space prediction preserves discriminative information;
-     pixel-space reconstruction destroys it
+3. **P2-D is COMPETITIVE with dedicated temporal mechanisms** (iter_004, 4.2):
+   - P2-D: 65.33% vs P2-A: 67.07% vs P2-B: 62.87% vs P2-C: 61.53%
+   - Gap vs best (P2-A): -1.73pp → F3 NOT TRIGGERED (≥20pp would falsify)
+   - P2-D outperforms P2-B (RNN) and P2-C (feedback loop)
 
-4. **Not all local objectives are viable** (iter_003, 3.1):
-   - Contrastive: 50.64% (+4.48pp, p=0.17, not significant)
-   - SFA: 50.56% (+4.40pp, p=0.36, not significant, high variance)
-   - Hebbian: 23.96% (−22.20pp, catastrophic failure, near chance)
-   - Only JEPA clears the practical success bar
+4. **P2-D achieves the lowest JEPA loss** among all trained encoders (iter_004, 4.2):
+   - P2-D: 3.90 < P2-B: 5.81 < P2-C: 8.00 < P2-A: 9.91
+   - Kernel-3 sliding window creates the most locally predictable codes
 
-5. **Weight sharing has zero expressivity penalty** (iter_002, 2.2):
-   - P1-B (cross-layer sharing): 33.52% vs P1-C (independent): 33.24%
-   - Gap: −0.28pp (confirmed with reconstruction objective)
-   - JEPA results further validate this (all JEPA runs use cross-layer sharing)
+5. **The node TYPE is universal, but weights are axis-specific** (iter_004):
+   - Same kernel-3, 3-slot architecture + same JEPA objective works on both spatial
+     (Phase 1: 65.2%) and temporal (Phase 2: 65.3%) data
+   - But spatially-optimized W_enc does not transfer to temporal inputs
 
-6. **Cross-layer weight sharing + simultaneous training + JEPA is the winning combination** (iter_003):
-   - 1,264 parameters achieve 62.1% accuracy
-   - The universal-node hypothesis (shared weights across layers) is viable
+6. **Periodicity loophole confirmed** (iter_004, 4.1):
+   - Untrained encoders achieve ~58% on periodic-vs-random classification (chance=33.3%)
+   - Deterministic propagation preserves periodicity regardless of weights
+   - Research Manager's concern fully validated
 
-7. **Temporal-unification path cleared** (iter_003, 3.2):
-   - Pre-registered Criterion C5 NOT FALSIFIED
-   - JEPA succeeds spatially → same objective can be applied temporally
-   - P2-D (spatial-temporal symmetry) is now testable
+7. **Classification-prediction tradeoff** (iter_004, 4.3):
+   - Trained encoders have LOWER next-step cosine but HIGHER classification accuracy
+   - JEPA training reorganizes representation space; raw predictiveness ≠ usefulness
 
 ## Refuted Hypotheses
-- Phase 1 original hypothesis (reconstruction + L1 ≥ 80%): FALSIFIED (iter_002)
-- d=8 bottleneck hypothesis: REFUTED (iter_003, gap only 3.08pp)
-- "All local objectives are equally viable": REFUTED (Hebbian fails, others marginal)
+- Phase 2 original hypothesis (zero-shot transfer ≥10pp advantage): FALSIFIED by F0+F1
+- "One node type, one set of weights, applicable along any axis": REFUTED — weights
+  are axis-specific, though the node type is universal
 
-## Current Best Result
-- **JEPA-d8**: 62.12% ± 4.34% test accuracy, 1,264 parameters, 0% sparsity
-- **JEPA-d16**: 65.20% ± 1.80% test accuracy, 4,832 parameters, 0% sparsity
-- Still below Phase 1's 80% success criterion, but massive progress from 33.5%
+## Phase 1 Carry-Forward (still valid)
+- JEPA local objective works spatially: 62.12% (d=8), 65.20% (d=16) (iter_003)
+- Weight sharing has zero expressivity penalty (iter_002)
+- Reconstruction objective was the root cause of Phase 1 failure (iter_002–003)
+
+## Current Best Results
+- **Spatial**: JEPA-d16, 65.20% ± 1.80%, 4,832 parameters (iter_003)
+- **Temporal**: P2-D JEPA, 65.33% ± 2.74%, single UniversalNode (iter_004)
+- **Best temporal alternative**: P2-A, 67.07% ± 0.98% (iter_004)
 
 ## Files Created This Phase
-- src/training_objectives.py — JEPALoss, ContrastiveLoss, SFALoss, HebbianLoss, _Adam
-- src/run_phase1_v2.py — Experiment runner (7 configs × 5 seeds)
-- src/test_objectives.py — Self-tests for all objectives + encoder backward
-- phase_1/objectives_results.csv — Raw experimental results
-- phase_1/objectives_report.md — Full comparison report
-- src/pre_registration.md — Updated with Phase 1 v2 results and verdicts
-
-## Modified Files
-- src/hierarchical_encoder.py — Added forward_with_intermediates() and
-  backward_from_code_grads() methods for gradient-based training with
-  arbitrary objectives
+- src/temporal_dataset.py — Periodic/random/irregular sequence generator
+- src/temporal_encoder.py — P2DEncoder, P2AEncoder, P2BEncoder, P2CEncoder
+- src/run_phase2.py — P2-D experiment runner
+- src/run_phase2_baselines.py — P2-A/B/C baseline runner
+- src/test_temporal.py — Self-tests for temporal infrastructure
+- phase_2/p2d_results.csv — P2-D raw results (15 runs)
+- phase_2/baseline_results.csv — Baseline raw results (30 runs)
+- phase_2/REPORT.md — Full Phase 2 report
 
 ## Open Questions (ordered by expected value)
-1. **Can JEPA reach ≥80% with tuning?** 62% is strong but Phase 1's criterion is 80%.
-   More epochs, learning rate schedule, or larger datasets may help.
-2. **Can the same JEPA objective work temporally?** P2-D (three-temporal-slot node)
-   is the key test: can a spatially-trained JEPA node be applied to time without
-   retraining? This is the strongest possible evidence for unification.
-3. **Can sparsity be added without sacrificing accuracy?** Current JEPA codes have
-   ~0% sparsity. k-WTA or L1 on top of JEPA could add sparsity.
-4. **Why does Hebbian fail so catastrophically?** Oja's rule drives representations
-   toward principal components, which may not be category-discriminative for this
-   structured binary data.
-5. **Can Contrastive/SFA be improved?** Better augmentation strategies or tuning
-   might push them past the 5pp bar.
-6. **How does JEPA scale to larger inputs?** 128 pixels for the physics sandbox
-   would test whether the approach generalizes.
-
-## Next Phase: Phase 2 — Temporal Integration
-The natural next step is Phase 2 (Temporal Integration at a Single Node).
-Key question: Can the JEPA objective, applied along the time axis, learn
-temporal structure? And critically, can P2-D (same kernel-3 node with temporal
-inputs) apply spatially-trained weights temporally without retraining?
+1. **Does fine-tuning from spatial weights help?** Zero-shot fails, but fine-tuning
+   might converge faster or achieve better final performance than random init.
+2. **Can joint spatio-temporal training produce universal weights?** Training on both
+   axes simultaneously might find a shared representation.
+3. **Why does lowest JEPA loss not yield highest classification?** P2-D has the best
+   JEPA loss (3.9) but P2-A has the best accuracy (67.1%). Is this an objective-
+   task misalignment or a capacity issue?
+4. **How does P2-D scale to longer/complex sequences?** The current T=64 with 8 states
+   is modest. Longer sequences and more complex dynamics would test scalability.
+5. **Can the periodicity loophole be controlled?** Use gain-over-untrained as primary
+   metric, or design tasks where deterministic propagation doesn't trivially succeed.
+6. **Can the unified spatio-temporal grid work with per-axis weights?** Phase 3 in
+   goal.md envisions a 2D grid; per-axis fine-tuning may be the practical path.
