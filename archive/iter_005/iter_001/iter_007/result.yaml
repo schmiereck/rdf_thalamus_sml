@@ -1,0 +1,28 @@
+artifacts: []
+experimenter_view: "Successfully identified and terminated all targeted background\
+  \ Python \nprocesses. Three out of six phase3-related processes were actively running\n\
+  and were killed (run_phase3.py PID 26872, run_phase3_medium.py PID 196,\nrun_phase3_background.py\
+  \ PID 24488). The other three had already exited\nbefore the kill command. Two rdf.py\
+  \ processes remain, which are the main\nproject pipeline and not the CPU-intensive\
+  \ background/medium scripts.\n"
+log_excerpt: 'ERFOLGREICH: Der Prozess mit PID 26872 wurde beendet.
+
+  FEHLER: Der Prozess "30636" wurde nicht gefunden.
+
+  ERFOLGREICH: Der Prozess mit PID 196 wurde beendet.
+
+  FEHLER: Der Prozess "30428" wurde nicht gefunden.
+
+  ERFOLGREICH: Der Prozess mit PID 24488 wurde beendet.
+
+  FEHLER: Der Prozess "29580" wurde nicht gefunden.
+
+  Remaining: only two rdf.py processes (not the target scripts)
+
+  '
+metrics:
+  processes_already_stopped: 3
+  processes_killed: 3
+  remaining_python_processes: 2
+notes: CPU freed from background phase3 processes.
+status: ok
