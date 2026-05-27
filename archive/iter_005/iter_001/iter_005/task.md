@@ -1,0 +1,2 @@
+Rewrite `src/spatiotemporal_encoder.py` to make both the spatial and temporal forward/backward passes fully vectorized (without Python loops over spatial/temporal positions).
+Verify that the self-test still runs and passes, and check how much faster it is.
