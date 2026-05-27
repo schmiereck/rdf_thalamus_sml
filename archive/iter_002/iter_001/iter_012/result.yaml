@@ -1,0 +1,48 @@
+artifacts:
+- hyper_search.py
+experimenter_view: 'All 128 hyperparameter configurations in the 4x4x4x2 grid completed
+  successfully.
+
+  The `normal_2.0` embedding initialization dramatically outperformed uniform init
+
+  (53.8% vs 34.2% max), suggesting the model needs sufficiently large initial
+
+  embeddings to learn useful representations from the 16-bit binary input.
+
+  A stark accuracy-vs-sparsity trade-off was observed: configurations with high
+
+  test accuracy (>50%) had near-zero code sparsity (0-1%), while configurations
+
+  with high sparsity (>50%, driven by high l1_lambda) collapsed to near-chance
+
+  accuracy (19-22%). No configuration achieved the dual target of >=80% accuracy
+
+  AND >=50% sparsity, indicating that either (a) the model architecture/capacity
+
+  is insufficient, (b) the progressive layer-by-layer training is too restrictive,
+
+  or (c) the current hyperparameter grid misses a region that balances both objectives.
+
+  '
+log_excerpt: "Sweep completed in 9.1 minutes\nBest test accuracy: 0.5380\nTOP 10 CONFIGURATIONS\
+  \ (sorted by test accuracy, descending)\nRank  embedding_init      lr  l1_lambda\
+  \  epochs  test_acc  train_acc  sparsity\n   1      normal_2.0   0.010     0.0020\
+  \     150    0.5380     0.5720    0.0083\n   2      normal_2.0   0.100     0.0000\
+  \     150    0.5380     0.5720    0.0056\n   3      normal_2.0   0.010     0.0100\
+  \     150    0.5360     0.5790    0.0007\n   4      normal_2.0   0.050     0.0000\
+  \     150    0.5320     0.5740    0.0023\n   5      normal_2.0   0.100     0.0000\
+  \     100    0.5280     0.5730    0.0003\n   6      normal_2.0   0.010     0.0100\
+  \     100    0.5220     0.5630    0.0014\n   7      normal_2.0   0.010     0.0005\
+  \     150    0.5180     0.5580    0.0001\n   8      normal_2.0   0.010     0.0000\
+  \     150    0.5160     0.5580    0.0013\n   9      normal_2.0   0.100     0.0005\
+  \     150    0.5160     0.5510    0.0009\n  10      normal_2.0   0.050     0.0000\
+  \     100    0.5140     0.5660    0.0005\nConfigurations with test_accuracy >= 80%\
+  \ AND sparsity >= 50%: 0 found\n"
+metrics:
+  best_test_accuracy: 0.538
+  best_train_accuracy: 0.572
+  configs_with_acc_ge_80_and_sparsity_ge_50: 0
+  sweep_time_minutes: 9.1
+  total_configs_evaluated: 128
+notes: Sweep complete; no config meets the 80%/50% dual threshold.
+status: ok
