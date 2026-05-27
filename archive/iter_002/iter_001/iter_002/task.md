@@ -1,0 +1,1 @@
+Run the python script `src/node.py` to verify if the self-test passes. Print the entire stdout and stderr.
