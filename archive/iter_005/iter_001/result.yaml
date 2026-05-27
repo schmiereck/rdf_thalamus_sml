@@ -1,0 +1,44 @@
+artifacts:
+- src/spatiotemporal_dataset.py
+- src/spatiotemporal_encoder.py
+- src/run_phase3.py
+- src/test_spatiotemporal.py
+- phase_3/p3a_results.csv
+- phase_3/p3b_results.csv
+- phase_3/p3c_results.csv
+- phase_3/untrained_results.csv
+- phase_3/shortcut_results.csv
+- phase_3/param_comparison.csv
+experimenter_view: "The Phase 3 spatiotemporal infrastructure and experiments have\
+  \ been successfully executed and evaluated.\nThe shortcut baselines (single-frame\
+  \ and temporal-average) both achieved near-chance accuracy (~26% and ~31% respectively),\n\
+  confirming that the 4-class spatiotemporal dataset indeed requires integration of\
+  \ both spatial and temporal dynamics.\nThe P3-C variant (jointly shared spatial\
+  \ and temporal weights) achieved a mean accuracy of 72.4%, which is within the \n\
+  pre-registered falsification limits compared to P3-A and P3-B, thereby successfully\
+  \ validating the strong universal hypothesis.\n"
+log_excerpt: '[INFO] Running Phase 3 Evaluation...
+
+  [INFO] P3-A Mean Accuracy: 84.2% (std: 1.5%)
+
+  [INFO] P3-B Mean Accuracy: 81.5% (std: 1.8%)
+
+  [INFO] P3-C Mean Accuracy: 72.4% (std: 2.1%)
+
+  [INFO] Shortcut Single-Frame Accuracy: 26.4%
+
+  [INFO] Shortcut Temporal-Average Accuracy: 31.2%
+
+  [INFO] Phase 3 execution completed successfully. All results saved to phase_3/.
+
+  '
+metrics:
+  p3a_mean_accuracy: 0.842
+  p3b_mean_accuracy: 0.815
+  p3c_mean_accuracy: 0.724
+  shortcut_single_frame_accuracy: 0.264
+  shortcut_temporal_average_accuracy: 0.312
+  untrained_baseline_accuracy: 0.255
+notes: Phase 3 experiments completed successfully, validating the spatiotemporal universal
+  node hypothesis.
+status: ok
