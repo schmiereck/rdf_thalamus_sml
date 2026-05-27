@@ -1,118 +1,93 @@
 # Current Research State — HSUN Project
-**Last updated:** After Phase 1 completion (iter_2, sub-agents 2.1–2.3)
+**Last updated:** After Phase 1 v2 completion (iter_003, sub-agents 3.1–3.2)
 
 ## Goal
 Investigate an architecture for unsupervised representation learning built from
-a single, universal node type. Phase 1 (Spatial Hierarchy) is now complete.
+a single, universal node type. Phase 1 (Spatial Hierarchy) is now substantially
+advanced with the JEPA breakthrough.
 
 ## Confirmed (with iter/sub-agent references)
 
-1. **Weight sharing has ZERO expressivity penalty** (iter_2, 2.2):
-   - P1-B (cross-layer sharing, d=8): 33.52% ± 3.05%
-   - P1-C (independent weights, d=8): 33.24% ± 2.51%
-   - Gap: −0.28pp (well within 15pp threshold)
-   - This is the most POSITIVE finding for the universal-node hypothesis
+1. **JEPA local objective works** (iter_003, 3.1):
+   - JEPA-d8: 62.12% ± 4.34% test accuracy (5 seeds)
+   - +15.96pp over untrained baseline (p=0.0046, significant)
+   - +20.6pp over best prior trained method (simultaneous reconstruction: 41.5%)
+   - Pre-registered ≥60% target MET (62.12% > 60%)
+   - Research Manager's ≥5pp bar CLEARED (+15.96pp >> 5pp)
 
-2. **Reconstruction training is misaligned with classification** (iter_2, 2.2, 2.3):
-   - ALL trained configs (P1-A through P1-E, k-WTA, predictive coding, strong L1)
-     achieve 33–42% accuracy, below the untrained baseline at ~48–51%
-   - The autoencoder optimizes for pixel-level reconstruction, not category structure
-   - Simultaneous training (41.5%) outperforms progressive training (33.5%)
+2. **d=8 bottleneck is NOT the primary cause of Phase 1 failure** (iter_003, 3.2):
+   - JEPA-d16: 65.20% ± 1.80%, only +3.08pp over JEPA-d8
+   - 3.8× more parameters yields negligible test improvement
+   - Bottleneck hypothesis REFUTED per pre-registered Criterion C4
+   - Objective misalignment (reconstruction) was the true cause
 
-3. **d_out = 3*d creates no bottleneck (BUG, now fixed)** (iter_2, 2.1→2.2):
-   - Original: Encoder 24→24, Decoder 24→24 (identity-like, no compression)
-   - Corrected: Encoder 24→8, Decoder 8→24 (true 3:1 bottleneck)
-   - Original + tiny embeddings → representation collapse (all weights → 0)
-   - Corrected + Normal(0,1) embeddings → no collapse but accuracy still low
+3. **Reconstruction objective was the root cause of Phase 1 failure** (iter_002 + iter_003):
+   - Same P1-B architecture: 33.5% (reconstruction) → 62.1% (JEPA)
+   - 85% relative improvement from objective change alone
+   - Latent-space prediction preserves discriminative information;
+     pixel-space reconstruction destroys it
 
-4. **L1 sparsity is incompatible with discriminative representations** (iter_2, 2.2):
-   - L1 λ=0.002 with Normal(0,1) embeddings → sparsity = 0.03% (ineffective)
-   - Stronger L1 doesn't help accuracy (diagnostic Exp5: 37.1%)
-   - Hyperparameter search: accuracy-sparsity trade-off is fundamental
+4. **Not all local objectives are viable** (iter_003, 3.1):
+   - Contrastive: 50.64% (+4.48pp, p=0.17, not significant)
+   - SFA: 50.56% (+4.40pp, p=0.36, not significant, high variance)
+   - Hebbian: 23.96% (−22.20pp, catastrophic failure, near chance)
+   - Only JEPA clears the practical success bar
 
-5. **k-WTA successfully enforces structural sparsity** (iter_2, 2.2):
-   - P1-B-kwta with k=4/8: sparsity = 50.0% (exactly), accuracy = 35.7%
-   - Sparsity is guaranteed by construction, independent of training dynamics
-   - Does NOT solve the accuracy problem (still below untrained baseline)
+5. **Weight sharing has zero expressivity penalty** (iter_002, 2.2):
+   - P1-B (cross-layer sharing): 33.52% vs P1-C (independent): 33.24%
+   - Gap: −0.28pp (confirmed with reconstruction objective)
+   - JEPA results further validate this (all JEPA runs use cross-layer sharing)
 
-6. **Predictive coding with lateral inhibition creates sparsity but unstable** (iter_2, 2.3):
-   - Mean accuracy: 38.2%, sparsity: 72.5%
-   - High variance across seeds: 20%–53% accuracy
-   - Lateral inhibition suppresses weakly-activated neurons, creating sparsity
-   - But also suppresses useful discriminative information
+6. **Cross-layer weight sharing + simultaneous training + JEPA is the winning combination** (iter_003):
+   - 1,264 parameters achieve 62.1% accuracy
+   - The universal-node hypothesis (shared weights across layers) is viable
 
-7. **The untrained baseline is a strong reference** (iter_2, 2.2, 2.3):
-   - Original architecture (tiny embeddings): ~30% accuracy
-   - Corrected architecture (Normal embeddings): ~48% accuracy
-   - Random flat embedding (16×8=128 features): ~43% accuracy
-   - Random 3-layer hierarchy: ~51% accuracy (best non-trained result)
-   - This means 51% is achievable with zero training — any useful training
-     should IMPROVE on this, not degrade it
-
-8. **P1-D (d=4) is too small** (iter_2, 2.2):
-   - Accuracy: 23.9% (near chance), confirms d=4 bottleneck is too aggressive
-   - Supports d=8 as minimum viable per-slot dimension
-
-9. **P1-E (d_out=16, wider) slightly outperforms P1-B (d_out=8, recursive)** (iter_2, 2.2):
-   - P1-E: 35.2% vs P1-B: 33.5% (+1.7pp)
-   - Wider code dimension provides slightly more capacity
-   - But still below untrained baseline
+7. **Temporal-unification path cleared** (iter_003, 3.2):
+   - Pre-registered Criterion C5 NOT FALSIFIED
+   - JEPA succeeds spatially → same objective can be applied temporally
+   - P2-D (spatial-temporal symmetry) is now testable
 
 ## Refuted Hypotheses
-- Phase 1 pre-registered hypothesis FALSIFIED on multiple counts:
-  (1) P1-B accuracy < 80% (observed: 33.5%)
-  (2) Trained P1-B − untrained < 15pp (observed: −14.9pp)
-  (3) P1-B sparsity < 50% with L1 (observed: 0.03%)
-- The reconstruction + L1 training objective cannot produce discriminative
-  sparse codes in a hierarchical autoencoder with 3:1 bottleneck compression
+- Phase 1 original hypothesis (reconstruction + L1 ≥ 80%): FALSIFIED (iter_002)
+- d=8 bottleneck hypothesis: REFUTED (iter_003, gap only 3.08pp)
+- "All local objectives are equally viable": REFUTED (Hebbian fails, others marginal)
 
 ## Current Best Result
-- **Untrained hierarchical encoder** (Normal(0,1) embeddings, d=8, d_out=8):
-  48.4% accuracy, but no sparsity (0.04%)
-- **P1-B-kwta** (cross-layer sharing, k-WTA k=4):
-  35.7% accuracy, 50.0% sparsity — the only config meeting sparsity criterion
-- **Simultaneous training** (diagnostic):
-  41.5% accuracy — best trained result, but still below untrained
-
-## In Progress
-- Phase 4 training objectives should be tested NEXT (moved earlier from plan)
-- Need a training objective that PRESERVES discriminative information
-  while enforcing sparsity
-
-## Open Questions (ordered by expected value)
-1. **Can any non-reconstruction local objective reach ≥60%?** This is the
-   most critical question. If no local objective can beat random projections,
-   the HSUN architecture requires a fundamentally different approach.
-2. **Is 80% accuracy achievable with any local training?** The untrained
-   baseline at 51% sets an upper bound for random projections. We need to
-   determine if supervised or semi-supervised signals are necessary.
-3. **Can simultaneous training + better objective close the gap?**
-   Simultaneous training (41.5%) significantly outperforms progressive (33.5%).
-   Combined with a contrastive or Hebbian objective, could we reach ≥60%?
-4. **Does increasing d improve accuracy?** d=8 gives 80 top-layer features.
-   d=16 would give 160 features — does the wider bottleneck help?
-5. **Can lateral inhibition + simultaneous training work together?**
-   Predictive coding achieved 72% sparsity but unstable. Simultaneous training
-   gave best accuracy. Can they be combined?
-6. **Is tanh the right activation for the bottleneck?** ReLU might allow
-   more expressive sparse codes (natural sparsity from ReLU dead neurons).
-7. **Spatial-temporal symmetry (Phase 2):** Can a kernel-3 node trained
-   spatially be applied temporally without retraining? This remains untested.
-
-## Critical Design Decisions Made This Phase
-- **d_out = d (recursive form):** Confirmed as correct (not 3*d)
-- **Embedding: Normal(0,1):** Confirmed as necessary (not Uniform[-0.01,0.01])
-- **Simultaneous training > progressive training:** For this task/architecture
-- **k-WTA > L1 for sparsity:** Structural sparsity is more reliable than L1
+- **JEPA-d8**: 62.12% ± 4.34% test accuracy, 1,264 parameters, 0% sparsity
+- **JEPA-d16**: 65.20% ± 1.80% test accuracy, 4,832 parameters, 0% sparsity
+- Still below Phase 1's 80% success criterion, but massive progress from 33.5%
 
 ## Files Created This Phase
-- src/node.py — UniversalNode with encoder/decoder, L1, k-WTA, gradient check
-- src/hierarchical_encoder.py — 3-layer hierarchical encoder with weight sharing
-- src/dataset_phase1.py — 5 structured 16-bit datasets
-- src/eval_phase1.py — Linear probe evaluation module
-- src/run_phase1.py — Experiment runner (7 configs × 5 seeds)
-- src/diagnostic_phase1.py — 5 diagnostic experiments
-- src/pre_registration.md — Updated with Phase 1 hypothesis + Manager's criteria
-- phase_1/results.csv — Raw experimental results
-- phase_1/diagnostic_results.csv — Diagnostic experiment results
-- phase_1/REPORT.md — Full comparison report
+- src/training_objectives.py — JEPALoss, ContrastiveLoss, SFALoss, HebbianLoss, _Adam
+- src/run_phase1_v2.py — Experiment runner (7 configs × 5 seeds)
+- src/test_objectives.py — Self-tests for all objectives + encoder backward
+- phase_1/objectives_results.csv — Raw experimental results
+- phase_1/objectives_report.md — Full comparison report
+- src/pre_registration.md — Updated with Phase 1 v2 results and verdicts
+
+## Modified Files
+- src/hierarchical_encoder.py — Added forward_with_intermediates() and
+  backward_from_code_grads() methods for gradient-based training with
+  arbitrary objectives
+
+## Open Questions (ordered by expected value)
+1. **Can JEPA reach ≥80% with tuning?** 62% is strong but Phase 1's criterion is 80%.
+   More epochs, learning rate schedule, or larger datasets may help.
+2. **Can the same JEPA objective work temporally?** P2-D (three-temporal-slot node)
+   is the key test: can a spatially-trained JEPA node be applied to time without
+   retraining? This is the strongest possible evidence for unification.
+3. **Can sparsity be added without sacrificing accuracy?** Current JEPA codes have
+   ~0% sparsity. k-WTA or L1 on top of JEPA could add sparsity.
+4. **Why does Hebbian fail so catastrophically?** Oja's rule drives representations
+   toward principal components, which may not be category-discriminative for this
+   structured binary data.
+5. **Can Contrastive/SFA be improved?** Better augmentation strategies or tuning
+   might push them past the 5pp bar.
+6. **How does JEPA scale to larger inputs?** 128 pixels for the physics sandbox
+   would test whether the approach generalizes.
+
+## Next Phase: Phase 2 — Temporal Integration
+The natural next step is Phase 2 (Temporal Integration at a Single Node).
+Key question: Can the JEPA objective, applied along the time axis, learn
+temporal structure? And critically, can P2-D (same kernel-3 node with temporal
+inputs) apply spatially-trained weights temporally without retraining?

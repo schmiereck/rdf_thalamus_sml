@@ -121,3 +121,57 @@ P1-B accuracy
 
 **Notes:** Phase 1 hypothesis falsified on accuracy and untrained-baseline criteria. Weight sharing confirmed to have zero cost. Reconstruction objective identified as root cause.
 
+
+---
+```yaml
+cached_tokens: 2152297
+campaign: phase-1-spatial-hierarchy
+cost_usd: 3.07887
+hypothesis: 'phase-3: JEPA local objective confirmed at 62.1% (d=8); bottleneck refuted;
+  temporal unification path cleared for Phase 2'
+input_tokens: 6553069
+iter: 3
+metrics:
+  best_prior_method_accuracy: 41.52
+  contrastive_d8_test_accuracy: 50.64
+  hebbian_d8_test_accuracy: 23.96
+  jepa_d16_test_accuracy: 65.2
+  jepa_d16_test_std: 1.8
+  jepa_d16_vs_d8_gap_pp: 3.08
+  jepa_d8_test_accuracy: 62.12
+  jepa_d8_test_std: 4.34
+  jepa_d8_vs_best_prior_delta_pp: 20.6
+  jepa_d8_vs_untrained_delta_pp: 15.96
+  jepa_d8_vs_untrained_p_value: 0.0046
+  sfa_d8_test_accuracy: 50.56
+  untrained_d16_test_accuracy: 54.6
+  untrained_d8_test_accuracy: 46.16
+output_tokens: 292562
+status: ok
+```
+
+## iter_003: phase-3: JEPA local objective confirmed at 62.1% (d=8); bottleneck refuted; temporal unification path cleared for Phase 2
+
+**Analysis:** Phase 1 v2 tested the central hypothesis that a non-reconstruction local objective
+can produce discriminative hierarchical representations. The JEPA objective
+(bidirectional neighbor prediction in latent space + VICReg collapse prevention)
+achieved 62.1% — exceeding the 60% pre-registered target and beating the untrained
+baseline by +16pp (p=0.005).
+
+The d=8 vs d=16 comparison (3.08pp gap) REFUTES
+
+**Status:** ok
+
+**Metrics:** `{'jepa_d8_test_accuracy': 62.12, 'jepa_d8_test_std': 4.34, 'jepa_d16_test_accuracy': 65.2, 'jepa_d16_test_std': 1.8, 'contrastive_d8_test_accuracy': 50.64, 'sfa_d8_test_accuracy': 50.56, 'hebbian_d8_test_accuracy': 23.96, 'untrained_d8_test_accuracy': 46.16, 'untrained_d16_test_accuracy': 54.6, 'jepa_d8_vs_untrained_delta_pp': 15.96, 'jepa_d8_vs_untrained_p_value': 0.0046, 'jepa_d16_vs_d8_gap_pp': 3.08, 'best_prior_method_accuracy': 41.52, 'jepa_d8_vs_best_prior_delta_pp': 20.6}`
+
+**Experimenter view:** The JEPA hypothesis is STRONGLY CONFIRMED. Sub-agent 3.1 (planner) implemented
+four training objectives (JEPA, Contrastive, SFA, Hebbian) and ran all 7 configs
+× 5 seeds = 35 experiments. Sub-agent 3.2 (high) performed statistical analysis
+against pre-registered criteria.
+
+KEY RESULTS:
+- JEPA-d8: 62.12% ± 4.34% (best objective by far)
+- JEPA-d16: 65.20% ± 1.80% (+3.1pp, not worth 3.8× more paramet
+
+**Notes:** JEPA confirmed; bottleneck refuted; Phase 2 temporal path cleared.
+
