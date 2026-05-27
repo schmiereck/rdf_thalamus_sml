@@ -1,0 +1,35 @@
+artifacts:
+- src/training_objectives.py
+- src/hierarchical_encoder.py
+- src/test_objectives.py
+experimenter_view: "All three deliverables were successfully implemented and tested:\n\
+  1. training_objectives.py contains pure-numpy JEPALoss (bidirectional\n   prediction\
+  \ + VICReg variance/covariance penalties + projection MLP\n   with ReLU/L2-normalization),\
+  \ ContrastiveLoss (InfoNCE + 2-layer\n   projection head), SFALoss (slowness + whitening),\
+  \ and HebbianLoss\n   (Oja's rule updates). Each loss returns non-zero finite loss\
+  \ and\n   properly-shaped gradients.\n2. hierarchical_encoder.py was extended with\
+  \ forward_with_intermediates\n   (caches embeddings, layer outputs, node_inputs,\
+  \ and all raw codes)\n   and backward_from_code_grads (back-propagates dL/dcodes\
+  \ through the\n   3-layer stack, through k-WTA masks, tanh, and encoder weights,\
+  \ all\n   the way to the embedding table). The backward pass was fixed to use\n\
+  \   n_nodes_prev when padding gradients across sliced dimensions.\n3. test_objectives.py\
+  \ verifies all loss functions produce finite loss\n   and gradients without NaNs,\
+  \ confirms the encoder backward pass yields\n   correct shapes in all three sharing\
+  \ modes (none, within_layer,\n   cross_layer), and checks that forward_with_intermediates\
+  \ agrees with\n   the standard forward pass.\n"
+log_excerpt: "--- Testing Encoder backward_from_code_grads ---\n  [mode=none]\n  \
+  \  embedding grad shape: (2, 4)  [OK]\n    dx_binary shape: (4, 16, 4)  [OK]\n \
+  \ [mode=within_layer]\n    embedding grad shape: (2, 4)  [OK]\n    dx_binary shape:\
+  \ (4, 16, 4)  [OK]\n  [mode=cross_layer]\n    embedding grad shape: (2, 4)  [OK]\n\
+  \    dx_binary shape: (4, 16, 4)  [OK]\n  [PASS]\n\n--- Testing forward consistency\
+  \ ---\n  forward() == forward_with_intermediates()  [PASS]\n\n============================================================\n\
+  \  ALL SELF-TESTS PASSED\n============================================================\n\
+  Syntax OK for all 3 files\n"
+metrics:
+  contrastive_loss: 3.7364
+  encoder_backward_modes_passed: 3
+  hebbian_proxy_loss: -1.0768
+  jepa_loss: 2.626
+  sfa_loss: 0.0154
+notes: All objectives and encoder backprop implemented and passing self-tests.
+status: ok
