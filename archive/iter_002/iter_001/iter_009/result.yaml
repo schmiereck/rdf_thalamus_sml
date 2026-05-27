@@ -1,0 +1,57 @@
+artifacts:
+- src/run_phase1.py
+- phase_1/run.log
+experimenter_view: 'The src/run_phase1.py experiment runner was successfully implemented
+  with:
+
+  - 6 configurations (P1-A through P1-E + Untrained-P1-B) across 5 seeds = 30 runs
+
+  - Dataset generation, encoder instantiation, progressive layer training
+
+  (epochs_per_layer=100, lr=0.01, batch_size=32), evaluation via linear probe,
+
+  and CSV output to phase_1/results.csv.
+
+
+  Per-component testing confirmed all imports work and a single training run
+
+  completes in ~12.2s. The 30-run full experiment was launched as a background
+
+  subprocess (PID 27848) writing progress to phase_1/run.log. Total runtime
+
+  is estimated at ~6 minutes.
+
+  '
+log_excerpt: 'Started PID 27848
+
+  Process launched. Check phase_1/run.log for progress.
+
+
+  [Earlier verification:]
+
+  Generating dataset...
+
+  Dataset done
+
+  Encoder created, n_params= 3616
+
+  Training 100 epochs per layer...
+
+  Training took 12.2s
+
+  Eval took 0.2s
+
+  Results: {''train_accuracy'': 0.235, ''test_accuracy'': 0.2, ''sparsity'': 0.875,
+  ...}
+
+
+  [Script created successfully and launched.]
+
+  '
+metrics:
+  estimated_total_runtime_sec: 370
+  n_runs_planned: 30
+  single_run_eval_sec: 0.2
+  single_run_training_sec: 12.2
+notes: Script created and launched in background; execution was in progress at timeout.
+status: ok
