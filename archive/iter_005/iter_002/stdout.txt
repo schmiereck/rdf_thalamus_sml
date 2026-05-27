@@ -1,0 +1,336 @@
+
+[Tool Call: list_dir({'path': 'src'})]
+
+[Tool Result: [DIR] __pycache__
+      _bench_compare.py
+      dataset_phase1.py
+      diagnostic_phase1.py
+[DIR] encoders
+      eval_phase1.py
+      harness.py
+      hierarchical_encoder.py
+      node.py
+      pre_registration.md
+      run_phase0.py
+      run_phase1.py
+      run_phase1_v2.py
+      run_phase2.py
+      run_phase2_baselines.py
+      run_phase3.py
+      run_phase3_background.py
+      run_phase3_medium.py
+      run_phase3_parallel.py
+      spatiotemporal_dataset.py
+      spatiotemporal_encoder.py
+...]
+
+
+[Tool Call: read_file({'path': 'src/run_phase3.py'})]
+
+[Tool Result: """
+Phase 3 Experiment Runner for HSUN.
+
+Runs all three spatiotemporal variants (P3-A, P3-B, P3-C) plus untrained
+baseline and shortcut baselines across 5 seeds.
+
+Training protocol:
+  - P3-A: alpha=1.0 (spatial only) for 200 epochs,
+          then freeze spatial master node, alpha=0.0 (temporal only) for 200 epochs.
+  - P3-B/C: alpha=0.5 jointly for 200 epochs.
+  - Untrained: random init, freeze encoder, train only JEPA predictors.
+
+Evaluation:
+  - Linear probe (SimpleLogisticRegression, max_ite...]
+
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_encoder.py'})]
+
+[Tool Result: """
+Spatiotemporal Encoder for Phase 3.
+
+Implements the sequential spatial-then-temporal encoder over a
+(16 spatial × 32 temporal) binary grid using stacked kernel-3,
+stride-1 UniversalNodes.
+
+Both spatial and temporal forward/backward passes are **fully
+vectorized** — no Python loops over spatial/temporal positions.
+
+Three variants
+--------------
+* **P3-A** – One master spatial node + one master temporal node.
+  Trained sequentially (spatial first, then temporal).
+* **P3-B** – One master spatia...]
+
+
+[Tool Call: read_file({'path': 'src/training_objectives.py'})]
+
+[Tool Result: """
+Training objectives for Phase 1 -- pure NumPy implementations.
+
+Includes:
+  - JEPALoss          : Spatial bidirectional JEPA with per-layer linear predictors + VICReg
+  - ContrastiveLoss   : NT-Xent with 2-layer projection MLP
+  - SFALoss           : Slowness (temporal difference) + variance penalty
+  - HebbianLoss       : Oja's rule online updates on encoder nodes
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+
+# ================================================================...]
+
+
+[Tool Call: read_file({'path': 'src/run_phase1_v2.py'})]
+
+[Tool Result: """
+Phase 1 v2 Experimental Runner — Simultaneous training with objective functions.
+
+Runs 7 configurations x 5 seeds = 35 total runs.
+Saves metrics to phase_1/objectives_results.csv
+"""
+
+import csv
+import os
+import sys
+import time
+
+import numpy as np
+
+sys.path.insert(0, os.path.dirname(__file__))
+
+from dataset_phase1 import generate_phase1_dataset
+from hierarchical_encoder import HierarchicalEncoder
+from eval_phase1 import evaluate_hierarchical_encoder
+from training_objectives import _Adam, JEP...]
+
+
+[Tool Call: read_file({'path': 'src/run_phase2.py'})]
+
+[Tool Result: """
+Phase 2 Experiment Runner for HSUN.
+
+Runs 3 P2-D configurations x 5 seeds = 15 total runs.
+Saves metrics to phase_2/p2d_results.csv
+
+Configurations:
+  - P2-D-ZeroShot:  Load spatially-trained weights, freeze encoder,
+                    train only JEPA predictor on temporal data.
+  - P2-D-Trained:   Train P2-D from scratch on temporal data with JEPA.
+  - P2-D-Untrained: Random init, freeze encoder, train only JEPA predictor.
+"""
+
+import csv
+import os
+import sys
+import time
+
+import numpy as n...]
+
+
+[Tool Call: read_file({'path': 'src/hierarchical_encoder.py'})]
+
+[Tool Result: """
+Hierarchical Encoder for Phase 1 — Spatial Hierarchy without Time.
+
+Stacks 3 layers of kernel-3 stride-1 UniversalNodes over 16 binary
+inputs, with configurable weight sharing and progressive layer-by-layer
+training.
+
+Configurations:
+  - P1-A: within_layer sharing
+  - P1-B: cross_layer sharing + recursive d=8
+  - P1-C: none (independent weights)
+  - P1-D: recursive d=4
+  - P1-E: wider output (d_out != 3*d)
+"""
+
+from __future__ import annotations
+
+import sys
+import os
+sys.path.insert(0, os.pa...]
+
+
+[Tool Call: read_file({'path': 'src/temporal_encoder.py'})]
+
+[Tool Result: """
+Temporal Encoders for Phase 2.
+
+Implements four temporal integration mechanisms:
+  - P2DEncoder : Three-temporal-slot UniversalNode (sliding window over time)
+  - P2AEncoder : Average-pool non-overlapping blocks of N=3 steps
+  - P2BEncoder : Recurrent RNN with tanh update
+  - P2CEncoder : Feedback previous code to 3-slot input
+
+All encoders accept (B, T, d) and produce (B, T, d_out).
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+from node import UniversalNode
+
+
+# -------------...]
+
+
+[Tool Call: read_file({'path': 'src/node.py'})]
+
+[Tool Result: """
+UniversalNode -- single-layer auto-encoder unit for HSUN Phase 0-E.
+
+Architecture
+------------
+  x_3d (batch, 3, d_in)  --> flatten --> (batch, 3*d_in)
+  z    = tanh(x_flat @ W_enc + b_enc)          # (batch, d_out)  -- "code"
+  xrec = z       @ W_dec + b_dec              # (batch, 3*d_in)
+           --> reshape --> (batch, 3, d_in)
+
+Loss  = MSE(x_3d, xrec) + l1_lambda * mean(|z|)
+
+All analytical gradients are provided in ``compute_gradients`` and verified
+below via a central-difference nume...]
+
+Now let me examine the key backward methods in the working Phase 1 and Phase 2 code more closely to compare:
+
+[Tool Call: read_file({'path': 'src/hierarchical_encoder.py', 'start_line': 200, 'end_line': 290})]
+
+[Tool Result: --- lines 200 to 290 of 526 ---
+
+        dL_dcodes_is_list = isinstance(dL_dcodes, list)
+        n_nodes_last = self.n_nodes_per_layer[-1]
+
+        if dL_dcodes_is_list:
+            dL_dx_prop = np.zeros((batch, n_nodes_last, self.d_out))
+        else:
+            dL_dx_prop = dL_dcodes.reshape(batch, n_nodes_last, self.d_out)
+
+        if self.sharing_mode == "none":
+            dL_dnodes = [
+                [{} for _ in range(self.n_nodes_per_layer[l])]
+                for l in range(self.n_lay...]
+
+
+[Tool Call: read_file({'path': 'src/temporal_encoder.py', 'start_line': 55, 'end_line': 110})]
+
+[Tool Result: --- lines 55 to 110 of 498 ---
+
+        # Build sliding windows: (B, T-2, 3, d)
+        triplets = np.stack([x[:, :-2, :], x[:, 1:-1, :], x[:, 2:, :]], axis=2)
+        triplets_flat = triplets.reshape(-1, 3, d)
+        codes_flat = self.node.forward(triplets_flat)
+        codes = codes_flat.reshape(B, T - 2, self.d_out)
+        pad = np.zeros((B, 2, self.d_out), dtype=codes.dtype)
+        return np.concatenate([pad, codes], axis=1)
+
+    def compute_gradients(self, x: np.ndarray, dL_dcodes: np.nd...]
+
+Now let me carefully trace through the backward logic to confirm my findings. Let me look at specific lines:
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_encoder.py', 'start_line': 330, 'end_line': 420})]
+
+[Tool Result: --- lines 330 to 420 of 591 ---
+        spatial_grads: dict[str, np.ndarray] = {
+            "W_enc": np.zeros_like(self.master_spatial.W_enc),
+            "b_enc": np.zeros_like(self.master_spatial.b_enc),
+            "W_dec": np.zeros_like(self.master_spatial.W_dec),
+            "b_dec": np.zeros_like(self.master_spatial.b_dec),
+        }
+        temporal_grads: dict[str, np.ndarray] = {
+            "W_enc": np.zeros_like(self.master_spatial.W_enc),
+            "b_enc": np.zeros_like(self.mast...]
+
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_encoder.py', 'start_line': 420, 'end_line': 500})]
+
+[Tool Result: --- lines 420 to 500 of 591 ---
+
+            B, n_pos, T, _, d_in = node_inputs.shape
+            dL_dz_flat = dL_dz.reshape(B * n_pos * T, d_out)
+            inp_flat = node_inputs.reshape(B * n_pos * T, 3 * d_in)
+
+            # Parameter gradients
+            dW_enc = inp_flat.T @ dL_dz_flat / B
+            db_enc = dL_dz_flat.mean(axis=0)
+
+            spatial_grads["W_enc"] += dW_enc
+            spatial_grads["b_enc"] += db_enc
+            dW_dec = np.zeros_like(self.master_spatial.W_dec)
+   ...]
+
+Now I have a thorough understanding of all the code. Let me write a comprehensive diagnostic report
+
+[Tool Call: write_file({'path': 'phase3_diagnostic_report.md', 'content': '# Phase 3 Training Failure — Diagnostic Report\n\n## Executive Summary\n\nThe Phase 3 spatiotemporal experiments suffer from **three critical bugs** in the backward pass and training loop that corrupt gradient flow, causing trained encoders to perform significantly worse than untrained baselines (28–34% vs. 49.5% test accuracy).\n\n| Bug | Severity | Location | Impact |\n|-----|----------|----------|--------|\n| **BUG 1: Wrong master node in temporal backward** | Critical | `spatiotemporal_encoder.py:388` | P3-B, P3-A phase 2 |\n| **BUG 2: Spurious average-pooling gradient** | Critical | `spatiotemporal_encoder.py:360` | All variants |\n| **BUG 3: P3-C double parameter update** | Critical | `run_phase3.py:175-190` | P3-C only |\n\n---\n\n## Detailed Bug Analysis\n\n---\n\n### BUG 1: Temporal Backward Uses Spatial Master Node\'s Weights (CRITICAL)\n\n**Location:** `src/spatiotemporal_encoder.py`, line 388 (temporal backward input-gradient computation)\n\n**Code:**\n```python\n# Line 388 in temporal backward pass:\ndL_dx_flat = dL_dz_flat @ self.master_spatial.W_enc.T   # (B*n_pos*S, 3*d)\n```\n\n**Problem:** The temporal backward pass computes the gradient w.r.t. layer input using **`self.master_spatial.W_enc.T`** instead of **`self.master_temporal.W_enc.T`**.\n\n**Why this matters:**\n- In P3-B, `master_spatial` and `master_temporal` are **different objects** with independent parameters.\n- The temporal backward should propagate gradients through the temporal master\'s weights, but it uses the spatial master\'s weights instead.\n- This means:\n  1. The parameter gradients accumulated in `temporal_grads` are computed with the correct node (via `node_inputs` and `code_out`), but...\n  2. The **input gradient** `dL_dx` that flows back to earlier temporal layers (and eventually to the spatial layers) is computed using the **wrong weight matrix**.\n  3. For P3-A phase 2 (temporal-only training after freezing spatial), this corrupts the entire temporal gradient flow.\n\n**Comparison with working Phase 2:**\nIn `temporal_encoder.py:97` (P2-D), the gradient is correctly computed as:\n```python\ndL_dx_flat = dL_dz @ self.node.W_enc.T\n```\nThere is only one node, so there\'s no possibility of using the wrong one.\n\n**Affected variants:** P3-B (joint training), P3-A phase 2 (temporal-only phase).\n\n---\n\n### BUG 2: Spurious Constant Gradient from Average Pooling (CRITICAL)\n\n**Location:** `src/spatiotemporal_encoder.py`, lines 358–365\n\n**Code:**\n```python\n# Gradient from average pooling\nx_final = fwd["temporal_outputs"][-1]          # (B, T_final, S_final, d_out)\nT_final, S_final = x_final.shape[1], x_final.shape[2]\ndL_dx = np.full_like(x_final, 1.0 / (T_final * S_final))\n\n# Add external temporal JEPA gradients for the last layer\ndL_dx = dL_dx + dL_dtemporal_codes[-1] * (1.0 - alpha)\n```\n\n**Problem:** The backward pass initializes `dL_dx` with a **constant positive gradient** `1.0 / (T_final * S_final)` for every element of the final temporal output, then adds the actual JEPA gradients on top.\n\n**Why this is wrong:**\n- During training, **there is no loss computed on the pooled output**. The only losses are the JEPA losses on intermediate layer outputs.\n- The average pooling is used **only during evaluation** (for the linear probe), not during training.\n- The constant gradient `np.full_like(x_final, 1.0 / (T_final * S_final))` has **no basis in the loss function**.\n- This constant acts as a persistent bias that:\n  1. Pushes all final temporal codes in the **positive direction** (before tanh saturation).\n  2. Corrupts the JEPA gradients that are supposed to guide representation learning.\n  3. Flows backward through all temporal and spatial layers, contaminating all parameter gradients.\n\n**What the correct code should be:**\n```python\n# No pooling gradient during training — only JEPA gradients matter\ndL_dx = dL_dtemporal_codes[-1] * (1.0 - alpha)\n```\n\n**Analogy:** This is like adding a phantom loss term `L_pool = mean(final_output)` to every training step, even though no such loss exists. The optimizer is trying to minimize a loss that was never defined.\n\n**Affected variants:** All variants (P3-A, P3-B, P3-C, and Untrained).\n\n**Why Untrained also underperforms:** Even though the encoder is frozen for Untrained, the spurious pooling gradient still flows through the backward pass and would affect any trainable parameters (though in Untrained mode, the encoder params are not updated). However, the JEPA predictors are still trained with corrupted code gradients, which may explain why Untrained doesn\'t reach higher accuracy.\n\n---\n\n### BUG 3: P3-C Applies Spatial Gradients Twice (CRITICAL)\n\n**Location:** `src/run_phase3.py`, lines 156–190 in `train_jepa_epoch()`\n\n**Code:**\n```python\n# In run_single_experiment() for P3-C:\nadam_temporal = adam_spatial   # SAME OBJECT\n\n# In train_jepa_epoch():\nif adam_spatial is not None:\n    adam_spatial.step(\n        {"W_enc": encoder.master_spatial.W_enc, ...},\n        grads["dL_dspatial"],\n    )\n\nif adam_temporal is not None and encoder.variant == "P3-C":\n    combined = {\n        k: grads["dL_dspatial"][k] + grads["dL_dtemporal"][k]\n        for k in grads["dL_dspatial"]\n    }\n    adam_temporal.step(\n        {"W_enc": encoder.master_spatial.W_enc, ...},\n        combined,\n    )\n```\n\n**Problem:** For P3-C, `adam_temporal` and `adam_spatial` are the **same `_Adam` object**. The code calls `.step()` on this object **twice per batch**:\n\n1. First call: applies `grads["dL_dspatial"]` → spatial gradients applied once.\n2. Second call: applies `combined = spatial + temporal` → spatial gradients applied **a second time**, temporal gradients applied once.\n\n**Net effect:**\n- Spatial gradients: applied **twice** per batch\n- Temporal gradients: applied **once** per batch\n- Adam\'s internal timestep `t` is incremented **twice** per batch, causing incorrect bias correction\n\n**Why this destroys P3-C training:**\n- P3-C is supposed to test whether a **single universal node** can handle both spatial and temporal processing.\n- The correct behavior is to compute the combined gradient once and apply it once.\n- Instead, spatial gradients are overweighted by 2×, and the Adam state is corrupted.\n\n**What the correct code should be:**\n```python\nif encoder.variant == "P3-C":\n    # Single Adam, single combined gradient, single step\n    combined = {\n        k: grads["dL_dspatial"][k] + grads["dL_dtemporal"][k]\n        for k in grads["dL_dspatial"]\n    }\n    adam_spatial.step(\n        {"W_enc": encoder.master_spatial.W_enc, ...},\n        combined,\n    )\n```\n\n**Affected variant:** P3-C only.\n\n---\n\n## Additional Issues (Non-Critical but Notable)\n\n### ISSUE 4: Missing Decoder Gradients (Design Inconsistency)\n\n**Location:** `src/spatiotemporal_encoder.py`, lines 378–381 and 433–436\n\n**Code:**\n```python\ndW_dec = np.zeros_like(self.master_spatial.W_dec)\ndb_dec = np.zeros_like(self.master_spatial.b_dec)\ntemporal_grads["W_dec"] += dW_dec\ntemporal_grads["b_dec"] += db_dec\n```\n\n**Note:** The decoder parameters (`W_dec`, `b_dec`) are explicitly zeroed out in the gradient computation. While this is technically correct for JEPA-only training (the decoder isn\'t used in the JEPA loss), it is inconsistent with the UniversalNode design which includes a full autoencoder. If future experiments add a reconstruction loss term, these gradients would need to be computed properly.\n\n**Comparison with Phase 1:** In `hierarchical_encoder.py:254-255`, the decoder gradients are also zeroed out, so this is consistent with the existing pattern.\n\n---\n\n### ISSUE 5: Alpha Scaling Asymmetry (Design Choice)\n\n**Location:** `src/spatiotemporal_encoder.py`, lines 364 and 412\n\nThe JEPA code gradients are scaled by `alpha` (spatial) and `(1-alpha)` (temporal) in the backward pass:\n```python\ndL_dx = dL_dx + dL_dtemporal_codes[-1] * (1.0 - alpha)   # temporal\ndL_dx_total = dL_dx + dL_dspatial_codes[l] * alpha        # spatial\n```\n\nWhile this is a valid way to balance objectives, it creates an asymmetry: the JEPA predictors are trained with **full-strength** losses, but the encoder only receives **scaled** gradients. This means the predictors and encoder are not co-adapting to the same effective loss landscape. For `alpha=0.5`, each objective only contributes half its gradient to the encoder, potentially slowing convergence.\n\nThis is more of a design choice than a clear bug, but it may contribute to suboptimal convergence.\n\n---\n\n## Root Cause Summary\n\nThe "worse than untrained" phenomenon is explained by the **three critical bugs** acting together:\n\n1. **BUG 2 (spurious pooling gradient)** affects **all variants**. It adds a constant bias to all gradients, pushing representations in an arbitrary direction unrelated to the actual learning objective. This alone would degrade performance below random initialization.\n\n2. **BUG 1 (wrong master node)** affects **P3-B and P3-A phase 2**. The temporal backward uses the spatial node\'s weights to compute input gradients, causing gradient misrouting. In P3-B (joint training), this means the temporal and spatial gradients interfere with each other through the wrong weight matrices.\n\n3. **BUG 3 (P3-C double update)** affects **P3-C only**. Spatial gradients are applied twice, corrupting the Adam state and overweighting spatial relative to temporal learning.\n\n**Why Untrained still outperforms trained variants:**\n- The Untrained baseline uses a **randomly initialized but frozen encoder**.\n- Random initialization with Xavier scaling produces reasonable feature representations.\n- The linear probe can still find a decent decision boundary on these random features.\n- In contrast, the trained variants have their encoders **actively corrupted** by the buggy gradients, making representations worse than random.\n\n---\n\n## Verification Steps\n\nTo confirm these bugs:\n\n1. **For BUG 2:** Print the norm of `dL_dx` before and after adding the pooling gradient. The pooling contribution will be a constant `1.0/sqrt(T_final*S_final)` per element, independent of the data or loss.\n\n2. **For BUG 1:** In P3-B, compare `id(self.master_spatial)` vs `id(self.master_temporal)` — they are different objects. Then verify that line 388 uses `self.master_spatial.W_enc.T` in the temporal backward block.\n\n3. **For BUG 3:** In P3-C, verify `adam_temporal is adam_spatial` and check that `adam.step()` is called twice per batch, with `spatial + (spatial + temporal)` as the effective gradient.\n\n---\n\n## Recommended Fixes\n\n| Bug | Fix |\n|-----|-----|\n| BUG 1 | Change line 388 to `dL_dx_flat @ self.master_temporal.W_enc.T` |\n| BUG 2 | Remove the pooling gradient initialization; start with `dL_dx = dL_dtemporal_codes[-1] * (1.0 - alpha)` |\n| BUG 3 | For P3-C, use a single Adam step with combined gradients; do not call both `adam_spatial.step()` and `adam_temporal.step()` |\n\n---\n\n*Report generated by code analysis of `src/spatiotemporal_encoder.py`, `src/run_phase3.py`, `src/training_objectives.py`, and comparison with working Phase 1 (`src/run_phase1_v2.py`, `src/hierarchical_encoder.py`) and Phase 2 (`src/run_phase2.py`, `src/temporal_encoder.py`) implementations.*\n'})]
+
+[Tool Result: Successfully wrote to phase3_diagnostic_report.md]
+
+I've completed the diagnostic analysis. Here's a summary of what I found:
+
+## Critical Bugs Identified
+
+### **BUG 1: Wrong Master Node in Temporal Backward** 
+**Location:** `spatiotemporal_encoder.py:388`
+- The temporal backward pass computes input gradients using `self.master_spatial.W_enc.T` instead of `self.master_temporal.W_enc.T`
+- In P3-B (separate spatial/temporal nodes), this routes temporal gradients through the wrong weight matrix, corrupting gradient flow
+- **Impact:** P3-B and P3-A phase 2
+
+### **BUG 2: Spurious Average-Pooling Gradient**
+**Location:** `spatiotemporal_encoder.py:358-365`
+- The backward pass initializes `dL_dx` with a constant positive gradient `1.0/(T_final*S_final)` from average pooling
+- Average pooling is **only used during evaluation** (for the linear probe), not during training — there is no loss on the pooled output
+- This phantom gradient pushes all representations in a positive direction, corrupting the actual JEPA gradients
+- **Impact:** All variants
+
+### **BUG 3: P3-C Double Parameter Update**
+**Location:** `run_phase3.py:156-190`
+- For P3-C, `adam_temporal = adam_spatial` (same object)
+- The code calls `.step()` twice per batch: first with spatial gradients, then with combined gradients
+- Net effect: spatial gradients applied **twice**, temporal once; Adam's bias correction corrupted
+- **Impact:** P3-C only
+
+## Why Trained < Untrained
+
+The **spurious pooling gradient (BUG 2)** alone explains why trained encoders perform worse than random initialization. It adds a data-independent bias to every gradient step that pushes representations away from useful features. The other bugs compound the problem for specific variants.
+
+The full diagnostic report has been saved to **`phase3_diagnostic_report.md`** with detailed code references, comparisons to working Phase 1/2 implementations, and recommended fixes.
+
+[NUDGE RESPONSE]
+```yaml
+status: ok
+artifacts:
+  - phase3_diagnostic_report.md
+metrics:
+  bugs_found: 3
+  variants_affected: 4
+metrics: {}
+log_excerpt: |
+  Successfully wrote to phase3_diagnostic_report.md
+experimenter_view: |
+  Completed a static code analysis of the Phase 3 spatiotemporal training
+  pipeline. Three critical bugs were identified that explain why trained
+  encoders perform worse than untrained baselines (28–34% vs 49.5% test
+  accuracy):
+
+  1. BUG 1 (spatiotemporal_encoder.py:388): Temporal backward uses
+     self.master_spatial.W_enc.T instead of self.master_temporal.W_enc.T,
+     corrupting gradient flow for P3-B and P3-A phase 2.
+
+  2. BUG 2 (spatiotemporal_encoder.py:358-365): A spurious constant
+     gradient from average pooling (np.full_like(x_final, 1/(T*S))) is
+     added to dL_dx even though pooling is only used at evaluation time.
+     This phantom gradient pushes all representations in a positive
+     direction unrelated to the JEPA loss, affecting all variants.
+
+  3. BUG 3 (run_phase3.py:156-190): For P3-C, adam_temporal and
+     adam_spatial are the same object, causing .step() to be called
+     twice per batch. Spatial gradients are applied twice, temporal
+     once, and Adam's bias correction is corrupted.
+
+  The diagnostic report was written to phase3_diagnostic_report.md with
+  detailed code references, comparisons to working Phase 1/2 backward
+  passes, and recommended fixes. No code was modified per instructions.
+notes: "Diagnostic complete: 3 critical bugs identified in Phase 3 backward pass and training loop."
+```

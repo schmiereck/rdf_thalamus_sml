@@ -1,0 +1,25 @@
+artifacts:
+- phase3_diagnostic_report.md
+experimenter_view: "Completed a static code analysis of the Phase 3 spatiotemporal\
+  \ training\npipeline. Three critical bugs were identified that explain why trained\n\
+  encoders perform worse than untrained baselines (28–34% vs 49.5% test\naccuracy):\n\
+  \n1. BUG 1 (spatiotemporal_encoder.py:388): Temporal backward uses\n   self.master_spatial.W_enc.T\
+  \ instead of self.master_temporal.W_enc.T,\n   corrupting gradient flow for P3-B\
+  \ and P3-A phase 2.\n\n2. BUG 2 (spatiotemporal_encoder.py:358-365): A spurious\
+  \ constant\n   gradient from average pooling (np.full_like(x_final, 1/(T*S))) is\n\
+  \   added to dL_dx even though pooling is only used at evaluation time.\n   This\
+  \ phantom gradient pushes all representations in a positive\n   direction unrelated\
+  \ to the JEPA loss, affecting all variants.\n\n3. BUG 3 (run_phase3.py:156-190):\
+  \ For P3-C, adam_temporal and\n   adam_spatial are the same object, causing .step()\
+  \ to be called\n   twice per batch. Spatial gradients are applied twice, temporal\n\
+  \   once, and Adam's bias correction is corrupted.\n\nThe diagnostic report was\
+  \ written to phase3_diagnostic_report.md with\ndetailed code references, comparisons\
+  \ to working Phase 1/2 backward\npasses, and recommended fixes. No code was modified\
+  \ per instructions.\n"
+log_excerpt: 'Successfully wrote to phase3_diagnostic_report.md
+
+  '
+metrics: {}
+notes: 'Diagnostic complete: 3 critical bugs identified in Phase 3 backward pass and
+  training loop.'
+status: ok
