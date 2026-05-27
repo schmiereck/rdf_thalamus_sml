@@ -16,7 +16,7 @@ The architecture should yield representations where similar inputs produce simil
 - 2D or higher-dimensional sensory data
 - End-to-end backpropagation across the full hierarchy
 - Real-world sensor integration
-- Motor / action loops (deferred — see `rdf_thalamus` project)
+- Motor / action loops (deferred — continued in a `rdf_thalamus` project)
 
 ## Design Constraints
 
@@ -228,7 +228,6 @@ Each phase specifies:
 
 ## Relationship to Existing Projects
 
-- Findings from this project may feed back into `rdf_thalamus` if a viable universal-node design emerges. Specifically, the output-as-input loop tested in Phase 2 (P2-C) is structurally identical to the thalamus output loop.
 - The architecture is intended to be eventually testable as a perception encoder in the 1D physics sandbox (128 RGB pixels, 3 objects). That integration is **out of scope** for this project but should be kept in mind as the long-term target.
 
 ## References for the Implementing Agent
