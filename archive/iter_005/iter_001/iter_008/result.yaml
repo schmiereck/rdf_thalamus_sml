@@ -1,0 +1,45 @@
+P3-B, 20 epochs: 180.8s
+Result: test_acc=0.3887
+artifacts: []
+experimenter_view: 'The P3-B variant with 3,200 encoder parameters was timed at ~181s
+  for 20 epochs on a
+
+  synthetic dataset (2000 train, 800 test samples, 16x32 patches). The final test
+  accuracy
+
+  of 38.87% is only slightly above chance (25% for 4 classes). Per-class analysis
+  reveals
+
+  severe class imbalance in prediction quality: class 0 is almost perfectly recognized
+
+  (99.5%), while classes 2 and 3 are at 1.5% and 8% respectively. This suggests the
+
+  joint spatial-temporal JEPA pre-training did not learn discriminative features for
+  all
+
+  classes, possibly due to insufficient epochs, dataset size, or an encoder architecture
+
+  that is too simple for the task.
+
+  '
+log_excerpt: "Variant: P3-B, Seed: 42, Epochs: 20\n  Dataset: train=(2000, 16, 32),\
+  \ test=(800, 16, 32)\n  Encoder: P3-B, params=3200\n  Joint training (alpha=0.5)\
+  \ for 20 epochs...\n    Epoch 0: spatial_loss=23.5079, temporal_loss=23.7458, combined=23.6269\n\
+  \    Epoch 19: spatial_loss=17.9990, temporal_loss=20.1240, combined=19.0615\n \
+  \ Training completed in 176.6s\n  Classification: train=0.3645, test=0.3887\n  \
+  \  Class 0 accuracy: 0.9950\n    Class 1 accuracy: 0.4650\n    Class 2 accuracy:\
+  \ 0.0150\n    Class 3 accuracy: 0.0800\n"
+metrics:
+  class_0_accuracy: 0.995
+  class_1_accuracy: 0.465
+  class_2_accuracy: 0.015
+  class_3_accuracy: 0.08
+  elapsed_time_seconds: 180.8
+  epochs: 20
+  spatial_loss_final: 17.999
+  temporal_loss_final: 20.124
+  test_accuracy: 0.3887
+  train_accuracy: 0.3645
+notes: Timing test completed successfully. Run time ~3 min for 20 epochs on local
+  machine.
+status: ok

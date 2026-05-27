@@ -1,0 +1,100 @@
+
+[Tool Call: read_file({'path': 'src/tmp_test_phase3_timing.py'})]
+
+[Tool Result: """Quick timing test for one variant."""
+import sys
+import time
+sys.path.insert(0, 'src')
+from run_phase3 import run_single_experiment
+
+t0 = time.time()
+result = run_single_experiment(variant="P3-B", seed=42, epochs=20, batch_size=32)
+t1 = time.time()
+print(f"\nP3-B, 20 epochs: {t1-t0:.1f}s")
+print(f"Result: test_acc={result['test_acc']:.4f}")
+]
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python src/tmp_test_phase3_timing.py'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+    Variant: P3-B, Seed: 42, Epochs: 20
+      Dataset: train=(2000, 16, 32), test=(800, 16, 32)
+      Encoder: P3-B, params=3200
+      Joint training (alpha=0.5) for 20 epochs...
+        Epoch 0: spatial_loss=23.5079, temporal_loss=23.7458, combined=23.6269
+        Epoch 2: spatial_loss=23.9260, temporal_loss=25.4747, combined=24.7004
+        Epoch 4: spatial_loss=23.1810, temporal_loss=24.9846, combined=24.0828
+        Epoch 6: spatial_loss=21.4656, temporal_loss=2...]
+
+## Results
+
+The script `src/tmp_test_phase3_timing.py` ran successfully.
+
+### Elapsed Time
+- **180.8 seconds** (~3 minutes) for 20 epochs of variant **P3-B**
+
+### Training Details
+| Metric | Value |
+|---|---|
+| Variant | P3-B (Encoder params: 3,200) |
+| Dataset | Train: (2000, 16, 32), Test: (800, 16, 32) |
+| Joint training (α=0.5) | 20 epochs |
+| Spatial JEPA loss (final) | 17.9990 |
+| Temporal JEPA loss (final) | 20.1240 |
+| **Train accuracy** | **0.3645** |
+| **Test accuracy** | **0.3887** |
+
+### Per-class Test Accuracy
+| Class | Accuracy |
+|---|---|
+| Class 0 | 0.9950 |
+| Class 1 | 0.4650 |
+| Class 2 | 0.0150 |
+| Class 3 | 0.0800 |
+
+The model performs well on class 0 but struggles significantly on classes 2 and 3, suggesting the learned representations are not fully capturing the discriminative features for those categories. Training took ~3 minutes on this machine.
+
+[NUDGE RESPONSE]
+```yaml
+status: ok
+artifacts: []
+metrics:
+  elapsed_time_seconds: 180.8
+  epochs: 20
+  test_accuracy: 0.3887
+  train_accuracy: 0.3645
+  spatial_loss_final: 17.9990
+  temporal_loss_final: 20.1240
+  class_0_accuracy: 0.9950
+  class_1_accuracy: 0.4650
+  class_2_accuracy: 0.0150
+  class_3_accuracy: 0.0800
+log_excerpt: |
+    Variant: P3-B, Seed: 42, Epochs: 20
+      Dataset: train=(2000, 16, 32), test=(800, 16, 32)
+      Encoder: P3-B, params=3200
+      Joint training (alpha=0.5) for 20 epochs...
+        Epoch 0: spatial_loss=23.5079, temporal_loss=23.7458, combined=23.6269
+        Epoch 19: spatial_loss=17.9990, temporal_loss=20.1240, combined=19.0615
+      Training completed in 176.6s
+      Classification: train=0.3645, test=0.3887
+        Class 0 accuracy: 0.9950
+        Class 1 accuracy: 0.4650
+        Class 2 accuracy: 0.0150
+        Class 3 accuracy: 0.0800
+
+P3-B, 20 epochs: 180.8s
+Result: test_acc=0.3887
+experimenter_view: |
+  The P3-B variant with 3,200 encoder parameters was timed at ~181s for 20 epochs on a
+  synthetic dataset (2000 train, 800 test samples, 16x32 patches). The final test accuracy
+  of 38.87% is only slightly above chance (25% for 4 classes). Per-class analysis reveals
+  severe class imbalance in prediction quality: class 0 is almost perfectly recognized
+  (99.5%), while classes 2 and 3 are at 1.5% and 8% respectively. This suggests the
+  joint spatial-temporal JEPA pre-training did not learn discriminative features for all
+  classes, possibly due to insufficient epochs, dataset size, or an encoder architecture
+  that is too simple for the task.
+notes: "Timing test completed successfully. Run time ~3 min for 20 epochs on local machine."
+```
