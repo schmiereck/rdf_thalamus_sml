@@ -1,9 +1,8 @@
-# RDF Scientific Pre-Registration
+# Research Manager Log - Iteration 002
 
-*   **Iteration:** 002
-*   **Pre-Registration File:** src/pre_registration.md
+## Iteration 002 -> Manager [Proposed Research Plan]
 
-## 1. Hypothesis
+**Proposed Hypothesis:**
 A hierarchical encoder using kernel-3 stride-1 Sparse Autoencoder nodes
 (3 layers over 16 binary inputs, d=8 per slot) with cross-layer weight
 sharing and recursive dimensions (dim_out = dim_in per slot = 8) achieves:
@@ -18,7 +17,7 @@ classification accuracy relative to the fully independent per-node weights
 upper bound, confirming that the universal-node architecture is expressively
 viable for spatial hierarchy.
 
-## 2. Falsification Criterion
+**Proposed Falsification Criterion:**
 The hypothesis is falsified if EITHER:
 (1) P1-B (cross-layer sharing, d=8) achieves linear-probe accuracy < 80%
     on the 5-category classification task, OR
@@ -32,7 +31,7 @@ P1-E (wider output) is expected to outperform P1-B; if P1-D matches or
 exceeds P1-B, or if P1-E provides no improvement over P1-B, these
 secondary predictions are falsified (informing dimension design choices).
 
-## 3. Proposed Method
+**Proposed Method:**
 EXPERIMENTAL PROTOCOL — Phase 1: Spatial Hierarchy without Time
 
 1. CREATE src/node.py — UniversalNode class
@@ -103,4 +102,29 @@ FILES CREATED: src/node.py, src/hierarchical_encoder.py, src/dataset_phase1.py,
                src/eval_phase1.py, src/run_phase1.py, phase_1/REPORT.md
 
 ---
-*Created automatically by the RDF Orchestrator prior to iteration execution.*
+
+## Iteration 002 -> Planner [Strategic Guidance]
+
+# Manager's Note: Strategic Guidance for Phase 1
+
+Welcome to Phase 1. Moving from the 3-bit smoke test to a 16-bit spatial hierarchy is the first true test of the Universal Node hypothesis. To ensure we do not fall into self-deception, we must apply strict scientific discipline to our experimental design. 
+
+Please refine your research plan and ensure that your automatically generated `src/pre_registration.md` includes the following corrections and rigorous criteria before execution.
+
+### 1. The Untrained Baseline Control (Construction-vs-Empirical Test)
+*   **The Trap:** A linear probe operating on a flattened 10-position $\times\ d$-dimensional representation (e.g., $10 \times 8 = 80$ dimensions) of a simple 16-bit input can easily achieve high classification accuracy $(\ge 80\%)$ purely due to random projection and embedding-level separation, without *any* unsupervised representation learning occurring.
+*   **The Mandate:** You must evaluate an **untrained (randomly initialized) control** of the exact same hierarchical architecture (including the input embedding layer). Your hypothesis is partially falsified if the trained P1-B encoder does not outperform this untrained baseline by at least **15 percentage points** in linear-probe accuracy. We must prove our local training objective actually extracts structured features rather than merely serving as a random projector.
+
+### 2. Tightening the Sparsity Constraint
+*   **The Trap:** An autoencoder can easily preserve information by utilizing dense continuous values, essentially bypassing the bottleneck. Our project is explicitly about *Sparse* Universal Nodes (HSUN).
+*   **The Mandate:** Your falsification criteria must explicitly reject models that achieve high classification at the cost of representation sparsity. You must define a quantitative sparsity threshold: **The average code sparsity (fraction of elements below $10^{-3}$ in magnitude) for the trained P1-B codes must be $\ge 50\%$.** If the model achieves $\ge 80\%$ accuracy but fails this sparsity threshold, the hypothesis is falsified.
+
+### 3. Dissecting Weight Sharing & Representation Drift
+*   **The Trap:** In a hierarchical model where weights are shared across layers, training all layers simultaneously with local reconstruction losses leads to extreme representation drift. Layer $l+1$ is trying to reconstruct an input from Layer $l$ that is changing dynamically, while both layers are constrained to use the exact same weight matrix.
+*   **The Mandate:** In your pre-registration, explicitly define the training mechanics. If you use simultaneous training with gradient averaging, explain how you stabilize the moving-target problem. If you use progressive training (e.g., training layer 1, copying to layers 2/3, freezing, then training layer 2, etc.), explain how that complies with the "universal node" sharing constraint. This choice must be documented clearly as a controlled variable.
+
+### Language & Reporting Discipline
+When compiling `phase_1/REPORT.md`, strictly adhere to our non-sensationalist language guidelines. Report the raw statistical realities. If the cross-layer weight sharing (P1-B) fails to remain within 15% of the unshared baseline (P1-C), document this as a highly valuable **honest null result** that challenges the strict universal-node hypothesis. Do not attempt to tune hyperparameters post-hoc to force a pass. Proceed with these modifications.
+
+---
+

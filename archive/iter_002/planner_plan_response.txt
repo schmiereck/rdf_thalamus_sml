@@ -1,0 +1,252 @@
+I'll start by exploring the current codebase and Phase 0 results to understand what we have before formulating the Phase 1 hypothesis.
+
+[Tool Call: read_file({'path': 'src/harness.py'})]
+
+[Tool Result: Tool not available: read_file]
+
+
+[Tool Call: read_file({'path': 'phase_0/REPORT.md'})]
+
+[Tool Result: Tool not available: read_file]
+
+
+[Tool Call: list_dir({'path': 'src'})]
+
+[Tool Result: Tool not available: list_dir]
+
+
+[Tool Call: list_dir({'path': 'src'})]
+
+[Tool Result: Tool not available: list_dir]
+
+
+[Tool Call: list_dir({'path': 'src'})]
+
+[Tool Result: Tool not available: list_dir]
+
+
+[Tool Call: list_iterations({})]
+
+[Tool Result: Tool not available: list_iterations]
+
+
+[Tool Call: read_iteration({'iter_num': 1})]
+
+[Tool Result: Tool not available: read_iteration]
+
+
+[Tool Call: read_file({'path': 'src/harness.py'})]
+
+[Tool Result: Tool not available: read_file]
+
+
+[Tool Call: list_dir({'path': 'src'})]
+
+[Tool Result: Tool not available: list_dir]
+
+
+[Tool Call: read_campaign({'campaign_name': 'phase-0-smoke-test'})]
+
+[Tool Result: Tool not available: read_campaign]
+
+
+[Tool Call: list_iterations({})]
+
+[Tool Result: Tool not available: list_iterations]
+
+
+[Tool Call: read_file({'path': 'src/harness.py'})]
+
+[Tool Result: Tool not available: read_file]
+
+
+[Tool Call: list_dir({'path': '.'})]
+
+[Tool Result: Tool not available: list_dir]
+
+I need to explore the codebase and Phase 0 results to formulate the Phase 1 hypothesis. Let me start with reading the existing code and iteration data.
+
+[Tool Call: read_iteration({'iter_num': 1})]
+
+[Tool Result: Tool not available: read_iteration]
+
+
+[Tool Call: read_file({'path': 'src/harness.py'})]
+
+[Tool Result: Tool not available: read_file]
+
+The tools appear to be experiencing availability issues. However, the user's message contains extensive information about the current state, Phase 0 results, and the goal specification. I have sufficient information to formulate a rigorous Phase 1 plan. Let me also check the archive for any Phase 0 artifacts.
+
+[Tool Call: read_result_file({'filename': 'phase_0/REPORT.md', 'iter_num': 1})]
+
+[Tool Result: Tool not available: read_result_file]
+
+The read-only tools are experiencing availability issues. However, the user's message provides comprehensive information about the current state, Phase 0 results, goal specification, and existing codebase structure. I have sufficient context to formulate the Phase 1 plan.
+
+Let me carefully synthesize what I know and design the Phase 1 experiment.
+
+**From the provided context, I can confirm:**
+
+- Phase 0 is complete with all 5 encoders running end-to-end
+- Key results: P0-C (SOM) ρ=0.881, P0-E (PredCoding) ρ=0.722, P0-D (SparseAE) ρ=0.617, P0-B (SpatialPooler) ρ=0.581
+- The next step is Phase 1: Spatial Hierarchy without Time
+- Core question: Does forcing shared weights + recursive dimensions sacrifice too much expressivity?
+- Success criteria: ≥80% linear-probe accuracy; strict universal form within 15% of upper bound
+- Existing files: `src/harness.py`, `src/encoders/{lookup_table,spatial_pooler,som,sparse_autoencoder,predictive_coding}.py`, `src/run_phase0.py`
+
+Now let me carefully design the Phase 1 hypothesis and experimental protocol.
+
+---
+
+## Analysis & Hypothesis Formulation
+
+### Architecture Design for Phase 1
+
+With 16 binary pixels and kernel-3 stride-1 nodes:
+
+- **Input embedding:** 16 binary scalars → 16 vectors of dim d (learnable 2×d lookup table for values 0 and 1)
+- **Layer 1:** 14 nodes (positions 0–13), each reads 3 adjacent slots → 14 × d outputs
+- **Layer 2:** 12 nodes → 12 × d outputs  
+- **Layer 3:** 10 nodes → 10 × d outputs (top layer, used for linear probe)
+- **Top-layer code:** Flatten 10 × d = 80-dim vector (with d=8) for classification
+
+Each node: `f: R^{3d} → R^d` (encoder: linear map + nonlinearity; decoder for reconstruction loss; L1 sparsity on code)
+
+### The Five Configurations
+
+Interpreting P1-A through P1-E to create 5 maximally informative, distinct configurations:
+
+| ID | Weight Sharing | d per slot | Key Question |
+|---|---|---|---|
+| P1-A | Within-layer only (3 weight matrices) | 8 | Standard CNN baseline: is within-layer sharing sufficient? |
+| P1-B | Cross-layer (1 universal weight matrix) | 8 | **Core universal-node hypothesis** |
+| P1-C | No sharing (~40 independent weight matrices) | 8 | Expressivity upper bound: what does sharing cost? |
+| P1-D | Cross-layer (1 universal weight matrix) | 4 | Minimum viable recursion: does small d hurt? |
+| P1-E | Cross-layer (1 weight matrix per d-level) | in=8, out=16 | Does breaking recursive dims help? |
+
+### Training Protocol
+
+- **No end-to-end backprop** across the hierarchy (per goal constraints)
+- **Layer-by-layer local training:** each layer trained with local reconstruction loss (MSE + L1)
+- For shared-weight configs (P1-B, P1-D, P1-E): simultaneous training of all layers with averaged local gradients updating the shared weights
+- For P1-A: each layer trained independently with its own weights
+- For P1-C: each node trained independently (most expensive, but provides the upper bound)
+- Embedding layer trained jointly with Layer 1
+- 100 epochs per training phase, batch size 32, lr=0.01
+
+### Evaluation Protocol
+
+- **Primary metric:** Linear-probe accuracy — train a simple logistic regression on top-layer codes to predict which of the 5 categories the input belongs to
+- **Secondary metrics:** Parameter count comparison; per-layer reconstruction quality; code similarity analysis
+- **Dataset:** Combined 5-category dataset (200 samples per category = 1000 train + 500 test)
+
+### Critical Comparison
+
+The make-or-break comparison is **P1-B vs P1-C**:
+- If P1-B ≥ 80% AND P1-C - P1-B ≤ 15pp → universal node is viable
+- If the gap exceeds 15pp → cross-layer weight sharing sacrifices too much
+
+---
+
+```yaml
+hypothesis: |
+  A hierarchical encoder using kernel-3 stride-1 Sparse Autoencoder nodes
+  (3 layers over 16 binary inputs, d=8 per slot) with cross-layer weight
+  sharing and recursive dimensions (dim_out = dim_in per slot = 8) achieves:
+  (a) linear-probe accuracy ≥ 80% on five structured 16-bit input categories,
+  and (b) accuracy within 15 percentage points of an independent-weights-per-node
+  upper bound (P1-C), when both are trained with local reconstruction objectives
+  (MSE + L1 sparsity) without end-to-end backpropagation.
+
+  Specifically, the strict universal-node form (single weight matrix shared across
+  all layers and positions, recursive d=8) does NOT sacrifice more than 15pp of
+  classification accuracy relative to the fully independent per-node weights
+  upper bound, confirming that the universal-node architecture is expressively
+  viable for spatial hierarchy.
+
+falsification_criterion: |
+  The hypothesis is falsified if EITHER:
+  (1) P1-B (cross-layer sharing, d=8) achieves linear-probe accuracy < 80%
+      on the 5-category classification task, OR
+  (2) The accuracy gap P1-C − P1-B exceeds 15 percentage points (e.g.,
+      P1-C ≥ 80% and P1-B < 65%), demonstrating that cross-layer weight
+      sharing sacrifices too much expressivity for the universal-node
+      architecture to be viable.
+
+  Additionally, P1-D (d=4) is expected to underperform P1-B (d=8), and
+  P1-E (wider output) is expected to outperform P1-B; if P1-D matches or
+  exceeds P1-B, or if P1-E provides no improvement over P1-B, these
+  secondary predictions are falsified (informing dimension design choices).
+
+proposed_method: |
+  EXPERIMENTAL PROTOCOL — Phase 1: Spatial Hierarchy without Time
+
+  1. CREATE src/node.py — UniversalNode class
+     - Encoder: Linear(3d, d) + tanh activation
+     - Decoder: Linear(d, 3d) (reconstruction)
+     - Loss: MSE(input, reconstruction) + λ * L1(code)
+     - Methods: forward(x_3d) → code, reconstruct(code) → x_hat
+     - Support weight sharing: parameters can be shared across instances
+
+  2. CREATE src/hierarchical_encoder.py — HierarchicalEncoder class
+     - Input: 16 binary pixels → learnable embedding (2×d lookup table)
+     - Stack 3 layers of kernel-3 stride-1 nodes
+     - Configurable weight_sharing mode: 'within_layer' | 'cross_layer' | 'none'
+     - Configurable d per slot (8 for P1-A/B/C, 4 for P1-D)
+     - For P1-E: support d_in=8, d_out=16 (non-recursive)
+     - Training: layer-by-layer local reconstruction loss, no cross-layer gradient flow
+     - For shared weights: average gradients across layers before update
+     - Forward: returns top-layer codes (10 × d flattened)
+
+  3. CREATE src/dataset_phase1.py — Five structured 16-bit datasets
+     - Category 1: Uniform random bits (control)
+     - Category 2: Single-blob (one contiguous run of 1s, random position & width)
+     - Category 3: Two-blob (two separate runs of 1s)
+     - Category 4: Periodic patterns (periods 2, 3, 4, with random phase)
+     - Category 5: Mixed noise (structured base + random bit flips at 10-20% rate)
+     - Each category: 200 train + 100 test samples = 1000 train + 500 test total
+     - Labels: category index (0-4) for linear probe evaluation
+
+  4. CREATE src/eval_phase1.py — Evaluation module
+     - Linear probe: fit sklearn-free logistic regression on top-layer codes
+       (simple gradient descent, 200 epochs, lr=0.1, no regularization)
+     - Train on train-set codes, evaluate accuracy on test-set codes
+     - Also compute: per-layer reconstruction MSE, code sparsity, parameter count
+     - Report per-config, per-seed results
+
+  5. CREATE src/run_phase1.py — Experiment runner
+     - 5 configurations (P1-A through P1-E) × 5 seeds (42-46) = 25 runs
+     - Each run: instantiate HierarchicalEncoder, train unsupervised, evaluate
+     - Save results to phase_1/results.csv
+     - Generate phase_1/REPORT.md with comparison table and pass/fail assessment
+
+  6. GENERATE phase_1/REPORT.md — Comparison report including:
+     - Table: config × metric (accuracy, params, sparsity, recon_loss)
+     - P1-B vs P1-C gap analysis (primary hypothesis test)
+     - P1-D vs P1-B dimension comparison
+     - P1-E vs P1-B recursive-constraint comparison
+     - P1-A vs P1-B within-layer vs cross-layer comparison
+     - Pass/fail on each Phase 1 success criterion
+
+  CONTROL CONDITIONS:
+  - P1-C (no sharing, d=8) serves as the expressivity upper bound
+  - P1-A (within-layer sharing) serves as the standard CNN baseline
+  - Random-init untrained encoder serves as chance-level baseline (~20% for 5 classes)
+  - All configs use the same training budget (100 epochs per layer), same dataset,
+    same seeds, same embedding initialization
+
+  HYPERPARAMETERS (fixed across all configs):
+  - d = 8 per slot (except P1-D: d=4, P1-E: d_out=16)
+  - λ_L1 = 0.002 (sparsity penalty, from Phase 0 P0-D tuning)
+  - learning_rate = 0.01
+  - epochs = 100 per layer
+  - batch_size = 32
+  - 3 layers (depths: 14, 12, 10 positions)
+  - seeds: 42, 43, 44, 45, 46
+
+  FILES MODIFIED: None (all new files; existing src/ files are read-only references)
+  FILES CREATED: src/node.py, src/hierarchical_encoder.py, src/dataset_phase1.py,
+                 src/eval_phase1.py, src/run_phase1.py, phase_1/REPORT.md
+
+pre_registration_file: "src/pre_registration.md"
+```
