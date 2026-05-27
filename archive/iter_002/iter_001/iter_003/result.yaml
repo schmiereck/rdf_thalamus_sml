@@ -1,0 +1,32 @@
+artifacts:
+- src/node.py
+experimenter_view: 'The gradient check for `x_3d` was failing initially because the
+  analytical
+
+  derivation only accounted for the path from `x` through the encoder (`d_z @ W_enc.T`).
+
+  However, the MSE loss `mean((recon - x)^2)` also depends directly on `x`, contributing
+
+  a direct gradient term of `-d_r` (which equals `2/(B*D_in) * (x - recon)`). By adding
+
+  this direct path to the gradient computation, the analytical gradients now perfectly
+
+  align with the central-difference numerical approximations. All 5 parameter/input
+
+  gradients pass the verification with relative errors well below the 1e-5 threshold.
+
+  '
+log_excerpt: "UniversalNode -- Numerical Gradient Check\n============================================================\n\
+  \     W_enc:  rel_err = 4.15e-08  PASS\n     b_enc:  rel_err = 8.80e-09  PASS\n\
+  \     W_dec:  rel_err = 5.55e-06  PASS\n     b_dec:  rel_err = 8.28e-08  PASS\n\
+  \      x_3d:  rel_err = 5.42e-08  PASS\n------------------------------------------------------------\n\
+  \  ALL GRADIENTS VERIFIED -- analytical approx numerical\n============================================================\n"
+metrics:
+  W_dec_rel_err: 5.55e-06
+  W_enc_rel_err: 4.15e-08
+  b_dec_rel_err: 8.28e-08
+  b_enc_rel_err: 8.8e-09
+  x_3d_rel_err: 5.42e-08
+notes: Input gradient x_3d corrected by including direct loss dependency, verification
+  passed.
+status: ok

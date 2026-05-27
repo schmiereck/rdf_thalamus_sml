@@ -149,7 +149,7 @@ class UniversalNode:
             dL/dz   = dL/da * (1 - a^2)                           (B, D_out)
             dL/dWenc = x^T @ dL/dz                                 (D_in, D_out)
             dL/dbenc = sum_b(dL/dz)                                (D_out,)
-            dL/dx   = dL/dz @ W_enc^T  --> reshape to (B, 3, d)
+            dL/dx   = dL/dz @ W_enc^T - d_r  --> reshape to (B, 3, d)
         """
         batch = x_3d.shape[0]
         D_in = self.d_in       # = 3 * d
@@ -181,7 +181,9 @@ class UniversalNode:
         d_b_enc = np.sum(d_z, axis=0)                  # (D_out,)
 
         # --- Gradient w.r.t. input x_3d ---
-        d_x_flat = d_z @ self.W_enc.T                  # (B, D_in)
+        # The loss MSE = mean((recon - x)**2) depends on x directly (with gradient -d_r)
+        # as well as indirectly through the encoder (with gradient d_z @ W_enc^T)
+        d_x_flat = d_z @ self.W_enc.T - d_r            # (B, D_in)
         d_x_3d = d_x_flat.reshape(batch, 3, self.d)    # (B, 3, d)
 
         return {
