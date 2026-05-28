@@ -1,61 +1,114 @@
+# Phase 3: Complete Remaining Experiments
 
-# Fix Phase 3 Bugs and Rerun All Experiments
+The optimized experiment runner script exists at `src/run_phase3_optimized.py`. Results so far are in `phase_3/phase3_full_results.csv` with 7 rows completed:
+- Untrained: seeds 42, 43, 44, 45, 46 (5/5 done)
+- P3-C: seeds 42, 43 (2/5 done, need 44, 45, 46)
+- P3-B: 0/5 done
+- P3-A: 0/5 done
 
-Three critical bugs were identified in the Phase 3 code. Fix all three, then run the complete experiment suite (4 variants × 5 seeds = 20 runs).
+Total remaining: 13 runs.
 
-## Bug 1: Wrong Weight Matrix in Temporal Backward
-File: `src/spatiotemporal_encoder.py`, line ~388
+## Your Task
 
-In the temporal backward pass, the code uses `self.master_spatial.W_enc.T` instead of `self.master_temporal.W_enc.T`. This corrupts gradient flow for P3-B and P3-A phase 2.
+Write and run a simple Python script that completes the remaining 13 experiment runs, APPENDING results to the existing CSV file. Do NOT delete or overwrite the existing results.
 
-**Fix**: Replace `self.master_spatial.W_enc.T` with `self.master_temporal.W_enc.T` in the temporal backward section.
+## Script to Write
 
-## Bug 2: Spurious Average-Pooling Gradient in Training
-File: `src/spatiotemporal_encoder.py`, lines ~358-365
+Create `src/run_remaining_phase3.py`:
 
-The backward() method adds a constant gradient from average pooling (`np.full_like(x_final, 1/(T*S))`) to `dL_dx` at the start of temporal backward. But average pooling is only used at evaluation time for the linear probe — it should NOT contribute a gradient during training. This phantom gradient pushes all representations in a direction unrelated to JEPA loss.
+```python
+"""Complete remaining Phase 3 experiments, appending to existing CSV."""
+import sys, os, csv, time
+sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+import numpy as np
 
-**Fix**: Remove the average-pooling gradient from backward(). The initial `dL_dx` at the start of temporal backward should be `np.zeros_like(x_final)`, not the constant from mean pooling. The only gradients should come from the JEPA code_grads passed in as arguments.
+# Import the experiment runner
+from run_phase3_optimized import run_single_experiment_opt, save_result_incrementally, N_TRAIN_PER_CLASS, N_TEST_PER_CLASS, EPOCHS, BATCH_SIZE, LR, RESULTS_CSV
 
-## Bug 3: Double Adam Step for P3-C
-File: `src/run_phase3.py`, lines ~156-190
+# Read existing results to determine what's done
+done = set()
+if os.path.exists(RESULTS_CSV):
+    with open(RESULTS_CSV) as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            done.add((row['variant'], int(row['seed'])))
 
-For P3-C variant, `adam_temporal` and `adam_spatial` are set to the same object. This means `.step()` is called twice on the same parameters per batch:
-- First call: applies spatial gradients 
-- Second call: applies spatial + temporal gradients COMBINED (because they share the same object)
+# Remaining runs in priority order (P3-C first for hypothesis testing)
+remaining = []
+for variant in ["P3-C", "P3-B", "P3-A"]:  # Skip Untrained (all done)
+    for seed in [42, 43, 44, 45, 46]:
+        if (variant, seed) not in done:
+            remaining.append((variant, seed))
 
-This effectively applies spatial gradients twice and Adam's running statistics are corrupted.
+print(f"Remaining runs: {len(remaining)}")
+print(f"Runs: {remaining}")
 
-**Fix**: For P3-C, use a SINGLE Adam optimizer for the shared master node, and call .step() ONCE per batch with the combined (spatial + temporal) gradients. Do NOT call step() separately for spatial and temporal.
+for i, (variant, seed) in enumerate(remaining):
+    print(f"\n{'='*70}")
+    print(f"  [{i+1}/{len(remaining)}] {variant}, seed={seed}")
+    print(f"{'='*70}")
+    t0 = time.time()
+    result = run_single_experiment_opt(
+        variant=variant,
+        seed=seed,
+        epochs=EPOCHS,
+        batch_size=BATCH_SIZE,
+        lr=LR,
+        update_encoder=(variant != "Untrained"),
+        n_train_per_class=N_TRAIN_PER_CLASS,
+        n_test_per_class=N_TEST_PER_CLASS,
+    )
+    save_result_incrementally(result, RESULTS_CSV)
+    t1 = time.time()
+    print(f"  Completed in {t1-t0:.1f}s. Test acc: {result['test_acc']:.4f}")
+    print(f"  Saved to {RESULTS_CSV}")
 
-## Implementation Steps
+print(f"\nAll {len(remaining)} runs completed!")
+```
 
-1. Fix all three bugs in `src/spatiotemporal_encoder.py` and `src/run_phase3.py`
-2. Run the self-test in `src/spatiotemporal_encoder.py` to verify the shapes are still correct
-3. Run the full experiment suite:
-   ```
-   cd src && python run_phase3.py
-   ```
-   This runs 4 variants (P3-A, P3-B, P3-C, Untrained) × 5 seeds (42-46) = 20 runs, 200 epochs each.
-   It also runs shortcut baselines.
+## Then Run It
 
-4. Save all results to `phase_3/phase3_results.csv` and `phase_3/shortcut_baselines.csv`
+```bash
+cd C:\Users\thomas\Projekte\rdf_thalamus_sml
+python src/run_remaining_phase3.py
+```
 
-## Important Notes
+## Also Run Shortcut Baselines
 
-- The dataset shortcut baselines should still pass (≤50% accuracy for 4-class)
-- After the fix, trained variants should significantly outperform the untrained baseline
-- All 5 seeds must be run for proper statistical analysis
-- The training should converge to reasonable JEPA losses (not 20-25)
-- If training seems unstable, consider reducing the learning rate or adjusting the training
+After the main experiments, also run shortcut baselines for all 5 seeds:
+
+```python
+from run_phase3_optimized import run_shortcut_baselines, SHORTCUT_CSV, N_TRAIN_PER_CLASS, N_TEST_PER_CLASS, SEEDS
+import csv
+
+shortcut_rows = []
+for seed in SEEDS:
+    rows = run_shortcut_baselines(seed, N_TRAIN_PER_CLASS, N_TEST_PER_CLASS)
+    shortcut_rows.extend(rows)
+
+with open(SHORTCUT_CSV, "w", newline="") as f:
+    writer = csv.DictWriter(f, fieldnames=["seed", "baseline_name", "train_acc", "test_acc"])
+    writer.writeheader()
+    writer.writerows(shortcut_rows)
+```
 
 ## Expected Timing
 
-Each run takes ~20-60 seconds for 200 epochs. 20 runs = ~10-20 minutes total.
+- P3-C: ~95s/run × 3 remaining = ~285s
+- P3-B: ~95s/run × 5 = ~475s  
+- P3-A: ~190s/run × 5 = ~950s (2x due to sequential training)
+- Shortcut baselines: ~30s
+- Total: ~1740s ≈ 29 min
 
-## Output
+## Critical Notes
 
-After all runs complete:
-- Print the summary table
-- Verify that results are saved to `phase_3/phase3_results.csv`
-- Verify shortcut baselines are saved to `phase_3/shortcut_baselines.csv`
+1. The script MUST append to the existing CSV, not overwrite it
+2. Each run saves incrementally — if interrupted, we keep partial results
+3. Working directory: C:\Users\thomas\Projekte\rdf_thalamus_sml
+4. Python is on PATH
+5. The `run_phase3_optimized.py` uses 30 epochs, 200 train/class, 100 test/class, batch=64, lr=1e-3
+
+## Output Files
+
+- `phase_3/phase3_full_results.csv` — complete with all 20 rows
+- `phase_3/shortcut_baselines.csv` — shortcut baseline results
