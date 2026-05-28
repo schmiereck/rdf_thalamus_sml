@@ -1,113 +1,158 @@
+# Phase 3: Final Cleanup, Shortcut Baselines, and Statistical Analysis
 
-# Run Remaining Phase 3 Seeds (43-46) for All Variants
+Working directory: `C:\Users\thomas\Projekte\rdf_thalamus_sml`
 
-The Phase 3 spatiotemporal experiments have seed 42 completed. You need to run seeds 43, 44, 45, 46 for all 4 variants (P3-A, P3-B, P3-C, Untrained) — that's 16 more runs.
+All 20 experiment runs (4 variants × 5 seeds) have been completed. The results are in `phase_3/phase3_full_results.csv` but have many duplicate rows from multiple background processes. You need to:
 
-Each run takes about 15-35 seconds. Total should be ~5-10 minutes.
+## Step 1: Clean Up CSV (deduplicate)
 
-## Approach
-
-Create a simple Python script that runs only the remaining seeds and APPENDS results to the existing CSV. Then run it.
-
-The existing results file is at `phase_3/phase3_results.csv` with these columns:
-variant,seed,train_acc,test_acc,final_spatial_jepa_loss,final_temporal_jepa_loss,training_time_sec,class_0_acc,class_1_acc,class_2_acc,class_3_acc
-
-Here's the script to create (save as `src/run_remaining_seeds.py`):
+Write and run a script to deduplicate the CSV, keeping only the FIRST occurrence of each (variant, seed) pair:
 
 ```python
-"""Run remaining Phase 3 seeds (43-46) and append to results CSV."""
-import csv, os, sys, time
-import numpy as np
-sys.path.insert(0, os.path.dirname(__file__))
+import csv
 
-from run_phase3 import (
-    run_single_experiment, run_shortcut_baselines,
-    SEEDS, OUTPUT_DIR, RESULTS_CSV, SHORTCUT_CSV
-)
+INPUT = "phase_3/phase3_full_results.csv"
+rows = []
+seen = set()
+with open(INPUT) as f:
+    reader = csv.DictReader(f)
+    fieldnames = reader.fieldnames
+    for row in reader:
+        key = (row['variant'], row['seed'])
+        if key not in seen:
+            seen.add(key)
+            rows.append(row)
 
-REMAINING_SEEDS = [43, 44, 45, 46]
-VARIANTS = ["P3-A", "P3-B", "P3-C", "Untrained"]
-
-def main():
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    
-    # Check which (variant, seed) combos already exist
-    existing = set()
-    if os.path.exists(RESULTS_CSV):
-        with open(RESULTS_CSV, "r") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                existing.add((row["variant"], int(row["seed"])))
-    
-    all_results = []
-    for variant in VARIANTS:
-        for seed in REMAINING_SEEDS:
-            if (variant, seed) in existing:
-                print(f"  Skipping {variant} seed={seed} (already done)")
-                continue
-            print(f"\n  Running {variant} seed={seed}...")
-            result = run_single_experiment(
-                variant=variant,
-                seed=seed,
-                epochs=200,
-                batch_size=32,
-                lr=1e-3,
-                update_encoder=(variant != "Untrained"),
-            )
-            all_results.append(result)
-            print(f"  → test_acc={result['test_acc']:.4f}")
-    
-    # Append to existing CSV
-    if all_results:
-        fieldnames = [
-            "variant", "seed", "train_acc", "test_acc",
-            "final_spatial_jepa_loss", "final_temporal_jepa_loss",
-            "training_time_sec",
-            "class_0_acc", "class_1_acc", "class_2_acc", "class_3_acc",
-        ]
-        file_exists = os.path.exists(RESULTS_CSV)
-        with open(RESULTS_CSV, "a", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            # Only write header if file doesn't exist
-            if not file_exists:
-                writer.writeheader()
-            writer.writerows(all_results)
-        print(f"\n  Appended {len(all_results)} results to {RESULTS_CSV}")
-    
-    # Also run shortcut baselines for remaining seeds
-    for seed in REMAINING_SEEDS:
-        rows = run_shortcut_baselines(seed)
-        # Append to shortcut CSV
-        with open(SHORTCUT_CSV, "a", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=["seed", "baseline_name", "train_acc", "test_acc"])
-            writer.writerows(rows)
-    
-    # Print summary of all results
-    all_data = []
-    with open(RESULTS_CSV, "r") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            all_data.append(row)
-    
-    print("\n" + "=" * 70)
-    print("  FULL RESULTS SUMMARY")
-    print("=" * 70)
-    for variant in VARIANTS:
-        rows = [r for r in all_data if r["variant"] == variant]
-        if not rows:
-            continue
-        accs = [float(r["test_acc"]) for r in rows]
-        print(f"  {variant:15s}: test_acc={np.mean(accs):.4f}±{np.std(accs):.4f}  (n={len(rows)})")
-
-if __name__ == "__main__":
-    main()
+with open(INPUT, 'w', newline='') as f:
+    writer = csv.DictWriter(f, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(rows)
+print(f"Cleaned: {len(rows)} unique rows")
 ```
 
-Then run it:
-```
-cd <project_root> && python src/run_remaining_seeds.py
+## Step 2: Run Shortcut Baselines
+
+Create and run a script to compute shortcut baselines:
+
+```python
+import sys, os, csv
+sys.path.insert(0, 'src')
+from spatiotemporal_dataset import generate_spatiotemporal_dataset, evaluate_all_shortcut_baselines
+
+SEEDS = [42, 43, 44, 45, 46]
+shortcut_rows = []
+for seed in SEEDS:
+    ds = generate_spatiotemporal_dataset(
+        n_train_per_class=200,
+        n_test_per_class=100,
+        noise_flip_prob=0.10,
+        seed=seed,
+    )
+    results = evaluate_all_shortcut_baselines(
+        ds["train_x"], ds["train_y"], ds["test_x"], ds["test_y"],
+        frames_to_test=[0, 8, 16, 24, 31],
+    )
+    for name, res in results.items():
+        shortcut_rows.append({
+            "seed": seed,
+            "baseline_name": name,
+            "train_acc": res["train_acc"],
+            "test_acc": res["test_acc"],
+        })
+
+with open("phase_3/shortcut_baselines.csv", "w", newline="") as f:
+    writer = csv.DictWriter(f, fieldnames=["seed", "baseline_name", "train_acc", "test_acc"])
+    writer.writeheader()
+    writer.writerows(shortcut_rows)
+print(f"Shortcut baselines: {len(shortcut_rows)} rows")
+for row in shortcut_rows:
+    print(f"  {row['seed']}/{row['baseline_name']}: train={row['train_acc']:.4f} test={row['test_acc']:.4f}")
 ```
 
-Wait for it to complete. After it's done, read the full results CSV and report all numbers.
+## Step 3: Comprehensive Statistical Analysis
 
-IMPORTANT: If it's taking too long, you can reduce epochs from 200 to 100 for speed. But 200 is preferred for consistency with the seed 42 results.
+Create and run a comprehensive analysis script. Read the pre-registration file at `src/pre_registration.md` for the exact falsification criteria.
+
+The analysis should:
+1. Load the cleaned CSV
+2. Compute mean ± std test accuracy for each variant
+3. Compute per-class accuracy for each variant (mean across seeds)
+4. Test the pre-registered falsification criteria:
+   - F1: P3-C vs Untrained (paired t-test, Cohen's d, gain >= 8pp)
+   - F2: P3-B vs P3-C (penalty <= 10pp)
+   - F3: P3-C vs P3-A (within 20pp)
+   - F4: P3-C JEPA loss <= 2× P3-B JEPA loss
+5. Check if any task has Untrained per-class accuracy > 60% (Research Manager mandate)
+6. Compare with shortcut baselines
+7. Parameter count comparison
+
+Write the results to `phase_3/REPORT.md`.
+
+## Step 4: Write Phase 3 Report
+
+Write `phase_3/REPORT.md` with the following structure:
+
+```markdown
+# Phase 3: Unified Spatiotemporal Grid — Results Report
+
+## Experiment Configuration
+- Epochs: 30
+- Train per class: 200
+- Test per class: 100
+- Batch size: 64
+- Learning rate: 1e-3
+- Seeds: 42-46
+
+## Architecture Summary
+| Variant | Description | Weight Sets | Params |
+|---------|-------------|-------------|--------|
+| P3-A    | Sequential spatial→temporal | 2 (W_spatial, W_temporal) | ? |
+| P3-B    | Joint training, separate weights | 2 (W_spatial, W_temporal) | ? |
+| P3-C    | Unified, shared weights | 1 (W_shared) | ? |
+| Untrained | P3-B architecture, frozen weights | 2 (random, frozen) | ? |
+
+## Main Results
+
+| Variant | Test Acc (mean±std) | Spatial Loss | Temporal Loss |
+|---------|---------------------|--------------|---------------|
+| P3-A    | ?±?                 | ?            | ?             |
+| P3-B    | ?±?                 | ?            | ?             |
+| P3-C    | ?±?                 | ?            | ?             |
+| Untrained | ?±?               | ?            | ?             |
+
+## Per-Class (Per-Task) Accuracies
+[Table showing per-class accuracy for each variant]
+
+## Pre-Registration Falsification Tests
+
+### F1: P3-C vs Untrained
+- Gain: ?pp
+- Paired t-test: t=?, p=?
+- Cohen's d: ?
+- Verdict: PASS/FAIL
+
+[Similar for F2, F3, F4]
+
+## Shortcut Baseline Results
+[Table]
+
+## Per-Task Untrained Baseline Analysis
+[Flag any task where Untrained > 60%]
+
+## Key Findings
+[Summarize]
+
+## Conclusions
+[Clear statement about whether the universal parameter hypothesis is supported]
+```
+
+IMPORTANT: The report must be factual and avoid speculative language. If P3-C fails to outperform untrained, state this clearly.
+
+## Pre-Registration Falsification Criteria (from src/pre_registration.md)
+
+- F1: P3-C mean test accuracy - Untrained mean test accuracy < 8pp OR p >= 0.05 OR Cohen's d < 1.0
+- F2: P3-B mean test accuracy - P3-C mean test accuracy > 10pp
+- F3: P3-C mean test accuracy < P3-A mean test accuracy - 20pp
+- F4: P3-C JEPA training loss > 2× P3-B final JEPA loss
+
+If ANY of F1, F2, F3, F4 is triggered, the specific aspect of the hypothesis is falsified.
