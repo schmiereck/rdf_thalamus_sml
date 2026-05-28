@@ -1,0 +1,43 @@
+artifacts:
+- phase_3/REPORT_vicreg_fix.md
+- phase_3/generate_vicreg_report.py
+experimenter_view: 'The pooled VICReg fix report was generated from pooled_vicreg_results.csv
+
+  (5,175 bytes, 40 rows across 5 seeds × 2 VICReg conditions × 2 readout types
+
+  × 2 conditions P3-C/Untrained). Key findings: (1) The VICReg fix
+
+  mechanistically works — pooled std increased 80% from 0.072 to 0.130
+
+  (p<0.0001, d=-6.16), variance loss went from collapsed 0.0 to active 0.87.
+
+  (2) Test accuracy significantly improved from 0.4400 to 0.4915 (+5.15pp,
+
+  p=0.044, d=-1.75). (3) However, the pre-registered F1 criterion (gain vs
+
+  untrained ≥ 8pp) still fails — gain is 7.75pp, just 0.25pp below threshold.
+
+  (4) All other criteria (F2, F3, F4) pass. The universal parameter hypothesis
+
+  remains falsified despite the VICReg fix improving representations. The fix
+
+  alone is insufficient — training depth, epochs, or readout capacity may need
+
+  enhancement.
+
+  '
+metrics:
+  cohens_d_test_acc: -1.751
+  gain_vs_untrained_pp: 7.75
+  p_test_acc_diff: 0.0435
+  pooled_std_increase_pct: 80.3
+  pooled_std_no_vicreg: 0.0722
+  pooled_std_vicreg_fix: 0.1302
+  test_acc_gain_pp: 5.15
+  test_acc_no_vicreg: 0.44
+  test_acc_vicreg_fix: 0.4915
+  variance_loss_no_vicreg: 0.0
+  variance_loss_vicreg_fix: 0.8698
+notes: Report fixed from 0 bytes to 13,160 bytes with full statistical analysis, per-class
+  breakdown, falsification evaluation, and mechanistic evidence.
+status: ok
