@@ -1,0 +1,53 @@
+complexity: high
+estimated_runtime_sec: 2400
+iter_id: '7.2'
+started_at: '2026-05-28T13:11:47.632780'
+status: running
+task: "\n# Phase 4: Run Full Experiment &amp; Generate Report\n\n## Task\nRun the\
+  \ full Phase 4 experiment and generate the statistical analysis report.\n\n### Step\
+  \ 1: Run Full Experiment\nExecute:\n```\ncd /home/user && python src/run_phase4.py\n\
+  ```\n\nThis runs 45 experiments (8 trained conditions × 5 seeds + 5 untrained baselines\
+  \ × 5 seeds),\n30 epochs each, with multiprocessing (5 workers). Expected runtime:\
+  \ ~20-30 minutes.\n\nWait for it to complete. The results will be saved to `phase_4/phase4_results.csv`.\n\
+  \n### Step 2: Verify Results\nAfter completion, read `phase_4/phase4_results.csv`\
+  \ and verify:\n- All 45 rows present (9 conditions × 5 seeds)\n- No NaN or infinite\
+  \ values\n- Test accuracies are reasonable (between 0.25 and 0.95)\n\n### Step 3:\
+  \ Generate Statistical Report\nCreate `phase_4/REPORT.md` with comprehensive analysis.\n\
+  \nRead the CSV and compute:\n\n**A. Comparison Table**\nFor each of the 9 conditions,\
+  \ compute:\n- Mean ± std test accuracy across 5 seeds\n- Mean train accuracy\n-\
+  \ Mean pooled_std\n- Mean final_loss\n- Mean training_time_sec\n\n**B. Statistical\
+  \ Tests**\nFor each trained condition vs Untrained baseline:\n- Paired t-test (pair\
+  \ by seed)\n- Cohen's d (paired)\n- Mark significance: * p&lt;0.05, ** p&lt;0.01,\
+  \ *** p&lt;0.001\n\n**C. VICReg Ablation Analysis**\nFor each objective (JEPA, SFA,\
+  \ Hebbian, Recon):\n- Compare with VICReg vs without VICReg\n- Paired t-test and\
+  \ Cohen's d\n- Report the difference in mean test accuracy\n\n**D. Falsification\
+  \ Criteria Evaluation**\n- F1: JEPA + pooled VICReg ≥ 55%? Report mean and individual\
+  \ seed values.\n- F2: Does any other objective (with OR without VICReg) exceed JEPA\
+  \ + pooled VICReg by ≥ 3pp?\n  Compute: max(other_means) - jepa_vicreg_mean. If\
+  \ ≥ 3pp, F2 is triggered.\n- F3: For each objective X, is accuracy(X without VICReg)\
+  \ ≥ accuracy(X with VICReg)?\n  Report for each objective.\n\n**E. Per-Class Accuracy\
+  \ Analysis**\nFor each condition, compute mean per-class accuracy across seeds.\n\
+  Note any classes where specific objectives excel or fail.\n\n**F. Manager's Directives**\n\
+  1. **Reconstruction without VICReg**: Report its accuracy. The Manager noted reconstruction\n\
+  \   \"natively resists collapse.\" Does the evidence support this? Compare pooled_std\
+  \ of\n   Recon without VICReg vs other objectives without VICReg.\n2. **SFA + VICReg\
+  \ as standard SFA**: Document that SFA+VICReg is the standard gradient-based\n \
+  \  SFA formulation (slowness loss + Lagrangian relaxation of variance/decorrelation\
+  \ constraints).\n3. **Hebbian mathematical definition**: Document that Hebbian =\
+  \ variance maximization on\n   intermediate codes, which is the gradient-based equivalent\
+  \ of Oja's rule. It is DISTINCT\n   from pooled VICReg because it operates on all\
+  \ intermediate codes and maximizes variance.\n\n**G. Formal Recommendation**\nBased\
+  \ on the evidence, recommend the default objective for Phase 5.\nConsider: accuracy,\
+  \ training stability, compute cost, and theoretical elegance.\n\n**Report Format:**\n\
+  Use markdown with tables. Include:\n- Title and date\n- Experiment Configuration\
+  \ section\n- Mathematical Formulations section (with LaTeX-style equations)\n- Results\
+  \ section with comparison table\n- Statistical Analysis section\n- Falsification\
+  \ Criteria section\n- VICReg Ablation section\n- Per-Class Analysis section\n- Manager's\
+  \ Directives section\n- Recommendation section\n\n## Key Notes\n- The dry run showed\
+  \ SFA+VICReg at 70.75% (1 epoch) vs JEPA+VICReg at 62.25%.\n  This is a potential\
+  \ F2 trigger if it holds at 30 epochs.\n- Reconstruction without VICReg was only\
+  \ 42.25% in the dry run (1 epoch).\n  The Manager expected it to \"natively resist\
+  \ collapse.\" Check if 30 epochs\n  improves this, and examine pooled_std to assess\
+  \ whether collapse actually occurred.\n- The `src/run_phase4.py` file already exists\
+  \ and has been dry-run tested.\n  You do NOT need to modify it — just run it and\
+  \ analyze results.\n"

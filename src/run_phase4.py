@@ -707,7 +707,7 @@ def main(dry_run: bool = False):
     if dry_run:
         all_results = [run_single_experiment(t) for t in tasks]
     else:
-        n_workers = min(3, total_tasks)
+        n_workers = min(1, total_tasks)
         print(f"  Using {n_workers} workers...")
         with Pool(processes=n_workers) as pool:
             # Use imap_unordered for better progress visibility

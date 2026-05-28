@@ -1,28 +1,354 @@
 
-[Tool Call: read_file({'path': 'current_state.md'})]
+[Tool Call: list_iterations({})]
 
-[Tool Result: # Current Research State — HSUN Project
-**Last updated:** After Phase 6 (iter_006, sub-agents 6.1–6.3)
+[Tool Result: iter | status          | hypothesis
+-----|-----------------|----------
+001  | ok              | phase-1-setup: establish spatial hierarchy with shared-weight stacked nodes; test whether P0-D/P0-C/P0-E can be stacked with dim_out=dim_in recursion and cross-layer weight sharing within 15% of per-layer upper bound
+002  | ok              | phase-2: the reconstruction objective is misaligned with classification; test alternative local objectives (predictive coding, SFA, Hebbian, contrastive) on the corrected hierarchical architecture with simultaneous training to determine if any local objective can reach ≥60% accuracy
+003  | ok              | phase-3: JEPA local objective confirmed at 62.1% (d=8); bottleneck refuted; temporal unification path cleared for Phase 2
+004  | ok              | phase-4: zero-shot spatial→temporal weight transfer is falsified; P2-D with temporal JEPA is competitive (65.3%, only 1.7pp below P2-A); node type is universal but weights are axis-specific
+005  | ok       ...]
 
-## Goal
-Investigate an architecture for unsupervised representation learning built from
-a single, universal node type. Phase 3 (Unified Spatiotemporal Grid) is now RESOLVED.
 
-## Confirmed (with iter/sub-agent references)
+[Tool Call: read_iteration({'iter_num': 7})]
 
-### Phase 3 Resolution (iter_006)
-1. **VICReg was NOT omitted** — it was present in JEPALoss with λ_var=25, λ_cov=25
-   (iter_006, 6.1 code audit). The original pre-registered hypothesis was factually
-   incorrect.
+[Tool Result: No record found for iteration 7.
 
-2. **VICReg on intermediate codes is INEFFECTIVE** for the pooled representation
-   (iter_006, 6.2 diagnostic):
-   - Per-dim stds at intermediate layers: ~0.07-0.08 (target ≥1.0)
-   - VICReg gradient per element ≈ 0.0008/elem vs prediction gradient ≈ 0.016/elem
-   - The prediction gradient overwhelms VICReg by ~20×
-   - Mathematical cause: M = B*T*S = 28,672 elements dilutes the gradient
+## Files in archive/iter_007/
+  iter_001/stderr.txt  (0 bytes)
+  iter_001/stdout.txt  (67,132 bytes)
+  iter_002/checkpoint.yaml  (4,324 bytes)
+  manager_log.md  (7,476 bytes)
+  planner_plan_prompt.txt  (30,208 bytes)
+  planner_plan_response.txt  (25,196 bytes)
+  planner_prompt.txt  (38,355 bytes)
+  planner_prompt_turn_1.txt  (38,355 bytes)
+  proposed_plan.yaml  (3,594 bytes)]
 
-3. **Mean-pooling destroys discriminative information** (iter_006,...]
+
+[Tool Call: read_result_file({'iter_num': 7, 'filename': 'manager_log.md'})]
+
+[Tool Result: # Research Manager Log - Iteration 007
+
+## Iteration 007 -> Manager [Proposed Research Plan]
+
+**Proposed Hypothesis:**
+On the Phase 3 spatiotemporal benchmark (P3-C architecture, 1,600 params,
+spatial_pooled_then_flat readout, pooled VICReg applied to all objectives),
+JEPA + pooled VICReg is the best training objective. Specifically:
+(H1) JEPA + pooled VICReg achieves test accuracy ≥ 58% (within 4pp of the
+     61.55% reference from iter_006).
+(H2) No other objective (SFA, Hebbian, Contrastive, Reconstruction) with
+     pooled VICReg exceeds JEPA + pooled VICReg by more than 2pp.
+(H3) All objectives with pooled VICReg outperform their counterparts without
+     pooled VICReg (confirming the pooled VICReg fix generalises).
+
+**Proposed Falsification Criterion:**
+The hypothesis is falsified if ANY of the following hold:
+F1: JEPA + pooled VICReg achieves < 55% test accuracy (indicating the
+    result is not reproducible or the implementation is broken).
+F2: Any other obje...]
+
+
+[Tool Call: read_result_file({'filename': 'proposed_plan.yaml', 'iter_num': 7})]
+
+[Tool Result: falsification_criterion: "The hypothesis is falsified if ANY of the following hold:\n\
+  F1: JEPA + pooled VICReg achieves < 55% test accuracy (indicating the\n    result\
+  \ is not reproducible or the implementation is broken).\nF2: Any other objective\
+  \ with pooled VICReg exceeds JEPA + pooled VICReg\n    by ≥ 3pp (JEPA is NOT the\
+  \ best objective).\nF3: For any objective, the version WITHOUT pooled VICReg achieves\
+  \ equal or\n    higher accuracy than the version WITH pooled VICReg (pooled VICReg\
+  \ fix\n    does not generalise).\n"
+hypothesis: "On the Phase 3 spatiotemporal benchmark (P3-C architecture, 1,600 params,\n\
+  spatial_pooled_then_flat readout, pooled VICReg applied to all objectives),\nJEPA\
+  \ + pooled VICReg is the best training objective. Specifically:\n(H1) JEPA + pooled\
+  \ VICReg achieves test accuracy ≥ 58% (within 4pp of the\n     61.55% reference\
+  \ from iter_006).\n(H2) No other objective (SFA, Hebbian, Contrastive, Reconstruction)\
+...]
+
+
+[Tool Call: read_result_file({'filename': 'iter_001/stdout.txt', 'iter_num': 7})]
+
+[Tool Result:  
+
+[Tool Call: list_dir({'path': 'src'})]
+
+[Tool Result: [DIR] __pycache__
+      _bench_compare.py
+      dataset_phase1.py
+      diagnostic_phase1.py
+      diagnostic_phase3_vicreg.py
+[DIR] encoders
+      eval_phase1.py
+      harness.py
+      hierarchical_encoder.py
+      node.py
+      phase3_run.log
+[DIR] phase_3
+      pooling_comparison_results.csv
+      pre_registration.md
+      profile_p3b.py
+      run_phase0.py
+      run_phase1.py
+      run_phase1_v2.py
+      run_phase2.py
+      run_phase2_baselines.py
+      run_phase3.py
+      run_phase3_backgro...]
+
+ 
+
+[Tool Call: read_file({'path': 'src/run_phase3_vicreg_fix.py'})]
+
+[Tool Result: """
+Phase 3 VICReg Fix — Pooled VICReg gradient injection.
+
+This runner implements the Pooled VICReg loss applied directly on the
+mean-pooled representation z_pooled, and propagates its gradient back
+into the encoder backward pass via the last temporal code gradient.
+
+Six conditions across 5 seeds, run via multipro...]
+
+Let me check the current state of sub-agent 7.2 and the files that have been created so far.
+
+[Tool Call: list_dir({'path': 'phase_4'})]
+
+[Tool Result:       run.log]
+
+
+[Tool Call: read_file({'path': 'phase_4/run.log'})]
+
+[Tool Result: ======================================================================
+  PHASE 4 � Objective Comparison � FULL RUN
+  Tasks: 45
+  Epochs: 30, Batch: 64, LR: 0.001
+  Seeds: [42, 43, 44, 45, 46]
+======================================================================
+  Using 3 workers...
+multiprocessing.pool.RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "C:\Users\thomas\AppData\Local\Programs\Python\Python312\Lib\multiprocessing\pool.py", line 125, in worker
+    result = (True, func(*args, **kwds))
+                    ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\run_phase4.py", line 600, in run_single_experiment
+    metrics = train_epoch(
+              ^^^^^^^^^^^^
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\run_phase4.py", line 282, in train_epoch
+    fwd = encoder.forward_with_intermediates(batch)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\spatiotemporal_encoder.py", lin...]
+
+
+[Tool Call: read_file({'path': 'src/run_phase4.py'})]
+
+[Tool Result: #!/usr/bin/env python3
+"""
+Phase 4 — Training Objective Comparison (8 objectives × 5 seeds).
+
+Compares four training-objective families on the P3-C encoder with
+spatial_pooled_then_flat readout:
+
+    JEPA        : per-layer bidirectional prediction + local VICReg
+    SFA         : slowness on final temporal output (+/- pooled VICReg)
+    Hebbian     : variance maximisation on ALL intermediate codes (+/- pooled VICReg)
+    Reconstruction: local sparse AE at every node (+/- pooled VICReg)
+
+Each objective is run with and without pooled VICReg gradient injection.
+An untrained baseline is included for reference.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import math
+import os
+import sys
+import time
+from multiprocessing import Pool
+
+import numpy as np
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from spatiotemporal_dataset import generate_spatiotemporal_dataset, N_CLASSES
+from spatiotemporal_encoder import SpatiotemporalEncoder
+from training_objec...]
+
+Let me check the encoder's backward method to understand the gradient flow for the reconstruction case, and also look at what other files exist in the project:
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_encoder.py', 'start_line': 280, 'end_line': 420})]
+
+[Tool Result: --- lines 280 to 420 of 590 ---
+            "embeddings": emb,
+            "spatial_outputs": spatial_outputs,
+            "spatial_inputs": spatial_inputs,
+            "temporal_outputs": temporal_outputs,
+            "temporal_inputs": temporal_inputs,
+            "pooled": pooled,
+        }
+
+    # ------------------------------------------------------------------
+    #  Backward — fully vectorised
+    # ------------------------------------------------------------------
+
+    def backward(
+        self,
+        fwd: dict,
+        dL_dspatial_codes: list[np.ndarray],
+        dL_dtemporal_codes: list[np.ndarray],
+        alpha: float = 0.5,
+    ) -> dict:
+        """
+        Propagate code-level gradients back through temporal and spatial
+        passes to produce gradients for the master nodes and the embedding.
+
+        Parameters
+        ----------
+        fwd : dict
+            The output of ``forward_with_intermediates``.
+        dL_dspatial_codes : list of np.ndarray
+            E...]
+
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_encoder.py', 'end_line': 500, 'start_line': 420})]
+
+[Tool Result: --- lines 420 to 500 of 590 ---
+            B, n_pos, T, _, d_in = node_inputs.shape
+            dL_dz_flat = dL_dz.reshape(B * n_pos * T, d_out)
+            inp_flat = node_inputs.reshape(B * n_pos * T, 3 * d_in)
+
+            # Parameter gradients
+            dW_enc = inp_flat.T @ dL_dz_flat / B
+            db_enc = dL_dz_flat.mean(axis=0)
+
+            spatial_grads["W_enc"] += dW_enc
+            spatial_grads["b_enc"] += db_enc
+            dW_dec = np.zeros_like(self.master_spatial.W_dec)
+            db_dec = np.zeros_like(self.master_spatial.b_dec)
+            spatial_grads["W_dec"] += dW_dec
+            spatial_grads["b_dec"] += db_dec
+
+            # Gradient w.r.t. input
+            dL_dx_flat = dL_dz_flat @ self.master_spatial.W_enc.T
+            dL_dx_reshaped = dL_dx_flat.reshape(B, n_pos, T, 3, d_in)  # (B, n_pos, T, 3, d)
+
+            # Scatter into layer input
+            dL_dlayer_input = np.zeros((B, n_pos + 2, T, d_in))
+            dL_dlayer_input[:, 0:n_pos,   :, :] += d...]
+
+Now let me look at the key issue: the memory error in sub-agent 7.2. The error is `numpy._core._exceptions._ArrayMemoryError: Unable to allocate 10.5 MiB for an array with shape (64, 14, 32, 3, 16)`. This is happening during `forward_with_intermediates`. Let me check the memory usage more carefully and also see what has already been modified:
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_encoder.py', 'start_line': 1, 'end_line': 50})]
+
+[Tool Result: --- lines 1 to 50 of 590 ---
+"""
+Spatiotemporal Encoder for Phase 3.
+
+Implements the sequential spatial-then-temporal encoder over a
+(16 spatial × 32 temporal) binary grid using stacked kernel-3,
+stride-1 UniversalNodes.
+
+Both spatial and temporal forward/backward passes are **fully
+vectorized** — no Python loops over spatial/temporal positions.
+
+Three variants
+--------------
+* **P3-A** – One master spatial node + one master temporal node.
+  Trained sequentially (spatial first, then temporal).
+* **P3-B** – One master spatial node + one master temporal node
+  (separate objects, trained jointly with both losses).
+* **P3-C** – A *single* master node reused for *both* spatial and
+  temporal passes (strong universal hypothesis).
+
+Architecture
+------------
+Input           : (B, S=16, T=32)  binary
+Embedding       : (2, d) lookup — Xavier-initialised, frozen
+Spatial stages  : 3 × kernel-3 / stride-1 over the S axis
+                  (16 → 14 → 12 → 10 spatial positions)
+Transpose        : (B,...]
+
+
+[Tool Call: read_file({'end_line': 180, 'path': 'src/spatiotemporal_encoder.py', 'start_line': 140})]
+
+[Tool Result: --- lines 140 to 180 of 590 ---
+    def _embed(self, x_binary: np.ndarray) -> np.ndarray:
+        """
+        Map raw binary (B, S, T) → (B, S, T, d) via frozen lookup table.
+        """
+        idx = x_binary.astype(int)                     # (B, S, T)
+        return self.embedding[idx]                      # (B, S, T, d)
+
+    # ------------------------------------------------------------------
+    #  Forward — fully vectorised
+    # ------------------------------------------------------------------
+
+    def _forward_spatial_layer(
+        self,
+        x_in: np.ndarray,       # (B, S_l, T, d)
+        layer_idx: int,
+        store_inputs: bool = False,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
+        """
+        Apply kernel-3 stride-1 sliding window over the S axis.
+
+        Returns
+        -------
+        x_out : (B, S_{l+1}, T, d_out)
+        node_inputs : (B, S_{l+1}, T, 3, d)  — only if store_inputs
+        """
+        node = self.master_spatial
+        B, S_l, T, d_in = x_...]
+
+Now I understand the memory issue. The `_make_windows_3` creates a view with shape (B, S_l-2, T, 3, d_in), and then `windows.copy()` creates a separate copy. With B=64, S_l=14 (layer 1), T=32, d_in=16, that's 64*14*32*3*16*8 bytes = 10.5 MiB just for one layer's node_inputs. But there are multiple intermediate arrays being stored. With multiprocessing and 3 workers, this triples the memory requirement.
+
+The issue is likely that 3 workers running simultaneously with B=64 each use too much memory. The `n_workers = min(1, total_tasks)` in the current code actually uses just 1 worker, but the error occurred with the original code that used `min(5, total_tasks)` or `min(3, total_tasks)`.
+
+Wait, looking more carefully at the current code, `n_workers = min(1, total_tasks)` = 1. But the error log shows `Using 3 workers...` which means the code has been updated since the error. The user says "This should be fixed now." 
+
+Let me check if the run has completed or is still running:
+
+[Tool Call: read_file({'end_line': 30, 'path': 'phase_4/run.log'})]
+
+[Tool Result: --- lines 1 to 30 of 40 ---
+======================================================================
+  PHASE 4 � Objective Comparison � FULL RUN
+  Tasks: 45
+  Epochs: 30, Batch: 64, LR: 0.001
+  Seeds: [42, 43, 44, 45, 46]
+======================================================================
+  Using 3 workers...
+multiprocessing.pool.RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "C:\Users\thomas\AppData\Local\Programs\Python\Python312\Lib\multiprocessing\pool.py", line 125, in worker
+    result = (True, func(*args, **kwds))
+                    ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\run_phase4.py", line 600, in run_single_experiment
+    metrics = train_epoch(
+              ^^^^^^^^^^^^
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\run_phase4.py", line 282, in train_epoch
+    fwd = encoder.forward_with_intermediates(batch)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\spa...]
+
+
+[Tool Call: read_file({'end_line': 40, 'path': 'phase_4/run.log', 'start_line': 30})]
+
+[Tool Result: --- lines 30 to 40 of 40 ---
+
+Traceback (most recent call last):
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\run_phase4.py", line 1068, in <module>
+    results = main(dry_run=args.dry_run)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\run_phase4.py", line 715, in main
+    for i, result in enumerate(pool.imap_unordered(run_single_experiment, tasks)):
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\thomas\AppData\Local\Programs\Python\Python312\Lib\multiprocessing\pool.py", line 873, in next
+    raise value
+numpy._core._exceptions._ArrayMemoryError: Unable to allocate 10.5 MiB for an array with shape (64, 14, 32, 3, 16) and data type float64]
 
 
 [Tool Call: list_dir({'path': 'src'})]
@@ -54,6 +380,7 @@ a single, universal node type. Phase 3 (Unified Spatiotemporal Grid) is now RESO
       run_phase3_optimized.py
       run_phase3_parallel.py
       run_phase3_vicreg_fix.py
+      run_phase4.py
       run_remaining_phase3.py
       run_remaining_seeds.py
       spatiotemporal_dataset.py
@@ -65,13 +392,88 @@ a single, universal node type. Phase 3 (Unified Spatiotemporal Grid) is now RESO
       test_objectives.py
       test_temporal.py
       time_one_run.py
-      tmp_test_phase3_timing.py
-      training_...]
+      tmp_test_phase3_timin...]
 
 
-[Tool Call: read_file({'path': 'src/training_objectives.py'})]
+[Tool Call: read_result_file({'filename': 'iter_001/stdout.txt', 'iter_num': 7})]
 
-[Tool Result: """
+[Tool Result:  
+
+[Tool Call: list_dir({'path': 'src'})]
+
+[Tool Result: [DIR] __pycache__
+      _bench_compare.py
+      dataset_phase1.py
+      diagnostic_phase1.py
+      diagnostic_phase3_vicreg.py
+[DIR] encoders
+      eval_phase1.py
+      harness.py
+      hierarchical_encoder.py
+      node.py
+      phase3_run.log
+[DIR] phase_3
+      pooling_comparison_results.csv
+      pre_registration.md
+      profile_p3b.py
+      run_phase0.py
+      run_phase1.py
+      run_phase1_v2.py
+      run_phase2.py
+      run_phase2_baselines.py
+      run_phase3.py
+      run_phase3_backgro...]
+
+ 
+
+[Tool Call: read_file({'path': 'src/run_phase3_vicreg_fix.py'})]
+
+[Tool Result: """
+Phase 3 VICReg Fix — Pooled VICReg gradient injection.
+
+This runner implements the Pooled VICReg loss applied directly on the
+mean-pooled representation z_pooled, and propagates its gradient back
+into the encoder backward pass via the last temporal code gradient.
+
+Six conditions across 5 seeds, run via multipro...]
+
+Now let me check the current state of `src/run_phase4.py` — it looks like the code has been updated since the error (with `n_workers = min(1, total_tasks)` and `imap_unordered`). Let me look at what's at the end of the file to confirm it's the updated version:
+
+[Tool Call: read_file({'end_line': 730, 'path': 'src/run_phase4.py', 'start_line': 700})]
+
+[Tool Result: --- lines 700 to 730 of 1071 ---
+    print(f"  Tasks: {total_tasks}")
+    print(f"  Epochs: {ep if dry_run else EPOCHS}, Batch: {BATCH_SIZE}, LR: {LR}")
+    print(f"  Seeds: {SEEDS if not dry_run else [42]}")
+    print("=" * 70)
+
+    t_start = time.time()
+
+    if dry_run:
+        all_results = [run_single_experiment(t) for t in tasks]
+    else:
+        n_workers = min(1, total_tasks)
+        print(f"  Using {n_workers} workers...")
+        with Pool(processes=n_workers) as pool:
+            # Use imap_unordered for better progress visibility
+            all_results = []
+            for i, result in enumerate(pool.imap_unordered(run_single_experiment, tasks)):
+                all_results.append(result)
+                if (i + 1) % 5 == 0 or i == total_tasks - 1:
+                    elapsed = time.time() - t_start
+                    print(f"    Completed {i+1}/{total_tasks} tasks ({elapsed:.1f}s elapsed)")
+
+    t_end = time.time()
+
+    for r in all_results:
+        save_result(r, RESULT...]
+
+I can see the code is already updated to use `n_workers = min(1, total_tasks)` — 1 worker. But there's still a memory issue. Even a single process with B=64 needs multiple intermediate arrays stored. Let me check if there are other memory-related considerations, and also review what the `_Adam` does for the reconstruction decoder:
+
+[Tool Call: read_file({'path': 'src/training_objectives.py', 'start_line': 1, 'end_line': 60})]
+
+[Tool Result: --- lines 1 to 60 of 654 ---
+"""
 Training objectives for Phase 1 -- pure NumPy implementations.
 
 Includes:
@@ -105,59 +507,99 @@ class _Adam:
         self.beta1 = beta1
         self.beta2 = beta2
         self.eps = eps
-        self.t = 0
-        self.m = {k: np.zer...]
+        self.t = ...]
+
+Now let me check a critical bug: in the reconstruction case, `adam_decoder` is created with the same `W_dec` and `b_dec` parameters as the encoder. But `adam_spatial` also updates `W_dec` and `b_dec`. So there's a double-update on the decoder parameters! Let me verify this:
+
+[Tool Call: read_file({'end_line': 590, 'path': 'src/run_phase4.py', 'start_line': 555})]
+
+[Tool Result: --- lines 555 to 590 of 1071 ---
+    test_y = ds["test_y"]
+
+    encoder = SpatiotemporalEncoder(
+        variant="P3-C",
+        d=D,
+        d_out=D_OUT,
+        n_spatial_layers=3,
+        n_temporal_layers=3,
+        l1_lambda=0.0,
+        seed=seed,
+    )
+
+    update_encoder = (objective != "untrained")
+
+    # JEPA losses (only used by jepa objective)
+    spatial_jepas = None
+    temporal_jepas = None
+    if objective == "jepa" and update_encoder:
+        spatial_jepas = create_jepa_losses(encoder.n_spatial_layers, D_OUT, lr=LR)
+        temporal_jepas = create_jepa_losses(encoder.n_temporal_layers, D_OUT, lr=LR)
+
+    # Adam optimisers
+    adam_spatial = None
+    adam_temporal = None
+    adam_decoder = None
+    if update_encoder:
+        params_enc = {
+            "W_enc": encoder.master_spatial.W_enc,
+            "b_enc": encoder.master_spatial.b_enc,
+            "W_dec": encoder.master_spatial.W_dec,
+            "b_dec": encoder.master_spatial.b_dec,
+        }
+        adam_spatial...]
 
 
-[Tool Call: read_file({'path': 'src/encoders'})]
+[Tool Call: read_file({'end_line': 605, 'path': 'src/run_phase4.py', 'start_line': 590})]
 
-[Tool Result: Error reading src/encoders: [Errno 13] Permission denied: 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\encoders']
+[Tool Result: --- lines 590 to 605 of 1071 ---
+        if objective == "recon":
+            adam_decoder = _Adam(
+                {"W_dec": encoder.master_spatial.W_dec,
+                 "b_dec": encoder.master_spatial.b_dec},
+                lr=LR,
+            )
 
+    # Training
+    t0 = time.time()
+    for epoch in range(epochs):
+        metrics = train_epoch(
+            encoder,
+            train_grid,
+            BATCH_SIZE,
+            rng,
+            objective=objective,]
 
-[Tool Call: list_dir({'path': 'src/encoders'})]
+I see a **critical bug**: For the reconstruction objective, `adam_decoder` and `adam_spatial` both track momentum/velocity for `W_dec` and `b_dec` — and they point to the same numpy arrays. When `adam_spatial.step()` is called, it updates `W_dec` and `b_dec`. When `adam_decoder.step()` is also called, it updates the SAME `W_dec` and `b_dec` again with its own independent momentum/velocity state. This creates double updates and conflicting optimizer states.
 
-[Tool Result:       __init__.py
-[DIR] __pycache__
-      lookup_table.py
-      predictive_coding.py
-      som.py
-      sparse_autoencoder.py
-      spatial_pooler.py]
+Looking more carefully at the encoder backward pass — it produces zero gradients for `W_dec` and `b_dec` (the encoder backward only computes gradients for `W_enc` and `b_enc`). So `adam_spatial` would apply zero gradients for `W_dec/b_dec` while `adam_decoder` applies the actual reconstruction gradients. So the double-update issue is actually not as bad as I feared — the `adam_spatial` step would just apply zeros to `W_dec/b_dec`, which means Adam's momentum would decay to zero. The `adam_decoder` step applies the actual gradients. This is still slightly problematic because Adam's bias correction on `adam_spatial` for `W_dec/b_dec` would create small spurious updates, but they'd be negligible.
 
+Actually wait, looking more carefully at the code: in the P3-C combined gradient, `grads["dL_dspatial"]` includes `W_dec` and `b_dec` keys which are set to zeros in the backward. So `combined["W_dec"]` would be zeros and `adam_spatial.step()` would push momentum for W_dec toward zero. But since adam_decoder also operates on the same arrays, the updates are interleaved. This is a minor issue but not a show-stopper.
 
-[Tool Call: read_file({'path': 'src/spatiotemporal_encoder.py'})]
+Now let me think about the main problem. The user says "Executor Sub-agent 7.2 had timeout Problems while running 'src/run_phase4.py'. This should be fixed now." So the memory error was addressed by reducing workers to 1, but then timeouts occurred because running 45 experiments sequentially (each taking a few minutes) takes too long.
 
-[Tool Result: """
-Spatiotemporal Encoder for Phase 3.
+Let me estimate the runtime: with B=64, 30 epochs, and ~12.5 batches per epoch, each forward+backward takes maybe 1-2 seconds (based on the Phase 3 timing). So each run is about 30 * 12.5 * 1.5 ≈ 562 seconds ≈ 9.4 minutes. For 45 runs that's ~423 minutes = 7 hours. That's too long for a sub-agent timeout.
 
-Implements the sequential spatial-then-temporal encoder over a
-(16 spatial × 32 temporal) binary grid using stacked kernel-3,
-stride-1 UniversalNodes.
+The key issue is that the experiments need to be run efficiently. Let me look at the timeout and understand what needs to be planned for the continuation.
 
-Both spatial and temporal forward/backward passes are **fully
-vectorized** — no Python loops over spatial/temporal positions.
+Let me check if there are any partial results from the previous attempts:
 
-Three variants
---------------
-* **P3-A** – One master spatial node + one master temporal node.
-  Trained sequentially (spatial first, then temporal).
-* **P3-B** – One master spatial node + one master temporal node
-  (separate objects, trained jointly with both losses).
-* **P3-C** – A *single* master node reused for *both* spatial and
-  temporal passes (strong universal hypothesis).
+[Tool Call: list_dir({'path': 'phase_4'})]
 
-Architecture
-------------
-Input           : (B, S=16, T=32)  binary
-Embedding       : (2, d) lookup — Xavier-initialised, frozen
-Spatial stages  : 3 × kernel-3 / stride-1 over the S axis
-                  (16 → 14 → 12 → 10 spatial positions)
-Transpose        : (B, 10, T, d_out)  →  (B, T, 10,...]
+[Tool Result:       run.log]
 
+No CSV results yet. The experiments haven't completed. Let me now formulate a plan that addresses:
 
-[Tool Call: read_file({'path': 'src/run_phase3_vicreg_fix.py'})]
+1. **Memory constraints**: Reduce batch size or use float32 to reduce memory
+2. **Timeout constraints**: Reduce epochs, use smaller batch sizes for faster iterations, or reduce seeds
+3. **Double-update bug**: Fix the Adam optimizer conflict for reconstruction
+4. **Complete Phase 4 as planned** with the correct experimental design
 
-[Tool Result: """
+Let me also check the `run_phase3_vicreg_fix.py` to see how it handled the same task efficiently:
+
+[Tool Call: read_file({'end_line': 60, 'path': 'src/run_phase3_vicreg_fix.py', 'start_line': 1})]
+
+[Tool Result: --- lines 1 to 60 of 889 ---
+"""
 Phase 3 VICReg Fix — Pooled VICReg gradient injection.
 
 This runner implements the Pooled VICReg loss applied directly on the
@@ -189,486 +631,681 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(__file__))
 
 from spatiotemporal_dataset import generate_spatiotemporal_dataset, N_CLASSES
-from spatiotemporal_encoder import SpatiotemporalEnc...]
+from spatiotemporal_enc...]
 
+Now let me look at a key potential optimization — using float32 instead of float64 would halve memory usage. Let me also check whether there are other bugs in the code:
 
-[Tool Call: read_file({'path': 'src/node.py'})]
+[Tool Call: read_file({'end_line': 108, 'path': 'src/spatiotemporal_encoder.py', 'start_line': 78})]
 
-[Tool Result: """
-UniversalNode -- single-layer auto-encoder unit for HSUN Phase 0-E.
-
-Architecture
-------------
-  x_3d (batch, 3, d_in)  --> flatten --> (batch, 3*d_in)
-  z    = tanh(x_flat @ W_enc + b_enc)          # (batch, d_out)  -- "code"
-  xrec = z       @ W_dec + b_dec              # (batch, 3*d_in)
-           --> reshape --> (batch, 3, d_in)
-
-Loss  = MSE(x_3d, xrec) + l1_lambda * mean(|z|)
-
-All analytical gradients are provided in ``compute_gradients`` and verified
-below via a central-difference numerical check.
-"""
-
-from __future__ import annotations
-
-from typing import Dict
-
-import numpy as np
-
-
-class UniversalNode:
-    """A single universal node implementing an encoder --> decoder pair."""
-
+[Tool Result: --- lines 78 to 108 of 590 ---
     def __init__(
         self,
-        d: int,
-        l1_lambda: float = 0.01,
+        variant: str = "P3-B",
+        d: int = 16,
+        d_out: int = 16,
+        n_spatial_layers: int = 3,
+        n_temporal_layers: int = 3,
+        l1_lambda: float = 0.002,
         seed: int = 42,
-        d_out: int | None = None,
-        kwta_k: int | None = None,
     ):
+        if variant not in ("P3-A", "P3-B", "P3-C"):
+            raise ValueError(
+                f"variant must be one of ('P3-A', 'P3-B', 'P3-C'), got '{variant}'"
+            )
+        if d_out != d:
+            raise ValueError(
+                f"d_out must equal d for dimension homogeneity, got d={d}, d_out={d_out}"
+            )
+
+        self.variant = variant
+        self.d = d
+        self.d_out = d_out
+        self.n_spatial_layers = n_spatial_layers
+        self.n_temporal_layers = n_temporal_layers
+        self.l1_lambda = l1_lambda
+        self.seed = seed
+
+        # --- Non-learned binary embedding (2, d) ---
+        rng = np.random.default_rng(seed)
+        scale = np.sqrt(2.0 / (1 + d))  # Xavier sca...]
+
+Now let me check how the encoder forward stores inputs - this is the key for memory. The `forward_with_intermediates` stores ALL intermediate inputs and outputs:
+
+[Tool Call: read_file({'end_line': 280, 'path': 'src/spatiotemporal_encoder.py', 'start_line': 220})]
+
+[Tool Result: --- lines 220 to 280 of 590 ---
+    def forward_with_intermediates(self, x_binary: np.ndarray) -> dict:
         """
+        Full forward pass storing all intermediates needed for backward.
+
         Parameters
         ----------
-        d : int
-            Input dimensionality *per channel*.  The fl...]
-
-Now let me look at the existing results from prior iterations and the run_phase3 infrastructure:
-
-[Tool Call: read_iteration({'iter_num': 2})]
-
-[Tool Result: ```yaml
-cached_tokens: 2233031
-campaign: phase-1-spatial-hierarchy
-cost_usd: 2.92354
-hypothesis: 'phase-2: the reconstruction objective is misaligned with classification;
-  test alternative local objectives (predictive coding, SFA, Hebbian, contrastive)
-  on the corrected hierarchical architecture with simultaneous training to determine
-  if any local objective can reach ≥60% accuracy'
-input_tokens: 8049498
-iter: 2
-metrics:
-  p1_a_corrected_accuracy: 0.3424
-  p1_b_corrected_accuracy: 0.3352
-  p1_b_kwta_accuracy: 0.3572
-  p1_b_kwta_sparsity: 0.5
-  p1_b_original_accuracy: 0.1836
-  p1_b_params: 1264
-  p1_b_sparsity: 0.0003
-  p1_c_corrected_accuracy: 0.3324
-  p1_c_minus_p1_b_pp: -0.28
-  p1_c_params: 14992
-  p1_d_corrected_accuracy: 0.2392
-  p1_e_corrected_accuracy: 0.3516
-  predictive_coding_accuracy: 0.3816
-  predictive_coding_sparsity: 0.7246
-  random_embedding_accuracy: 0.4336
-  simultaneous_training_accuracy: 0.4152
-  single_layer_accuracy: 0.3976
-  strong_l1_accuracy: 0.3712
-  trained...]
-
-
-[Tool Call: read_iteration({'iter_num': 3})]
-
-[Tool Result: ```yaml
-cached_tokens: 2152297
-campaign: phase-1-spatial-hierarchy
-cost_usd: 3.07887
-hypothesis: 'phase-3: JEPA local objective confirmed at 62.1% (d=8); bottleneck refuted;
-  temporal unification path cleared for Phase 2'
-input_tokens: 6553069
-iter: 3
-metrics:
-  best_prior_method_accuracy: 41.52
-  contrastive_d8_test_accuracy: 50.64
-  hebbian_d8_test_accuracy: 23.96
-  jepa_d16_test_accuracy: 65.2
-  jepa_d16_test_std: 1.8
-  jepa_d16_vs_d8_gap_pp: 3.08
-  jepa_d8_test_accuracy: 62.12
-  jepa_d8_test_std: 4.34
-  jepa_d8_vs_best_prior_delta_pp: 20.6
-  jepa_d8_vs_untrained_delta_pp: 15.96
-  jepa_d8_vs_untrained_p_value: 0.0046
-  sfa_d8_test_accuracy: 50.56
-  untrained_d16_test_accuracy: 54.6
-  untrained_d8_test_accuracy: 46.16
-output_tokens: 292562
-status: ok
-```
-
-## iter_003: phase-3: JEPA local objective confirmed at 62.1% (d=8); bottleneck refuted; temporal unification path cleared for Phase 2
-
-**Analysis:** Phase 1 v2 tested the central hypothesis that a non-reconstruction local objectiv...]
-
-
-[Tool Call: read_file({'path': 'src/spatiotemporal_dataset.py'})]
-
-[Tool Result: """
-Spatiotemporal Dataset Generator for Phase 3.
-
-Generates four categories of spatiotemporal sequences on a 16x32 binary grid
-(16 spatial positions x 32 timesteps). Designed so that shortcut baselines
-(single-frame and temporal-average projections) achieve at-chance performance,
-forcing the model to reason about temporal dynamics.
-
-Classes (4-class classification):
-    0 = moving_blob       -- blob position follows a LINEAR trajectory (wrapped mod 16)
-    1 = expanding_blob    -- blob width oscillates periodically in place (wrapped mod 16)
-    2 = periodic_st       -- blob position oscillates back-and-forth sinusoidally (wrapped mod 16)
-    3 = object_permanence -- blob stays put (wrapped mod 16), disappears for some steps
-
-CRITICAL design property: all four classes draw their initial spatial position
-from the SAME distribution (uniformly 0..15) and their base blob width from
-the SAME distribution (uniformly 2..4).  The CLASS label is encoded ONLY in
-the TEMPORAL TRAJECTORY of the bl...]
-
-
-[Tool Call: read_file({'path': 'src/run_phase3.py', 'start_line': 1, 'end_line': 80})]
-
-[Tool Result: --- lines 1 to 80 of 599 ---
-"""
-Phase 3 Experiment Runner for HSUN.
-
-Runs all three spatiotemporal variants (P3-A, P3-B, P3-C) plus untrained
-baseline and shortcut baselines across 5 seeds.
+        x_binary : np.ndarray, shape (B, S=16, T=32) or (B, S*T)
+
+        Returns
+        -------
+        dict with keys:
+            embeddings      : (B, 16, 32, d)
+            spatial_outputs  : list of 3 × (B, S_l_out, T, d)
+            spatial_inputs   : list of 3 × (B, S_l_out, T, 3, d)
+            temporal_outputs : list of 3 × (B, T_l_out, S_final, d)
+            temporal_inputs  : list of 3 × (B, T_l_out, S_final, 3, d)
+            pooled           : (B, d_out)  — mean-pooled final code
+        """
+        # Accept flat (B, S*T) and reshape
+        if x_binary.ndim == 2 and x_binary.shape[1] == 16 * 32:
+            x_binary = x_binary.reshape(-1, 16, 32)
+
+        B = x_binary.shape[0]
+
+        # --- Embed ---
+        emb = self._embed(x_binary)         ...]
+
+Let me estimate total memory per batch with B=64:
+- embeddings: 64 * 16 * 32 * 16 * 8 = 4.2 MB
+- spatial_inputs[0]: 64 * 14 * 32 * 3 * 16 * 8 = 10.5 MB (this is the one that fails)
+- spatial_inputs[1]: 64 * 12 * 32 * 3 * 16 * 8 = 9.0 MB
+- spatial_inputs[2]: 64 * 10 * 32 * 3 * 16 * 8 = 7.5 MB
+- spatial_outputs[0-2]: each ~3.5 MB
+- temporal_inputs[0]: 64 * 30 * 10 * 3 * 16 * 8 = 7.4 MB
+- temporal_inputs[1]: 64 * 28 * 10 * 3 * 16 * 8 = 6.9 MB
+- temporal_inputs[2]: 64 * 26 * 10 * 3 * 16 * 8 = 6.4 MB
+- temporal_outputs[0-2]: each ~2.5 MB
+
+Total forward intermediates: ~60 MB per batch
+Plus the backward pass creates similar-sized gradient arrays.
+
+With 3 workers, that's 180 MB just for intermediates. Plus the full train/test datasets are loaded in each worker.
+
+The key solution is to reduce batch size from 64 to 32. This halves all intermediate memory and also speeds up individual batch processing, making each epoch faster.
+
+Let me now design a proper plan. The key issues are:
+
+1. **Memory**: Reduce BATCH_SIZE from 64 to 32 to halve memory per batch
+2. **Timeout**: With batch_size=32 and 1 worker, estimate time per run. Need to estimate from the previous Phase 3 timings. In iter_006, with batch_size=64, each run took some number of seconds. Let me check:
+
+[Tool Call: read_result_file({'filename': 'manager_log.md', 'iter_num': 7})]
+
+[Tool Result: # Research Manager Log - Iteration 007
+
+## Iteration 007 -> Manager [Proposed Research Plan]
+
+**Proposed Hypothesis:**
+On the Phase 3 spatiotemporal benchmark (P3-C architecture, 1,600 params,
+spatial_pooled_then_flat readout, pooled VICReg applied to all objectives),
+JEPA + pooled VICReg is the best training objective. Specifically:
+(H1) JEPA + pooled VICReg achieves test accuracy ≥ 58% (within 4pp of the
+     61.55% reference from iter_006).
+(H2) No other objective (SFA, Hebbian, Contrastive, Reconstruction) with
+     pooled VICReg exceeds JEPA + pooled VICReg by more than 2pp.
+(H3) All objectives with pooled VICReg outperform their counterparts without
+     pooled VICReg (confirming the pooled VICReg fix generalises).
+
+**Proposed Falsification Criterion:**
+The hypothesis is falsified if ANY of the following hold:
+F1: JEPA + pooled VICReg achieves < 55% test accuracy (indicating the
+    result is not reproducible or the implementation is broken).
+F2: Any other obje...]
+
+Now let me check if there's a patch file for the encoder:
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_encoder.py-patch'})]
+
+[Tool Result:         spatial_grads: dict[str, np.ndarray] = {
+            "W_enc": np.zeros_like(self.master_spatial.W_enc),
+            "b_enc": np.zeros_like(self.master_spatial.b_enc),
+            "W_dec": np.zeros_like(self.master_spatial.W_dec),
+            "b_dec": np.zeros_like(self.master_spatial.b_dec),
+        }
+        temporal_grads: dict[str, np.ndarray] = {
+            "W_enc": np.zeros_like(self.master_temporal.W_enc),
+            "b_enc": np.zeros_like(self.master_temporal.b_enc),
+            "W_dec": np.zeros_like(self.master_temporal.W_dec),
+            "b_dec": np.zeros_like(self.master_temporal.b_dec),
+        }
+
+        # ====================================================================
+        #  TEMPORAL BACKWARD (process layers in reverse) — vectorised
+        # ====================================================================
+
+        # Initial gradient comes only from JEPA code_grads, not from pooling
+        x_final = fwd["temporal_outputs"][-1]          # (B, T_fin...]
+
+Now I have a comprehensive understanding of the situation. Let me formulate the plan for Phase 4 continuation.
+
+The key issues to address:
+1. **Memory error** — solved by reducing batch size from 64 to 32, or reducing number of workers
+2. **Timeout** — the full 45 runs with 30 epochs each will take many hours; need to estimate time and plan accordingly
+3. **Double Adam bug** for reconstruction — `adam_decoder` and `adam_spatial` both update the same W_dec/b_dec arrays with independent momentum states
+4. **Untrained baseline** doesn't need training — the current code sets `epochs=30` for untrained runs unnecessarily
+
+Let me also consider that the sub-agent needs to complete within its timeout. The solution is to:
+- Use batch_size=32 to reduce memory per run
+- Use 1 worker to avoid memory issues
+- Reduce epochs if needed (30 should be fine based on prior convergence data)
+- Pre-compute how long it takes and adjust
 
-Training protocol:
-  - P3-A: alpha=1.0 (spatial only) for 200 epochs,
-          then freeze spatial master node, alpha=0.0 (temporal only) for 200 epochs.
-  - P3-B/C: alpha=0.5 jointly for 200 epochs.
-  - Untrained: random init, freeze encoder, train only JEPA predictors.
+Let me estimate: From iter_006, the run_phase3_vicreg_fix used 30 runs (6 conditions × 5 seeds) with similar configuration. If each run takes ~2-3 minutes (with batch_size=64), then with batch_size=32 it would be similar (more batches but each is faster). With 45 runs at ~3 min each = 135 min ≈ 2.25 hours. This might be tight for a sub-agent timeout.
 
-Evaluation:
-  - Linear probe (SimpleLogisticRegression, max_iter=2000) on pooled representations.
-  - Test accuracy + per-class (per-benchmark) accuracies.
-  - Shortcut baselines: single-frame and temporal-average.
+A better approach: reduce to 3 seeds instead of 5 for the first pass, then confirm with more seeds if needed. But the pre-registration says 5 seeds. We should stick with the plan but optimize the execution.
 
-Results saved to phase_3/ directory.
-"""
+Actually, let me check the timing from Phase 3 more carefully:
 
-from __future__ import annotations
+[Tool Call: grep_search({'pattern': 'training_time_sec', 'include_pattern': '*.csv'})]
 
-import csv
-import os
-import sys
-import time
-from typing import Dict, List
+[Tool Result: phase_3\phase3_full_results.csv:1: variant,seed,train_acc,test_acc,final_spatial_jepa_loss,final_temporal_jepa_loss,training_time_sec,class_0_acc,class_1_acc,class_2_acc,class_3_acc
+phase_3\phase3_results.csv:1: variant,seed,train_acc,test_acc,final_spatial_jepa_loss,final_temporal_jepa_loss,training_time_sec,class_0_acc,class_1_acc,class_2_acc,class_3_acc
+phase_3\pooled_vicreg_results.csv:1: condition,seed,use_pooled_vicreg,readout_type,train_acc,test_acc,final_spatial_jepa_loss,final_temporal_jepa_loss,final_pooled_std,final_pooled_var_loss,final_pooled_cov_loss,training_time_sec,param_count,class_0_acc,class_1_acc,class_2_acc,class_3_acc]
 
-import numpy as np
 
-sys.path.insert(0, os.path.dirname(__file__))
+[Tool Call: read_result_file({'filename': 'phase_3/pooled_vicreg_results.csv', 'iter_num': 6})]
 
-from spatiotemporal_dataset import (
-    generate_spatiotemporal_dataset,
-    evaluate_all_shortcu...]
+[Tool Result: File not found: archive/iter_006/phase_3/pooled_vicreg_results.csv]
 
 
-[Tool Call: read_file({'path': 'src/run_phase3.py', 'start_line': 80, 'end_line': 200})]
+[Tool Call: read_file({'path': 'phase_3/pooled_vicreg_results.csv'})]
 
-[Tool Result: --- lines 80 to 200 of 599 ---
-    """Reshape JEPA code gradients (B*T, S, d) back to (B, S, T, d)."""
-    return grad.reshape(B, T, S, d).transpose(0, 2, 1, 3)
-
-
-def reshape_for_temporal_jepa(x: np.ndarray) -> np.ndarray:
-    """
-    Reshape temporal layer output (B, T, S, d) -> (B*S, T, d) for JEPA.
-    """
-    B, T, S, d = x.shape
-    return x.transpose(0, 2, 1, 3).reshape(B * S, T, d)
-
-
-def reshape_temporal_grads_back(grad: np.ndarray, B: int, T: int, S: int, d: int) -> np.ndarray:
-    """Reshape JEPA code gradients (B*S, T, d) back to (B, T, S, d)."""
-    return grad.reshape(B, S, T, d).transpose(0, 2, 1, 3)
-
-
-def train_jepa_epoch(
-    encoder: SpatiotemporalEncoder,
-    spatial_jepas: list[JEPALoss],
-    temporal_jepas: list[JEPALoss],
-    train_grid: np.ndarray,
-    batch_size: int,
-    rng: np.random.Generator,
-    alpha: float,
-    adam_spatial: _Adam | None,
-    adam_temporal: _Adam | None,
-    adam_embedding: _Adam | None,
-) -> dict:
-    """
-    Train one epoch of JEPA on sp...]
-
-
-[Tool Call: read_file({'path': 'src/harness.py'})]
-
-[Tool Result: """
-HSUN Phase 0 -- Experimental Harness
-
-Dataset generator, similarity evaluator, encoder interface, and utility functions
-for the smoke-test of hierarchical sparse universal nodes.
-
-Dependencies: numpy, scipy only -- no external ML libraries.
-"""
-
-from __future__ import annotations
-
-import itertools
-from abc import ABC, abstractmethod
-from typing import Dict, List, Tuple
-
-import numpy as np
-from scipy.stats import spearmanr
-
-
-# ---------------------------------------------------------------------------
-# Dataset Generator
-# ---------------------------------------------------------------------------
-
-class DatasetGenerator:
-    """
-    Generates the Phase 0 dataset:
-      - 8 base states: all 3-bit binary tuples (0,0,0) ... (1,1,1)
-      - 10 noise variants per base state (bit-flip prob 0.1)
-      - Total: 88 samples
-    """
-
-    NUM_BITS = 3
-    NOISE_VARIANTS_PER_STATE = 10
-    FLIP_PROB = 0.1
-
-    def __init__(self, seed: int | None = None) -> None:
-        self.rng = np.random.def...]
-
-
-[Tool Call: read_file({'path': 'src/pre_registration.md'})]
-
-[Tool Result: # RDF Scientific Pre-Registration
-
-*   **Iteration:** 006-DIAGNOSTIC
-*   **Pre-Registration File:** src/pre_registration.md
-
-## 1. Hypothesis
-Phase 3's failure (P3-C gain of only ~1.15pp over untrained baseline on 4-class
-classification) is NOT caused by VICReg omission. Code review confirms that
-VICReg IS already present in `JEPALoss` (λ_var=25, λ_cov=25) in
-`src/training_objectives.py`, applied per-layer to intermediate codes during
-the spatial and temporal JEPA steps. The pre-registered hypothesis about
-"VICReg omission" is factually incorrect.
-
-The likely cause of Phase 3's failure is one of two mechanisms:
-
-**(a) Representation pooling destroys discriminative position-specific information.**
-Phase 3 uses mean-pooled (B, 16) representation, while Phase 1 used flattened
-(B, 80+) representation. The global average pool over all spatial × temporal
-positions may collapse class-discriminative structure that exists in the
-intermediate layer outputs.
-
-**(b) VICReg applied per-layer to int...]
-
-
-[Tool Call: list_dir({'path': 'phase_3'})]
-
-[Tool Result:       _dedup.py
-      _run_p3a_43.py
-      clean_dedup.py
-      comprehensive_analysis.py
-      compute_stats.py
-      dedup.py
-      diagnostic_report.md
-      experiment_config.txt
-      fast_run.log
-      generate_final_report.py
-      generate_vicreg_report.py
-      phase3_full_results.csv
-      phase3_results.csv
-      pooled_vicreg_results.csv
-      REPORT.md
-      REPORT_vicreg_fix.md
-      run.log
-      run_p3a_final.log
-      run_p3a_final.py
-      run_parallel.log
-      run_phase3_final.py
-      run_remaining.log
-      shortcut_baselines.csv]
-
-
-[Tool Call: grep_search({'pattern': 'phase_4', 'include_pattern': '*.py'})]
-
-[Tool Result: No matches found.]
-
-
-[Tool Call: grep_search({'include_pattern': '*.py', 'pattern': 'P4-A|P4-B|P4-C|P4-D|P4-E|phase_4|Phase 4'})]
-
-[Tool Result: No matches found.]
-
-
-[Tool Call: read_file({'path': 'phase_3/REPORT_vicreg_fix.md'})]
-
-[Tool Result: # Phase 3 — Pooled VICReg Fix: Final Report
-
-*Generated automatically by `generate_final_report.py`*
-
----
-
-## Executive Summary
-
-This report evaluates the **pooled VICReg fix** — a re-implementation of the variance regularisation term in the JEPA loss that replaces the standard-deviation-based formulation (which has zero gradient at collapse) with a per-dimension hinge-based variance loss. The fix was applied to the **P3-C** condition (shared weights, 1,600 parameters) across 5 seeds (42–46).
-
-### Key Finding: Both Fixes Combined Pass All Pre-Registered Falsification Criteria! 🎉
-
-Under the **pre-registered `spatial_pooled_then_flat` readout**, Condition D (P3-C with VICReg=True) achieves a **9.45 percentage-point gain over the untrained baseline** (Condition F), surpassing the pre-registered **≥8pp threshold** with strong statistical significance:
-
-- **Gain:** 9.45 pp (D mean = 61.55%, F mean = 52.10%)
-- **Paired t-test:** t(4) = 4.27, **p = 0.0130**
-- **Cohen's d (dz):** 1.91 (very la...]
-
-Now I have a thorough understanding of the codebase, prior results, and the Phase 4 requirements. Let me review the existing Phase 3 results one more time for reference, then formulate the plan.
-
-[Tool Call: read_file({'path': 'phase_3/pooled_vicreg_results.csv', 'start_line': 1, 'end_line': 10})]
-
-[Tool Result: --- lines 1 to 10 of 31 ---
-condition,seed,use_pooled_vicreg,readout_type,train_acc,test_acc,final_spatial_jepa_loss,final_temporal_jepa_loss,final_pooled_std,final_pooled_var_loss,final_pooled_cov_loss,training_time_sec,param_count,class_0_acc,class_1_acc,class_2_acc,class_3_acc
+[Tool Result: condition,seed,use_pooled_vicreg,readout_type,train_acc,test_acc,final_spatial_jepa_loss,final_temporal_jepa_loss,final_pooled_std,final_pooled_var_loss,final_pooled_cov_loss,training_time_sec,param_count,class_0_acc,class_1_acc,class_2_acc,class_3_acc
 P3-C,42,False,pooled,0.445,0.4425,18.5220831863055,9.01534186603424,0.07274529323071374,0.0,0.0,207.83137488365173,1600,0.61,0.19,0.28,0.69
 P3-C,43,False,pooled,0.46,0.4375,18.20115307223184,8.72085126153079,0.07039510208025884,0.0,0.0,207.8235673904419,1600,0.66,0.27,0.18,0.64
 P3-C,44,False,pooled,0.44625,0.425,17.8839849236025,9.036962313604981,0.08839668914997581,0.0,0.0,204.7143087387085,1600,0.56,0.22,0.17,0.75
 P3-C,45,False,pooled,0.47125,0.44,17.967081227982135,8.737349206686439,0.060122353015351626,0.0,0.0,206.87844610214233,1600,0.53,0.35,0.19,0.69
 P3-C,46,False,pooled,0.47375,0.455,17.826281955757924,8.749240343722498,0.06931246457443763,0.0,0.0,205.30752515792847,1600,0.56,0.34,0.19,0.73
-P3-C,42,Fal...]
+P3-C,42,False,spatial_pooled_then_flat,...]
+
+So each run with batch_size=64, 30 epochs, JEPA objective takes about 207-222 seconds (3.5-3.7 minutes). With 45 runs that's about 160 minutes ≈ 2.7 hours. This is within the typical sub-agent timeout if we're careful.
+
+However, the reconstruction objective will take longer because it processes more gradients per batch. SFA should be faster (only final layer). Hebbian is similar to JEPA in complexity.
+
+The memory error with 3 workers is the real problem. With 1 worker and batch_size=64, it should work. The code has already been updated to use 1 worker.
+
+Now, there's also the double-Adam bug for reconstruction. Let me trace through the code:
+
+For reconstruction:
+1. `adam_spatial` is created with `W_enc, b_enc, W_dec, b_dec` from master_spatial
+2. `adam_decoder` is also created with `W_dec, b_dec` from the same master_spatial
+3. During training, both `adam_spatial.step()` and `adam_decoder.step()` update W_dec and b_dec
+
+The encoder's `backward()` produces zero gradients for W_dec and b_dec (since the reconstruction code gradient flows through the encoder but the decoder gradient is computed separately). So `adam_spatial.step()` receives zero gradients for W_dec/b_dec, while `adam_decoder.step()` receives the actual reconstruction gradients. 
+
+This is actually correct in terms of gradient flow! The problem is only that `adam_spatial` maintains separate momentum/velocity for W_dec/b_dec that are always zero, so it never actually changes W_dec/b_dec. The `adam_decoder` handles the actual updates. So the double-update is NOT a bug — it's just slightly wasteful (adam_spatial computes some unnecessary operations on zeros for W_dec/b_dec).
+
+Wait, actually there IS a subtle bug: since both Adam instances reference the SAME numpy arrays for W_dec/b_dec, when adam_decoder.step() modifies them in-place, then adam_spatial.step() also sees the modified values. But since adam_spatial's gradients for W_dec/b_dec are zero, it just adds zero momentum and the bias correction would produce a small non-zero update from accumulated zero gradients... Actually no, if the gradient is always zero, the momentum m=0, velocity v=0, and the update is also zero (except for floating point rounding). So this is fine.
+
+Actually wait, let me re-read. In P3-C, `adam_spatial` and `adam_temporal` are the same object (`adam_temporal = adam_spatial`). The combined gradient is passed to `adam_spatial.step()`. This combined gradient has zeros for W_dec/b_dec. Then `adam_decoder.step()` is called with actual gradients for W_dec/b_dec. The order matters: if adam_decoder runs first, then adam_spatial, the combined gradient's zero for W_dec/b_dec would not undo anything (since it's adding zero). If adam_spatial runs first, same thing.
+
+OK, I'm convinced the reconstruction code is functionally correct. Let me now check for other bugs:
+
+1. The `metrics` variable in `run_single_experiment` references the last epoch's metrics. That's fine.
+2. The `evaluate_classification` function creates a new forward pass for train and test. For the train set (800 samples), this should be fine memory-wise since it's done as a single forward pass.
+3. The `final_fwd = encoder.forward_with_intermediates(train_grid)` creates another forward pass just for the pooled std metric. This is wasteful but not a bug.
+
+Now let me think about the plan. The current state is:
+- Sub-agent 7.1 completed (pre-registration + code creation)
+- Sub-agent 7.2 is "running" but actually failed with memory error, and the code has been patched
+- No results have been generated yet
+
+My plan should:
+1. Fix the memory issue (reduce batch size from 64 to 32, or keep at 64 with 1 worker and ensure it works)
+2. Fix any remaining bugs
+3. Run the experiments
+4. Generate the report
+5. Check falsification criteria
+
+Actually, let me re-read the current code more carefully. The code already uses `n_workers = min(1, total_tasks)`, which means 1 worker. With 1 worker and batch_size=64, the memory should be manageable (~120 MB per batch). The issue was with 3 workers (360 MB total + dataset copies in each worker). Let me check if the system has enough memory for a single worker with batch_size=64.
+
+The error said "Unable to allocate 10.5 MiB" — that's only 10.5 MB. This is suspicious. It suggests the system is severely memory-constrained (maybe only 1-2 GB total RAM), or there's a memory leak, or other processes are consuming memory.
+
+The fix should:
+1. Reduce batch_size from 64 to 32 to be safe
+2. Use 1 worker (already done)
+3. Add explicit garbage collection between runs
+4. Process evaluation in smaller batches
+
+Actually, for a Windows system with Python 3.12, multiprocessing uses `spawn` by default, which means each worker gets a full copy of the parent process's memory space. Even with 1 worker, the Pool creates a child process. A simpler approach would be to avoid multiprocessing entirely and just run sequentially.
+
+Let me now formulate the complete plan:
+
+**Key changes needed to `src/run_phase4.py`:**
+1. Reduce `BATCH_SIZE` from 64 to 32 (halves peak memory)
+2. Remove multiprocessing entirely — run sequentially in the main process
+3. Add `gc.collect()` between runs to free memory
+4. Fix the reconstruction double-Adam (minor — just exclude W_dec/b_dec from adam_spatial for recon objective, or accept the harmless double-tracking)
+5. Process evaluation in batches to reduce peak memory for the 800-sample train set
+
+**Sub-task plan:**
+- Sub-agent 7.2 (retry): Fix memory issues in run_phase4.py and run all 45 experiments, generate results CSV and REPORT.md
+
+Let me also check whether there's a `gc` import or any other optimization needed:
+
+[Tool Call: grep_search({'pattern': 'import gc', 'include_pattern': 'run_phase4.py'})]
+
+[Tool Result: No matches found.]
 
 
-[Tool Call: read_file({'path': 'src/run_phase3.py', 'start_line': 200, 'end_line': 300})]
+[Tool Call: grep_search({'include_pattern': 'run_phase4.py', 'pattern': 'gc\\.collect'})]
 
-[Tool Result: --- lines 200 to 300 of 599 ---
-                        },
-                        grads["dL_dtemporal"],
-                    )
+[Tool Result: No matches found.]
 
-            if adam_embedding is not None:
-                # Embedding is frozen per design, but we keep the hook
-                pass
+Now let me also verify that the evaluation function won't have memory issues. With 800 train samples and batch_size not being used in evaluate_classification, it does a single forward pass on all 800 samples:
 
-        avg_spatial = float(np.mean(spatial_losses)) if spatial_losses else 0.0
-        avg_temporal = float(np.mean(temporal_losses)) if temporal_losses else 0.0
-        combined = alpha * avg_spatial + (1.0 - alpha) * avg_temporal
+[Tool Call: read_file({'end_line': 440, 'path': 'src/run_phase4.py', 'start_line': 390})]
 
-        total_spatial_loss += avg_spatial
-        total_temporal_loss += avg_temporal
-        total_combined_loss += combined
-        n_batches += 1
+[Tool Result: --- lines 390 to 440 of 1071 ---
+                )
+                avg_b_dec_grad = (
+                    sum(g["b_dec"] for g in dec_grads_spatial + dec_grads_temporal)
+                    / (encoder.n_spatial_layers + encoder.n_temporal_layers)
+                )
+                adam_decoder.step(
+                    {"W_dec": W_dec, "b_dec": b_dec},
+                    {"W_dec": avg_W_dec_grad, "b_dec": avg_b_dec_grad},
+                )
 
-    return {
-        "spatial_loss": total_spatial_loss / n_batches,
-        "temporal_loss": total_temporal_loss / n_batches,
-        "combined_loss": total_combined_loss / n_batches,
-    }
+        else:
+            raise ValueError(f"Unknown objective: {objective}")
+
+        # =====================================================================
+        #  Pooled VICReg injection (same mechanism as Phase 3)
+        # =====================================================================
+        if use_pooled_vicreg:
+            z_pooled = fwd["pooled"]  # (B, d_out)
+            dL_dzp = pooled_vicreg_grad(z_pooled)  # (B, d_out)
+
+            T_final, S_final = fwd["temporal_outputs"][-1].shape[1:3]
+            dL_expanded = dL_dzp[:, N...]
+
+Let me check how evaluate_classification handles large datasets:
+
+The function does:
+```python
+fwd_train = encoder.forward_with_intermediates(train_grid)  # 800 samples
+fwd_test = encoder.forward_with_intermediates(test_grid)    # 400 samples
+```
+
+With 800 samples, the memory for forward intermediates would be 800/64 = 12.5x the batch memory. That's ~750 MB for intermediates alone. This is a MAJOR memory issue! The evaluation function needs to be fixed to process in batches.
+
+Let me estimate: with batch_size=32, each batch uses ~60 MB for intermediates. With 800 samples in evaluation (25 batches of 32), the peak is 60 MB. But if we do ALL 800 in one call, it's 800/32 * 60 = 1500 MB. That's way too much.
+
+This is likely the root cause of the memory error! The evaluation function does a single forward pass on the full 800-sample training set. Let me check the Phase 3 code:
+
+[Tool Call: grep_search({'include_pattern': 'run_phase3_vicreg_fix.py', 'pattern': 'forward_with_intermediates'})]
+
+[Tool Result: src\run_phase3_vicreg_fix.py:215: fwd = encoder.forward_with_intermediates(batch)
+src\run_phase3_vicreg_fix.py:356: fwd_train = encoder.forward_with_intermediates(train_grid)
+src\run_phase3_vicreg_fix.py:357: fwd_test = encoder.forward_with_intermediates(test_grid)
+src\run_phase3_vicreg_fix.py:483: final_fwd = encoder.forward_with_intermediates(train_grid)]
 
 
-def evaluate_classification(
-    encoder: SpatiotemporalEncoder,
-    train_grid: np.ndarray,
-    train_y: np.ndarray,
-    test_grid: np.ndarray,
-    test_y: n...]
+[Tool Call: read_file({'end_line': 380, 'path': 'src/run_phase3_vicreg_fix.py', 'start_line': 350})]
 
-Now I have a comprehensive understanding. Let me formulate the Phase 4 plan.
+[Tool Result: --- lines 350 to 380 of 889 ---
+    readout : str
+        - 'pooled': use fwd["pooled"] (B, d_out)
+        - 'spatial_pooled_then_flat': mean over spatial axis of last
+          temporal output, then flatten.
+          fwd["temporal_outputs"][-1].mean(axis=2).reshape(len(y), -1)
+    """
+    fwd_train = encoder.forward_with_intermediates(train_grid)
+    fwd_test = encoder.forward_with_intermediates(test_grid)
 
-**Summary of evidence from iterations 2–6:**
-- **Reconstruction/Sparse AE**: collapses (iter 002)
-- **Hebbian**: collapses to random variation, 23.96% (iter 003)
-- **SFA**: positive trend but below significance, 50.56% (iter 003)
-- **Contrastive**: moderate, 50.64% (iter 003)
-- **JEPA + VICReg**: clear winner, 62.12% (d=8) and 65.20% (d=16) in spatial-only (iter 003), and 61.55% in spatiotemporal (iter 006)
+    if readout == "pooled":
+        train_feats = fwd_train["pooled"]  # (n_train, d_out)
+        test_feats = fwd_test["pooled"]   # (n_test, d_out)
+    elif readout == "spatial_pooled_then_flat":
+        temp_last_tr = fwd_train["temporal_outputs"][-1]  # (B, T_final, S_final, d_out)
+        temp_last_te = fwd_test["temporal_outputs"][-1]
+        # Mean over spatial axis (axis=2), then flatten
+        train_feats = temp_last_tr.mean(axis=2).reshape(len(train_y), -1)
+        test_feats = temp_last_te.mean(axis=2).reshape(len(test_y), -1)
+    else:
+        raise ValueError(f"Unkno...]
 
-These were all tested on the **spatial-only** Phase 1 benchmark. The goal of Phase 4 is a **formal comparison on the spatiotemporal Phase 3 benchmark** using the confirmed architecture (P3-C, pooled VICReg, spatial_pooled readout).
+So the Phase 3 VICReg fix also evaluated with full-dataset forward passes. But it worked with 3 workers... Wait, the Phase 3 experiment had different conditions. Let me check — it used 6 conditions × 5 seeds = 30 runs. With Pool(3), that's 3 concurrent workers. But each worker only processes one run at a time, and within a run, the evaluation forward passes happen sequentially. The memory error we see in Phase 4 was during the TRAINING forward pass, not evaluation. Let me re-read the error:
 
-The key question: can any objective other than JEPA + pooled VICReg match or exceed JEPA's 61.55% on the spatiotemporal benchmark? The user hint suggests this should be a clean confirmation run — all objectives, identical setup, clean table.
+```
+File "src/run_phase4.py", line 282, in train_epoch
+    fwd = encoder.forward_with_intermediates(batch)
+```
 
-Let me check what modifications are needed for each objective to work with the spatiotemporal encoder:
+Line 282 in the current code is the training forward pass with batch_size=64. So the 10.5 MB allocation for a single training batch failed. This means the system is extremely memory-constrained. With 3 workers, each creating datasets + encoders, the memory is exceeded.
 
-1. **JEPA + pooled VICReg** — already implemented and proven (iter 006)
-2. **SFA** — exists in `training_objectives.py` but operates on temporal sequences `(T, d)` or `(B, T, d)`. Needs adaptation for spatiotemporal data.
-3. **Hebbian** — exists in `training_objectives.py` but operates on `HierarchicalEncoder`, not `SpatiotemporalEncoder`. Needs adaptation.
-4. **Contrastive** — exists in `training_objectives.py` but needs augmentation pairs.
-5. **Reconstruction (sparse AE)** — the UniversalNode already has `local_loss` and `compute_gradients`. Could use this as a reference point.
+With 1 worker, this should work. But the user said the timeout was the problem, not the memory. So the fix to 1 worker resolved the memory issue, but then the runs took too long and timed out.
 
-The critical adaptation challenge: all existing objectives were written for the Phase 1 `HierarchicalEncoder`, not the Phase 3 `SpatiotemporalEncoder`. We need to:
-- Create spatiotemporal versions of each objective
-- Apply the pooled VICReg fix where appropriate
-- Use the same training protocol (30 epochs, 200 train/class, batch=64, lr=1e-3)
-- Evaluate with `spatial_pooled_then_flat` readout
+OK, so my plan should focus on:
+1. Keep batch_size=64 (or reduce to 48 as compromise)
+2. Run sequentially (no multiprocessing) to save memory and avoid spawn overhead
+3. Add batch-wise evaluation to avoid memory spikes
+4. Consider reducing to 3 seeds initially if 5 is too slow
+5. Optimize the untrained baseline (no training needed)
+
+Actually, looking more carefully at the user hint: "Executor Sub-agent 7.2 had timeout Problems while running 'src/run_phase4.py'. This should be fixed now." The "This should be fixed now" likely means the code has already been updated to address the timeout (e.g., by reducing workers to 1). The user wants me to continue with the experiment by re-running it.
+
+Let me now plan the specific experiment execution. The key question is: can 45 runs complete within a sub-agent timeout? Based on Phase 3 data, each run takes ~210 seconds. 45 runs × 210 = 9,450 seconds ≈ 158 minutes ≈ 2.6 hours. Sub-agent timeouts are typically 2-3 hours, so this is right at the limit.
+
+Optimizations:
+1. **Untrained baseline**: No training needed. Just forward pass + classification. Should take <30 seconds each. 5 × 30 = 150 seconds.
+2. **SFA**: Simpler objective (only final layer). Might be ~10% faster.
+3. **Hebbian**: Similar complexity to JEPA. Similar time.
+4. **Reconstruction**: Extra decoder update, but similar time.
+5. **Evaluation**: Needs batched forward passes to avoid memory spikes.
+
+With optimizations, estimated time: 40 trained runs × 210s + 5 untrained × 30s = 8,550s ≈ 143 minutes. Still tight.
+
+Alternative: **Reduce to 3 seeds** (42, 43, 44) for 27 trained + 3 untrained = 30 runs. Time: 27 × 210 + 3 × 30 = 5,760s ≈ 96 minutes. More feasible.
+
+But the pre-registration says 5 seeds. I need to either:
+a) Stick with 5 seeds and hope the timeout is generous enough
+b) Modify the pre-registration to use 3 seeds (still valid for statistical tests with paired t-tests)
+
+Actually, with only 3 seeds, paired t-tests have very low power. 5 seeds is the minimum for meaningful statistics. Let me think about a different approach.
+
+**Strategy: Run in batches of objectives.** Process one objective at a time (2 VICReg conditions × 5 seeds = 10 runs per objective, plus the untrained baseline which is shared). This way, each sub-agent call handles a manageable chunk.
+
+But wait — the sub-agent framework runs the full `run_phase4.py`. If I modify it to accept command-line arguments specifying which objective to run, I can split the work across multiple sub-agents.
+
+Actually, the simplest approach is:
+1. Fix the code to run sequentially (no Pool), use batch_size=32, and add batched evaluation
+2. Split into two sub-agents: one runs jepa+sfa (20 trained + 5 untrained), another runs hebbian+recon (20 trained, no untrained needed)
+3. A third sub-agent combines results and generates the report
+
+Let me design this properly.
+
+Actually, I should check what the typical sub-agent timeout is. Given that Phase 3 ran 30 experiments successfully, the timeout must be at least 2 hours. With 45 experiments at ~3.5 min each = 158 minutes = 2.6 hours, it might just work if we optimize a bit.
+
+Key optimizations for speed:
+1. **Batched evaluation**: Instead of full-dataset forward pass, process in chunks of 64
+2. **No separate final_fwd**: Compute pooled_std from the last training batch instead of a separate forward pass
+3. **Sequential processing**: No multiprocessing overhead
+4. **Reduce batch_size to 32**: Slightly faster per-epoch due to less memory pressure, but more batches per epoch
+
+Actually, reducing batch_size from 64 to 32 doubles the number of batches per epoch (from ~12.5 to ~25), which roughly doubles the time per epoch. So batch_size=64 is actually faster when it fits in memory. The memory fix of using 1 worker should be sufficient.
+
+Let me reconsider: the error was with 3 workers. With 1 worker, batch_size=64 should work fine. The current code already uses `n_workers = min(1, total_tasks)`. The timeout issue was that it was running for too long.
+
+Let me estimate more precisely: with batch_size=64, 800 train samples, 30 epochs:
+- Batches per epoch: ceil(800/64) = 13
+- Each batch: forward (with intermediates) + backward + Adam update ≈ 0.5-1.0 seconds
+- Epoch time: 13 × 0.75 ≈ 10 seconds
+- 30 epochs: 300 seconds ≈ 5 minutes per run
+- 45 runs: 225 minutes ≈ 3.75 hours
+
+Hmm, but the Phase 3 data showed ~210 seconds per run. That's 3.5 minutes. So 45 × 3.5 = 157 minutes ≈ 2.6 hours. 
+
+If the sub-agent timeout is ~2 hours, we need to be more efficient. Options:
+1. Run only 3 seeds (30 runs ≈ 105 min)  
+2. Split across sub-agents
+3. Reduce epochs from 30 to 20 (but pre-registration says 30)
+4. Skip the final_fwd for pooled_std (save ~30s per run)
+
+I think the best approach is to split the work into manageable sub-agent chunks:
+
+**Sub-agent 7.2 (retry)**: Run JEPA and SFA objectives (20 trained + 5 untrained = 25 runs)
+**Sub-agent 7.3**: Run Hebbian and Reconstruction objectives (20 trained runs, reuse untrained baseline)
+**Sub-agent 7.4**: Combine all results and generate REPORT.md
+
+This way each sub-agent handles ~25 runs ≈ 90 minutes, well within a 2-hour timeout.
+
+Let me now design the precise modifications needed:
+
+### Code modifications needed:
+
+1. **`src/run_phase4.py`**: 
+   - Add `--objectives` CLI argument to run specific objectives
+   - Add `--skip-untrained` flag for sub-agents that don't need to recompute the baseline
+   - Use sequential execution (no Pool) to avoid memory issues
+   - Add batched evaluation for large datasets
+   - Add garbage collection between runs
+   - Fix: remove the unnecessary `final_fwd` forward pass (compute pooled_std from last training batch metrics)
+   - Handle the case where results CSV already exists (append mode for split runs)
+
+2. **Evaluation batch processing**: Instead of `encoder.forward_with_intermediates(train_grid)` on all 800 samples, process in chunks of 64.
+
+Actually, I just realized the evaluation memory issue: with 800 samples, the intermediates are:
+- spatial_inputs[0]: 800 × 14 × 32 × 3 × 16 × 8 bytes = 137 MB
+- Plus all other intermediates: total ~800 MB
+
+This is WAY too much for a memory-constrained system. We need batched evaluation.
+
+Let me now write the final plan.
+
+Wait, let me also check if there's a simpler approach: can we extract features without storing all intermediates?
+
+[Tool Call: grep_search({'include_pattern': 'spatiotemporal_encoder.py', 'pattern': 'def forward'})]
+
+[Tool Result: src\spatiotemporal_encoder.py:220: def forward_with_intermediates(self, x_binary: np.ndarray) -> dict:]
+
+There's only `forward_with_intermediates` — no lighter-weight forward. We need to add a `forward_features_only` method or do batched evaluation.
+
+OK, I have a comprehensive understanding now. Let me formulate the plan.
+
+The plan should be:
+
+**Hypothesis**: Same as the pre-registered Phase 4 hypothesis from iter_007.
+
+**Key modifications to `src/run_phase4.py`**:
+1. Replace multiprocessing with sequential execution
+2. Add batched feature extraction for evaluation (process in chunks of 64)
+3. Add `--objectives` argument to filter which objectives to run
+4. Add `--seeds` argument for flexibility
+5. Remove the redundant `final_fwd` forward pass
+6. Add `gc.collect()` between runs
+7. Fix: ensure the results CSV is opened in append mode when combining partial results
+
+**Execution plan**:
+- Sub-agent 7.2: Fix run_phase4.py, run JEPA+SFA objectives, save partial results
+- Sub-agent 7.3: Run Hebbian+Reconstruction objectives, append to results  
+- Sub-agent 7.4: Generate final report from combined results
+
+Actually, thinking about this more carefully, the simplest approach that avoids coordination issues is to have a single sub-agent do all the work, but with the code optimized to run fast enough. Let me estimate if we can get under 2 hours:
+
+With batch_size=64, each run is ~210s. But the untrained runs are ~30s (no training). 
+- 40 trained runs × 210s = 8,400s
+- 5 untrained × 30s = 150s
+- Total: 8,550s = 142.5 min ≈ 2.4 hours
+
+This is too long. We need to shave off time. Key optimizations:
+
+1. **Batched evaluation with no intermediates**: For evaluation, we only need the final temporal output (for spatial_pooled_then_flat readout). We don't need to store spatial_inputs or temporal_inputs. If we add a lightweight forward that only stores outputs (not inputs), we can evaluate the full 800 samples in one pass.
+
+Actually, let me check if we can just call `forward_with_intermediates` in batches and concatenate the features:
+
+```python
+def extract_features_batched(encoder, grid, batch_size=64):
+    features = []
+    for start in range(0, len(grid), batch_size):
+        batch = grid[start:start+batch_size]
+        fwd = encoder.forward_with_intermediates(batch)
+        feat = fwd["temporal_outputs"][-1].mean(axis=2).reshape(len(batch), -1)
+        features.append(feat)
+    return np.concatenate(features, axis=0)
+```
+
+This is simple and works. Each batch only allocates memory for batch_size samples.
+
+2. **Remove final_fwd**: Instead of a separate forward pass to compute pooled_std, compute it from the last training batch's metrics (already tracked in `metrics["pooled_std"]`).
+
+3. **Faster untrained runs**: The current code creates Adam optimizers but never calls step(). This is wasteful. Skip optimizer creation entirely for untrained.
+
+With these optimizations, let me estimate:
+- Each trained run: ~200s (removing final_fwd saves ~10s)
+- Each untrained run: ~20s (no training, just evaluation)
+- 40 × 200 + 5 × 20 = 8,100s = 135 min ≈ 2.25 hours
+
+Still tight. Let me think about splitting.
+
+Actually, the most reliable approach is to split into 2 sub-agents:
+
+**Sub-agent 7.2** (complexity: high): 
+- Fix run_phase4.py with all memory/speed optimizations
+- Run JEPA (10 runs) + SFA (10 runs) + untrained (5 runs) = 25 runs
+- Save results to phase_4/phase4_results.csv
+- Estimated time: 25 × 200 = 5,000s ≈ 83 min (plus untrained ~100s)
+
+**Sub-agent 7.3** (complexity: high):
+- Run Hebbian (10 runs) + Reconstruction (10 runs) = 20 runs
+- Append results to phase_4/phase4_results.csv  
+- Estimated time: 20 × 200 = 4,000s ≈ 67 min
+
+**Sub-agent 7.4** (complexity: medium):
+- Load all results from phase_4/phase4_results.csv
+- Run statistical analysis
+- Generate phase_4/REPORT.md
+- Check falsification criteria
+
+This is clean and each sub-agent should complete well within timeout. Let me finalize the plan.
+
+One more thing — I need to verify the pre-registration is properly set up. Let me check:
+
+[Tool Call: read_file({'path': 'src/pre_registration.md'})]
+
+[Tool Result: # RDF Scientific Pre-Registration — Phase 4
+
+*   **Iteration:** 008
+*   **Pre-Registration File:** src/pre_registration.md
+
+## 1. Research Question
+Which unsupervised training objective best extracts task-relevant features from
+spatiotemporal binary-grid data when combined with a lightweight universal-node
+encoder (P3-C, 1 600 parameters, spatial_pooled_then_flat readout)?
+
+Specifically, we compare four objective families — JEPA, SFA, Hebbian variance
+maximisation, and Sparse Reconstruction — each with and without a pooled
+VICReg variance+covariance regulariser injected into the final temporal layer.
+
+## 2. Mathematical Formulations
+
+### Notation
+- Input grid: `x ∈ {0,1}^{B×S×T}`  (B batch, S=16 spatial, T=32 temporal)
+- Embedding: `e = embed(x) ∈ ℝ^{B×S×T×d}`  with d=16, frozen
+- Spatial layer `l` output: `Z_l^{(s)} ∈ ℝ^{B×S_l×T×d_out}`  (post-tanh code)
+- Temporal layer `l` output: `Z_l^{(t)} ∈ ℝ^{B×T_l×S_{final}×d_out}`  (post-tanh code)
+- Pooled representation: `z̄ = mean_{s,t}(Z_{...]
+
+Good, the pre-registration is well-formed. Now let me design the final plan with all the necessary details.
+
+Let me check one more thing — the `_Adam` class and how it handles the double-reference issue for reconstruction:
+
+[Tool Call: read_file({'end_line': 620, 'path': 'src/run_phase4.py', 'start_line': 575})]
+
+[Tool Result: --- lines 575 to 620 of 1071 ---
+
+    # Adam optimisers
+    adam_spatial = None
+    adam_temporal = None
+    adam_decoder = None
+    if update_encoder:
+        params_enc = {
+            "W_enc": encoder.master_spatial.W_enc,
+            "b_enc": encoder.master_spatial.b_enc,
+            "W_dec": encoder.master_spatial.W_dec,
+            "b_dec": encoder.master_spatial.b_dec,
+        }
+        adam_spatial = _Adam(params_enc, lr=LR)
+        adam_temporal = adam_spatial  # P3-C: shared
+
+        if objective == "recon":
+            adam_decoder = _Adam(
+                {"W_dec": encoder.master_spatial.W_dec,
+                 "b_dec": encoder.master_spatial.b_dec},
+                lr=LR,
+            )
+
+    # Training
+    t0 = time.time()
+    for epoch in range(epochs):
+        metrics = train_epoch(
+            encoder,
+            train_grid,
+            BATCH_SIZE,
+            rng,
+            objective=objective,
+            adam_spatial=adam_spatial if update_encoder else None,
+      ...]
+
+The `final_fwd` on the full 800 samples is a memory problem. For 800 samples:
+- spatial_inputs[0]: 800 × 14 × 32 × 3 × 16 × 8 = 137 MB
+
+This is definitely causing memory issues. The fix is to either:
+1. Compute pooled_std from the training metrics (already available as `metrics["pooled_std"]`)
+2. Compute it in batches
+
+Option 1 is simplest and gives the same information (it's the mean over batches of the per-batch pooled std, which is a good approximation).
+
+Now I have everything I need to formulate the plan. Let me be precise about the bugs and fixes:
+
+### Bugs found in `src/run_phase4.py`:
+
+1. **Memory: Full-dataset evaluation** — `evaluate_classification` does `forward_with_intermediates(train_grid)` on all 800 samples, allocating ~1 GB of intermediates. **Fix**: Add batched feature extraction helper.
+
+2. **Memory: Full-dataset final_fwd** — `run_single_experiment` does `forward_with_intermediates(train_grid)` for pooled_std. **Fix**: Use `metrics["pooled_std"]` from last epoch instead.
+
+3. **Memory: multiprocessing Pool** — With Pool, each worker gets a copy of the parent's memory via `spawn` on Windows. **Fix**: Use sequential execution in main process.
+
+4. **Performance: Untrained baseline wastes time** — The untrained condition creates optimizers and goes through the training loop (with zero gradients). **Fix**: Skip training entirely for untrained.
+
+5. **Minor: Double Adam for reconstruction** — `adam_spatial` and `adam_decoder` both track W_dec/b_dec, but only `adam_decoder` receives non-zero gradients. This is functionally correct but wasteful. **Fix**: Exclude W_dec/b_dec from `adam_spatial` for the reconstruction objective (or just leave it — the overhead is negligible).
+
+Let me now write the final plan YAML:
+
+[Tool Call: read_file({'end_line': 5, 'path': 'src/pre_registration.md'})]
+
+[Tool Result: --- lines 1 to 5 of 208 ---
+# RDF Scientific Pre-Registration — Phase 4
+
+*   **Iteration:** 008
+*   **Pre-Registration File:** src/pre_registration.md
+]
+
+Now I'm ready to formulate the plan. The plan should be continuation of iteration 007, specifically completing the Phase 4 experiment that sub-agent 7.2 failed to complete due to memory and timeout issues.
 
 ```yaml
 hypothesis: |
-  On the Phase 3 spatiotemporal benchmark (P3-C architecture, 1,600 params,
-  spatial_pooled_then_flat readout, pooled VICReg applied to all objectives),
-  JEPA + pooled VICReg is the best training objective. Specifically:
-  (H1) JEPA + pooled VICReg achieves test accuracy ≥ 58% (within 4pp of the
-       61.55% reference from iter_006).
-  (H2) No other objective (SFA, Hebbian, Contrastive, Reconstruction) with
-       pooled VICReg exceeds JEPA + pooled VICReg by more than 2pp.
-  (H3) All objectives with pooled VICReg outperform their counterparts without
-       pooled VICReg (confirming the pooled VICReg fix generalises).
-
+  Phase 4 (Training Objective Comparison) on the P3-C spatiotemporal benchmark:
+  (H1) JEPA + pooled VICReg achieves test accuracy ≥ 55% (reproducing the 61.55%
+       reference from iter_006 with relaxed floor).
+  (H2) No other objective (with OR without pooled VICReg) exceeds JEPA + pooled
+       VICReg by ≥ 3 percentage points.
+  (H3) For most objectives, pooled VICReg improves accuracy over the VICReg-free
+       version. Reconstruction may violate H3 (it natively resists collapse).
 falsification_criterion: |
-  The hypothesis is falsified if ANY of the following hold:
-  F1: JEPA + pooled VICReg achieves < 55% test accuracy (indicating the
-      result is not reproducible or the implementation is broken).
-  F2: Any other objective with pooled VICReg exceeds JEPA + pooled VICReg
-      by ≥ 3pp (JEPA is NOT the best objective).
-  F3: For any objective, the version WITHOUT pooled VICReg achieves equal or
-      higher accuracy than the version WITH pooled VICReg (pooled VICReg fix
-      does not generalise).
-
+  F1: JEPA + pooled VICReg achieves < 55% test accuracy (implementation broken).
+  F2: Any other objective exceeds JEPA + pooled VICReg by ≥ 3pp (JEPA not best).
+  F3: For any objective X (other than Reconstruction), accuracy(X without VICReg)
+      ≥ accuracy(X with VICReg) — pooled VICReg does not generalise. F3 triggering
+      for Reconstruction is expected and explicitly allowed.
 proposed_method: |
-  Step 1: Create src/run_phase4.py — the unified Phase 4 experiment runner.
+  Step 1: Fix src/run_phase4.py to address memory and timeout failures:
+    a) Replace multiprocessing Pool with sequential execution in main process
+    b) Add batched feature extraction for evaluation (process in chunks of 64
+       instead of full 800-sample forward pass — avoids ~1 GB memory spike)
+    c) Remove the redundant final_fwd forward pass on full training set;
+       use metrics["pooled_std"] from last epoch instead
+    d) Skip training loop for untrained baseline (just do evaluation)
+    e) Add gc.collect() between runs to free memory
+    f) Add --objectives CLI argument to run subset of objectives
+    g) Change results CSV to append mode (support split runs)
   
-  Step 2: Implement 5 training objectives adapted for SpatiotemporalEncoder:
-    - P4-A: JEPA + pooled VICReg (reference, from run_phase3_vicreg_fix.py)
-    - P4-B: Local JEPA (prediction only, no pooled VICReg — control)
-    - P4-C: SFA + pooled VICReg (slowness on temporal axis + variance penalty)
-    - P4-D: Hebbian + pooled VICReg (Oja's rule on encoder weights + VICReg)
-    - P4-E: Reconstruction (sparse AE) + pooled VICReg (local reconstruction + VICReg)
+  Step 2: Run experiments in two sequential sub-agents to stay within timeout:
+    Sub-agent 7.2 (retry): Fix code + run JEPA (10) + SFA (10) + untrained (5) = 25 runs
+    Sub-agent 7.3: Run Hebbian (10) + Reconstruction (10) = 20 runs, append to CSV
   
-  For each objective, the training loop follows the same pattern:
-  1. Forward pass through SpatiotemporalEncoder
-  2. Compute objective-specific loss and code gradients
-  3. If pooled VICReg is enabled, compute pooled VICReg gradient and inject
-     into the last temporal code gradient (same mechanism as iter_006)
-  4. Backward pass through encoder
-  5. Adam update on encoder parameters
-  6. Evaluate with spatial_pooled_then_flat readout
+  Step 3: Sub-agent 7.4 loads all 45 results from phase_4/phase4_results.csv,
+    runs statistical analysis (paired t-tests, Cohen's d), evaluates F1/F2/F3
+    falsification criteria, and generates phase_4/REPORT.md.
   
-  Step 3: Run 5 objectives × 2 VICReg conditions (with/without) × 5 seeds
-  = 50 experiments. Plus 5 untrained baselines × 5 seeds = 25 additional.
-  Total: 55 runs. Each run: 30 epochs, batch=64, lr=1e-3.
+  Step 4: Update current_state.md with Phase 4 results and recommendation for
+    default training objective going forward.
   
-  Step 4: Save results to phase_4/phase4_results.csv with columns:
-  objective, seed, use_pooled_vicreg, train_acc, test_acc, per-class accs,
-  final_loss, pooled_std, training_time_sec.
+  Files to modify: src/run_phase4.py (major refactor), src/pre_registration.md (update iteration number)
+  Files to create: phase_4/phase4_results.csv, phase_4/REPORT.md
+  Files to update: current_state.md
   
-  Step 5: Statistical analysis and report generation:
-  - Paired t-tests between each objective and untrained baseline
-  - Effect sizes (Cohen's d)
-  - Comparison table with mean ± std for all 10+ conditions
-  - VICReg ablation analysis (with vs without for each objective)
-  - Recommendation for default objective
-  
-  Step 6: Write phase_4/REPORT.md with:
-  - Clean comparison table (all objectives, both VICReg conditions)
-  - Statistical significance markers
-  - Training stability observations
-  - Compute cost comparison
-  - Formal recommendation
-  
-  Files to create/modify:
-  - src/run_phase4.py (NEW — unified experiment runner)
-  - src/pre_registration.md (UPDATE)
-  - phase_4/phase4_results.csv (NEW — results)
-  - phase_4/REPORT.md (NEW — final comparison report)
-
-pre_registration_file: "src/pre_registration.md"
+  Experimental config (unchanged from pre-registration):
+  - P3-C architecture, d=16, d_out=16, 1,600 params
+  - 4 objectives × 2 VICReg conditions × 5 seeds = 40 trained + 5 untrained = 45 runs
+  - 30 epochs, batch=64, lr=1e-3, alpha=0.5
+  - Readout: spatial_pooled_then_flat (416 dims)
+  - Seeds: [42, 43, 44, 45, 46]
+pre_registration_file: src/pre_registration.md
 ```
