@@ -1,0 +1,30 @@
+artifacts:
+- src/pre_registration.md
+experimenter_view: 'The pre-registration was successfully updated to reflect the corrected
+  hypothesis:
+
+  Phase 3''s failure is NOT caused by VICReg omission (VICReg is present with
+
+  λ_var=25, λ_cov=25 in JEPALoss). The diagnostic was designed to distinguish
+
+  between two mechanisms: (a) pooling destroys discriminative position-specific
+
+  information, or (b) VICReg on intermediates doesn''t prevent final pooled
+
+  representation collapse. However, the diagnostic script was not executed due
+
+  to execution limit, so no empirical determination could be made.
+
+  '
+log_excerpt: 'Work stopped after updating src/pre_registration.md with corrected hypothesis.
+
+  The diagnostic script (src/diagnostic_phase3_vicreg.py) was not written or executed.
+
+  The pooling comparison and variance measurements were not performed.
+
+  The final report (phase_3/diagnostic_report.md) was not produced.
+
+  '
+metrics: {}
+notes: Execution limit reached before diagnostic script could be written or run.
+status: code_error
