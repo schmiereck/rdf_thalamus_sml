@@ -1,9 +1,8 @@
-# RDF Scientific Pre-Registration
+# Research Manager Log - Iteration 008
 
-*   **Iteration:** 008
-*   **Pre-Registration File:** src/pre_registration.md
+## Iteration 008 -> Manager [Proposed Research Plan]
 
-## 1. Hypothesis
+**Proposed Hypothesis:**
 Phase 5 — Vector Semantics Investigation.
 
 PRIMARY HYPOTHESIS: In the P3-C encoder trained with Reconstruction + pooled VICReg
@@ -39,7 +38,7 @@ all intermediate layers) does NOT significantly improve consistency over P5-A
 (difference < 0.05), but maintains accuracy ≥ 78%. Pure decorrelation without
 semantic anchoring does not improve interpretability.
 
-## 2. Falsification Criterion
+**Proposed Falsification Criterion:**
 PRIMARY FALSIFICATION (any one suffices to falsify the core hypothesis):
 
 F1: Mean overall consistency ≤ 0.30 for P5-A (codes are no more semantically
@@ -63,7 +62,7 @@ F5: P5-B consistency improvement over P5-A < 0.05 — anchoring does not help
 consistency, suggesting the model resists semantic alignment even with
 explicit regularization.
 
-## 3. Proposed Method
+**Proposed Method:**
 STEP 1: Implement semantic probe extraction (src/semantic_probes.py).
 
 Define 5 scalar probes computed from the raw (B, 16, 32) binary grid,
@@ -180,4 +179,43 @@ Experimental config:
   Evaluation: 4-class classification accuracy + consistency scores
 
 ---
-*Created automatically by the RDF Orchestrator prior to iteration execution.*
+
+## Iteration 008 -> Planner [Strategic Guidance]
+
+### Strategic Guidance: Manager's Note
+
+To: The Planner Agent  
+From: Research Manager  
+Subject: Phase 5 Vector Semantics Formulation — Avoiding Tautologies & Tightening Definitions
+
+Your transition to Phase 5 is highly logical. Using the high-performing **Reconstruction + pooled VICReg** (83.00%) representation provides a sufficiently rich latent space to probe for semantic alignment. However, your proposed plan contains a classic **constructional trap** and a metric vulnerability that we must correct before pre-registration and execution. 
+
+Address the following three strategic points:
+
+---
+
+### 1. The Construction-vs-Empirical Test: Anchoring is a Constraint, Not a Discovery
+In **P5-B (Anchor Features)**, you propose to add an explicit loss term $L_{\text{anchor}} = \lambda_{\text{anchor}} \sum \| \mathbf{z}_j - \mathbf{p}_j \|^2$ to force the first 5 dimensions of the code to align with the semantic probes. 
+* **The Trap:** If you subsequently report that these 5 dimensions correlate strongly with the probes, you are merely verifying that your optimizer works. **This is a definitional identity, not an empirical finding.**
+* **The Corrective Action:** Explicitly reframe the evaluation of P5-B. The only genuine empirical questions for P5-B are:
+  1. *Does forcing these 5 semantic alignments degrade or improve downstream classification accuracy compared to P5-A?* (If accuracy is maintained or improved, it suggests the hand-designed semantic axes are natural to the task).
+  2. *Does anchoring the first 5 dimensions improve the emergence of consistent, unconstrained semantics in the remaining 11 dimensions?*
+* **Directive:** Update your hypotheses and analysis scripts to explicitly segregate the *anchored* dimensions from the *free* dimensions when calculating emergent semantic consistency.
+
+### 2. Tighten Semantic Assignment: Establish an Interpretability Threshold
+In your proposed Step 3(e), you assign the dominant semantic for each dimension using a simple $\operatorname{argmax}_k |R|$. 
+* **The Vulnerability:** If a dimension has exceptionally weak correlations with all probes (e.g., maximum $|R| = 0.05$), assigning it a "dominant semantic" based on the argmax is a statistical artifact. It means the dimension is actually uninterpretable noise, but your metric will force-classify it into one of your 5 categories, artificially inflating consistency.
+* **The Corrective Action:** Introduce a strict **interpretability threshold**. A dimension $j$ at position $(s, t)$ can only be assigned a dominant semantic if:
+  $$\max_k |R(j, p_k)| \ge 0.20 \quad \text{AND} \quad \text{FDR-corrected } q < 0.05$$
+  If it fails this criterion, its dominant semantic must be labeled as **"Unassigned/Null"**. 
+* This ensures that "consistency" measures the agreement of *meaningful* semantic tuning, rather than the alignment of random noise.
+
+### 3. Pre-Registration Mandate & Language Discipline
+Before running the simulations, the Orchestrator will write and commit your finalized plan to `src/pre_registration.md`. 
+* Ensure your mathematical formulations for the 5 probes (specifically boundary wrapping for spatial gradients and temporal causality for periodicity) are completely explicit in the code.
+* In your eventual analysis, maintain strict language hygiene. Avoid phrases like *"the network organically discovered the concept of motion"*. Instead, use: *"dimension $j$ is consistent with local temporal change under conditions $Y$, showing a statistically significant correlation of $R = \dots$."*
+
+You are authorized to proceed to pre-registration and implementation once these metric constraints are integrated. Good luck.
+
+---
+

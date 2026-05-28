@@ -1,0 +1,858 @@
+
+[Tool Call: read_file({'path': 'current_state.md'})]
+
+[Tool Result: # Current Research State — HSUN Project
+**Last updated:** After Phase 4 (iter_007, sub-agents 7.1–7.2)
+
+## Goal
+Investigate an architecture for unsupervised representation learning built from
+a single, universal node type. Phase 4 (Training Objective Comparison) is now RESOLVED.
+
+## Confirmed (with iter/sub-agent references)
+
+### Phase 4 Resolution (iter_007)
+1. **Reconstruction + pooled VICReg is the best training objective** at 83.00% ± 2.27%
+   (iter_007, 7.1). This exceeds JEPA + pooled VICReg (61.55%) by 21.45pp.
+
+2. **SFA + pooled VICReg is a close second** at 82.15% ± 3.02% (iter_007, 7.1).
+   SFA without VICReg completely collapses to 25.00% (chance).
+
+3. **Pooled VICReg is the DOMINANT anti-collapse factor** across all objectives
+   (iter_007, 7.1 + 7.2):
+   - SFA: +57.15pp (25.00% → 82.15%), p = 0.000002
+   - Reconstruction: +33.45pp (49.55% → 83.00%), p = 0.000943
+   - JEPA: +8.05pp (53.50% → 61.55%), p = 0.007
+   - Hebbian: +4.65pp (43.90% → 48.55%), p = 0.183 (not signific...]
+
+
+[Tool Call: read_file({'path': 'goal.md'})]
+
+[Tool Result: # RDF Project: Hierarchical Sparse Universal Nodes (HSUN)
+
+## Vision
+
+Investigate an architecture for unsupervised representation learning built from a **single, universal node type** that satisfies the following properties:
+
+1. Maps a small fixed-arity input (target: 3 slots, each a vector of dimension `d`) to a single output vector of dimension `d`.
+2. Can be stacked hierarchically by feeding triplets of node outputs into nodes of the next layer (shared weights, kernel-3 1D convolution semantics, stride 1 — overlap of 2).
+3. Can be applied along the time axis identically — three temporally consecutive outputs of one position feeding a temporal node.
+4. Is trained via a **local, label-free objective** such that the same trained node works at every spatial position and every hierarchical level.
+
+The architecture should yield representations where similar inputs produce similar codes (similarity-preserving encoding) and the dimensions of those codes carry **consistent semantics across p...]
+
+
+[Tool Call: list_dir({'path': 'src'})]
+
+[Tool Result: [DIR] __pycache__
+      _bench_compare.py
+      dataset_phase1.py
+      diagnostic_phase1.py
+      diagnostic_phase3_vicreg.py
+[DIR] encoders
+      eval_phase1.py
+      harness.py
+      hierarchical_encoder.py
+      node.py
+      phase3_run.log
+[DIR] phase_3
+      pooling_comparison_results.csv
+      pre_registration.md
+      profile_p3b.py
+      run_phase0.py
+      run_phase1.py
+      run_phase1_v2.py
+      run_phase2.py
+      run_phase2_baselines.py
+      run_phase3.py
+      run_phase3_background.py
+      run_phase3_fast.py
+      run_phase3_medium.py
+      run_phase3_optimized.py
+      run_phase3_parallel.py
+      run_phase3_vicreg_fix.py
+      run_phase4.py
+      run_remaining_phase3.py
+      run_remaining_seeds.py
+      spatiotemporal_dataset.py
+      spatiotemporal_encoder.py
+      spatiotemporal_encoder.py-patch
+      temporal_dataset.py
+      temporal_encoder.py
+      test_import.py
+      test_objectives.py
+      test_temporal.py
+      time_one_run.py
+      tmp_test_phase3_timin...]
+
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_encoder.py'})]
+
+[Tool Result: """
+Spatiotemporal Encoder for Phase 3.
+
+Implements the sequential spatial-then-temporal encoder over a
+(16 spatial × 32 temporal) binary grid using stacked kernel-3,
+stride-1 UniversalNodes.
+
+Both spatial and temporal forward/backward passes are **fully
+vectorized** — no Python loops over spatial/temporal positions.
+
+Three variants
+--------------
+* **P3-A** – One master spatial node + one master temporal node.
+  Trained sequentially (spatial first, then temporal).
+* **P3-B** – One master spatial node + one master temporal node
+  (separate objects, trained jointly with both losses).
+* **P3-C** – A *single* master node reused for *both* spatial and
+  temporal passes (strong universal hypothesis).
+
+Architecture
+------------
+Input           : (B, S=16, T=32)  binary
+Embedding       : (2, d) lookup — Xavier-initialised, frozen
+Spatial stages  : 3 × kernel-3 / stride-1 over the S axis
+                  (16 → 14 → 12 → 10 spatial positions)
+Transpose        : (B, 10, T, d_out)  →  (B, T, 10,...]
+
+
+[Tool Call: read_file({'path': 'src/training_objectives.py'})]
+
+[Tool Result: """
+Training objectives for Phase 1 -- pure NumPy implementations.
+
+Includes:
+  - JEPALoss          : Spatial bidirectional JEPA with per-layer linear predictors + VICReg
+  - ContrastiveLoss   : NT-Xent with 2-layer projection MLP
+  - SFALoss           : Slowness (temporal difference) + variance penalty
+  - HebbianLoss       : Oja's rule online updates on encoder nodes
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+
+# ==============================================================================
+#  Adam helper
+# ==============================================================================
+
+class _Adam:
+    """Simple Adam optimizer for a dict of parameters."""
+
+    def __init__(
+        self,
+        params: dict,
+        lr: float = 1e-3,
+        beta1: float = 0.9,
+        beta2: float = 0.999,
+        eps: float = 1e-8,
+    ):
+        self.lr = lr
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.eps = eps
+        self.t = 0
+        self.m = {k: np.zer...]
+
+
+[Tool Call: read_file({'path': 'src/run_phase4.py'})]
+
+[Tool Result: #!/usr/bin/env python3
+"""
+Phase 4 — Training Objective Comparison (8 objectives × 5 seeds).
+
+Compares four training-objective families on the P3-C encoder with
+spatial_pooled_then_flat readout:
+
+    JEPA        : per-layer bidirectional prediction + local VICReg
+    SFA         : slowness on final temporal output (+/- pooled VICReg)
+    Hebbian     : variance maximisation on ALL intermediate codes (+/- pooled VICReg)
+    Reconstruction: local sparse AE at every node (+/- pooled VICReg)
+
+Each objective is run with and without pooled VICReg gradient injection.
+An untrained baseline is included for reference.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import gc
+import math
+import os
+import sys
+import time
+
+import numpy as np
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from spatiotemporal_dataset import generate_spatiotemporal_dataset, N_CLASSES
+from spatiotemporal_encoder import SpatiotemporalEncoder
+from training_objectives import JEPALoss, ...]
+
+
+[Tool Call: read_file({'path': 'src/node.py'})]
+
+[Tool Result: """
+UniversalNode -- single-layer auto-encoder unit for HSUN Phase 0-E.
+
+Architecture
+------------
+  x_3d (batch, 3, d_in)  --> flatten --> (batch, 3*d_in)
+  z    = tanh(x_flat @ W_enc + b_enc)          # (batch, d_out)  -- "code"
+  xrec = z       @ W_dec + b_dec              # (batch, 3*d_in)
+           --> reshape --> (batch, 3, d_in)
+
+Loss  = MSE(x_3d, xrec) + l1_lambda * mean(|z|)
+
+All analytical gradients are provided in ``compute_gradients`` and verified
+below via a central-difference numerical check.
+"""
+
+from __future__ import annotations
+
+from typing import Dict
+
+import numpy as np
+
+
+class UniversalNode:
+    """A single universal node implementing an encoder --> decoder pair."""
+
+    def __init__(
+        self,
+        d: int,
+        l1_lambda: float = 0.01,
+        seed: int = 42,
+        d_out: int | None = None,
+        kwta_k: int | None = None,
+    ):
+        """
+        Parameters
+        ----------
+        d : int
+            Input dimensionality *per channel*.  The fl...]
+
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_dataset.py'})]
+
+[Tool Result: """
+Spatiotemporal Dataset Generator for Phase 3.
+
+Generates four categories of spatiotemporal sequences on a 16x32 binary grid
+(16 spatial positions x 32 timesteps). Designed so that shortcut baselines
+(single-frame and temporal-average projections) achieve at-chance performance,
+forcing the model to reason about temporal dynamics.
+
+Classes (4-class classification):
+    0 = moving_blob       -- blob position follows a LINEAR trajectory (wrapped mod 16)
+    1 = expanding_blob    -- blob width oscillates periodically in place (wrapped mod 16)
+    2 = periodic_st       -- blob position oscillates back-and-forth sinusoidally (wrapped mod 16)
+    3 = object_permanence -- blob stays put (wrapped mod 16), disappears for some steps
+
+CRITICAL design property: all four classes draw their initial spatial position
+from the SAME distribution (uniformly 0..15) and their base blob width from
+the SAME distribution (uniformly 2..4).  The CLASS label is encoded ONLY in
+the TEMPORAL TRAJECTORY of the bl...]
+
+
+[Tool Call: read_file({'path': 'src/harness.py'})]
+
+[Tool Result: """
+HSUN Phase 0 -- Experimental Harness
+
+Dataset generator, similarity evaluator, encoder interface, and utility functions
+for the smoke-test of hierarchical sparse universal nodes.
+
+Dependencies: numpy, scipy only -- no external ML libraries.
+"""
+
+from __future__ import annotations
+
+import itertools
+from abc import ABC, abstractmethod
+from typing import Dict, List, Tuple
+
+import numpy as np
+from scipy.stats import spearmanr
+
+
+# ---------------------------------------------------------------------------
+# Dataset Generator
+# ---------------------------------------------------------------------------
+
+class DatasetGenerator:
+    """
+    Generates the Phase 0 dataset:
+      - 8 base states: all 3-bit binary tuples (0,0,0) ... (1,1,1)
+      - 10 noise variants per base state (bit-flip prob 0.1)
+      - Total: 88 samples
+    """
+
+    NUM_BITS = 3
+    NOISE_VARIANTS_PER_STATE = 10
+    FLIP_PROB = 0.1
+
+    def __init__(self, seed: int | None = None) -> None:
+        self.rng = np.random.def...]
+
+
+[Tool Call: read_file({'path': 'phase_4/REPORT.md'})]
+
+[Tool Result: # Phase 4: Training Objective Comparison -- Statistical Report
+
+> **Iteration:** 007
+> **Date:** 2026-05-28
+> **Pre-registration:** src/pre_registration.md
+> **Raw results:** phase_4/phase4_results.csv
+
+---
+
+## 1. Experiment Configuration
+
+| Parameter | Value |
+|-----------|-------|
+| Architecture | P3-C (spatiotemporal) |
+| Hidden dimension (d) | 16 |
+| Output dimension (d_out) | 16 |
+| Total parameters | 1,600 |
+| Epochs | 30 |
+| Learning rate | 1x10^-3 |
+| Batch size | 64 |
+| Readout | spatial_pooled_then_flat (416 dims) |
+| Seeds | [42, 43, 44, 45, 46] |
+| Objectives | JEPA, SFA, Hebbian, Reconstruction |
+| VICReg conditions | With pooled VICReg, without |
+| Total runs | 40 trained + 5 untrained = 45 |
+
+---
+
+## 2. Schema Validation
+
+- **45 rows confirmed**: 4 objectives x 2 VICReg conditions x 5 seeds = 40 trained + 5 untrained = 45.
+- Each (objective, seed, use_pooled_vicreg) combination appears exactly once.
+- No missing or duplicate entries detected.
+
+---
+
+## 3. Mathematical For...]
+
+
+[Tool Call: list_dir({'path': 'phase_4'})]
+
+[Tool Result:       analysis.py
+      phase4_results.csv
+      REPORT.md
+      run.log]
+
+
+[Tool Call: read_file({'path': 'src/pre_registration.md'})]
+
+[Tool Result: # RDF Scientific Pre-Registration
+
+*   **Iteration:** 007
+*   **Pre-Registration File:** src/pre_registration.md
+
+## 1. Hypothesis
+Phase 4 (Training Objective Comparison) on the P3-C spatiotemporal benchmark:
+(H1) JEPA + pooled VICReg achieves test accuracy ≥ 55% (reproducing the 61.55%
+     reference from iter_006 with relaxed floor).
+(H2) No other objective (with OR without pooled VICReg) exceeds JEPA + pooled
+     VICReg by ≥ 3 percentage points.
+(H3) For most objectives, pooled VICReg improves accuracy over the VICReg-free
+     version. Reconstruction may violate H3 (it natively resists collapse).
+
+## 2. Falsification Criterion
+F1: JEPA + pooled VICReg achieves < 55% test accuracy (implementation broken).
+F2: Any other objective exceeds JEPA + pooled VICReg by ≥ 3pp (JEPA not best).
+F3: For any objective X (other than Reconstruction), accuracy(X without VICReg)
+    ≥ accuracy(X with VICReg) — pooled VICReg does not generalise. F3 triggering
+    for Reconstruction is expected and ex...]
+
+
+[Tool Call: read_iteration({'iter_num': 7})]
+
+[Tool Result: ```yaml
+cached_tokens: 399104
+campaign: phase-4-objective-comparison
+campaign_status: completed
+campaign_summary: 'Phase 4 resolved: Reconstruction+pooled VICReg achieves 83.00%
+  (best); JEPA refuted as best objective (F2 triggered); pooled VICReg is the dominant
+  anti-collapse factor for ALL objectives including Reconstruction.'
+cost_usd: 2.65005
+hypothesis: 'phase-7: Phase 4 training objective comparison completed — Reconstruction+pooled
+  VICReg best at 83.00%; JEPA refuted as best (F2 triggered); VICReg is the dominant
+  anti-collapse factor across all objectives'
+input_tokens: 3532271
+iter: 7
+metrics:
+  best_mean_acc: 0.83
+  best_objective: reconstruction+VICReg
+  f1_triggered: false
+  f2_triggered: true
+  f3_triggered: false
+  hebbian_no_vicreg_mean_acc: 0.439
+  hebbian_vicreg_mean_acc: 0.4855
+  jepa_no_vicreg_mean_acc: 0.535
+  jepa_vicreg_mean_acc: 0.6155
+  recon_no_vicreg_mean_acc: 0.4955
+  recon_vicreg_mean_acc: 0.83
+  sfa_no_vicreg_mean_acc: 0.25
+  sfa_vicreg_mean_acc: 0.82...]
+
+Now let me examine the Phase 3 resolution details more closely, and check the run_phase3 code for the readout mechanism:
+
+[Tool Call: read_file({'path': 'src/run_phase3.py', 'end_line': 80, 'start_line': 1})]
+
+[Tool Result: --- lines 1 to 80 of 599 ---
+"""
+Phase 3 Experiment Runner for HSUN.
+
+Runs all three spatiotemporal variants (P3-A, P3-B, P3-C) plus untrained
+baseline and shortcut baselines across 5 seeds.
+
+Training protocol:
+  - P3-A: alpha=1.0 (spatial only) for 200 epochs,
+          then freeze spatial master node, alpha=0.0 (temporal only) for 200 epochs.
+  - P3-B/C: alpha=0.5 jointly for 200 epochs.
+  - Untrained: random init, freeze encoder, train only JEPA predictors.
+
+Evaluation:
+  - Linear probe (SimpleLogisticRegression, max_iter=2000) on pooled representations.
+  - Test accuracy + per-class (per-benchmark) accuracies.
+  - Shortcut baselines: single-frame and temporal-average.
+
+Results saved to phase_3/ directory.
+"""
+
+from __future__ import annotations
+
+import csv
+import os
+import sys
+import time
+from typing import Dict, List
+
+import numpy as np
+
+sys.path.insert(0, os.path.dirname(__file__))
+
+from spatiotemporal_dataset import (
+    generate_spatiotemporal_dataset,
+    evaluate_all_shortcu...]
+
+
+[Tool Call: read_file({'path': 'src/run_phase3_vicreg_fix.py', 'end_line': 50, 'start_line': 1})]
+
+[Tool Result: --- lines 1 to 50 of 889 ---
+"""
+Phase 3 VICReg Fix — Pooled VICReg gradient injection.
+
+This runner implements the Pooled VICReg loss applied directly on the
+mean-pooled representation z_pooled, and propagates its gradient back
+into the encoder backward pass via the last temporal code gradient.
+
+Six conditions across 5 seeds, run via multiprocessing.
+
+Conditions:
+  A: P3-C, no pooled VICReg, readout='pooled'
+  B: P3-C, no pooled VICReg, readout='spatial_pooled_then_flat'
+  C: P3-C, pooled VICReg, readout='pooled'
+  D: P3-C, pooled VICReg, readout='spatial_pooled_then_flat'
+  E: Untrained, no pooled VICReg, readout='pooled'
+  F: Untrained, no pooled VICReg, readout='spatial_pooled_then_flat'
+"""
+
+from __future__ import annotations
+
+import csv
+import math
+import os
+import sys
+import time
+from multiprocessing import Pool
+
+import numpy as np
+
+sys.path.insert(0, os.path.dirname(__file__))
+
+from spatiotemporal_dataset import generate_spatiotemporal_dataset, N_CLASSES
+from spatiotemporal_enc...]
+
+
+[Tool Call: list_dir({'path': '.'})]
+
+[Tool Result: [DIR] -p
+[DIR] .git
+      .gitignore
+[DIR] .venv
+      _check_csv.py
+      _compute_stats.py
+      _debug.txt
+      _fix_encoding.py
+      _fix_rho.py
+      _fix_st.py
+      _gen_report.py
+      _profile_fast.py
+      _profile_mid.py
+      _profile_speed.py
+      _time_one.py
+      _tst.txt
+[DIR] archive
+      config.toml
+      current_state.md
+      experiment_log.md
+      goal.md
+      hyper_search.py
+      manager_log.md
+      phase3_diagnostic_report.md
+      phase3_run.log
+[DIR] phase_0
+[DIR] phase_1
+[DIR] phase_2
+[DIR] phase_3
+[DIR] phase_4
+      RESEARCH-RESULT-001.md
+      RESEARCH-RESULT-002.md
+      RESEARCH-RESULT-003.md
+      RESEARCH-RESULT-004.md
+      RESEARCH-RESULT-005.md
+      RESEARCH-RESULT-006.md
+      RESEARCH-RESULT-007.md
+      research_journal.md
+      run_phase3_bg.py
+[DIR] src
+      test_raw_accuracy.py
+      test_scale.py
+      test_training.py
+      tmp_launch.py
+      tmp_run_bg.py
+      tmp_test_sa.py
+      tmp_test_sa2.py
+      tmp_test_sa3.py
+      tmp_...]
+
+
+[Tool Call: list_dir({'path': 'src/encoders'})]
+
+[Tool Result:       __init__.py
+[DIR] __pycache__
+      lookup_table.py
+      predictive_coding.py
+      som.py
+      sparse_autoencoder.py
+      spatial_pooler.py]
+
+
+[Tool Call: read_campaign({'campaign_name': 'phase-3-spatiotemporal-grid'})]
+
+[Tool Result: ```yaml
+cached_tokens: 3787683
+campaign: phase-3-spatiotemporal-grid
+campaign_status: completed
+campaign_summary: 'Phase 3 resolved: P3-C with pooled VICReg + spatial_pooled readout
+  achieves 61.55% (+9.45pp over untrained, p=0.013, d=1.91). Universal parameter hypothesis
+  SUPPORTED.'
+cost_usd: 2.72549
+hypothesis: 'phase-6: Phase 3 failure resolved — pooled VICReg prevents representation
+  collapse (+80.3% std increase) and spatial_pooled readout preserves temporal discriminative
+  information (+9.25pp). Combined: P3-C at 61.55% (+9.45pp over untrained, p=0.013,
+  d=1.91). Universal parameter hypothesis SUPPORTED.'
+input_tokens: 6919963
+iter: 6
+metrics:
+  F1_d_ge_1: true
+  F1_gain_ge_8pp: true
+  F1_p_lt_005: true
+  F2_penalty_le_10pp: true
+  F3_within_20pp_P3A: true
+  F4_loss_ratio_ok: true
+  cohens_d: 1.91
+  condition_A_mean: 0.44
+  condition_B_mean: 0.535
+  condition_C_mean: 0.4915
+  condition_D_mean: 0.6155
+  condition_D_mean_test_acc: 0.6155
+  condition_D_seeds:
+  - 0.58
+  - 0.68...]
+
+Now I have a comprehensive understanding of the project state, architecture, and what Phase 5 requires. Let me review the critical implementation details one more time:
+
+[Tool Call: read_file({'path': 'src/run_phase3.py', 'end_line': 60, 'start_line': 80})]
+
+[Tool Result: --- lines 80 to 60 of 599 ---
+]
+
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_encoder.py', 'end_line': 100, 'start_line': 67})]
+
+[Tool Result: --- lines 67 to 100 of 590 ---
+        np.take(x_in, range(2, x_in.shape[axis]    ), axis=axis),
+    ], axis=-2)
+
+
+# ---------------------------------------------------------------------------
+#  Spatiotemporal Encoder
+# ---------------------------------------------------------------------------
+
+class SpatiotemporalEncoder:
+    """Sequential spatial→temporal encoder with configurable weight sharing."""
+
+    def __init__(
+        self,
+        variant: str = "P3-B",
+        d: int = 16,
+        d_out: int = 16,
+        n_spatial_layers: int = 3,
+        n_temporal_layers: int = 3,
+        l1_lambda: float = 0.002,
+        seed: int = 42,
+    ):
+        if variant not in ("P3-A", "P3-B", "P3-C"):
+            raise ValueError(
+                f"variant must be one of ('P3-A', 'P3-B', 'P3-C'), got '{variant}'"
+            )
+        if d_out != d:
+            raise ValueError(
+                f"d_out must equal d for dimension homogeneity, got d={d}, d_out={d_out}"
+            )
+
+        s...]
+
+
+[Tool Call: read_file({'end_line': 170, 'path': 'src/spatiotemporal_encoder.py', 'start_line': 140})]
+
+[Tool Result: --- lines 140 to 170 of 590 ---
+    def _embed(self, x_binary: np.ndarray) -> np.ndarray:
+        """
+        Map raw binary (B, S, T) → (B, S, T, d) via frozen lookup table.
+        """
+        idx = x_binary.astype(int)                     # (B, S, T)
+        return self.embedding[idx]                      # (B, S, T, d)
+
+    # ------------------------------------------------------------------
+    #  Forward — fully vectorised
+    # ------------------------------------------------------------------
+
+    def _forward_spatial_layer(
+        self,
+        x_in: np.ndarray,       # (B, S_l, T, d)
+        layer_idx: int,
+        store_inputs: bool = False,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
+        """
+        Apply kernel-3 stride-1 sliding window over the S axis.
+
+        Returns
+        -------
+        x_out : (B, S_{l+1}, T, d_out)
+        node_inputs : (B, S_{l+1}, T, 3, d)  — only if store_inputs
+        """
+        node = self.master_spatial
+        B, S_l, T, d_in = x_...]
+
+Now I have a thorough understanding of the codebase, the architecture, the Phase 4 results, and what Phase 5 requires. Let me formulate the hypothesis and experimental plan.
+
+**Key architectural facts for Phase 5:**
+
+1. P3-C encoder with shared W_enc (48×16) applied at every spatial and temporal position
+2. 16-dimensional tanh-activated code vectors at each (layer, position, timestep)
+3. 3 spatial layers: 14→12→10 positions × 32 timesteps
+4. 3 temporal layers: 30→28→26 positions × 10 spatial positions
+5. Best objective: Reconstruction + pooled VICReg at 83.00%
+6. 1,600 parameters total
+
+**Critical insight for hypothesis design:** Because P3-C uses shared W_enc, the same linear transformation is applied at every position. This creates a strong structural prior for semantic consistency: if W_enc column j extracts "local magnitude" from input vectors, dimension j should correlate with magnitude at every position. However, cross-layer consistency is not guaranteed (deeper layers receive codes, not raw pixels), and cross-axis consistency (spatial vs. temporal) is not guaranteed (the same computation on different data).
+
+**Semantic probe design:** I need 5 scalar probes computed from the raw (16×32) binary grid, varying across both samples and spatial/temporal positions, to enable correlation with code dimensions at each position.
+
+The probes:
+1. **Magnitude**: Mean pixel activity in a local spatial-temporal window
+2. **Gradient**: Left-minus-right asymmetry of activity in a local spatial window
+3. **Variance**: Temporal variance of activity over a short window
+4. **Periodicity**: Temporal autocorrelation at lag 1 (measures repetitiveness)
+5. **Novelty**: Absolute pixel-level change from the previous timestep
+
+**Consistency scoring:** For each dimension j, at each (layer, s, t) position, identify the "dominant semantic" (probe with highest absolute Pearson R). Consistency for dimension j = fraction of all positions that agree on the same dominant semantic. Overall consistency = mean across dimensions. Chance level ≈ 1/5 = 0.20.
+
+```yaml
+hypothesis: |
+  Phase 5 — Vector Semantics Investigation.
+
+  PRIMARY HYPOTHESIS: In the P3-C encoder trained with Reconstruction + pooled VICReg
+  (P5-A, pure emergence), the 16 code dimensions carry consistent, interpretable
+  semantics across spatial positions and layers. Specifically:
+
+  (H1) INTERPRETABILITY: At least 10 of 16 code dimensions show a statistically
+  significant correlation (FDR-corrected q < 0.05 across 16×5=80 tests per position
+  set, minimum R² ≥ 0.04) with at least one of the 5 hand-designed semantic probes
+  at ≥ 80% of spatial positions within spatial layer 0.
+
+  (H2) WITHIN-AXIS CONSISTENCY: The mean within-axis consistency score (fraction of
+  positions within a spatial layer agreeing on the dominant semantic per dimension) is
+  ≥ 0.55 for spatial layers (well above the 0.20 chance level). This is expected due
+  to shared W_enc ensuring the same computation at every position.
+
+  (H3) CROSS-LAYER CONSISTENCY: The mean cross-layer consistency (fraction of spatial
+  layers agreeing on the dominant semantic for each dimension, compared at matched
+  center-position) is ≥ 0.35. This tests whether dimension j means the same thing at
+  layer 0 vs layer 2 despite operating on different input types.
+
+  (H4) TRAINING GAIN: The overall consistency (across all layers and axes) for P5-A is
+  ≥ 0.15 above the untrained baseline consistency, demonstrating that
+  Reconstruction+VICReg training produces semantically structured codes.
+
+  SECONDARY HYPOTHESIS: P5-B (anchor features regularization, λ_anchor=0.1, first 5
+  dimensions anchored to 5 semantic probes applied at all intermediate layers) achieves
+  overall consistency ≥ 0.55 (at least 0.10 above P5-A) while maintaining classification
+  accuracy ≥ 78% (within 5pp of P5-A's 83%).
+
+  TERTIARY HYPOTHESIS: P5-C (disentanglement penalty, β=0.01, correlation penalty at
+  all intermediate layers) does NOT significantly improve consistency over P5-A
+  (difference < 0.05), but maintains accuracy ≥ 78%. Pure decorrelation without
+  semantic anchoring does not improve interpretability.
+
+falsification_criterion: |
+  PRIMARY FALSIFICATION (any one suffices to falsify the core hypothesis):
+
+  F1: Mean overall consistency ≤ 0.30 for P5-A (codes are no more semantically
+  consistent than random assignment, despite shared weights and 83% accuracy).
+
+  F2: (P5-A consistency - untrained baseline consistency) ≤ 0.05 — training does
+  not improve semantic consistency, meaning the 83% accuracy comes from
+  unstructured distributed codes rather than semantically meaningful dimensions.
+
+  F3: Within-axis spatial consistency < 0.40 for P5-A — even the shared-weight
+  structural prior does not produce position-consistent semantics, indicating
+  that different positions with different input statistics cause the same W_enc
+  column to respond to different features.
+
+  SECONDARY FALSIFICATION:
+
+  F4: P5-B accuracy < 75% — anchor regularization destroys too much
+  discriminative capacity.
+
+  F5: P5-B consistency improvement over P5-A < 0.05 — anchoring does not help
+  consistency, suggesting the model resists semantic alignment even with
+  explicit regularization.
+
+proposed_method: |
+  STEP 1: Implement semantic probe extraction (src/semantic_probes.py).
+
+  Define 5 scalar probes computed from the raw (B, 16, 32) binary grid,
+  producing (B, 16, 32) feature maps (one scalar per spatial-temporal position):
+
+  1. MAGNITUDE: For position (s, t), mean of grid[max(0,s-1):min(16,s+2),
+     max(0,t-1):min(32,t+2)] — local average activity in a 3×3 window.
+     Uses modulo-16 spatial wrapping for boundary positions.
+
+  2. GRADIENT: For position (s, t), mean(grid[(s+1)%16:(s+3)%16, t]) -
+     mean(grid[(s-2)%16:s, t]) — right-minus-left spatial gradient.
+
+  3. VARIANCE: For position (s, t), variance of grid[s, max(0,t-4):t+1]
+     over the last 5 timesteps — local temporal variability.
+
+  4. PERIODICITY: For position (s, t), autocorrelation at lag 2 of
+     grid[s, max(0,t-7):t+1] — measures temporal repetitiveness.
+
+  5. NOVELTY: For position (s, t), |grid[s, t] - grid[s, max(0, t-1)]|
+     — pixel-level temporal change (0 for t=0).
+
+  Also implement downsampling functions that average probe values over the
+  receptive field of each code position (matching each layer's spatial
+  resolution: 14→12→10 for spatial layers; 32→30→28→26 for temporal axis;
+  16→10 spatial positions after spatial processing for temporal layers).
+
+  STEP 2: Implement Phase 5 experiment runner (src/run_phase5.py).
+
+  Training variants (3 variants × 5 seeds = 15 runs + 5 untrained = 20 total):
+
+  P5-A (Pure Emergence): Reconstruction + pooled VICReg, identical to Phase 4
+  best configuration (30 epochs, lr=1e-3, batch=64, λ_var=25, λ_cov=25,
+  λ_l1=0.01, alpha=0.5).
+
+  P5-B (Anchor Features): Reconstruction + pooled VICReg + anchor regularization.
+  Add loss term: L_anchor = λ_anchor * (1/5) * Σ_{j=0}^{4} ||code[:, :, :, j] -
+  probe_j(normalized)||² at each spatial and temporal intermediate layer.
+  λ_anchor = 0.1 (tuned to not overwhelm reconstruction loss). The first 5 code
+  dimensions are softly anchored to the 5 normalized semantic probes. Remaining
+  11 dimensions are free. Probes are computed from raw input, downsampled to
+  match each layer's resolution, and L2-normalized to zero mean, unit variance
+  before computing the anchor loss.
+
+  P5-C (Disentanglement Penalty): Reconstruction + pooled VICReg + correlation
+  penalty. Add loss term: L_dis = β * Σ_{layers} (1/(d*(d-1))) * Σ_{j≠k}
+  |Corr(code_j, code_k)|² at each intermediate layer. β = 0.01. This encourages
+  dimensions to be decorrelated (beyond the pooled VICReg's effect on the final
+  representation) without specifying what each dimension should encode.
+
+  Untrained baseline: Same architecture, no training, 5 seeds.
+
+  STEP 3: Semantic probing analysis.
+
+  For each trained model (all 20 runs):
+  a) Forward-pass the full test set (400 samples) through the encoder, storing
+     all intermediate codes at each (layer, s, t) position.
+  b) Compute 5 semantic probe feature maps from the raw input grids.
+  c) Downsample probes to match each layer's spatial/temporal resolution.
+  d) For each (layer, s, t, code_dim_j), compute Pearson R and R² between
+     code_dim_j and each of the 5 semantic probes across samples.
+  e) Assign the dominant semantic for each (layer, s, t, j) as argmax_k |R|.
+  f) Apply FDR correction (Benjamini-Hochberg) across 16×5=80 tests per
+     position set for the significance test.
+
+  STEP 4: Consistency scoring.
+
+  For each dimension j (1-16):
+  a) WITHIN-LAYER SPATIAL CONSISTENCY: For each spatial layer l, compute the
+     fraction of spatial positions (at a fixed timestep, e.g., t=16) that agree
+     on the dominant semantic. Average across layers.
+  b) CROSS-LAYER CONSISTENCY: For matched center positions across spatial
+     layers (e.g., position 7 at layer 0, position 6 at layer 1, position 5
+     at layer 2 — all covering similar spatial regions), compute the fraction
+     of dimensions that agree on the dominant semantic across layers.
+  c) OVERALL CONSISTENCY: Fraction of ALL (layer, s, t) positions that agree
+     on the most common dominant semantic for dimension j. Mean across j.
+  d) TRAINING GAIN: P5-A overall consistency minus untrained overall consistency.
+
+  STEP 5: Classification evaluation.
+
+  Same as Phase 4: spatial_pooled_then_flat readout, SimpleLogisticRegression,
+  4-class accuracy. Confirm P5-A reproduces ~83%, P5-B ≥ 78%, P5-C ≥ 78%.
+
+  STEP 6: Statistical analysis and report (phase_5/REPORT.md).
+
+  - Per-dimension consistency table for P5-A, P5-B, P5-C, untrained
+  - Per-dimension dominant semantic assignment map
+  - Per-layer consistency comparison
+  - R² heatmap: (code_dim × semantic_axis) at each layer
+  - Falsification criteria evaluation
+  - Paired t-tests (by seed) comparing P5-B vs P5-A and P5-C vs P5-A
+  - Recommendation for which variant yields most interpretable semantics
+
+  Files to CREATE:
+    src/semantic_probes.py     — Semantic probe computation and downsampling
+    src/run_phase5.py          — Phase 5 experiment runner
+    phase_5/phase5_results.csv — Raw results (accuracy, consistency scores)
+    phase_5/consistency_analysis.csv — Per-dimension consistency detail
+    phase_5/REPORT.md          — Comprehensive analysis report
+
+  Files to MODIFY:
+    src/pre_registration.md    — Updated with Phase 5 hypothesis and plan
+    current_state.md           — Updated after experiment completion
+
+  Experimental config:
+    Architecture: P3-C, d=16, d_out=16, 1,600 params
+    Training: 30 epochs, 200 train/class, 100 test/class, batch=64, lr=1e-3
+    Base objective: Reconstruction + pooled VICReg (λ_var=25, λ_cov=25)
+    P5-B: Base + anchor (λ_anchor=0.1, k=5)
+    P5-C: Base + disentanglement (β=0.01)
+    Seeds: [42, 43, 44, 45, 46]
+    Semantic probes: 5 (magnitude, gradient, variance, periodicity, novelty)
+    Readout: spatial_pooled_then_flat (416 features)
+    Evaluation: 4-class classification accuracy + consistency scores
+
+pre_registration_file: "src/pre_registration.md"
+```
