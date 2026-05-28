@@ -1,0 +1,674 @@
+
+[Tool Call: read_file({'path': 'current_state.md'})]
+
+[Tool Result: # Current Research State — HSUN Project
+**Last updated:** After Phase 6 (iter_006, sub-agents 6.1–6.3)
+
+## Goal
+Investigate an architecture for unsupervised representation learning built from
+a single, universal node type. Phase 3 (Unified Spatiotemporal Grid) is now RESOLVED.
+
+## Confirmed (with iter/sub-agent references)
+
+### Phase 3 Resolution (iter_006)
+1. **VICReg was NOT omitted** — it was present in JEPALoss with λ_var=25, λ_cov=25
+   (iter_006, 6.1 code audit). The original pre-registered hypothesis was factually
+   incorrect.
+
+2. **VICReg on intermediate codes is INEFFECTIVE** for the pooled representation
+   (iter_006, 6.2 diagnostic):
+   - Per-dim stds at intermediate layers: ~0.07-0.08 (target ≥1.0)
+   - VICReg gradient per element ≈ 0.0008/elem vs prediction gradient ≈ 0.016/elem
+   - The prediction gradient overwhelms VICReg by ~20×
+   - Mathematical cause: M = B*T*S = 28,672 elements dilutes the gradient
+
+3. **Mean-pooling destroys discriminative information** (iter_006,...]
+
+
+[Tool Call: list_dir({'path': 'src'})]
+
+[Tool Result: [DIR] __pycache__
+      _bench_compare.py
+      dataset_phase1.py
+      diagnostic_phase1.py
+      diagnostic_phase3_vicreg.py
+[DIR] encoders
+      eval_phase1.py
+      harness.py
+      hierarchical_encoder.py
+      node.py
+      phase3_run.log
+[DIR] phase_3
+      pooling_comparison_results.csv
+      pre_registration.md
+      profile_p3b.py
+      run_phase0.py
+      run_phase1.py
+      run_phase1_v2.py
+      run_phase2.py
+      run_phase2_baselines.py
+      run_phase3.py
+      run_phase3_background.py
+      run_phase3_fast.py
+      run_phase3_medium.py
+      run_phase3_optimized.py
+      run_phase3_parallel.py
+      run_phase3_vicreg_fix.py
+      run_remaining_phase3.py
+      run_remaining_seeds.py
+      spatiotemporal_dataset.py
+      spatiotemporal_encoder.py
+      spatiotemporal_encoder.py-patch
+      temporal_dataset.py
+      temporal_encoder.py
+      test_import.py
+      test_objectives.py
+      test_temporal.py
+      time_one_run.py
+      tmp_test_phase3_timing.py
+      training_...]
+
+
+[Tool Call: read_file({'path': 'src/training_objectives.py'})]
+
+[Tool Result: """
+Training objectives for Phase 1 -- pure NumPy implementations.
+
+Includes:
+  - JEPALoss          : Spatial bidirectional JEPA with per-layer linear predictors + VICReg
+  - ContrastiveLoss   : NT-Xent with 2-layer projection MLP
+  - SFALoss           : Slowness (temporal difference) + variance penalty
+  - HebbianLoss       : Oja's rule online updates on encoder nodes
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+
+# ==============================================================================
+#  Adam helper
+# ==============================================================================
+
+class _Adam:
+    """Simple Adam optimizer for a dict of parameters."""
+
+    def __init__(
+        self,
+        params: dict,
+        lr: float = 1e-3,
+        beta1: float = 0.9,
+        beta2: float = 0.999,
+        eps: float = 1e-8,
+    ):
+        self.lr = lr
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.eps = eps
+        self.t = 0
+        self.m = {k: np.zer...]
+
+
+[Tool Call: read_file({'path': 'src/encoders'})]
+
+[Tool Result: Error reading src/encoders: [Errno 13] Permission denied: 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\encoders']
+
+
+[Tool Call: list_dir({'path': 'src/encoders'})]
+
+[Tool Result:       __init__.py
+[DIR] __pycache__
+      lookup_table.py
+      predictive_coding.py
+      som.py
+      sparse_autoencoder.py
+      spatial_pooler.py]
+
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_encoder.py'})]
+
+[Tool Result: """
+Spatiotemporal Encoder for Phase 3.
+
+Implements the sequential spatial-then-temporal encoder over a
+(16 spatial × 32 temporal) binary grid using stacked kernel-3,
+stride-1 UniversalNodes.
+
+Both spatial and temporal forward/backward passes are **fully
+vectorized** — no Python loops over spatial/temporal positions.
+
+Three variants
+--------------
+* **P3-A** – One master spatial node + one master temporal node.
+  Trained sequentially (spatial first, then temporal).
+* **P3-B** – One master spatial node + one master temporal node
+  (separate objects, trained jointly with both losses).
+* **P3-C** – A *single* master node reused for *both* spatial and
+  temporal passes (strong universal hypothesis).
+
+Architecture
+------------
+Input           : (B, S=16, T=32)  binary
+Embedding       : (2, d) lookup — Xavier-initialised, frozen
+Spatial stages  : 3 × kernel-3 / stride-1 over the S axis
+                  (16 → 14 → 12 → 10 spatial positions)
+Transpose        : (B, 10, T, d_out)  →  (B, T, 10,...]
+
+
+[Tool Call: read_file({'path': 'src/run_phase3_vicreg_fix.py'})]
+
+[Tool Result: """
+Phase 3 VICReg Fix — Pooled VICReg gradient injection.
+
+This runner implements the Pooled VICReg loss applied directly on the
+mean-pooled representation z_pooled, and propagates its gradient back
+into the encoder backward pass via the last temporal code gradient.
+
+Six conditions across 5 seeds, run via multiprocessing.
+
+Conditions:
+  A: P3-C, no pooled VICReg, readout='pooled'
+  B: P3-C, no pooled VICReg, readout='spatial_pooled_then_flat'
+  C: P3-C, pooled VICReg, readout='pooled'
+  D: P3-C, pooled VICReg, readout='spatial_pooled_then_flat'
+  E: Untrained, no pooled VICReg, readout='pooled'
+  F: Untrained, no pooled VICReg, readout='spatial_pooled_then_flat'
+"""
+
+from __future__ import annotations
+
+import csv
+import math
+import os
+import sys
+import time
+from multiprocessing import Pool
+
+import numpy as np
+
+sys.path.insert(0, os.path.dirname(__file__))
+
+from spatiotemporal_dataset import generate_spatiotemporal_dataset, N_CLASSES
+from spatiotemporal_encoder import SpatiotemporalEnc...]
+
+
+[Tool Call: read_file({'path': 'src/node.py'})]
+
+[Tool Result: """
+UniversalNode -- single-layer auto-encoder unit for HSUN Phase 0-E.
+
+Architecture
+------------
+  x_3d (batch, 3, d_in)  --> flatten --> (batch, 3*d_in)
+  z    = tanh(x_flat @ W_enc + b_enc)          # (batch, d_out)  -- "code"
+  xrec = z       @ W_dec + b_dec              # (batch, 3*d_in)
+           --> reshape --> (batch, 3, d_in)
+
+Loss  = MSE(x_3d, xrec) + l1_lambda * mean(|z|)
+
+All analytical gradients are provided in ``compute_gradients`` and verified
+below via a central-difference numerical check.
+"""
+
+from __future__ import annotations
+
+from typing import Dict
+
+import numpy as np
+
+
+class UniversalNode:
+    """A single universal node implementing an encoder --> decoder pair."""
+
+    def __init__(
+        self,
+        d: int,
+        l1_lambda: float = 0.01,
+        seed: int = 42,
+        d_out: int | None = None,
+        kwta_k: int | None = None,
+    ):
+        """
+        Parameters
+        ----------
+        d : int
+            Input dimensionality *per channel*.  The fl...]
+
+Now let me look at the existing results from prior iterations and the run_phase3 infrastructure:
+
+[Tool Call: read_iteration({'iter_num': 2})]
+
+[Tool Result: ```yaml
+cached_tokens: 2233031
+campaign: phase-1-spatial-hierarchy
+cost_usd: 2.92354
+hypothesis: 'phase-2: the reconstruction objective is misaligned with classification;
+  test alternative local objectives (predictive coding, SFA, Hebbian, contrastive)
+  on the corrected hierarchical architecture with simultaneous training to determine
+  if any local objective can reach ≥60% accuracy'
+input_tokens: 8049498
+iter: 2
+metrics:
+  p1_a_corrected_accuracy: 0.3424
+  p1_b_corrected_accuracy: 0.3352
+  p1_b_kwta_accuracy: 0.3572
+  p1_b_kwta_sparsity: 0.5
+  p1_b_original_accuracy: 0.1836
+  p1_b_params: 1264
+  p1_b_sparsity: 0.0003
+  p1_c_corrected_accuracy: 0.3324
+  p1_c_minus_p1_b_pp: -0.28
+  p1_c_params: 14992
+  p1_d_corrected_accuracy: 0.2392
+  p1_e_corrected_accuracy: 0.3516
+  predictive_coding_accuracy: 0.3816
+  predictive_coding_sparsity: 0.7246
+  random_embedding_accuracy: 0.4336
+  simultaneous_training_accuracy: 0.4152
+  single_layer_accuracy: 0.3976
+  strong_l1_accuracy: 0.3712
+  trained...]
+
+
+[Tool Call: read_iteration({'iter_num': 3})]
+
+[Tool Result: ```yaml
+cached_tokens: 2152297
+campaign: phase-1-spatial-hierarchy
+cost_usd: 3.07887
+hypothesis: 'phase-3: JEPA local objective confirmed at 62.1% (d=8); bottleneck refuted;
+  temporal unification path cleared for Phase 2'
+input_tokens: 6553069
+iter: 3
+metrics:
+  best_prior_method_accuracy: 41.52
+  contrastive_d8_test_accuracy: 50.64
+  hebbian_d8_test_accuracy: 23.96
+  jepa_d16_test_accuracy: 65.2
+  jepa_d16_test_std: 1.8
+  jepa_d16_vs_d8_gap_pp: 3.08
+  jepa_d8_test_accuracy: 62.12
+  jepa_d8_test_std: 4.34
+  jepa_d8_vs_best_prior_delta_pp: 20.6
+  jepa_d8_vs_untrained_delta_pp: 15.96
+  jepa_d8_vs_untrained_p_value: 0.0046
+  sfa_d8_test_accuracy: 50.56
+  untrained_d16_test_accuracy: 54.6
+  untrained_d8_test_accuracy: 46.16
+output_tokens: 292562
+status: ok
+```
+
+## iter_003: phase-3: JEPA local objective confirmed at 62.1% (d=8); bottleneck refuted; temporal unification path cleared for Phase 2
+
+**Analysis:** Phase 1 v2 tested the central hypothesis that a non-reconstruction local objectiv...]
+
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_dataset.py'})]
+
+[Tool Result: """
+Spatiotemporal Dataset Generator for Phase 3.
+
+Generates four categories of spatiotemporal sequences on a 16x32 binary grid
+(16 spatial positions x 32 timesteps). Designed so that shortcut baselines
+(single-frame and temporal-average projections) achieve at-chance performance,
+forcing the model to reason about temporal dynamics.
+
+Classes (4-class classification):
+    0 = moving_blob       -- blob position follows a LINEAR trajectory (wrapped mod 16)
+    1 = expanding_blob    -- blob width oscillates periodically in place (wrapped mod 16)
+    2 = periodic_st       -- blob position oscillates back-and-forth sinusoidally (wrapped mod 16)
+    3 = object_permanence -- blob stays put (wrapped mod 16), disappears for some steps
+
+CRITICAL design property: all four classes draw their initial spatial position
+from the SAME distribution (uniformly 0..15) and their base blob width from
+the SAME distribution (uniformly 2..4).  The CLASS label is encoded ONLY in
+the TEMPORAL TRAJECTORY of the bl...]
+
+
+[Tool Call: read_file({'path': 'src/run_phase3.py', 'start_line': 1, 'end_line': 80})]
+
+[Tool Result: --- lines 1 to 80 of 599 ---
+"""
+Phase 3 Experiment Runner for HSUN.
+
+Runs all three spatiotemporal variants (P3-A, P3-B, P3-C) plus untrained
+baseline and shortcut baselines across 5 seeds.
+
+Training protocol:
+  - P3-A: alpha=1.0 (spatial only) for 200 epochs,
+          then freeze spatial master node, alpha=0.0 (temporal only) for 200 epochs.
+  - P3-B/C: alpha=0.5 jointly for 200 epochs.
+  - Untrained: random init, freeze encoder, train only JEPA predictors.
+
+Evaluation:
+  - Linear probe (SimpleLogisticRegression, max_iter=2000) on pooled representations.
+  - Test accuracy + per-class (per-benchmark) accuracies.
+  - Shortcut baselines: single-frame and temporal-average.
+
+Results saved to phase_3/ directory.
+"""
+
+from __future__ import annotations
+
+import csv
+import os
+import sys
+import time
+from typing import Dict, List
+
+import numpy as np
+
+sys.path.insert(0, os.path.dirname(__file__))
+
+from spatiotemporal_dataset import (
+    generate_spatiotemporal_dataset,
+    evaluate_all_shortcu...]
+
+
+[Tool Call: read_file({'path': 'src/run_phase3.py', 'start_line': 80, 'end_line': 200})]
+
+[Tool Result: --- lines 80 to 200 of 599 ---
+    """Reshape JEPA code gradients (B*T, S, d) back to (B, S, T, d)."""
+    return grad.reshape(B, T, S, d).transpose(0, 2, 1, 3)
+
+
+def reshape_for_temporal_jepa(x: np.ndarray) -> np.ndarray:
+    """
+    Reshape temporal layer output (B, T, S, d) -> (B*S, T, d) for JEPA.
+    """
+    B, T, S, d = x.shape
+    return x.transpose(0, 2, 1, 3).reshape(B * S, T, d)
+
+
+def reshape_temporal_grads_back(grad: np.ndarray, B: int, T: int, S: int, d: int) -> np.ndarray:
+    """Reshape JEPA code gradients (B*S, T, d) back to (B, T, S, d)."""
+    return grad.reshape(B, S, T, d).transpose(0, 2, 1, 3)
+
+
+def train_jepa_epoch(
+    encoder: SpatiotemporalEncoder,
+    spatial_jepas: list[JEPALoss],
+    temporal_jepas: list[JEPALoss],
+    train_grid: np.ndarray,
+    batch_size: int,
+    rng: np.random.Generator,
+    alpha: float,
+    adam_spatial: _Adam | None,
+    adam_temporal: _Adam | None,
+    adam_embedding: _Adam | None,
+) -> dict:
+    """
+    Train one epoch of JEPA on sp...]
+
+
+[Tool Call: read_file({'path': 'src/harness.py'})]
+
+[Tool Result: """
+HSUN Phase 0 -- Experimental Harness
+
+Dataset generator, similarity evaluator, encoder interface, and utility functions
+for the smoke-test of hierarchical sparse universal nodes.
+
+Dependencies: numpy, scipy only -- no external ML libraries.
+"""
+
+from __future__ import annotations
+
+import itertools
+from abc import ABC, abstractmethod
+from typing import Dict, List, Tuple
+
+import numpy as np
+from scipy.stats import spearmanr
+
+
+# ---------------------------------------------------------------------------
+# Dataset Generator
+# ---------------------------------------------------------------------------
+
+class DatasetGenerator:
+    """
+    Generates the Phase 0 dataset:
+      - 8 base states: all 3-bit binary tuples (0,0,0) ... (1,1,1)
+      - 10 noise variants per base state (bit-flip prob 0.1)
+      - Total: 88 samples
+    """
+
+    NUM_BITS = 3
+    NOISE_VARIANTS_PER_STATE = 10
+    FLIP_PROB = 0.1
+
+    def __init__(self, seed: int | None = None) -> None:
+        self.rng = np.random.def...]
+
+
+[Tool Call: read_file({'path': 'src/pre_registration.md'})]
+
+[Tool Result: # RDF Scientific Pre-Registration
+
+*   **Iteration:** 006-DIAGNOSTIC
+*   **Pre-Registration File:** src/pre_registration.md
+
+## 1. Hypothesis
+Phase 3's failure (P3-C gain of only ~1.15pp over untrained baseline on 4-class
+classification) is NOT caused by VICReg omission. Code review confirms that
+VICReg IS already present in `JEPALoss` (λ_var=25, λ_cov=25) in
+`src/training_objectives.py`, applied per-layer to intermediate codes during
+the spatial and temporal JEPA steps. The pre-registered hypothesis about
+"VICReg omission" is factually incorrect.
+
+The likely cause of Phase 3's failure is one of two mechanisms:
+
+**(a) Representation pooling destroys discriminative position-specific information.**
+Phase 3 uses mean-pooled (B, 16) representation, while Phase 1 used flattened
+(B, 80+) representation. The global average pool over all spatial × temporal
+positions may collapse class-discriminative structure that exists in the
+intermediate layer outputs.
+
+**(b) VICReg applied per-layer to int...]
+
+
+[Tool Call: list_dir({'path': 'phase_3'})]
+
+[Tool Result:       _dedup.py
+      _run_p3a_43.py
+      clean_dedup.py
+      comprehensive_analysis.py
+      compute_stats.py
+      dedup.py
+      diagnostic_report.md
+      experiment_config.txt
+      fast_run.log
+      generate_final_report.py
+      generate_vicreg_report.py
+      phase3_full_results.csv
+      phase3_results.csv
+      pooled_vicreg_results.csv
+      REPORT.md
+      REPORT_vicreg_fix.md
+      run.log
+      run_p3a_final.log
+      run_p3a_final.py
+      run_parallel.log
+      run_phase3_final.py
+      run_remaining.log
+      shortcut_baselines.csv]
+
+
+[Tool Call: grep_search({'pattern': 'phase_4', 'include_pattern': '*.py'})]
+
+[Tool Result: No matches found.]
+
+
+[Tool Call: grep_search({'include_pattern': '*.py', 'pattern': 'P4-A|P4-B|P4-C|P4-D|P4-E|phase_4|Phase 4'})]
+
+[Tool Result: No matches found.]
+
+
+[Tool Call: read_file({'path': 'phase_3/REPORT_vicreg_fix.md'})]
+
+[Tool Result: # Phase 3 — Pooled VICReg Fix: Final Report
+
+*Generated automatically by `generate_final_report.py`*
+
+---
+
+## Executive Summary
+
+This report evaluates the **pooled VICReg fix** — a re-implementation of the variance regularisation term in the JEPA loss that replaces the standard-deviation-based formulation (which has zero gradient at collapse) with a per-dimension hinge-based variance loss. The fix was applied to the **P3-C** condition (shared weights, 1,600 parameters) across 5 seeds (42–46).
+
+### Key Finding: Both Fixes Combined Pass All Pre-Registered Falsification Criteria! 🎉
+
+Under the **pre-registered `spatial_pooled_then_flat` readout**, Condition D (P3-C with VICReg=True) achieves a **9.45 percentage-point gain over the untrained baseline** (Condition F), surpassing the pre-registered **≥8pp threshold** with strong statistical significance:
+
+- **Gain:** 9.45 pp (D mean = 61.55%, F mean = 52.10%)
+- **Paired t-test:** t(4) = 4.27, **p = 0.0130**
+- **Cohen's d (dz):** 1.91 (very la...]
+
+Now I have a thorough understanding of the codebase, prior results, and the Phase 4 requirements. Let me review the existing Phase 3 results one more time for reference, then formulate the plan.
+
+[Tool Call: read_file({'path': 'phase_3/pooled_vicreg_results.csv', 'start_line': 1, 'end_line': 10})]
+
+[Tool Result: --- lines 1 to 10 of 31 ---
+condition,seed,use_pooled_vicreg,readout_type,train_acc,test_acc,final_spatial_jepa_loss,final_temporal_jepa_loss,final_pooled_std,final_pooled_var_loss,final_pooled_cov_loss,training_time_sec,param_count,class_0_acc,class_1_acc,class_2_acc,class_3_acc
+P3-C,42,False,pooled,0.445,0.4425,18.5220831863055,9.01534186603424,0.07274529323071374,0.0,0.0,207.83137488365173,1600,0.61,0.19,0.28,0.69
+P3-C,43,False,pooled,0.46,0.4375,18.20115307223184,8.72085126153079,0.07039510208025884,0.0,0.0,207.8235673904419,1600,0.66,0.27,0.18,0.64
+P3-C,44,False,pooled,0.44625,0.425,17.8839849236025,9.036962313604981,0.08839668914997581,0.0,0.0,204.7143087387085,1600,0.56,0.22,0.17,0.75
+P3-C,45,False,pooled,0.47125,0.44,17.967081227982135,8.737349206686439,0.060122353015351626,0.0,0.0,206.87844610214233,1600,0.53,0.35,0.19,0.69
+P3-C,46,False,pooled,0.47375,0.455,17.826281955757924,8.749240343722498,0.06931246457443763,0.0,0.0,205.30752515792847,1600,0.56,0.34,0.19,0.73
+P3-C,42,Fal...]
+
+
+[Tool Call: read_file({'path': 'src/run_phase3.py', 'start_line': 200, 'end_line': 300})]
+
+[Tool Result: --- lines 200 to 300 of 599 ---
+                        },
+                        grads["dL_dtemporal"],
+                    )
+
+            if adam_embedding is not None:
+                # Embedding is frozen per design, but we keep the hook
+                pass
+
+        avg_spatial = float(np.mean(spatial_losses)) if spatial_losses else 0.0
+        avg_temporal = float(np.mean(temporal_losses)) if temporal_losses else 0.0
+        combined = alpha * avg_spatial + (1.0 - alpha) * avg_temporal
+
+        total_spatial_loss += avg_spatial
+        total_temporal_loss += avg_temporal
+        total_combined_loss += combined
+        n_batches += 1
+
+    return {
+        "spatial_loss": total_spatial_loss / n_batches,
+        "temporal_loss": total_temporal_loss / n_batches,
+        "combined_loss": total_combined_loss / n_batches,
+    }
+
+
+def evaluate_classification(
+    encoder: SpatiotemporalEncoder,
+    train_grid: np.ndarray,
+    train_y: np.ndarray,
+    test_grid: np.ndarray,
+    test_y: n...]
+
+Now I have a comprehensive understanding. Let me formulate the Phase 4 plan.
+
+**Summary of evidence from iterations 2–6:**
+- **Reconstruction/Sparse AE**: collapses (iter 002)
+- **Hebbian**: collapses to random variation, 23.96% (iter 003)
+- **SFA**: positive trend but below significance, 50.56% (iter 003)
+- **Contrastive**: moderate, 50.64% (iter 003)
+- **JEPA + VICReg**: clear winner, 62.12% (d=8) and 65.20% (d=16) in spatial-only (iter 003), and 61.55% in spatiotemporal (iter 006)
+
+These were all tested on the **spatial-only** Phase 1 benchmark. The goal of Phase 4 is a **formal comparison on the spatiotemporal Phase 3 benchmark** using the confirmed architecture (P3-C, pooled VICReg, spatial_pooled readout).
+
+The key question: can any objective other than JEPA + pooled VICReg match or exceed JEPA's 61.55% on the spatiotemporal benchmark? The user hint suggests this should be a clean confirmation run — all objectives, identical setup, clean table.
+
+Let me check what modifications are needed for each objective to work with the spatiotemporal encoder:
+
+1. **JEPA + pooled VICReg** — already implemented and proven (iter 006)
+2. **SFA** — exists in `training_objectives.py` but operates on temporal sequences `(T, d)` or `(B, T, d)`. Needs adaptation for spatiotemporal data.
+3. **Hebbian** — exists in `training_objectives.py` but operates on `HierarchicalEncoder`, not `SpatiotemporalEncoder`. Needs adaptation.
+4. **Contrastive** — exists in `training_objectives.py` but needs augmentation pairs.
+5. **Reconstruction (sparse AE)** — the UniversalNode already has `local_loss` and `compute_gradients`. Could use this as a reference point.
+
+The critical adaptation challenge: all existing objectives were written for the Phase 1 `HierarchicalEncoder`, not the Phase 3 `SpatiotemporalEncoder`. We need to:
+- Create spatiotemporal versions of each objective
+- Apply the pooled VICReg fix where appropriate
+- Use the same training protocol (30 epochs, 200 train/class, batch=64, lr=1e-3)
+- Evaluate with `spatial_pooled_then_flat` readout
+
+```yaml
+hypothesis: |
+  On the Phase 3 spatiotemporal benchmark (P3-C architecture, 1,600 params,
+  spatial_pooled_then_flat readout, pooled VICReg applied to all objectives),
+  JEPA + pooled VICReg is the best training objective. Specifically:
+  (H1) JEPA + pooled VICReg achieves test accuracy ≥ 58% (within 4pp of the
+       61.55% reference from iter_006).
+  (H2) No other objective (SFA, Hebbian, Contrastive, Reconstruction) with
+       pooled VICReg exceeds JEPA + pooled VICReg by more than 2pp.
+  (H3) All objectives with pooled VICReg outperform their counterparts without
+       pooled VICReg (confirming the pooled VICReg fix generalises).
+
+falsification_criterion: |
+  The hypothesis is falsified if ANY of the following hold:
+  F1: JEPA + pooled VICReg achieves < 55% test accuracy (indicating the
+      result is not reproducible or the implementation is broken).
+  F2: Any other objective with pooled VICReg exceeds JEPA + pooled VICReg
+      by ≥ 3pp (JEPA is NOT the best objective).
+  F3: For any objective, the version WITHOUT pooled VICReg achieves equal or
+      higher accuracy than the version WITH pooled VICReg (pooled VICReg fix
+      does not generalise).
+
+proposed_method: |
+  Step 1: Create src/run_phase4.py — the unified Phase 4 experiment runner.
+  
+  Step 2: Implement 5 training objectives adapted for SpatiotemporalEncoder:
+    - P4-A: JEPA + pooled VICReg (reference, from run_phase3_vicreg_fix.py)
+    - P4-B: Local JEPA (prediction only, no pooled VICReg — control)
+    - P4-C: SFA + pooled VICReg (slowness on temporal axis + variance penalty)
+    - P4-D: Hebbian + pooled VICReg (Oja's rule on encoder weights + VICReg)
+    - P4-E: Reconstruction (sparse AE) + pooled VICReg (local reconstruction + VICReg)
+  
+  For each objective, the training loop follows the same pattern:
+  1. Forward pass through SpatiotemporalEncoder
+  2. Compute objective-specific loss and code gradients
+  3. If pooled VICReg is enabled, compute pooled VICReg gradient and inject
+     into the last temporal code gradient (same mechanism as iter_006)
+  4. Backward pass through encoder
+  5. Adam update on encoder parameters
+  6. Evaluate with spatial_pooled_then_flat readout
+  
+  Step 3: Run 5 objectives × 2 VICReg conditions (with/without) × 5 seeds
+  = 50 experiments. Plus 5 untrained baselines × 5 seeds = 25 additional.
+  Total: 55 runs. Each run: 30 epochs, batch=64, lr=1e-3.
+  
+  Step 4: Save results to phase_4/phase4_results.csv with columns:
+  objective, seed, use_pooled_vicreg, train_acc, test_acc, per-class accs,
+  final_loss, pooled_std, training_time_sec.
+  
+  Step 5: Statistical analysis and report generation:
+  - Paired t-tests between each objective and untrained baseline
+  - Effect sizes (Cohen's d)
+  - Comparison table with mean ± std for all 10+ conditions
+  - VICReg ablation analysis (with vs without for each objective)
+  - Recommendation for default objective
+  
+  Step 6: Write phase_4/REPORT.md with:
+  - Clean comparison table (all objectives, both VICReg conditions)
+  - Statistical significance markers
+  - Training stability observations
+  - Compute cost comparison
+  - Formal recommendation
+  
+  Files to create/modify:
+  - src/run_phase4.py (NEW — unified experiment runner)
+  - src/pre_registration.md (UPDATE)
+  - phase_4/phase4_results.csv (NEW — results)
+  - phase_4/REPORT.md (NEW — final comparison report)
+
+pre_registration_file: "src/pre_registration.md"
+```

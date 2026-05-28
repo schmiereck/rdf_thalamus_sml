@@ -1,0 +1,564 @@
+# Research Project – Phase 7
+
+## Research Goal
+# RDF Project: Hierarchical Sparse Universal Nodes (HSUN)
+
+## Vision
+
+Investigate an architecture for unsupervised representation learning built from a **single, universal node type** that satisfies the following properties:
+
+1. Maps a small fixed-arity input (target: 3 slots, each a vector of dimension `d`) to a single output vector of dimension `d`.
+2. Can be stacked hierarchically by feeding triplets of node outputs into nodes of the next layer (shared weights, kernel-3 1D convolution semantics, stride 1 — overlap of 2).
+3. Can be applied along the time axis identically — three temporally consecutive outputs of one position feeding a temporal node.
+4. Is trained via a **local, label-free objective** such that the same trained node works at every spatial position and every hierarchical level.
+
+The architecture should yield representations where similar inputs produce similar codes (similarity-preserving encoding) and the dimensions of those codes carry **consistent semantics across positions and layers**.
+
+## Non-Goals (for this project)
+
+- 2D or higher-dimensional sensory data
+- End-to-end backpropagation across the full hierarchy
+- Real-world sensor integration
+- Motor / action loops (deferred — continued in a `rdf_thalamus` project)
+
+## Design Constraints
+
+- Python 3.10 / 3.11
+- **No SaaS dependencies, no global ML library installations.** Isolated environments per phase.
+- All training and evaluation runs locally (CPU acceptable for early phases)
+- File naming: `snake_case` for modules, `PascalCase` for classes
+- Each component must be swappable behind a small, explicit interface
+- Each phase produces a numerical comparison report committed to the repo
+
+## How to Read This Document
+
+This document defines a **gated phase plan**. The implementing agent should not advance to the next phase until the current phase's success criteria are met, OR a rigorous justification for skipping is documented in `current_state.md`. The strategist may reorder alternatives within a phase but must not skip phases without justification.
+
+Each phase specifies:
+- **Setup** — the experimental configuration
+- **Alternatives** — concrete variants to implement and compare
+- **Success criteria** — quantitative bar to clear before advancing
+- **Expected insight** — what the phase is supposed to teach us
+
+---
+
+## Phase 0 — Harness & Smoke Test
+
+**Purpose:** Verify the experimental pipeline end-to-end. Establish a similarity metric and a baseline. **This is a smoke test, not a research result.**
+
+**Setup:**
+- Input: 3 binary pixels (8 possible states)
+- Single encoder, no hierarchy, no time
+- Synthetic dataset enumerating all 8 states with controlled noise variants
+
+**Alternatives to implement and compare:**
+
+| ID    | Name                      | Description                                                      |
+|-------|---------------------------|------------------------------------------------------------------|
+| P0-A  | Lookup table              | One-hot embedding, trivial lower bound                           |
+| P0-B  | SDR / Spatial Pooler      | HTM-style sparse distributed representation, k-WTA               |
+| P0-C  | Self-Organizing Map       | Kohonen SOM on a small grid                                      |
+| P0-D  | Sparse Autoencoder        | Reconstruction + L1 sparsity penalty                             |
+| P0-E  | Predictive Coding node    | Local-error node in the spirit of ngclearn                       |
+
+**Success criteria:**
+- All five implementations run end-to-end
+- Similarity metric: cosine similarity of codes correlates with inverse Hamming distance of inputs (Spearman ρ ≥ 0.6 for non-trivial methods)
+- A comparison report is produced (`phase_0/REPORT.md`)
+
+**Expected insight:** With only 8 input states, every reasonable method succeeds. The deliverable is a working harness, a fixed similarity metric, and confidence that all five candidate encoders are correctly implemented. **Do not draw architectural conclusions from this phase.**
+
+---
+
+## Phase 1 — Spatial Hierarchy without Time
+
+**Purpose:** Test the shared-weight stacked architecture on a non-trivial input space.
+
+**Setup:**
+- Input: 16 binary pixels in a 1D array
+- Architecture: kernel-3 nodes with stride 1, 2–3 stacked layers
+- Output dimension `d` chosen such that input slot dim = output slot dim (recursability)
+- Structured datasets, not exhaustive enumeration of 2^16:
+  - Uniform random bits
+  - Single-blob inputs (one contiguous run of 1s)
+  - Two-blob inputs
+  - Periodic patterns (periods 2, 3, 4)
+  - Mixed noise overlays
+
+**Alternatives to compare:**
+
+| ID    | Name                                                 | Description                                              |
+|-------|------------------------------------------------------|----------------------------------------------------------|
+| P1-A  | Best Phase-0 method, stacked, shared within layer    | Baseline stacking                                        |
+| P1-B  | Same, but weights shared across layers too           | Test the strict universal-node hypothesis                |
+| P1-C  | Per-layer learned weights (no cross-layer sharing)   | Upper-bound reference: what does sharing cost?           |
+| P1-D  | Output dim = input dim, fully recursive form         | Strict universal-node form                               |
+| P1-E  | Output dim ≠ input dim (e.g., wider)                 | Test if shape-matching is too restrictive                |
+
+**Success criteria:**
+- Top-layer codes separate the five structured input categories with ≥80% linear-probe accuracy
+- Per-layer-vs-shared comparison quantified
+- The strict universal form (P1-B with P1-D) reaches within 15% of upper-bound (P1-C)
+
+**Expected insight:** Does forcing `dim_out = dim_in` and cross-layer weight sharing sacrifice too much expressivity? This phase decides whether the universal-node ambition is viable in the spatial-only setting.
+
+---
+
+## Phase 2 — Temporal Integration at a Single Node
+
+**Purpose:** Test mechanisms for letting representations integrate over time, isolated from spatial hierarchy.
+
+**Setup:**
+- Single spatial position
+- Input: sequence of single-state vectors over time (A/B/C: single Input 1.0,, AB/ABC/...: inputs 1.0,  '-': all Inputs 0.0)
+- Example Test sequences:
+  - Periodic: `A,B,C,A,B,C,…`, `AB,C,AB,C,…`, `A,B,-,A,B,-,…`, ...
+  - Irregular: `A,B,A,B,C,B,A,B,…`, `A,AB,B,BC,A,B,AC,C,ABC,…`, ...
+  - Random walks over a small state set
+  - Long-range periodic patterns (period 7, 11)
+
+**Alternatives to compare:**
+
+| ID    | Name                            | Description                                                                     |
+|-------|---------------------------------|---------------------------------------------------------------------------------|
+| P2-A  | Different tick rates per layer  | Higher-level node updates every N steps, pools lower outputs                    |
+| P2-B  | Internal recurrent state        | Node has a hidden state, mixes with current input (GRU-like, locally trained)   |
+| P2-C  | Output-as-input loop            | Output at t-1 fed as an additional input slot at t (thalamus-style)             |
+| P2-D  | Three-temporal-slot node        | Same kernel-3 node, inputs are `(state_{t-2}, state_{t-1}, state_t)` — full spatial-temporal symmetry |
+
+**Success criteria:**
+- Each method evaluated on (a) next-step prediction accuracy and (b) periodic-vs-random classification
+- For P2-D specifically: can the same node trained spatially be applied temporally **without retraining**? If yes, this is the strongest evidence for unification.
+
+**Expected insight:** P2-D is architecturally the cleanest. This phase decides whether the unified spatial-temporal grid is viable.
+
+---
+
+## Phase 3 — Unified Spatiotemporal Grid
+
+**Purpose:** Combine spatial hierarchy and temporal integration into one architecture using a single universal node type.
+
+**Setup:**
+- 16 binary pixels, sequences of length 32
+- 2D grid of nodes: spatial axis × temporal axis
+- Single node type applied at every `(space, time)` position with kernel-3 receptive field in both axes
+
+**Alternatives to compare:**
+
+| ID    | Name                                                       | Description                                       |
+|-------|------------------------------------------------------------|---------------------------------------------------|
+| P3-A  | Separate spatial then temporal stages                       | Sequential: spatial encoder → temporal encoder    |
+| P3-B  | Unified grid, anisotropic (different params space/time)     | Slight relaxation of the universal hypothesis     |
+| P3-C  | Fully unified grid, single node type                        | The strong universal hypothesis                   |
+
+**Test patterns:**
+- Moving blob (translation in time)
+- Expanding/contracting blob
+- Periodic spatial-temporal patterns
+- Object permanence: blob disappears for k steps then reappears
+
+**Success criteria:**
+- Pattern recognition accuracy on the four spatiotemporal benchmarks
+- P3-C within 20% accuracy of P3-A
+- Parameter count comparison: P3-C should be dramatically smaller
+
+---
+
+## Phase 4 — Training Objective Comparison
+
+**Purpose:** With the architecture fixed (best variant from Phase 3), compare self-supervised training objectives on identical conditions.
+
+**Setup:**
+- Architecture frozen to the Phase-3 winner
+- Dataset and evaluation held constant
+- Train from scratch with each objective; equal compute budget
+
+**Alternatives to compare:**
+
+| ID    | Name                            | Description                                                          |
+|-------|---------------------------------|----------------------------------------------------------------------|
+| P4-A  | Predictive Coding (local)       | ngclearn-style local error propagation                               |
+| P4-B  | Local JEPA                      | Predict own future latent from neighbors + own past                  |
+| P4-C  | Slow Feature Analysis           | Minimize temporal change subject to variance constraint              |
+| P4-D  | Hebbian + sparsity              | Pure local correlation learning with sparsity penalty                |
+| P4-E  | Reconstruction (sparse AE)      | Reference point                                                      |
+
+**Downstream evaluation tasks (held out from training):**
+1. Anomaly detection (inject novel patterns)
+2. Sequence classification
+3. Next-step prediction
+
+**Success criteria:**
+- Ranked comparison across the three downstream tasks
+- Training stability and per-method compute cost documented
+- Recommendation issued for the default objective going forward
+
+---
+
+## Phase 5 — Vector Semantics Investigation
+
+**Purpose:** Investigate whether code dimensions carry consistent semantics across positions and layers.
+
+**Setup:**
+- Take best model from Phase 4
+- Probe each dimension of the code vector for correlations with hand-designed semantic axes:
+  - Local magnitude / activity level
+  - Local gradient (left-right asymmetry)
+  - Local variance / "chaos"
+  - Periodicity / repetition
+  - Novelty / surprise (deviation from local prediction)
+
+**Alternatives to compare:**
+
+| ID    | Name                       | Description                                                            |
+|-------|----------------------------|------------------------------------------------------------------------|
+| P5-A  | Pure emergence             | No constraints on dimensions during training                           |
+| P5-B  | Anchor features            | First k dimensions regularized toward hand-designed semantic features  |
+| P5-C  | Disentanglement penalty    | Information-bottleneck or β-VAE-like loss term added                   |
+
+**Success criteria:**
+- For each dimension at each (layer, position): variance explained by each semantic axis
+- Consistency score: how stable is the dimension-to-semantics mapping across positions and layers?
+- Document which approach yields the most consistent and most interpretable semantics
+
+---
+
+## Open Question Resolved in Phase 0
+
+> *Is it meaningful to begin with only 3 b/w inputs and no temporal component, or does that strip out all the interesting properties?*
+
+**Answer:** Phase 0 with 3 inputs is a smoke test for the harness only. The architecture's interesting properties — hierarchy, time, recursion, universal node — cannot be evaluated at that scale (only 8 possible input states; every reasonable method succeeds trivially). Phase 1 (16 inputs, spatial hierarchy) is the first phase where method comparisons carry research weight. Phase 2 is where the architecture's distinctive value proposition begins to be tested. **Do not draw architectural conclusions from Phase 0.**
+
+## Relationship to Existing Projects
+
+- The architecture is intended to be eventually testable as a perception encoder in the 1D physics sandbox (128 RGB pixels, 3 objects). That integration is **out of scope** for this project but should be kept in mind as the long-term target.
+
+## References for the Implementing Agent
+
+- **HTM Spatial Pooler & Temporal Memory** — Numenta literature (Hawkins et al.)
+- **ngclearn** — predictive coding library, biologically plausible local learning
+- **JEPA family** — LeCun et al., joint embedding predictive architectures
+- **Slow Feature Analysis** — Wiskott & Sejnowski, 2002
+- **Hebbian / Oja learning rules** — classical references
+- **Sparse coding** — Olshausen & Field, 1996
+
+
+## All Iterations (overview)
+[ungrouped]
+  iter | status          | hypothesis
+  -----|-----------------|----------
+  005  | ok              | phase-5: unified weights falsified (F1 triggered); deeper problem is JEPA-to-classification transfer failure across ALL variants; object_permanence shortcut confirmed
+
+[phase-0-smoke-test] COMPLETED  (iter 001–001, 1 iterations)
+  Phase 0 smoke test complete: all 5 encoders run end-to-end; 3/4 non-trivial encoders pass rho>=0.6; all local methods within 0.15 of global baseline; report generated.
+  → read_campaign("phase-0-smoke-test") to see all iterations
+
+[phase-1-spatial-hierarchy] active
+  iter | status          | hypothesis
+  -----|-----------------|----------
+  002  | ok              | phase-2: the reconstruction objective is misaligned with classification; test alternative local objectives (predictive coding, SFA, Hebbian, contrastive) on the corrected hierarchical architecture with simultaneous training to determine if any local objective can reach ≥60% accuracy
+  003  | ok              | phase-3: JEPA local objective confirmed at 62.1% (d=8); bottleneck refuted; temporal unification path cleared for Phase 2
+
+[phase-2-temporal-integration] active
+  iter | status          | hypothesis
+  -----|-----------------|----------
+  004  | ok              | phase-4: zero-shot spatial→temporal weight transfer is falsified; P2-D with temporal JEPA is competitive (65.3%, only 1.7pp below P2-A); node type is universal but weights are axis-specific
+
+[phase-3-spatiotemporal-grid] COMPLETED  (iter 006–006, 1 iterations)
+  Phase 3 resolved: P3-C with pooled VICReg + spatial_pooled readout achieves 61.55% (+9.45pp over untrained, p=0.013, d=1.91). Universal parameter hypothesis SUPPORTED.
+  → read_campaign("phase-3-spatiotemporal-grid") to see all iterations
+
+## Current State
+# Current Research State — HSUN Project
+**Last updated:** After Phase 6 (iter_006, sub-agents 6.1–6.3)
+
+## Goal
+Investigate an architecture for unsupervised representation learning built from
+a single, universal node type. Phase 3 (Unified Spatiotemporal Grid) is now RESOLVED.
+
+## Confirmed (with iter/sub-agent references)
+
+### Phase 3 Resolution (iter_006)
+1. **VICReg was NOT omitted** — it was present in JEPALoss with λ_var=25, λ_cov=25
+   (iter_006, 6.1 code audit). The original pre-registered hypothesis was factually
+   incorrect.
+
+2. **VICReg on intermediate codes is INEFFECTIVE** for the pooled representation
+   (iter_006, 6.2 diagnostic):
+   - Per-dim stds at intermediate layers: ~0.07-0.08 (target ≥1.0)
+   - VICReg gradient per element ≈ 0.0008/elem vs prediction gradient ≈ 0.016/elem
+   - The prediction gradient overwhelms VICReg by ~20×
+   - Mathematical cause: M = B*T*S = 28,672 elements dilutes the gradient
+
+3. **Mean-pooling destroys discriminative information** (iter_006, 6.2 diagnostic):
+   - spatial_pooled_then_flat (53.5%) >> pooled (44.25%) = +9.25pp gap
+   - Temporal structure is the primary discriminative signal
+   - Mean-pooling over both space and time erases this signal
+
+4. **Pooled VICReg fix is EFFECTIVE** (iter_006, 6.3 factorial experiment):
+   - Applying VICReg directly to pooled representation (M=B=64) concentrates
+     gradient 450× per element
+   - Per-dim pooled std: 0.072 → 0.130 (+80.3%, p < 0.001)
+   - Variance loss: 0.0 (inactive) → 0.87 (active)
+
+5. **Combined fix PASSES all falsification criteria** (iter_006, 6.3):
+   - P3-C + pooled VICReg + spatial_pooled_then_flat = 61.55% test accuracy
+   - Gain over untrained: +9.45pp (threshold ≥8pp) ✅
+   - p = 0.013 (threshold <0.05) ✅
+   - Cohen's d = 1.91 (threshold ≥1.0) ✅
+   - F2 (sharing penalty): 0.0pp ✅
+   - F3 (within 20pp of P3-A): 61.55% >> 24.5% ✅
+   - F4 (loss ratio): 27.4 < 43.75 ✅
+
+6. **Both fixes are NECESSARY** (iter_006, 6.3 2×2 factorial):
+   - Readout-only (no VICReg): +1.4pp over untrained (NOT significant)
+   - VICReg-only (pooled readout): +7.75pp (just below 8pp threshold)
+   - Both together: +9.45pp (significant, large effect)
+
+### Phase 1-2 Carry-Forward (still valid)
+- JEPA local objective works spatially: 62.12% (d=8), 65.20% (d=16) (iter_003)
+- P2-D temporal JEPA: 65.33% ± 2.74% (iter_004)
+- Weight sharing has zero expressivity penalty (iter_002, iter_005)
+- Zero-shot spatial→temporal transfer is falsified (iter_004)
+- Node type is universal, weights are axis-specific (iter_004)
+
+## Refuted Hypotheses
+- "VICReg was omitted from Phase 3 training": REFUTED — VICReg IS present (iter_006, 6.1)
+- "VICReg omission caused collapse": PARTIALLY REFUTED — VICReg is present but
+  INEFFECTIVE due to gradient dilution (iter_006, 6.2)
+- "The spatiotemporal architecture fundamentally cannot learn": REFUTED — P3-C
+  with pooled VICReg achieves 61.55% (iter_006, 6.3)
+
+## Current Best Results
+- **Spatial only**: JEPA-d16, 65.20% ± 1.80%, 4,832 params (iter_003)
+- **Temporal only**: P2-D JEPA, 65.33% ± 2.74% (iter_004)
+- **Spatiotemporal (P3-C, pooled VICReg, spatial_pooled readout)**: 61.55% ± 4.67%, 1,600 params (iter_006)
+- **Spatiotemporal (P3-C, pooled VICReg, pooled readout)**: 49.15% ± 3.76% (iter_006)
+
+## Experiment Configuration (Updated)
+- Architecture: P3-C (shared weights), d=16, d_out=16, 1,600 params
+- Training: 30 epochs, 200 train/class, 100 test/class, batch=64, lr=1e-3
+- NEW: Pooled VICReg (λ_var=25, λ_cov=25) on final representation
+- NEW: spatial_pooled_then_flat readout (416 features) for classification
+
+## Files Created This Phase
+- src/diagnostic_phase3_vicreg.py — Variance diagnostic + pooling comparison script
+- src/variance_diagnostic_results.csv — Per-epoch variance metrics
+- src/pooling_comparison_results.csv — Pooling strategy comparison
+- src/run_phase3_vicreg_fix.py — Full experiment runner with pooled VICReg
+- src/pre_registration.md — Updated with corrected hypothesis
+- phase_3/pooled_vicreg_results.csv — 30 experiment results (6 conditions × 5 seeds)
+- phase_3/REPORT_vicreg_fix.md — Comprehensive analysis report
+- phase_3/diagnostic_report.md — Diagnostic analysis
+
+## Open Questions (ordered by expected value)
+1. **Should Phase 4 use pooled VICReg + spatial_pooled readout as standard?**
+   Yes — this resolves the known training collapse and readout bottleneck.
+2. **Can other training objectives (SFA, Hebbian, contrastive) also benefit
+   from pooled VICReg?** This should be tested in Phase 4.
+3. **Is the object_permanence shortcut (69.2% untrained with pooled readout)
+   still present with spatial_pooled readout?** Untrained spatial readout:
+   72.4% for class_3 (object_permanence) — shortcut persists.
+4. **Would longer training improve results?** JEPA loss converges by epoch 30,
+   but pooled VICReg might benefit from more epochs.
+5. **Can we close the gap to spatial-only (65.2%) and temporal-only (65.3%)?**
+   Currently at 61.55% — 3.7pp below single-axis performance.
+6. **Would P3-A with pooled VICReg exceed P3-C?** The sequential training
+   protocol might interact differently with pooled VICReg.
+
+
+## Recent Log (last 3 entries)
+```yaml
+cached_tokens: 1772918
+campaign: phase-2-temporal-integration
+cost_usd: 2.52331
+hypothesis: 'phase-4: zero-shot spatial→temporal weight transfer is falsified; P2-D
+  with temporal JEPA is competitive (65.3%, only 1.7pp below P2-A); node type is universal
+  but weights are axis-specific'
+input_tokens: 5232950
+iter: 4
+metrics:
+  cohens_d_f0: -0.7
+  cohens_d_f2: 1.95
+  f0_loss_ratio: 0.9903
+  f1_transfer_gap_pp: -0.8
+  f2_p2d_trained_accuracy: 65.33
+  f2_p2d_trained_std: 2.74
+  f3_gap_vs_best_pp: -1.73
+  p2a_trained_accuracy: 67.07
+  p2b_trained_accuracy: 62.87
+  p2c_trained_accuracy: 61.53
+  p2d_trained_jepa_loss: 3.9
+  p_value_f2: 0.012
+  total_runs: 45
+  untrained_test_accuracy: 58.53
+  zeroshot_test_accuracy: 57.73
+output_tokens: 131112
+status: ok
+```
+
+## iter_004: phase-4: zero-shot spatial→temporal weight transfer is falsified; P2-D with temporal JEPA is competitive (65.3%, only 1.7pp below P2-A); node type is universal but weights are axis-specific
+
+**Analysis:** Phase 2 tested four pre-registered falsification criteria for the spatial→temporal
+transfer of UniversalNode weights. Two criteria are triggered (F0, F1) and two are
+not (F2, F3), yielding a partial falsification.
+
+The core finding is nuanced: the node TYPE is universal (kernel-3, 3-slot input,
+JEPA objective works on both spatial and temporal data), but the WEIGHTS are
+axis-specific. Spatially-tr
+
+**Status:** ok
+
+**Metrics:** `{'f0_loss_ratio': 0.9903, 'f1_transfer_gap_pp': -0.8, 'f2_p2d_trained_accuracy': 65.33, 'f2_p2d_trained_std': 2.74, 'f3_gap_vs_best_pp': -1.73, 'p2d_trained_jepa_loss': 3.9, 'p2a_trained_accuracy': 67.07, 'p2b_trained_accuracy': 62.87, 'p2c_trained_accuracy': 61.53, 'zeroshot_test_accuracy': 57.73, 'untrained_test_accuracy': 58.53, 'total_runs': 45, 'cohens_d_f0': -0.7, 'cohens_d_f2': 1.95, 'p_value_f2': 0.012}`
+
+**Experimenter view:** Phase 2 tested the universal-node hypothesis: can a spatially-trained UniversalNode
+transfer zero-shot to temporal data, and is the kernel-3 temporal architecture
+competitive with dedicated temporal mechanisms?
+
+SUB-GOAL 4.1 (Planner): Built full temporal infrastructure (temporal_dataset.py,
+temporal_encoder.py, run_phase2.py, test_tempal.py). Ran P2-D experiments (15 runs).
+Zero-shot transfer is 
+
+**Notes:** Phase 2 complete: zero-shot transfer falsified (F0+F1), but P2-D competitive and JEPA works temporally (F2+F3).
+
+
+---
+```yaml
+cached_tokens: 1792704
+cost_usd: 1.52794
+hypothesis: 'phase-5: unified weights falsified (F1 triggered); deeper problem is
+  JEPA-to-classification transfer failure across ALL variants; object_permanence shortcut
+  confirmed'
+input_tokens: 3667976
+iter: 5
+metrics:
+  experiment_epochs: 30
+  experiment_train_per_class: 200
+  f1_cohens_d: 0.2206
+  f1_p_value: 0.6477
+  f2_penalty_pp: 0.0
+  f3_gap_pp: 0.5
+  f4_p3c_loss_ratio_to_p3b: 1.11
+  object_permanence_untrained_acc: 0.692
+  p3a_mean_test_acc: 0.445
+  p3a_params: 3200
+  p3b_mean_test_acc: 0.44
+  p3b_params: 3200
+  p3c_mean_test_acc: 0.44
+  p3c_params: 1600
+  p3c_vs_untrained_gain_pp: 1.15
+  periodic_st_untrained_acc: 0.106
+  untrained_mean_test_acc: 0.4285
+output_tokens: 93991
+status: ok
+```
+
+## iter_005: phase-5: unified weights falsified (F1 triggered); deeper problem is JEPA-to-classification transfer failure across ALL variants; object_permanence shortcut confirmed
+
+**Analysis:** Phase 3 tested whether a single UniversalNode weight set (P3-C) trained jointly
+on spatial and temporal JEPA objectives can produce competitive spatiotemporal
+representations. The experiment was run with 4 variants × 5 seeds = 20 runs,
+using 30 epochs, 200 train/class, 100 test/class, batch=64.
+
+The pre-registered hypothesis is falsified on criterion F1: P3-C achieves only
+1.15pp gain over Untrain
+
+**Status:** ok
+
+**Metrics:** `{'p3a_mean_test_acc': 0.445, 'p3b_mean_test_acc': 0.44, 'p3c_mean_test_acc': 0.44, 'untrained_mean_test_acc': 0.4285, 'p3c_vs_untrained_gain_pp': 1.15, 'f1_p_value': 0.6477, 'f1_cohens_d': 0.2206, 'f2_penalty_pp': 0.0, 'f3_gap_pp': 0.5, 'f4_p3c_loss_ratio_to_p3b': 1.11, 'object_permanence_untrained_acc': 0.692, 'periodic_st_untrained_acc': 0.106, 'p3c_params': 1600, 'p3b_params': 3200, 'p3a_params': 3200, 'experiment_epochs': 30, 'experiment_train_per_class': 200}`
+
+**Experimenter view:** 
+
+**Notes:** Phase 3 hypothesis falsified on F1. All variants barely exceed untrained baseline, revealing a deeper JEPA-to-classification transfer problem.
+
+
+---
+```yaml
+cached_tokens: 3787683
+campaign: phase-3-spatiotemporal-grid
+campaign_status: completed
+campaign_summary: 'Phase 3 resolved: P3-C with pooled VICReg + spatial_pooled readout
+  achieves 61.55% (+9.45pp over untrained, p=0.013, d=1.91). Universal parameter hypothesis
+  SUPPORTED.'
+cost_usd: 2.72549
+hypothesis: 'phase-6: Phase 3 failure resolved — pooled VICReg prevents representation
+  collapse (+80.3% std increase) and spatial_pooled readout preserves temporal discriminative
+  information (+9.25pp). Combined: P3-C at 61.55% (+9.45pp over untrained, p=0.013,
+  d=1.91). Universal parameter hypothesis SUPPORTED.'
+input_tokens: 6919963
+iter: 6
+metrics:
+  F1_d_ge_1: true
+  F1_gain_ge_8pp: true
+  F1_p_lt_005: true
+  F2_penalty_le_10pp: true
+  F3_within_20pp_P3A: true
+  F4_loss_ratio_ok: true
+  cohens_d: 1.91
+  condition_A_mean: 0.44
+  condition_B_mean: 0.535
+  condition_C_mean: 0.4915
+  condition_D_mean: 0.6155
+  condition_D_mean_test_acc: 0.6155
+  condition_D_seeds:
+  - 0.58
+  - 0.6825
+  - 0.595
+  - 0.57
+  - 0.65
+  condition_E_mean: 0.414
+  condition_F_mean: 0.521
+  diagnostic_pooled_std_epoch30: 0.0753
+  diagnostic_spatial_l2_std_epoch30: 0.6458
+  diagnostic_temporal_l2_std_epoch30: 0.7515
+  diagnostic_untrained_pooled_std: 0.0339
+  experiment_epochs: 30
+  experiment_param_count: 1600
+  experiment_seeds: 5
+  experiment_train_per_class: 200
+  gain_pp: 9.45
+  p_value: 0.013
+  pooled_std_increase_pct: 80.3
+  pooled_std_no_vicreg: 0.0722
+  pooled_std_with_vicreg: 0.1302
+  pooled_var_loss_no_vicreg: 0.0
+  pooled_var_loss_with_vicreg: 0.8698
+  untrained_spatial_mean_acc: 0.521
+output_tokens: 127551
+status: ok
+```
+
+## iter_006: phase-6: Phase 3 failure resolved — pooled VICReg prevents representation collapse (+80.3% std increase) and spatial_pooled readout preserves temporal discriminative information (+9.25pp). Combined: P3-C at 61.55% (+9.45pp over untrained, p=0.013, d=1.91). Universal parameter hypothesis SUPPORTED.
+
+**Analysis:** Phase 6 resolved the Phase 3 failure through systematic diagnosis and
+targeted fixes, following the approved plan with one critical correction.
+
+SUB-AGENT 6.1 (high): Updated pre-registration. The original hypothesis
+("VICReg was omitted from Phase 3 training") was found to be FACTUALLY
+INCORRECT — VICReg IS present in JEPALoss with λ_var=25, λ_cov=25. The
+pre-registration was updated to reflect t
+
+**Status:** ok
+
+**Metrics:** `{'condition_D_mean_test_acc': 0.6155, 'condition_D_seeds': [0.58, 0.6825, 0.595, 0.57, 0.65], 'untrained_spatial_mean_acc': 0.521, 'gain_pp': 9.45, 'p_value': 0.013, 'cohens_d': 1.91, 'condition_A_mean': 0.44, 'condition_B_mean': 0.535, 'condition_C_mean': 0.4915, 'condition_D_mean': 0.6155, 'condition_E_mean': 0.414, 'condition_F_mean': 0.521, 'pooled_std_no_vicreg': 0.0722, 'pooled_std_with_vicreg': 0.1302, 'pooled_std_increase_pct': 80.3, 'pooled_var_loss_no_vicreg': 0.0, 'pooled_var_loss_with_vicreg': 0.8698, 'diagnostic_pooled_std_epoch30': 0.0753, 'diagnostic_spatial_l2_std_epoch30': 0.6458, 'diagnostic_temporal_l2_std_epoch30': 0.7515, 'diagnostic_untrained_pooled_std': 0.0339, 'F1_gain_ge_8pp': True, 'F1_p_lt_005': True, 'F1_d_ge_1': True, 'F2_penalty_le_10pp': True, 'F3_within_20pp_P3A': True, 'F4_loss_ratio_ok': True, 'experiment_epochs': 30, 'experiment_train_per_class': 200, 'experiment_seeds': 5, 'experiment_param_count': 1600}`
+
+**Experimenter view:** Two root causes were identified for Phase 3's failure and both were fixed:
+
+ROOT CAUSE 1: VICReg on intermediate codes is INEFFECTIVE for the pooled
+representation. The gradient per element is ~25/(M*d*std) where M=B*T*S
+(28,672 elements for spatial layer 0). This dilutes the VICReg gradient
+~20x relative to the JEPA prediction gradient. Per-dim stds at intermediate
+layers are ~0.07-0.08, far belo
+
+**Notes:** Phase 3 failure fully resolved. Two root causes (VICReg gradient dilution + pooling destruction) identified and fixed. Universal parameter hypothesis now SUPPORTED.
+
+
+
+## Decompose and Execute
+Plan and execute the next research phase. Break it into sub-tasks:
+- run_agent(complexity='planner') — for sub-goals requiring multi-step analysis (the inner Planner can itself spawn sub-agents)
+- run_agent(complexity='medium'/'high') — for bounded, direct experiments
+Run sub-tasks sequentially. Each result informs the next. Synthesise all results into your final YAML report.
+
+## User Hint
+Recommendation for Phase 4: Summary: The evidence from Iterations 2–6 is already strong: * Reconstruction / Sparse AE → collapses (Iteration 2) * Hebbian → collapses to random variation (Iteration 3) * SFA → positive trend but below significance (Iteration 3) * JEPA + Pooled VICReg → clear winner in three independent experiments --- Phase 4 can be run as a confirmation run on the Phase 3 benchmark — all objectives, identical setup, clean table. No new architecture experiment. The main value is the documented comparison for the final report.
