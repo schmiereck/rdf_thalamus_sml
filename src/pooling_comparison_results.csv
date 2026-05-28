@@ -1,0 +1,5 @@
+representation,n_features,train_acc,test_acc
+pooled,16,0.445,0.4425
+temporal_flat_pca100,100,0.59125,0.41
+spatial_pooled_then_flat,416,0.85125,0.535
+temporal_pooled_then_flat,160,0.63,0.49
