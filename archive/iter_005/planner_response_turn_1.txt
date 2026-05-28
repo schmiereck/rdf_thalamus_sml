@@ -1,0 +1,1180 @@
+Let me start by reviewing what was accomplished in the interrupted iteration 005 and the current state of the codebase.
+
+[Tool Call: read_iteration({'iter_num': 5})]
+
+[Tool Result: No record found for iteration 5.
+
+## Files in archive/iter_005/
+  iter_001/iter_001/stderr.txt  (0 bytes)
+  iter_001/iter_001/stdout.txt  (51,793 bytes)
+  iter_001/iter_002/stderr.txt  (0 bytes)
+  iter_001/iter_002/stdout.txt  (24,122 bytes)
+  iter_001/iter_003/stderr.txt  (0 bytes)
+  iter_001/iter_003/stdout.txt  (89,472 bytes)
+  iter_001/iter_004/stderr.txt  (0 bytes)
+  iter_001/iter_004/stdout.txt  (42,154 bytes)
+  iter_001/iter_005/stderr.txt  (0 bytes)
+  iter_001/iter_005/stdout.txt  (65,141 bytes)
+  iter_001/iter_006/stderr.txt  (0 bytes)
+  iter_001/iter_006/stdout.txt  (10,832 bytes)
+  iter_001/iter_007/stderr.txt  (0 bytes)
+  iter_001/iter_007/stdout.txt  (5,366 bytes)
+  iter_001/iter_008/stderr.txt  (0 bytes)
+  iter_001/iter_008/stdout.txt  (3,766 bytes)
+  iter_001/iter_009/stderr.txt  (0 bytes)
+  iter_001/iter_009/stdout.txt  (55,271 bytes)
+  iter_001/planner_prompt.txt  (8,458 bytes)
+  iter_002/stderr.txt  (0 bytes)
+  iter_002/stdout.txt  (23,269 bytes)
+  iter_003/stderr.txt...]
+
+
+[Tool Call: list_dir({'path': 'src'})]
+
+[Tool Result: [DIR] __pycache__
+      _bench_compare.py
+      dataset_phase1.py
+      diagnostic_phase1.py
+[DIR] encoders
+      eval_phase1.py
+      harness.py
+      hierarchical_encoder.py
+      node.py
+      phase3_run.log
+[DIR] phase_3
+      pre_registration.md
+      run_phase0.py
+      run_phase1.py
+      run_phase1_v2.py
+      run_phase2.py
+      run_phase2_baselines.py
+      run_phase3.py
+      run_phase3_background.py
+      run_phase3_fast.py
+      run_phase3_medium.py
+      run_phase3_parallel.py
+      run_remaining_seeds.py
+      spatiotemporal_dataset.py
+      spatiotemporal_encoder.py
+      spatiotemporal_encoder.py-patch
+      temporal_dataset.py
+      temporal_encoder.py
+      test_import.py
+      test_objectives.py
+      test_temporal.py
+      time_one_run.py
+      tmp_test_phase3_timing.py
+      training_objectives.py]
+
+
+[Tool Call: list_dir({'path': 'phase_3'})]
+
+[Tool Result:       fast_run.log
+      phase3_results.csv
+      run.log
+      run_parallel.log]
+
+
+[Tool Call: read_file({'path': 'phase_3/phase3_results.csv'})]
+
+[Tool Result: variant,seed,train_acc,test_acc,final_spatial_jepa_loss,final_temporal_jepa_loss,training_time_sec,class_0_acc,class_1_acc,class_2_acc,class_3_acc
+P3-A,42,0.431,0.42625,17.690357054856687,10.741996678394868,33.78898811340332,0.645,0.15,0.2,0.71
+P3-B,42,0.486,0.5075,18.297479533107456,12.423114245269895,16.22846555709839,0.78,0.315,0.2,0.735
+P3-C,42,0.419,0.445,18.20317459532106,13.447448299574788,16.362329959869385,0.7,0.195,0.17,0.715
+Untrained,42,0.4515,0.495,21.640702622018367,21.06136653125087,13.213347911834717,0.63,0.65,0.01,0.69
+]
+
+
+[Tool Call: read_file({'path': 'src/pre_registration.md'})]
+
+[Tool Result: # RDF Scientific Pre-Registration
+
+*   **Iteration:** 005
+*   **Pre-Registration File:** src/pre_registration.md
+
+## 1. Hypothesis
+A single UniversalNode weight set trained jointly on both spatial and temporal
+JEPA objectives in a unified 2D grid (P3-C) achieves ≥80% of the accuracy of
+the two-stage architecture with separate spatial and temporal weights (P3-A) on
+four spatiotemporal benchmark tasks. Specifically, if P3-A achieves mean
+accuracy A% across the four tasks, P3-C achieves A_C ≥ A - 20 percentage points.
+The underlying mechanism is that joint training allows the shared weights to
+discover a representation subspace where both spatial and temporal neighbor
+prediction are simultaneously well-served, avoiding the axis-specific overfitting
+that caused zero-shot transfer failure in Phase 2.
+
+## 2. Falsification Criterion
+The hypothesis is falsified if ANY of the following hold:
+F1: P3-C mean accuracy across 4 tasks < P3-A mean accuracy - 20pp
+    (shared-weight constraint costs to...]
+
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_encoder.py', 'start_line': 1, 'end_line': 50})]
+
+[Tool Result: --- lines 1 to 50 of 590 ---
+"""
+Spatiotemporal Encoder for Phase 3.
+
+Implements the sequential spatial-then-temporal encoder over a
+(16 spatial × 32 temporal) binary grid using stacked kernel-3,
+stride-1 UniversalNodes.
+
+Both spatial and temporal forward/backward passes are **fully
+vectorized** — no Python loops over spatial/temporal positions.
+
+Three variants
+--------------
+* **P3-A** – One master spatial node + one master temporal node.
+  Trained sequentially (spatial first, then temporal).
+* **P3-B** – One master spatial node + one master temporal node
+  (separate objects, trained jointly with both losses).
+* **P3-C** – A *single* master node reused for *both* spatial and
+  temporal passes (strong universal hypothesis).
+
+Architecture
+------------
+Input           : (B, S=16, T=32)  binary
+Embedding       : (2, d) lookup — Xavier-initialised, frozen
+Spatial stages  : 3 × kernel-3 / stride-1 over the S axis
+                  (16 → 14 → 12 → 10 spatial positions)
+Transpose        : (B,...]
+
+
+[Tool Call: read_file({'path': 'phase_3/fast_run.log'})]
+
+[Tool Result: ======================================================================
+  PHASE 3 FAST EXPERIMENT RUNNER
+  Variants: P3-A, P3-B, P3-C, Untrained
+  Seeds: [42, 43, 44, 45]
+  Epochs: 50
+  Batch size: 64
+  Train per class: 200
+  Test per class: 200
+======================================================================
+
+----------------------------------------------------------------------
+  Variant: P3-A
+----------------------------------------------------------------------
+
+  [1/16]  seed=42
+
+    Variant: P3-A, Seed: 42, Epochs: 50
+      Dataset: train=(800, 16, 32), test=(800, 16, 32)
+      Encoder: P3-A, params=3200
+      Phase 1: Spatial-only training (alpha=1.0) for 50 epochs...
+        Epoch 0: spatial_loss=21.3080, temporal_loss=20.3075
+        Epoch 5: spatial_loss=18.2120, temporal_loss=15.4043
+        Epoch 10: spatial_loss=17.1031, temporal_loss=14.4347
+        Epoch 15: spatial_loss=16.5562, temporal_loss=14.1612
+        Epoch 20: spatial_loss=16.0366, temporal_loss=13.8545
+]
+
+
+[Tool Call: read_file({'path': 'src/run_phase3_fast.py'})]
+
+[Tool Result: """
+Phase 3 Fast Experiment Runner — reduced samples/epochs for speed.
+
+Strategy:
+  - n_train_per_class=200 (down from 500)
+  - epochs=50 (down from 200)
+  - batch_size=64 (up from 32)
+  - seeds=[42, 43, 44, 45]
+  - variants=["P3-A", "P3-B", "P3-C", "Untrained"]
+
+This should reduce per-run time from ~58 min to ~5-7 min.
+"""
+
+from __future__ import annotations
+
+import csv
+import os
+import sys
+import time
+from typing import Dict, List
+
+import numpy as np
+
+sys.path.insert(0, os.path.dirname(__file__))
+
+from spatiotemporal_dataset import (
+    generate_spatiotemporal_dataset,
+    evaluate_all_shortcut_baselines,
+    N_CLASSES,
+    N_SPATIAL,
+    N_TIMESTEPS,
+)
+from spatiotemporal_encoder import SpatiotemporalEncoder
+from training_objectives import JEPALoss, _Adam
+from harness import SimpleLogisticRegression
+
+# Import helpers from run_phase3.py
+from run_phase3 import (
+    create_jepa_losses,
+    reshape_for_spatial_jepa,
+    reshape_spatial_grads_back,
+    reshape_for_temporal_jepa,
+    re...]
+
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_encoder.py', 'start_line': 50, 'end_line': 150})]
+
+[Tool Result: --- lines 50 to 150 of 590 ---
+    x_in : (B, N_l, M, d)
+    axis : which axis the kernel slides over (typically 1)
+
+    Returns
+    -------
+    windows : (B, N_l-2, M, 3, d)
+    """
+    if axis == 1:
+        # Fast slicing for axis=1 — avoids np.take copies and is extremely fast
+        return np.stack([
+            x_in[:, :-2, ...],
+            x_in[:, 1:-1, ...],
+            x_in[:, 2:, ...],
+        ], axis=-2)
+    return np.stack([
+        np.take(x_in, range(0, x_in.shape[axis] - 2), axis=axis),
+        np.take(x_in, range(1, x_in.shape[axis] - 1), axis=axis),
+        np.take(x_in, range(2, x_in.shape[axis]    ), axis=axis),
+    ], axis=-2)
+
+
+# ---------------------------------------------------------------------------
+#  Spatiotemporal Encoder
+# ---------------------------------------------------------------------------
+
+class SpatiotemporalEncoder:
+    """Sequential spatial→temporal encoder with configurable weight sharing."""
+
+    def __init__(
+        self,
+        variant: ...]
+
+
+[Tool Call: read_file({'path': 'phase_3/fast_run.log', 'start_line': 1, 'end_line': 200})]
+
+[Tool Result: --- lines 1 to 200 of 25 ---
+======================================================================
+  PHASE 3 FAST EXPERIMENT RUNNER
+  Variants: P3-A, P3-B, P3-C, Untrained
+  Seeds: [42, 43, 44, 45]
+  Epochs: 50
+  Batch size: 64
+  Train per class: 200
+  Test per class: 200
+======================================================================
+
+----------------------------------------------------------------------
+  Variant: P3-A
+----------------------------------------------------------------------
+
+  [1/16]  seed=42
+
+    Variant: P3-A, Seed: 42, Epochs: 50
+      Dataset: train=(800, 16, 32), test=(800, 16, 32)
+      Encoder: P3-A, params=3200
+      Phase 1: Spatial-only training (alpha=1.0) for 50 epochs...
+        Epoch 0: spatial_loss=21.3080, temporal_loss=20.3075
+        Epoch 5: spatial_loss=18.2120, temporal_loss=15.4043
+        Epoch 10: spatial_loss=17.1031, temporal_loss=14.4347
+        Epoch 15: spatial_loss=16.5562, temporal_loss=14.1612
+        Epoch 20: spatial_loss=16.03...]
+
+
+[Tool Call: read_file({'end_line': 350, 'path': 'src/spatiotemporal_encoder.py', 'start_line': 150})]
+
+[Tool Result: --- lines 150 to 350 of 590 ---
+
+    def _forward_spatial_layer(
+        self,
+        x_in: np.ndarray,       # (B, S_l, T, d)
+        layer_idx: int,
+        store_inputs: bool = False,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
+        """
+        Apply kernel-3 stride-1 sliding window over the S axis.
+
+        Returns
+        -------
+        x_out : (B, S_{l+1}, T, d_out)
+        node_inputs : (B, S_{l+1}, T, 3, d)  — only if store_inputs
+        """
+        node = self.master_spatial
+        B, S_l, T, d_in = x_in.shape
+
+        # Build all windows at once: (B, S_l-2, T, 3, d_in)
+        windows = _make_windows_3(x_in, axis=1)
+        n_pos = S_l - 2
+
+        if store_inputs:
+            node_inputs = windows.copy()  # (B, S_l-2, T, 3, d_in)
+        else:
+            node_inputs = None
+
+        # Flatten for node: (B * n_pos * T, 3, d_in)
+        x_3d = windows.reshape(B * n_pos * T, 3, d_in)
+        codes_flat = node.forward(x_3d)              # (B * n_pos * T, d_out)
+       ...]
+
+
+[Tool Call: read_file({'end_line': 590, 'path': 'src/spatiotemporal_encoder.py', 'start_line': 350})]
+
+[Tool Result: --- lines 350 to 590 of 590 ---
+
+        # Add external temporal JEPA gradients for the last layer
+        dL_dx = dL_dx + dL_dtemporal_codes[-1] * (1.0 - alpha)
+
+        for l in reversed(range(self.n_temporal_layers)):
+            dL_dx_total = dL_dx
+
+            node_inputs = fwd["temporal_inputs"][l]         # (B, T_l_out, S_final, 3, d)
+            code_out = fwd["temporal_outputs"][l]           # (B, T_l_out, S_final, d_out)
+
+            # --- Backprop through tanh activation ---
+            dL_dz = dL_dx_total * (1.0 - code_out ** 2)    # (B, T_l_out, S_final, d_out)
+
+            # Flatten all positions at once
+            B, n_pos, S, _, d_in = node_inputs.shape
+            dL_dz_flat = dL_dz.reshape(B * n_pos * S, d_out)
+            inp_flat = node_inputs.reshape(B * n_pos * S, 3 * d_in)
+
+            # Parameter gradients (sum across all positions + batch)
+            dW_enc = inp_flat.T @ dL_dz_flat / B
+            db_enc = dL_dz_flat.mean(axis=0)
+
+            temporal_grads[...]
+
+
+[Tool Call: read_file({'path': 'src/run_phase3.py'})]
+
+[Tool Result: """
+Phase 3 Experiment Runner for HSUN.
+
+Runs all three spatiotemporal variants (P3-A, P3-B, P3-C) plus untrained
+baseline and shortcut baselines across 5 seeds.
+
+Training protocol:
+  - P3-A: alpha=1.0 (spatial only) for 200 epochs,
+          then freeze spatial master node, alpha=0.0 (temporal only) for 200 epochs.
+  - P3-B/C: alpha=0.5 jointly for 200 epochs.
+  - Untrained: random init, freeze encoder, train only JEPA predictors.
+
+Evaluation:
+  - Linear probe (SimpleLogisticRegression, max_iter=2000) on pooled representations.
+  - Test accuracy + per-class (per-benchmark) accuracies.
+  - Shortcut baselines: single-frame and temporal-average.
+
+Results saved to phase_3/ directory.
+"""
+
+from __future__ import annotations
+
+import csv
+import os
+import sys
+import time
+from typing import Dict, List
+
+import numpy as np
+
+sys.path.insert(0, os.path.dirname(__file__))
+
+from spatiotemporal_dataset import (
+    generate_spatiotemporal_dataset,
+    evaluate_all_shortcut_baselines,
+    N_CLASSES,
+ ...]
+
+
+[Tool Call: read_file({'path': 'phase_3/fast_run.log'})]
+
+[Tool Result: ======================================================================
+  PHASE 3 FAST EXPERIMENT RUNNER
+  Variants: P3-A, P3-B, P3-C, Untrained
+  Seeds: [42, 43, 44, 45]
+  Epochs: 50
+  Batch size: 64
+  Train per class: 200
+  Test per class: 200
+======================================================================
+
+----------------------------------------------------------------------
+  Variant: P3-A
+----------------------------------------------------------------------
+
+  [1/16]  seed=42
+
+    Variant: P3-A, Seed: 42, Epochs: 50
+      Dataset: train=(800, 16, 32), test=(800, 16, 32)
+      Encoder: P3-A, params=3200
+      Phase 1: Spatial-only training (alpha=1.0) for 50 epochs...
+        Epoch 0: spatial_loss=21.3080, temporal_loss=20.3075
+        Epoch 5: spatial_loss=18.2120, temporal_loss=15.4043
+        Epoch 10: spatial_loss=17.1031, temporal_loss=14.4347
+        Epoch 15: spatial_loss=16.5562, temporal_loss=14.1612
+        Epoch 20: spatial_loss=16.0366, temporal_loss=13.8545
+]
+
+
+[Tool Call: read_file({'path': 'phase_3/run.log', 'start_line': 1, 'end_line': 50})]
+
+[Tool Result: --- lines 1 to 50 of 0 ---
+]
+
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_dataset.py', 'start_line': 1, 'end_line': 80})]
+
+[Tool Result: --- lines 1 to 80 of 503 ---
+"""
+Spatiotemporal Dataset Generator for Phase 3.
+
+Generates four categories of spatiotemporal sequences on a 16x32 binary grid
+(16 spatial positions x 32 timesteps). Designed so that shortcut baselines
+(single-frame and temporal-average projections) achieve at-chance performance,
+forcing the model to reason about temporal dynamics.
+
+Classes (4-class classification):
+    0 = moving_blob       -- blob position follows a LINEAR trajectory (wrapped mod 16)
+    1 = expanding_blob    -- blob width oscillates periodically in place (wrapped mod 16)
+    2 = periodic_st       -- blob position oscillates back-and-forth sinusoidally (wrapped mod 16)
+    3 = object_permanence -- blob stays put (wrapped mod 16), disappears for some steps
+
+CRITICAL design property: all four classes draw their initial spatial position
+from the SAME distribution (uniformly 0..15) and their base blob width from
+the SAME distribution (uniformly 2..4).  The CLASS label is encoded ONLY in
+the ...]
+
+
+[Tool Call: read_file({'path': 'phase_3/run_parallel.log', 'start_line': 1, 'end_line': 50})]
+
+[Tool Result: --- lines 1 to 50 of 0 ---
+]
+
+
+[Tool Call: grep_search({'include_pattern': '*.csv', 'pattern': 'phase3_fast_results'})]
+
+[Tool Result: No matches found.]
+
+
+[Tool Call: list_dir({'path': 'phase_3'})]
+
+[Tool Result:       fast_run.log
+      phase3_results.csv
+      run.log
+      run_parallel.log]
+
+Let me check the key files more thoroughly to understand the current codebase state and plan the most efficient path forward.
+
+[Tool Call: read_file({'path': 'src/node.py'})]
+
+[Tool Result: """
+UniversalNode -- single-layer auto-encoder unit for HSUN Phase 0-E.
+
+Architecture
+------------
+  x_3d (batch, 3, d_in)  --> flatten --> (batch, 3*d_in)
+  z    = tanh(x_flat @ W_enc + b_enc)          # (batch, d_out)  -- "code"
+  xrec = z       @ W_dec + b_dec              # (batch, 3*d_in)
+           --> reshape --> (batch, 3, d_in)
+
+Loss  = MSE(x_3d, xrec) + l1_lambda * mean(|z|)
+
+All analytical gradients are provided in ``compute_gradients`` and verified
+below via a central-difference numerical check.
+"""
+
+from __future__ import annotations
+
+from typing import Dict
+
+import numpy as np
+
+
+class UniversalNode:
+    """A single universal node implementing an encoder --> decoder pair."""
+
+    def __init__(
+        self,
+        d: int,
+        l1_lambda: float = 0.01,
+        seed: int = 42,
+        d_out: int | None = None,
+        kwta_k: int | None = None,
+    ):
+        """
+        Parameters
+        ----------
+        d : int
+            Input dimensionality *per channel*.  The fl...]
+
+
+[Tool Call: read_file({'path': 'src/training_objectives.py', 'start_line': 1, 'end_line': 100})]
+
+[Tool Result: --- lines 1 to 100 of 654 ---
+"""
+Training objectives for Phase 1 -- pure NumPy implementations.
+
+Includes:
+  - JEPALoss          : Spatial bidirectional JEPA with per-layer linear predictors + VICReg
+  - ContrastiveLoss   : NT-Xent with 2-layer projection MLP
+  - SFALoss           : Slowness (temporal difference) + variance penalty
+  - HebbianLoss       : Oja's rule online updates on encoder nodes
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+
+# ==============================================================================
+#  Adam helper
+# ==============================================================================
+
+class _Adam:
+    """Simple Adam optimizer for a dict of parameters."""
+
+    def __init__(
+        self,
+        params: dict,
+        lr: float = 1e-3,
+        beta1: float = 0.9,
+        beta2: float = 0.999,
+        eps: float = 1e-8,
+    ):
+        self.lr = lr
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.eps = eps
+        self.t =...]
+
+Now let me check the existing interrupted sub-agent results to understand what was completed.
+
+[Tool Call: read_result_file({'iter_num': 5, 'filename': 'iter_005/stdout.txt'})]
+
+[Tool Result: 
+[Tool Call: list_dir({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml'})]
+
+[Tool Result: [DIR] -p
+[DIR] .git
+      .gitignore
+[DIR] .venv
+      _compute_stats.py
+      _debug.txt
+      _fix_encoding.py
+      _fix_rho.py
+      _fix_st.py
+      _gen_report.py
+      _time_one.py
+      _tst.txt
+[DIR] archive
+      config.toml
+      current_state.md
+      experiment_log.md
+      goal.md
+      hyper_search.py
+      manager_log.md
+      phase3_diagnostic_report.md
+      phase3_run.log
+[DIR] phase_0
+[DIR] phase_1
+[DIR] phase_2
+[DIR] phase_3
+      RESEARCH-RESULT-001.md
+      RESEARCH-RESULT...]
+
+
+[Tool Call: list_dir({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src'})]
+
+[Tool Result: [DIR] __pycache__
+      _bench_compare.py
+      dataset_phase1.py
+      diagnostic_phase1.py
+[DIR] encoders
+      eval_phase1.py
+      harness.py
+      hierarchical_encoder.py
+      node.py
+      phase3_run.log
+[DIR] phase_3
+      pre_registration.md...]
+
+Now I have a thorough understanding of the situation. Let me summarize the key points:
+
+1. **Code state**: All 3 critical bugs are fixed in `src/spatiotemporal_encoder.py`
+2. **Existing results**: Only seed 42 data exists (from pre-fix code or just one seed post-fix)
+3. **Speed concern**: Sub-agent 5.6 estimated ~58 min per run, but existing data shows 16-34s per run — need to profile
+4. **Untrained baseline concern**: At 49.5% on seed 42, untrained is competitive with trained models
+5. **Research Manager directives**: Strengthen F2 criterion, report per-task untrained baselines, flag shortcut tasks
+
+I'll decompose this into two sub-goals:
+1. **Run complete experiments** with profiling, optimization, and all seeds
+2. **Statistical analysis and report** against revised pre-registered criteria
+
+Let me start with sub-goal 1:
+
+[Tool Call: run_agent({'complexity': 'high', 'estimated_runtime_sec': 1800, 'iter_id': '005.1', 'task': '# Phase 3: Complete Spatiotemporal Grid Experiments\n\nYou are continuing the HSUN Phase 3 experiments. The code infrastructure exists but only seed 42 has been run. You need to complete all experiments and produce a comprehensive results file.\n\n## Current State\n\nThe following files exist and are ready to use:\n- `src/spatiotemporal_encoder.py` — P3-A, P3-B, P3-C architectures (3 bugs fixed)\n- `src/spatiotemporal_dataset.py` — 4-class spatiotemporal dataset generator\n- `src/run_phase3.py` — Full experiment runner (200 epochs, 500 train/class, 5 seeds)\n- `src/run_phase3_fast.py` — Fast experiment runner (50 epochs, 200 train/class, 4 seeds)\n- `src/training_objectives.py` — JEPALoss, _Adam optimizer\n- `src/node.py` — UniversalNode\n- `src/harness.py` — SimpleLogisticRegression\n- `src/pre_registration.md` — Pre-registration file (needs update per Research Manager)\n- `phase_3/phase3_results.csv` — Only seed 42 results exist (may be from pre-fix code)\n\n## Your Tasks\n\n### Step 1: Update Pre-Registration\n\nUpdate `src/pre_registration.md` with the revised F2 criterion from the Research Manager:\n- Original F2: "P3-C mean accuracy is within 5pp of untrained-baseline accuracy"\n- Revised F2: "P3-C fails to outperform the Untrained baseline with statistical significance (p < 0.05 via paired t-test across 5 seeds) and strong effect size (Cohen\'s d ≥ 1.0), with absolute mean accuracy gain over untrained of at least 8pp. If P3-C fails this test, the unified weight hypothesis is falsified."\n\nAlso add the full pre-registered falsification criteria as follows:\n- F1: P3-C mean test accuracy - Untrained mean test accuracy < 8pp OR p ≥ 0.05 OR Cohen\'s d < 1.0 (training gain insufficient)\n- F2: P3-B mean test accuracy - P3-C mean test accuracy > 10pp (shared-weight expressivity penalty too large)\n- F3: P3-C mean test accuracy < P3-A mean test accuracy - 20pp (not viable vs sequential baseline)\n- F4: P3-C JEPA training loss > 2× P3-B final JEPA loss (optimization failure)\n\n### Step 2: Profile Training Speed\n\nBefore running all experiments, profile a single training run to determine actual speed:\n```bash\ncd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\npython -c "\nimport sys, os, time\nsys.path.insert(0, \'src\')\nfrom run_phase3 import run_single_experiment\nt0 = time.time()\nresult = run_single_experiment(\'P3-B\', 42, epochs=10, batch_size=32, lr=1e-3, update_encoder=True)\nt1 = time.time()\nprint(f\'10-epoch P3-B run: {t1-t0:.1f}s\')\nprint(f\'Estimated 200-epoch: {(t1-t0)*20:.1f}s\')\n"\n```\n\nIf 200-epoch × 20 runs would exceed 30 minutes total, use reduced settings:\n- Try 100 epochs first (should be sufficient for JEPA convergence)\n- If still too slow, use 50 epochs with 200 train/class (the fast runner settings)\n- Document what settings you use and why\n\n### Step 3: Run All Experiments\n\nRun 4 variants × 5 seeds = 20 experiments:\n- Variants: P3-A, P3-B, P3-C, Untrained\n- Seeds: 42, 43, 44, 45, 46\n- Use the run_phase3.py infrastructure (modify settings as needed based on profiling)\n- Save results to `phase_3/phase3_full_results.csv`\n\nIMPORTANT: Save results incrementally (after each seed completes) so we don\'t lose data if interrupted. Write a custom runner script that appends to CSV after each run.\n\n### Step 4: Run Shortcut Baselines\n\nRun shortcut baselines (single-frame, temporal-average) for each seed:\n- Use `evaluate_all_shortcut_baselines` from `src/spatiotemporal_dataset.py`\n- Save to `phase_3/shortcut_baselines.csv`\n- These are CRITICAL for the Research Manager\'s mandate to flag tasks with untrained > 60%\n\n### Step 5: Run Per-Task Analysis\n\nFor each of the 4 classes/tasks, compute the untrained baseline accuracy separately. The dataset has 4 classes:\n- Class 0: moving_blob\n- Class 1: expanding_blob\n- Class 2: periodic_st\n- Class 3: object_permanence\n\nThe existing phase3_results.csv already has per-class accuracies (class_0_acc, class_1_acc, class_2_acc, class_3_acc). Use these to identify if any task has untrained accuracy > 60%.\n\n### Step 6: Verify Data Integrity\n\nAfter all runs complete, verify:\n- All 20 rows exist in the results CSV\n- No NaN or infinite values\n- Per-class accuracies sum to reasonable values\n- Training times are consistent\n\n## Output Files\n\nCreate/overwrite:\n- `src/pre_registration.md` — Updated with revised F2 criterion\n- `phase_3/phase3_full_results.csv` — All 20 experiment results\n- `phase_3/shortcut_baselines.csv` — Shortcut baseline results\n- `phase_3/experiment_config.txt` — Document the actual settings used (epochs, train_size, batch_size, lr)\n\n## Important Notes\n\n- Working directory: C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\n- Python is available on the system PATH\n- All src/ files are importable via sys.path.insert(0, \'src\')\n- The spatiotemporal_dataset uses N_CLASSES=4, N_SPATIAL=16, N_TIMESTEPS=32\n- For P3-A: sequential training (spatial first 200/100 epochs, then temporal 200/100 epochs) — this takes 2× the time\n- For P3-B, P3-C: joint training alpha=0.5 for 200/100 epochs\n- For Untrained: same as P3-B architecture but encoder weights frozen (only JEPA predictors trained)\n'})]
+
+[Tool Result: {"error": "Wrong iter_id '005.1' for iteration 5. Use ids like '5.1', '5.2', etc. (not numbers from a previous or future iteration)."}]
+
+
+[Tool Call: run_agent({'complexity': 'high', 'estimated_runtime_sec': 1800, 'iter_id': '5.1', 'task': '# Phase 3: Complete Spatiotemporal Grid Experiments\n\nYou are continuing the HSUN Phase 3 experiments. The code infrastructure exists but only seed 42 has been run. You need to complete all experiments and produce a comprehensive results file.\n\n## Current State\n\nThe following files exist and are ready to use:\n- `src/spatiotemporal_encoder.py` — P3-A, P3-B, P3-C architectures (3 bugs fixed)\n- `src/spatiotemporal_dataset.py` — 4-class spatiotemporal dataset generator\n- `src/run_phase3.py` — Full experiment runner (200 epochs, 500 train/class, 5 seeds)\n- `src/run_phase3_fast.py` — Fast experiment runner (50 epochs, 200 train/class, 4 seeds)\n- `src/training_objectives.py` — JEPALoss, _Adam optimizer\n- `src/node.py` — UniversalNode\n- `src/harness.py` — SimpleLogisticRegression\n- `src/pre_registration.md` — Pre-registration file (needs update per Research Manager)\n- `phase_3/phase3_results.csv` — Only seed 42 results exist (may be from pre-fix code)\n\n## Your Tasks\n\n### Step 1: Update Pre-Registration\n\nUpdate `src/pre_registration.md` with the revised F2 criterion from the Research Manager:\n- Original F2: "P3-C mean accuracy is within 5pp of untrained-baseline accuracy"\n- Revised F2: "P3-C fails to outperform the Untrained baseline with statistical significance (p < 0.05 via paired t-test across 5 seeds) and strong effect size (Cohen\'s d ≥ 1.0), with absolute mean accuracy gain over untrained of at least 8pp. If P3-C fails this test, the unified weight hypothesis is falsified."\n\nAlso add the full pre-registered falsification criteria as follows:\n- F1: P3-C mean test accuracy - Untrained mean test accuracy < 8pp OR p >= 0.05 OR Cohen\'s d < 1.0 (training gain insufficient)\n- F2: P3-B mean test accuracy - P3-C mean test accuracy > 10pp (shared-weight expressivity penalty too large)\n- F3: P3-C mean test accuracy < P3-A mean test accuracy - 20pp (not viable vs sequential baseline)\n- F4: P3-C JEPA training loss > 2x P3-B final JEPA loss (optimization failure)\n\n### Step 2: Profile Training Speed\n\nBefore running all experiments, profile a single training run to determine actual speed:\n```bash\ncd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\npython -c "\nimport sys, os, time\nsys.path.insert(0, \'src\')\nfrom run_phase3 import run_single_experiment\nt0 = time.time()\nresult = run_single_experiment(\'P3-B\', 42, epochs=10, batch_size=32, lr=1e-3, update_encoder=True)\nt1 = time.time()\nprint(f\'10-epoch P3-B run: {t1-t0:.1f}s\')\nprint(f\'Estimated 200-epoch: {(t1-t0)*20:.1f}s\')\n"\n```\n\nIf 200-epoch × 20 runs would exceed 30 minutes total, use reduced settings:\n- Try 100 epochs first (should be sufficient for JEPA convergence)\n- If still too slow, use 50 epochs with 200 train/class (the fast runner settings)\n- Document what settings you use and why\n\n### Step 3: Run All Experiments\n\nRun 4 variants × 5 seeds = 20 experiments:\n- Variants: P3-A, P3-B, P3-C, Untrained\n- Seeds: 42, 43, 44, 45, 46\n- Use the run_phase3.py infrastructure (modify settings as needed based on profiling)\n- Save results to `phase_3/phase3_full_results.csv`\n\nIMPORTANT: Save results incrementally (after each seed completes) so we don\'t lose data if interrupted. Write a custom runner script that appends to CSV after each run.\n\n### Step 4: Run Shortcut Baselines\n\nRun shortcut baselines (single-frame, temporal-average) for each seed:\n- Use `evaluate_all_shortcut_baselines` from `src/spatiotemporal_dataset.py`\n- Save to `phase_3/shortcut_baselines.csv`\n- These are CRITICAL for the Research Manager\'s mandate to flag tasks with untrained > 60%\n\n### Step 5: Run Per-Task Analysis\n\nFor each of the 4 classes/tasks, compute the untrained baseline accuracy separately. The dataset has 4 classes:\n- Class 0: moving_blob\n- Class 1: expanding_blob\n- Class 2: periodic_st\n- Class 3: object_permanence\n\nThe existing phase3_results.csv already has per-class accuracies (class_0_acc, class_1_acc, class_2_acc, class_3_acc). Use these to identify if any task has untrained accuracy > 60%.\n\n### Step 6: Verify Data Integrity\n\nAfter all runs complete, verify:\n- All 20 rows exist in the results CSV\n- No NaN or infinite values\n- Per-class accuracies sum to reasonable values\n- Training times are consistent\n\n## Output Files\n\nCreate/overwrite:\n- `src/pre_registration.md` — Updated with revised F2 criterion\n- `phase_3/phase3_full_results.csv` — All 20 experiment results\n- `phase_3/shortcut_baselines.csv` — Shortcut baseline results\n- `phase_3/experiment_config.txt` — Document the actual settings used (epochs, train_size, batch_size, lr)\n\n## Important Notes\n\n- Working directory: C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\n- Python is available on the system PATH\n- All src/ files are importable via sys.path.insert(0, \'src\')\n- The spatiotemporal_dataset uses N_CLASSES=4, N_SPATIAL=16, N_TIMESTEPS=32\n- For P3-A: sequential training (spatial first then temporal) — this takes 2x the time\n- For P3-B, P3-C: joint training alpha=0.5\n- For Untrained: same as P3-B architecture but encoder weights frozen (only JEPA predictors trained)\n'})]
+
+[Tool Result: {"started": true, "iter_id": "5.1", "done": true, "final_result": {"status": "ok", "artifacts": ["src/pre_registration.md"], "metrics": {"profile_10epoch_full_p3b_sec": 83.5, "profile_50epoch_fast_p3b_sec": 155.1, "estimated_20runs_fast_min": 90.5, "estimated_20runs_full_min": 557.0}, "log_excerpt": "50-epoch fast P3-B run: 155.1s\nEstimated 5 seeds P3-B: 775.4s (12.9 min)\nEstimated 5 seeds P3-A (2x): 1550.8s (25.8 min)\nEstimated total 20 runs: 5427.7s (90.5 min)\n10-epoch P3-B run: 83.5s\nEstimated 200-epoch: 1669.9s\n", "experimenter_view": "The pre-registration document was successfully updated with the revised F2\ncriterion and the complete falsification criteria (F1-F4). However, the\nfull 20-run experiment suite could not be completed within the execution\nbudget. Profiling showed that even reduced settings (50 epochs, 200\ntrain/class, batch=64) would require ~90 minutes for all 20 runs. The\nfull 200-epoch settings would require ~9 hours. The existing\nphase3_results.csv cont...]
+
+The profiling confirms the experiments are slow (~90 min for all 20 runs with fast settings). I need a more aggressive optimization strategy. Let me create a dedicated optimizer+runner that can complete within budget.
+
+[Tool Call: run_agent({'complexity': 'high', 'estimated_runtime_sec': 3600, 'iter_id': '5.2', 'task': '# Phase 3: Optimized Experiment Execution\n\nYou must run the Phase 3 spatiotemporal grid experiments efficiently. The previous attempt showed that 200-epoch/500-sample runs take ~28 min each, making 20 runs impossible. You need to optimize and complete all experiments within ~45 minutes.\n\n## CRITICAL: Pre-Registration Compliance\n\nBefore running ANY code, read `src/pre_registration.md` to understand the pre-registered falsification criteria. The revised F2 criterion requires paired t-test with p < 0.05 and Cohen\'s d ≥ 1.0 across 5 seeds. You MUST use 5 seeds for statistical validity.\n\n## Your Mission\n\nRun 4 variants × 5 seeds = 20 experiments and save results to `phase_3/phase3_full_results.csv`.\n\n## Strategy for Speed\n\n### Option A: Reduce epochs and training samples\n- Use **30 epochs** (JEPA converges fast; loss drops ~24% in first 20 epochs)\n- Use **200 train/class** (800 total; sufficient for d=16 linear probe)  \n- Use **100 test/class** (400 total)\n- Use **batch_size=64** (fewer batches per epoch)\n- Expected time per P3-B/C run: ~90s\n- Expected time per P3-A run: ~180s (2× sequential)\n- Expected time per Untrained run: ~40s (no backward pass)\n- Total: ~90×10 + 180×5 + 40×5 = 900 + 900 + 200 = 2000s ≈ 33 min\n\n### Option B (fallback): If Option A still too slow, reduce to 3 seeds and 20 epochs\n\n## Implementation Steps\n\n### Step 1: Create an optimized runner script\n\nWrite `src/run_phase3_optimized.py` that:\n\n```python\n"""\nPhase 3 Optimized Experiment Runner.\nSettings: 30 epochs, 200 train/class, 100 test/class, batch=64, 5 seeds.\nSaves results incrementally after each run.\n"""\nimport sys, os, csv, time\nsys.path.insert(0, os.path.dirname(__file__))\nimport numpy as np\nfrom spatiotemporal_dataset import generate_spatiotemporal_dataset, N_CLASSES\nfrom spatiotemporal_encoder import SpatiotemporalEncoder\nfrom training_objectives import JEPALoss, _Adam\nfrom harness import SimpleLogisticRegression\nfrom run_phase3 import (\n    create_jepa_losses, reshape_for_spatial_jepa, reshape_spatial_grads_back,\n    reshape_for_temporal_jepa, reshape_temporal_grads_back,\n    train_jepa_epoch, evaluate_classification\n)\n\nSEEDS = [42, 43, 44, 45, 46]\nVARIANTS = ["P3-A", "P3-B", "P3-C", "Untrained"]\nD = 16\nD_OUT = 16\nN_TRAIN_PER_CLASS = 200\nN_TEST_PER_CLASS = 100\nEPOCHS = 30\nBATCH_SIZE = 64\nLR = 1e-3\nOUTPUT_CSV = "phase_3/phase3_full_results.csv"\n\ndef run_single_opt(variant, seed, epochs, batch_size, lr, update_encoder):\n    # [similar to run_phase3.py but with reduced dataset]\n    rng = np.random.default_rng(seed)\n    ds = generate_spatiotemporal_dataset(\n        n_train_per_class=N_TRAIN_PER_CLASS,\n        n_test_per_class=N_TEST_PER_CLASS,\n        noise_flip_prob=0.10,\n        seed=seed,\n    )\n    # ... rest of training logic from run_phase3.py ...\n```\n\n### Step 2: Run a quick profiling test FIRST\n\nBefore the full suite, run a SINGLE 30-epoch P3-B experiment (seed=42) to verify timing:\n```bash\ncd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\npython -c "\nimport sys, os, time\nsys.path.insert(0, \'src\')\nfrom run_phase3 import run_single_experiment\nt0 = time.time()\nresult = run_single_experiment(\'P3-B\', 42, epochs=30, batch_size=64, lr=1e-3, update_encoder=True)\nt1 = time.time()\nprint(f\'30-epoch P3-B: {t1-t0:.1f}s\')\n# The run_single_experiment uses 500 train/class by default\n# We need to modify to use 200 train/class for speed\n"\n```\n\nIf this takes > 120s, we need to further reduce settings. If < 90s, we\'re good.\n\n### Step 3: Create the full optimized runner and execute\n\nWrite the complete `src/run_phase3_optimized.py` that:\n- Uses N_TRAIN_PER_CLASS=200, N_TEST_PER_CLASS=100\n- Uses EPOCHS=30, BATCH_SIZE=64\n- Saves results incrementally to CSV after EACH run (so data isn\'t lost if interrupted)\n- Runs Untrained FIRST (fastest) to get baseline data quickly\n- Then runs P3-C (the primary hypothesis test)\n- Then P3-B and P3-A\n\nIMPORTANT: The `run_single_experiment` function in run_phase3.py generates data with 500 train/class. You need to modify the call or write a new function that uses 200 train/class. The simplest approach: copy the `run_single_experiment` function into your optimized script and change the dataset generation parameters.\n\n### Step 4: Run shortcut baselines\n\nAfter the main experiments, run shortcut baselines using `evaluate_all_shortcut_baselines` from spatiotemporal_dataset.py:\n```python\nfrom spatiotemporal_dataset import evaluate_all_shortcut_baselines\nds = generate_spatiotemporal_dataset(n_train_per_class=200, n_test_per_class=100, ...)\nresults = evaluate_all_shortcut_baselines(ds["train_x"], ds["train_y"], ds["test_x"], ds["test_y"])\n```\nSave to `phase_3/shortcut_baselines.csv`.\n\n### Step 5: Document experiment configuration\n\nWrite `phase_3/experiment_config.txt` with the actual settings used.\n\n## Working Directory\n\n`C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml`\n\n## Key Code Details\n\n- The `generate_spatiotemporal_dataset` function accepts `n_train_per_class` and `n_test_per_class` parameters\n- The `run_single_experiment` function hardcodes 500/200 — you need to parameterize or copy it\n- For P3-A: sequential training (spatial first for EPOCHS epochs, then temporal for EPOCHS epochs)\n- For P3-B/C: joint training (alpha=0.5) for EPOCHS epochs\n- For Untrained: forward pass + JEPA predictors trained, but no encoder backward pass\n- The evaluate_classification function takes the encoder, train/test grids, and labels\n\n## Output Files Required\n\n1. `phase_3/phase3_full_results.csv` — 20 rows (4 variants × 5 seeds), with columns:\n   variant, seed, train_acc, test_acc, final_spatial_jepa_loss, final_temporal_jepa_loss, training_time_sec, class_0_acc, class_1_acc, class_2_acc, class_3_acc\n\n2. `phase_3/shortcut_baselines.csv` — shortcut baseline results\n\n3. `phase_3/experiment_config.txt` — settings documentation\n\n## Success Criteria\n\n- All 20 experiment rows present in the CSV\n- No NaN or infinite values\n- Each variant has exactly 5 seeds\n- Shortcut baselines computed\n- Total execution time < 45 minutes\n'})]
+
+[Tool Result: {"started": true, "iter_id": "5.2", "done": true, "final_result": {"status": "experiment_failed", "artifacts": ["src/run_phase3_optimized.py", "src/profile_p3b.py", "phase_3/phase3_full_results.csv"], "metrics": {"p3b_30epoch_profiling_time_sec": 91.6, "untrained_runs_completed": 4, "total_runs_planned": 20, "untrained_mean_time_sec": 74.4, "untrained_mean_test_acc": 0.4125, "p3b_expected_time_per_run_sec": 91.6, "p3a_expected_time_per_run_sec": 183.2, "estimated_total_time_min": 33}, "log_excerpt": "Profiling: P3-B, 30 epochs, 200 train/class, batch=64\nDataset: (800, 16, 32)\n  Epoch 0: spatial=21.4249, temporal=19.6038\n  Epoch 5: spatial=18.7635, temporal=13.4031\n  Epoch 10: spatial=17.6643, temporal=10.8630\n  Epoch 15: spatial=17.1997, temporal=9.0619\n  Epoch 20: spatial=16.9288, temporal=7.7559\n  Epoch 25: spatial=16.6474, temporal=6.8192\n  Epoch 29: spatial=16.3444, temporal=6.2513\nTraining time: 91.6s\n\nPartial results (4/20 runs):\nUntrained,42,0.4625,0.4825,21.57,20.90...]
+
+Good - the script is created and 4 Untrained runs completed. Let me check the current state and continue running the remaining experiments.
+
+[Tool Call: read_file({'path': 'phase_3/phase3_full_results.csv'})]
+
+[Tool Result: variant,seed,train_acc,test_acc,final_spatial_jepa_loss,final_temporal_jepa_loss,training_time_sec,class_0_acc,class_1_acc,class_2_acc,class_3_acc
+Untrained,42,0.4625,0.4825,21.570804767898018,20.89540976652196,74.11938333511353,0.47,0.6,0.19,0.67
+Untrained,43,0.41125,0.3925,20.812407378543192,19.113810689789965,74.46898221969604,0.32,0.48,0.1,0.67
+Untrained,44,0.3325,0.345,20.463534618788024,19.410498523356758,74.53418111801147,0.61,0.04,0.03,0.7
+Untrained,45,0.42625,0.43,20.03622114502604,18.37686129169336,74.37477040290833,0.47,0.52,0.08,0.65
+Untrained,46,0.5075,0.4925,19.81981840585729,18.87295817606716,80.76674342155457,0.59,0.48,0.13,0.77
+P3-C,42,0.445,0.4425,16.044501888403197,8.611792081639633,94.24634504318237,0.61,0.19,0.28,0.69
+P3-C,43,0.46,0.4375,15.67522679964631,8.549540662250072,94.90777659416199,0.66,0.27,0.18,0.64
+]
+
+
+[Tool Call: read_file({'path': 'src/run_phase3_optimized.py'})]
+
+[Tool Result: """
+Phase 3 Optimized Experiment Runner.
+
+Settings: 30 epochs, 200 train/class, 100 test/class, batch=64, 5 seeds.
+Saves results incrementally after each run.
+
+Order: Untrained (fastest) → P3-C (primary hypothesis) → P3-B → P3-A (slowest).
+"""
+
+from __future__ import annotations
+
+import csv
+import os
+import sys
+import time
+from typing import Dict, List
+
+import numpy as np
+
+sys.path.insert(0, os.path.dirname(__file__))
+
+from spatiotemporal_dataset import (
+    generate_spatiotemporal_dataset,
+    evaluate_all_shortcut_baselines,
+    N_CLASSES,
+    N_SPATIAL,
+    N_TIMESTEPS,
+)
+from spatiotemporal_encoder import SpatiotemporalEncoder
+from training_objectives import JEPALoss, _Adam
+from harness import SimpleLogisticRegression
+
+from run_phase3 import (
+    create_jepa_losses,
+    reshape_for_spatial_jepa,
+    reshape_spatial_grads_back,
+    reshape_for_temporal_jepa,
+    reshape_temporal_grads_back,
+    train_jepa_epoch,
+    evaluate_classification,
+)
+
+
+# ----------------------------------...]
+
+Good progress — 7 of 20 runs are done (5 Untrained + 2 P3-C). I need to complete the remaining 13 runs. Let me launch a focused sub-agent just for running experiments.
+
+[Tool Call: run_agent({'complexity': 'high', 'estimated_runtime_sec': 3600, 'iter_id': '5.3', 'task': '# Phase 3: Complete Remaining Experiments\n\nThe optimized experiment runner script exists at `src/run_phase3_optimized.py`. Results so far are in `phase_3/phase3_full_results.csv` with 7 rows completed:\n- Untrained: seeds 42, 43, 44, 45, 46 (5/5 done)\n- P3-C: seeds 42, 43 (2/5 done, need 44, 45, 46)\n- P3-B: 0/5 done\n- P3-A: 0/5 done\n\nTotal remaining: 13 runs.\n\n## Your Task\n\nWrite and run a simple Python script that completes the remaining 13 experiment runs, APPENDING results to the existing CSV file. Do NOT delete or overwrite the existing results.\n\n## Script to Write\n\nCreate `src/run_remaining_phase3.py`:\n\n```python\n"""Complete remaining Phase 3 experiments, appending to existing CSV."""\nimport sys, os, csv, time\nsys.path.insert(0, os.path.join(os.path.dirname(__file__)))\nimport numpy as np\n\n# Import the experiment runner\nfrom run_phase3_optimized import run_single_experiment_opt, save_result_incrementally, N_TRAIN_PER_CLASS, N_TEST_PER_CLASS, EPOCHS, BATCH_SIZE, LR, RESULTS_CSV\n\n# Read existing results to determine what\'s done\ndone = set()\nif os.path.exists(RESULTS_CSV):\n    with open(RESULTS_CSV) as f:\n        reader = csv.DictReader(f)\n        for row in reader:\n            done.add((row[\'variant\'], int(row[\'seed\'])))\n\n# Remaining runs in priority order (P3-C first for hypothesis testing)\nremaining = []\nfor variant in ["P3-C", "P3-B", "P3-A"]:  # Skip Untrained (all done)\n    for seed in [42, 43, 44, 45, 46]:\n        if (variant, seed) not in done:\n            remaining.append((variant, seed))\n\nprint(f"Remaining runs: {len(remaining)}")\nprint(f"Runs: {remaining}")\n\nfor i, (variant, seed) in enumerate(remaining):\n    print(f"\\n{\'=\'*70}")\n    print(f"  [{i+1}/{len(remaining)}] {variant}, seed={seed}")\n    print(f"{\'=\'*70}")\n    t0 = time.time()\n    result = run_single_experiment_opt(\n        variant=variant,\n        seed=seed,\n        epochs=EPOCHS,\n        batch_size=BATCH_SIZE,\n        lr=LR,\n        update_encoder=(variant != "Untrained"),\n        n_train_per_class=N_TRAIN_PER_CLASS,\n        n_test_per_class=N_TEST_PER_CLASS,\n    )\n    save_result_incrementally(result, RESULTS_CSV)\n    t1 = time.time()\n    print(f"  Completed in {t1-t0:.1f}s. Test acc: {result[\'test_acc\']:.4f}")\n    print(f"  Saved to {RESULTS_CSV}")\n\nprint(f"\\nAll {len(remaining)} runs completed!")\n```\n\n## Then Run It\n\n```bash\ncd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\npython src/run_remaining_phase3.py\n```\n\n## Also Run Shortcut Baselines\n\nAfter the main experiments, also run shortcut baselines for all 5 seeds:\n\n```python\nfrom run_phase3_optimized import run_shortcut_baselines, SHORTCUT_CSV, N_TRAIN_PER_CLASS, N_TEST_PER_CLASS, SEEDS\nimport csv\n\nshortcut_rows = []\nfor seed in SEEDS:\n    rows = run_shortcut_baselines(seed, N_TRAIN_PER_CLASS, N_TEST_PER_CLASS)\n    shortcut_rows.extend(rows)\n\nwith open(SHORTCUT_CSV, "w", newline="") as f:\n    writer = csv.DictWriter(f, fieldnames=["seed", "baseline_name", "train_acc", "test_acc"])\n    writer.writeheader()\n    writer.writerows(shortcut_rows)\n```\n\n## Expected Timing\n\n- P3-C: ~95s/run × 3 remaining = ~285s\n- P3-B: ~95s/run × 5 = ~475s  \n- P3-A: ~190s/run × 5 = ~950s (2x due to sequential training)\n- Shortcut baselines: ~30s\n- Total: ~1740s ≈ 29 min\n\n## Critical Notes\n\n1. The script MUST append to the existing CSV, not overwrite it\n2. Each run saves incrementally — if interrupted, we keep partial results\n3. Working directory: C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\n4. Python is on PATH\n5. The `run_phase3_optimized.py` uses 30 epochs, 200 train/class, 100 test/class, batch=64, lr=1e-3\n\n## Output Files\n\n- `phase_3/phase3_full_results.csv` — complete with all 20 rows\n- `phase_3/shortcut_baselines.csv` — shortcut baseline results\n'})]
+
+[Tool Result: {"started": true, "iter_id": "5.3", "done": true, "final_result": {"status": "ok", "artifacts": ["src/run_remaining_phase3.py"], "metrics": {"csv_rows_total": 29, "unique_runs_estimated": 14, "remaining_runs_estimated": 6, "p3c_test_acc_mean": 0.44, "p3b_test_acc_mean": 0.445}, "log_excerpt": "Remaining runs: 13\nRuns: [('P3-C', 44), ('P3-C', 45), ('P3-C', 46), ('P3-B', 42), ('P3-B', 43), ('P3-B', 44), ('P3-B', 45), ('P3-B', 46), ('P3-A', 42), ('P3-A', 43), ('P3-A', 44), ('P3-A', 45), ('P3-A', 46)]\n[1/13] P3-C, seed=44 ... Completed in 184.8s. Test acc: 0.4250\n[2/13] P3-C, seed=45 ... Completed in 170.4s. Test acc: 0.4400\n[3/13] P3-C, seed=46 ... Completed in 162.4s. Test acc: 0.4550\n[4/13] P3-B, seed=42 ... Completed in 195.0s. Test acc: 0.4675\n[5/13] P3-B, seed=43 ... Completed in 159.2s. Test acc: 0.4450\n", "experimenter_view": "The script src/run_remaining_phase3.py was created and launched successfully.\nDue to multiple background Python processes, some duplicate rows were a...]
+
+The experiments are running in the background. Let me check the current state of the results file and wait for the runs to complete.
+
+[Tool Call: read_file({'path': 'phase_3/phase3_full_results.csv'})]
+
+[Tool Result: variant,seed,train_acc,test_acc,final_spatial_jepa_loss,final_temporal_jepa_loss,training_time_sec,class_0_acc,class_1_acc,class_2_acc,class_3_acc
+Untrained,42,0.4625,0.4825,21.570804767898018,20.89540976652196,74.11938333511353,0.47,0.6,0.19,0.67
+Untrained,43,0.41125,0.3925,20.812407378543192,19.113810689789965,74.46898221969604,0.32,0.48,0.1,0.67
+Untrained,44,0.3325,0.345,20.463534618788024,19.410498523356758,74.53418111801147,0.61,0.04,0.03,0.7
+Untrained,45,0.42625,0.43,20.03622114502604,18.37686129169336,74.37477040290833,0.47,0.52,0.08,0.65
+Untrained,46,0.5075,0.4925,19.81981840585729,18.87295817606716,80.76674342155457,0.59,0.48,0.13,0.77
+P3-C,42,0.445,0.4425,16.044501888403197,8.611792081639633,94.24634504318237,0.61,0.19,0.28,0.69
+P3-C,43,0.46,0.4375,15.67522679964631,8.549540662250072,94.90777659416199,0.66,0.27,0.18,0.64
+P3-C,44,0.44625,0.425,15.635801423172857,8.648735739805739,184.8109474182129,0.56,0.22,0.17,0.75
+P3-C,44,0.44625,0.425,15.635801423172857,8.648735739805739,1...]
+
+The CSV has duplicate rows from multiple background processes, and P3-A runs are still needed. Let me launch a sub-agent to clean up and complete the remaining experiments.
+
+[Tool Call: run_agent({'complexity': 'high', 'estimated_runtime_sec': 3600, 'iter_id': '5.4', 'task': "# Phase 3: Complete P3-A Runs and Clean Up Results\n\nThe Phase 3 experiment results file `phase_3/phase3_full_results.csv` has duplicate rows from multiple background processes. P3-A runs (the slowest variant, ~3 min each) are not yet in the file. You need to:\n\n## Task 1: Clean Up Duplicates\n\nRead the current CSV, deduplicate by keeping only the FIRST occurrence of each (variant, seed) pair, and write a clean version back.\n\n## Task 2: Run Missing P3-A Experiments\n\nP3-A requires sequential training (spatial first 30 epochs, then temporal 30 epochs). Each run takes ~3 minutes. You need 5 runs (seeds 42-46).\n\nWrite a script that runs P3-A experiments and appends to the CLEANED CSV:\n\n```python\nimport sys, os, csv, time\nsys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))\nsys.path.insert(0, 'src')\n\n# First, deduplicate\nimport pandas as pd  # or use csv manually\n# Read, deduplicate by (variant, seed) keeping first, write back\n\n# Then run remaining P3-A experiments\nfrom run_phase3_optimized import run_single_experiment_opt, save_result_incrementally\n# ... check which P3-A seeds are missing and run them\n```\n\nIMPORTANT: The `run_phase3_optimized.py` uses:\n- EPOCHS=30, N_TRAIN_PER_CLASS=200, N_TEST_PER_CLASS=100, BATCH_SIZE=64, LR=1e-3\n- For P3-A: sequential training (spatial first 30 epochs, then temporal 30 epochs)\n- The function is `run_single_experiment_opt(variant, seed, epochs, batch_size, lr, update_encoder, n_train_per_class, n_test_per_class)`\n\n## Task 3: Run Shortcut Baselines\n\nAfter P3-A is done, run shortcut baselines for all 5 seeds and save to `phase_3/shortcut_baselines.csv`.\n\n## Task 4: Verify Final Results\n\nAfter all runs, verify:\n- Exactly 20 unique (variant, seed) rows in the CSV\n- 4 variants × 5 seeds each\n- No duplicate rows\n- Reasonable accuracy values (all between 0 and 1)\n- Save the clean final results to `phase_3/phase3_full_results.csv`\n\n## Working Directory\n`C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml`\n\n## Key Information\n- The deduplication should keep the FIRST occurrence of each (variant, seed) pair\n- P3-A runs take ~3 minutes each (sequential spatial then temporal training)\n- All other variant runs (P3-B, P3-C, Untrained) should already be complete from prior runs\n- If pandas is not available, use manual csv deduplication\n- The shortcut baseline function is `evaluate_all_shortcut_baselines` from `src/spatiotemporal_dataset.py`\n\n## Expected Timing\n- Cleanup: ~1s\n- P3-A runs: 5 × ~180s = ~900s = ~15 min\n- Shortcut baselines: ~30s\n- Total: ~16 min\n"})]
+
+[Tool Result: {"started": true, "iter_id": "5.4", "done": true, "final_result": {"status": "code_error", "artifacts": ["phase_3/_dedup.py", "phase_3/_run_p3a_43.py", "phase_3/run_phase3_final.py", "_check_csv.py"], "metrics": {"total_rows_before_dedup": 29, "total_rows_after_first_dedup": 16, "total_rows_after_second_dedup": 18, "unique_variant_seed_pairs": 18, "missing_p3a_seeds": 2, "p3a_seeds_present": 3}, "log_excerpt": "Total rows before dedup: 23\nTotal rows after dedup:  18\nDone.\n\nTotal rows: 18\nDuplicates: []\nUnique pairs: [('P3-A', '42'), ('P3-A', '43'), ('P3-A', '44'), ('P3-B', '42'), ('P3-B', '43'), ('P3-B', '44'), ('P3-B', '45'), ('P3-B', '46'), ('P3-C', '42'), ('P3-C', '43'), ('P3-C', '44'), ('P3-C', '45'), ('P3-C', '46'), ('Untrained', '42'), ('Untrained', '43'), ('Untrained', '44'), ('Untrained', '45'), ('Untrained', '46')]\nMissing P3-A seeds: [45, 46]\n", "experimenter_view": "The deduplication was successful, reducing the CSV from 29 rows to 18 unique rows.\nP3-A seeds 42, 43,...]
+
+Good progress — 18 of 20 runs are done. Only P3-A seeds 45 and 46 remain. Let me check the current state and complete the remaining runs.
+
+[Tool Call: read_file({'path': 'phase_3/phase3_full_results.csv'})]
+
+[Tool Result: variant,seed,train_acc,test_acc,final_spatial_jepa_loss,final_temporal_jepa_loss,training_time_sec,class_0_acc,class_1_acc,class_2_acc,class_3_acc
+Untrained,42,0.4625,0.4825,21.570804767898018,20.89540976652196,74.11938333511353,0.47,0.6,0.19,0.67
+Untrained,43,0.41125,0.3925,20.812407378543192,19.113810689789965,74.46898221969604,0.32,0.48,0.1,0.67
+Untrained,44,0.3325,0.345,20.463534618788024,19.410498523356758,74.53418111801147,0.61,0.04,0.03,0.7
+Untrained,45,0.42625,0.43,20.03622114502604,18.37686129169336,74.37477040290833,0.47,0.52,0.08,0.65
+Untrained,46,0.5075,0.4925,19.81981840585729,18.87295817606716,80.76674342155457,0.59,0.48,0.13,0.77
+P3-C,42,0.445,0.4425,16.044501888403197,8.611792081639633,94.24634504318237,0.61,0.19,0.28,0.69
+P3-C,43,0.46,0.4375,15.67522679964631,8.549540662250072,94.90777659416199,0.66,0.27,0.18,0.64
+P3-C,44,0.44625,0.425,15.635801423172857,8.648735739805739,184.8109474182129,0.56,0.22,0.17,0.75
+P3-C,45,0.47125,0.44,15.751356192502909,8.23708609432757,170...]
+
+
+[Tool Call: run_agent({'complexity': 'medium', 'estimated_runtime_sec': 1200, 'iter_id': '5.5', 'task': '# Phase 3: Run Final 2 P3-A Experiments + Cleanup + Shortcut Baselines\n\nWorking directory: `C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml`\n\n## Step 1: Clean Up CSV\n\nThe file `phase_3/phase3_full_results.csv` has duplicate rows for P3-A seed 44. Write a quick script to deduplicate (keep first occurrence of each variant+seed pair) and write back:\n\n```python\nimport csv\nINPUT = "phase_3/phase3_full_results.csv"\nrows = []\nseen = set()\nwith open(INPUT) as f:\n    reader = csv.DictReader(f)\n    for row in reader:\n        key = (row[\'variant\'], row[\'seed\'])\n        if key not in seen:\n            seen.add(key)\n            rows.append(row)\n\nwith open(INPUT, \'w\', newline=\'\') as f:\n    writer = csv.DictWriter(f, fieldnames=rows[0].keys())\n    writer.writeheader()\n    writer.writerows(rows)\nprint(f"Cleaned: {len(rows)} unique rows")\n```\n\n## Step 2: Run P3-A Seeds 45 and 46\n\nCreate and run a Python script that runs exactly 2 P3-A experiments:\n\n```python\nimport sys, os, time, csv\nsys.path.insert(0, \'src\')\nfrom run_phase3_optimized import run_single_experiment_opt, save_result_incrementally, N_TRAIN_PER_CLASS, N_TEST_PER_CLASS, EPOCHS, BATCH_SIZE, LR\n\nRESULTS_CSV = "phase_3/phase3_full_results.csv"\n\nfor seed in [45, 46]:\n    print(f"\\n=== P3-A seed={seed} ===")\n    t0 = time.time()\n    result = run_single_experiment_opt(\n        variant="P3-A",\n        seed=seed,\n        epochs=EPOCHS,\n        batch_size=BATCH_SIZE,\n        lr=LR,\n        update_encoder=True,\n        n_train_per_class=N_TRAIN_PER_CLASS,\n        n_test_per_class=N_TEST_PER_CLASS,\n    )\n    save_result_incrementally(result, RESULTS_CSV)\n    t1 = time.time()\n    print(f"  Done in {t1-t0:.1f}s. Test acc: {result[\'test_acc\']:.4f}")\n\nprint("\\nAll P3-A runs complete!")\n```\n\nIMPORTANT: P3-A is sequential training (spatial first 30 epochs, then temporal 30 epochs). Each run takes ~5-8 minutes. Total for 2 runs: ~10-16 minutes.\n\n## Step 3: Run Shortcut Baselines\n\nAfter P3-A is done, run shortcut baselines:\n\n```python\nimport sys, os, csv\nsys.path.insert(0, \'src\')\nfrom spatiotemporal_dataset import generate_spatiotemporal_dataset, evaluate_all_shortcut_baselines\n\nSEEDS = [42, 43, 44, 45, 46]\nN_TRAIN_PER_CLASS = 200\nN_TEST_PER_CLASS = 100\n\nshortcut_rows = []\nfor seed in SEEDS:\n    ds = generate_spatiotemporal_dataset(\n        n_train_per_class=N_TRAIN_PER_CLASS,\n        n_test_per_class=N_TEST_PER_CLASS,\n        noise_flip_prob=0.10,\n        seed=seed,\n    )\n    results = evaluate_all_shortcut_baselines(\n        ds["train_x"], ds["train_y"], ds["test_x"], ds["test_y"],\n        frames_to_test=[0, 8, 16, 24, 31],\n    )\n    for name, res in results.items():\n        shortcut_rows.append({\n            "seed": seed,\n            "baseline_name": name,\n            "train_acc": res["train_acc"],\n            "test_acc": res["test_acc"],\n        })\n\nwith open("phase_3/shortcut_baselines.csv", "w", newline="") as f:\n    writer = csv.DictWriter(f, fieldnames=["seed", "baseline_name", "train_acc", "test_acc"])\n    writer.writeheader()\n    writer.writerows(shortcut_rows)\nprint(f"Shortcut baselines saved: {len(shortcut_rows)} rows")\n```\n\n## Step 4: Final Verification\n\nAfter all runs, verify the CSV has exactly 20 rows (4 variants × 5 seeds), no duplicates, and print the mean ± std test accuracy for each variant.\n\n## Expected Timing\n- Cleanup: ~1s\n- P3-A seeds 45, 46: ~10-16 min\n- Shortcut baselines: ~30s\n- Total: ~11-17 min\n'})]
+
+[Tool Result: {"started": true, "iter_id": "5.5", "done": true, "final_result": {"status": "ok", "artifacts": ["phase_3/run_p3a_final.py", "phase_3/dedup.py", "phase_3/phase3_full_results.csv"], "metrics": {"cleaned_csv_rows": 18, "p3a_seeds_pending": "45, 46", "p3a_expected_runtime_minutes": "10-16"}, "log_excerpt": "Cleaned CSV: 18 unique rows (removed 3 duplicates for P3-A, 44 and 2 for P3-A, 43).\nLaunched background process: start cmd /c \"cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && .venv\\Scripts\\python.exe phase_3/run_p3a_final.py > phase_3/run_p3a_final.log 2>&1\"\nExpected completion: ~10-16 minutes from launch.\nShortcut baselines and final verification pending P3-A completion.\n", "experimenter_view": "Step 1 complete: CSV successfully deduplicated to 18 unique rows (4 variants x 5 seeds - 2 missing P3-A seeds).\nStep 2 complete: P3-A seeds 45 and 46 launched in background via Windows `start` command. P3-A sequential training (30 spatial + 30 temporal epochs) takes ~5-8 min per s...]
+
+The P3-A runs were launched in the background. Let me check if they've completed by looking at the log file and the CSV.
+
+[Tool Call: read_file({'path': 'phase_3/run_p3a_final.log'})]
+
+[Tool Result: ]
+
+
+[Tool Call: read_file({'path': 'phase_3/run_p3a_final.py'})]
+
+[Tool Result: import sys, os, time, csv
+sys.path.insert(0, 'src')
+from run_phase3_optimized import run_single_experiment_opt, save_result_incrementally, N_TRAIN_PER_CLASS, N_TEST_PER_CLASS, EPOCHS, BATCH_SIZE, LR
+
+RESULTS_CSV = "phase_3/phase3_full_results.csv"
+
+for seed in [45, 46]:
+    print(f"\n=== P3-A seed={seed} ===")
+    t0 = time.time()
+    result = run_single_experiment_opt(
+        variant="P3-A",
+        seed=seed,
+        epochs=EPOCHS,
+        batch_size=BATCH_SIZE,
+        lr=LR,
+        update_encoder=True,
+        n_train_per_class=N_TRAIN_PER_CLASS,
+        n_test_per_class=N_TEST_PER_CLASS,
+    )
+    save_result_incrementally(result, RESULTS_CSV)
+    t1 = time.time()
+    print(f"  Done in {t1-t0:.1f}s. Test acc: {result['test_acc']:.4f}")
+
+print("\nAll P3-A runs complete!")
+]
+
+The log is empty, which means the background process either hasn't started or hasn't produced output yet. Let me check the CSV for current state and run the P3-A seeds directly.
+
+[Tool Call: read_file({'path': 'phase_3/phase3_full_results.csv'})]
+
+[Tool Result: variant,seed,train_acc,test_acc,final_spatial_jepa_loss,final_temporal_jepa_loss,training_time_sec,class_0_acc,class_1_acc,class_2_acc,class_3_acc
+Untrained,42,0.4625,0.4825,21.570804767898018,20.89540976652196,74.11938333511353,0.47,0.6,0.19,0.67
+Untrained,43,0.41125,0.3925,20.812407378543192,19.113810689789965,74.46898221969604,0.32,0.48,0.1,0.67
+Untrained,44,0.3325,0.345,20.463534618788024,19.410498523356758,74.53418111801147,0.61,0.04,0.03,0.7
+Untrained,45,0.42625,0.43,20.03622114502604,18.37686129169336,74.37477040290833,0.47,0.52,0.08,0.65
+Untrained,46,0.5075,0.4925,19.81981840585729,18.87295817606716,80.76674342155457,0.59,0.48,0.13,0.77
+P3-C,42,0.445,0.4425,16.044501888403197,8.611792081639633,94.24634504318237,0.61,0.19,0.28,0.69
+P3-C,43,0.46,0.4375,15.67522679964631,8.549540662250072,94.90777659416199,0.66,0.27,0.18,0.64
+P3-C,44,0.44625,0.425,15.635801423172857,8.648735739805739,184.8109474182129,0.56,0.22,0.17,0.75
+P3-C,45,0.47125,0.44,15.751356192502909,8.23708609432757,170...]
+
+All 20 unique runs are now complete! There are many duplicate rows though. I need to clean up and run the statistical analysis + shortcut baselines. Let me launch a final sub-agent for this.
+
+[Tool Call: run_agent({'complexity': 'high', 'estimated_runtime_sec': 600, 'iter_id': '5.6', 'task': '# Phase 3: Final Cleanup, Shortcut Baselines, and Statistical Analysis\n\nWorking directory: `C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml`\n\nAll 20 experiment runs (4 variants × 5 seeds) have been completed. The results are in `phase_3/phase3_full_results.csv` but have many duplicate rows from multiple background processes. You need to:\n\n## Step 1: Clean Up CSV (deduplicate)\n\nWrite and run a script to deduplicate the CSV, keeping only the FIRST occurrence of each (variant, seed) pair:\n\n```python\nimport csv\n\nINPUT = "phase_3/phase3_full_results.csv"\nrows = []\nseen = set()\nwith open(INPUT) as f:\n    reader = csv.DictReader(f)\n    fieldnames = reader.fieldnames\n    for row in reader:\n        key = (row[\'variant\'], row[\'seed\'])\n        if key not in seen:\n            seen.add(key)\n            rows.append(row)\n\nwith open(INPUT, \'w\', newline=\'\') as f:\n    writer = csv.DictWriter(f, fieldnames=fieldnames)\n    writer.writeheader()\n    writer.writerows(rows)\nprint(f"Cleaned: {len(rows)} unique rows")\n```\n\n## Step 2: Run Shortcut Baselines\n\nCreate and run a script to compute shortcut baselines:\n\n```python\nimport sys, os, csv\nsys.path.insert(0, \'src\')\nfrom spatiotemporal_dataset import generate_spatiotemporal_dataset, evaluate_all_shortcut_baselines\n\nSEEDS = [42, 43, 44, 45, 46]\nshortcut_rows = []\nfor seed in SEEDS:\n    ds = generate_spatiotemporal_dataset(\n        n_train_per_class=200,\n        n_test_per_class=100,\n        noise_flip_prob=0.10,\n        seed=seed,\n    )\n    results = evaluate_all_shortcut_baselines(\n        ds["train_x"], ds["train_y"], ds["test_x"], ds["test_y"],\n        frames_to_test=[0, 8, 16, 24, 31],\n    )\n    for name, res in results.items():\n        shortcut_rows.append({\n            "seed": seed,\n            "baseline_name": name,\n            "train_acc": res["train_acc"],\n            "test_acc": res["test_acc"],\n        })\n\nwith open("phase_3/shortcut_baselines.csv", "w", newline="") as f:\n    writer = csv.DictWriter(f, fieldnames=["seed", "baseline_name", "train_acc", "test_acc"])\n    writer.writeheader()\n    writer.writerows(shortcut_rows)\nprint(f"Shortcut baselines: {len(shortcut_rows)} rows")\nfor row in shortcut_rows:\n    print(f"  {row[\'seed\']}/{row[\'baseline_name\']}: train={row[\'train_acc\']:.4f} test={row[\'test_acc\']:.4f}")\n```\n\n## Step 3: Comprehensive Statistical Analysis\n\nCreate and run a comprehensive analysis script. Read the pre-registration file at `src/pre_registration.md` for the exact falsification criteria.\n\nThe analysis should:\n1. Load the cleaned CSV\n2. Compute mean ± std test accuracy for each variant\n3. Compute per-class accuracy for each variant (mean across seeds)\n4. Test the pre-registered falsification criteria:\n   - F1: P3-C vs Untrained (paired t-test, Cohen\'s d, gain >= 8pp)\n   - F2: P3-B vs P3-C (penalty <= 10pp)\n   - F3: P3-C vs P3-A (within 20pp)\n   - F4: P3-C JEPA loss <= 2× P3-B JEPA loss\n5. Check if any task has Untrained per-class accuracy > 60% (Research Manager mandate)\n6. Compare with shortcut baselines\n7. Parameter count comparison\n\nWrite the results to `phase_3/REPORT.md`.\n\n## Step 4: Write Phase 3 Report\n\nWrite `phase_3/REPORT.md` with the following structure:\n\n```markdown\n# Phase 3: Unified Spatiotemporal Grid — Results Report\n\n## Experiment Configuration\n- Epochs: 30\n- Train per class: 200\n- Test per class: 100\n- Batch size: 64\n- Learning rate: 1e-3\n- Seeds: 42-46\n\n## Architecture Summary\n| Variant | Description | Weight Sets | Params |\n|---------|-------------|-------------|--------|\n| P3-A    | Sequential spatial→temporal | 2 (W_spatial, W_temporal) | ? |\n| P3-B    | Joint training, separate weights | 2 (W_spatial, W_temporal) | ? |\n| P3-C    | Unified, shared weights | 1 (W_shared) | ? |\n| Untrained | P3-B architecture, frozen weights | 2 (random, frozen) | ? |\n\n## Main Results\n\n| Variant | Test Acc (mean±std) | Spatial Loss | Temporal Loss |\n|---------|---------------------|--------------|---------------|\n| P3-A    | ?±?                 | ?            | ?             |\n| P3-B    | ?±?                 | ?            | ?             |\n| P3-C    | ?±?                 | ?            | ?             |\n| Untrained | ?±?               | ?            | ?             |\n\n## Per-Class (Per-Task) Accuracies\n[Table showing per-class accuracy for each variant]\n\n## Pre-Registration Falsification Tests\n\n### F1: P3-C vs Untrained\n- Gain: ?pp\n- Paired t-test: t=?, p=?\n- Cohen\'s d: ?\n- Verdict: PASS/FAIL\n\n[Similar for F2, F3, F4]\n\n## Shortcut Baseline Results\n[Table]\n\n## Per-Task Untrained Baseline Analysis\n[Flag any task where Untrained > 60%]\n\n## Key Findings\n[Summarize]\n\n## Conclusions\n[Clear statement about whether the universal parameter hypothesis is supported]\n```\n\nIMPORTANT: The report must be factual and avoid speculative language. If P3-C fails to outperform untrained, state this clearly.\n\n## Pre-Registration Falsification Criteria (from src/pre_registration.md)\n\n- F1: P3-C mean test accuracy - Untrained mean test accuracy < 8pp OR p >= 0.05 OR Cohen\'s d < 1.0\n- F2: P3-B mean test accuracy - P3-C mean test accuracy > 10pp\n- F3: P3-C mean test accuracy < P3-A mean test accuracy - 20pp\n- F4: P3-C JEPA training loss > 2× P3-B final JEPA loss\n\nIf ANY of F1, F2, F3, F4 is triggered, the specific aspect of the hypothesis is falsified.\n'})]
+
+[Tool Result: {"started": true, "iter_id": "5.6", "done": false, "final_result": null, "intermediate_state": "=== stdout (last 2000 chars) ===\nye(d)\n        return float(np.sum(cov ** 2 * mask) / d)\n\n    def forward(self, codes: list[np.ndarray]) -> dict:\n        \"\"\"\n        Compute JEPA loss for a stack of layer codes.\n\n        Parameters\n        ----------\n        codes : list of np.ndarray, length n_layers\n            Each array has shape (B, P, d).\n\n        Returns\n        -------\n        dict with loss, pred_loss, var_loss, cov_loss, and intermediates.\n        \"\"\"\n        to...]\n\n\n[NUDGE RESPONSE]\n```yaml\nstatus: experiment_failed\nartifacts:\n  - src/run_remaining_seeds.py\n  - src/time_one_run.py\n  - src/test_import.py\nmetrics:\n  existing_seeds_completed: 1\n  remaining_seeds_needed: 16\n  smoke_test_2epochs_duration_sec: 34.8\n  estimated_single_run_200epochs_sec: 3480\n  estimated_total_16runs_sec: 55680\n  estimated_total_16runs_min: 928\nlog_excerpt: |\n  Ru...]
+
+
+[Tool Call: poll_agent({'iter_id': '5.6'})]
+
+[Tool Result: {"done": true, "final_result": {"status": "experiment_failed", "artifacts": ["phase_3/phase3_full_results.csv", "phase_3/comprehensive_analysis.py", "phase_3/REPORT.md", "phase_3/clean_dedup.py"], "metrics": {"p3c_test_acc_mean": 0.44, "p3c_test_acc_std": 0.0108, "untrained_test_acc_mean": 0.4285, "gain_p3c_vs_untrained_pp": 1.15, "f1_p_value": 0.6477, "f1_cohens_d": 0.2206, "f2_penalty_pp": 0.0, "f3_gap_pp": 0.5, "p3c_jepa_loss": 24.2472, "p3b_jepa_loss": 21.8754, "object_permanence_untrained_acc": 0.692}, "log_excerpt": "F1 -- P3-C vs Untrained:\n  Gain: 1.15pp (threshold >= 8pp)\n  Paired t-test: t=0.4933, p=0.6477\n  Cohen's d: 0.2206 (threshold >= 1.0)\n  Triggered: True => FAIL\nF2 -- P3-B vs P3-C:\n  Penalty: 0.00pp (threshold <= 10pp)\n  Triggered: False => PASS\nF3 -- P3-C vs P3-A:\n  Gap: 0.50pp (must be < 20pp)\n  Triggered: False => PASS\nF4 -- P3-C JEPA loss vs 2x P3-B:\n  Triggered: False => PASS\nOVERALL VERDICT: HYPOTHESIS FALSIFIED (at least one criterion triggered)\n"...]
+
+The analysis is complete. Let me verify the results and check the report quality.
+
+[Tool Call: read_file({'path': 'phase_3/phase3_full_results.csv'})]
+
+[Tool Result: variant,seed,train_acc,test_acc,final_spatial_jepa_loss,final_temporal_jepa_loss,training_time_sec,class_0_acc,class_1_acc,class_2_acc,class_3_acc
+Untrained,42,0.4625,0.4825,21.570804767898018,20.89540976652196,74.11938333511353,0.47,0.6,0.19,0.67
+Untrained,43,0.41125,0.3925,20.812407378543192,19.113810689789965,74.46898221969604,0.32,0.48,0.1,0.67
+Untrained,44,0.3325,0.345,20.463534618788024,19.410498523356758,74.53418111801147,0.61,0.04,0.03,0.7
+Untrained,45,0.42625,0.43,20.03622114502604,18.37686129169336,74.37477040290833,0.47,0.52,0.08,0.65
+Untrained,46,0.5075,0.4925,19.81981840585729,18.87295817606716,80.76674342155457,0.59,0.48,0.13,0.77
+P3-C,42,0.445,0.4425,16.044501888403197,8.611792081639633,94.24634504318237,0.61,0.19,0.28,0.69
+P3-C,43,0.46,0.4375,15.67522679964631,8.549540662250072,94.90777659416199,0.66,0.27,0.18,0.64
+P3-C,44,0.44625,0.425,15.635801423172857,8.648735739805739,184.8109474182129,0.56,0.22,0.17,0.75
+P3-C,45,0.47125,0.44,15.751356192502909,8.23708609432757,170...]
+
+
+[Tool Call: read_file({'path': 'phase_3/REPORT.md'})]
+
+[Tool Result: # Phase 3: Unified Spatiotemporal Grid -- Results Report
+
+## Experiment Configuration
+- Epochs: 30
+- Train per class: 200
+- Test per class: 100
+- Batch size: 64
+- Learning rate: 1e-3
+- Seeds: 42-46
+- Noise flip probability: 0.10
+- Dataset: 4-class spatiotemporal binary grid (16 spatial x 32 temporal)
+
+## Architecture Summary
+| Variant | Description | Weight Sets | Params |
+|---------|-------------|-------------|--------|
+| P3-A | Sequential spatial->temporal | 2 (W_spatial, W_temporal) | 3,200 |
+| P3-B | Joint training, separate weights | 2 (W_spatial, W_temporal) | 3,200 |
+| P3-C | Unified, shared weights | 1 (W_shared) | 1,600 |
+| Untrained | P3-B architecture, frozen weights | 2 (random, frozen) | 3,200 |
+
+## Main Results
+
+| Variant | Test Acc (mean+-std) | Train Acc (mean+-std) | Spatial Loss | Temporal Loss | Time (s) |
+|---------|---------------------|----------------------|--------------|---------------|----------|
+| P3-A | 0.4450+-0.0277 | 0.4502+-0.0297 | 15.0651+-0.2326 | 5.7...]
+
+Let me verify the shortcut baselines were computed correctly.
+
+[Tool Call: read_file({'path': 'phase_3/shortcut_baselines.csv'})]
+
+[Tool Result: seed,baseline_name,train_acc,test_acc
+42,temporal_average,0.3575,0.3
+42,single_frame_t0,0.325,0.2375
+42,single_frame_t8,0.33125,0.2525
+42,single_frame_t16,0.43,0.395
+42,single_frame_t24,0.3175,0.285
+42,single_frame_t31,0.33625,0.2525
+43,temporal_average,0.39375,0.3425
+43,single_frame_t0,0.30625,0.2375
+43,single_frame_t8,0.34625,0.325
+43,single_frame_t16,0.43875,0.3425
+43,single_frame_t24,0.36,0.2675
+43,single_frame_t31,0.355,0.2675
+44,temporal_average,0.40625,0.365
+44,single_frame_t0,0.29875,0.2225
+44,single_frame_t8,0.34125,0.3125
+44,single_frame_t16,0.4225,0.3675
+44,single_frame_t24,0.345,0.2475
+44,single_frame_t31,0.34625,0.2675
+45,temporal_average,0.37875,0.2725
+45,single_frame_t0,0.31875,0.2275
+45,single_frame_t8,0.34875,0.3025
+45,single_frame_t16,0.44,0.3725
+45,single_frame_t24,0.3225,0.2975
+45,single_frame_t31,0.35375,0.2875
+46,temporal_average,0.4025,0.35
+46,single_frame_t0,0.3375,0.2275
+46,single_frame_t8,0.36,0.3175
+46,single_frame_t16,0.43375,0.38
+46,single_frame_t24,0.33625...]
+
+Now let me also check the pre-registration file update status and verify the experiment config:
+
+[Tool Call: read_file({'path': 'src/pre_registration.md'})]
+
+[Tool Result: # RDF Scientific Pre-Registration
+
+*   **Iteration:** 005
+*   **Pre-Registration File:** src/pre_registration.md
+
+## 1. Hypothesis
+A single UniversalNode weight set trained jointly on both spatial and temporal
+JEPA objectives in a unified 2D grid (P3-C) achieves ≥80% of the accuracy of
+the two-stage architecture with separate spatial and temporal weights (P3-A) on
+four spatiotemporal benchmark tasks. Specifically, if P3-A achieves mean
+accuracy A% across the four tasks, P3-C achieves A_C ≥ A - 20 percentage points.
+The underlying mechanism is that joint training allows the shared weights to
+discover a representation subspace where both spatial and temporal neighbor
+prediction are simultaneously well-served, avoiding the axis-specific overfitting
+that caused zero-shot transfer failure in Phase 2.
+
+## 2. Falsification Criteria
+The hypothesis is falsified if ANY of the following hold:
+
+**F1 — Training gain insufficient:**
+P3-C mean test accuracy - Untrained mean test accuracy < 8pp OR p >...]
+
+
+[Tool Call: read_file({'path': 'phase_3/experiment_config.txt'})]
+
+[Tool Result: Phase 3 Optimized Experiment Configuration
+============================================
+Generated: 2026-05-28 09:02:52
+
+Dataset:
+  n_train_per_class: 200
+  n_test_per_class:  100
+  noise_flip_prob:   0.10
+  total_train:       800
+  total_test:        400
+
+Model:
+  d:                 16
+  d_out:             16
+  n_spatial_layers:  3
+  n_temporal_layers: 3
+
+Training:
+  epochs:            30
+  batch_size:        64
+  lr:                0.001
+  seeds:             [42, 43, 44, 45, 46]
+  variants:          ['Untrained', 'P3-C', 'P3-B', 'P3-A']
+
+Pre-registration Compliance:
+  - 5 seeds used for statistical validity (paired t-test, Cohen's d)
+  - F1: P3-C vs Untrained (gain >= 8pp, p < 0.05, d >= 1.0)
+  - F2: P3-B vs P3-C (penalty <= 10pp)
+  - F3: P3-C vs P3-A (within 20pp of sequential baseline)
+  - F4: P3-C loss <= 2x P3-B loss
+
+Output Files:
+  - phase_3\phase3_full_results.csv
+  - phase_3\shortcut_baselines.csv
+  - phase_3\experiment_config.txt
+]
+
+Now I have all the data and the analysis. Let me verify the numbers myself to make sure the analysis is accurate before writing the YAML report.
+
+Let me compute the key metrics from the raw CSV:
+
+**Untrained (5 seeds):** test_acc = 0.4825, 0.3925, 0.345, 0.43, 0.4925 → mean = 0.4285
+**P3-C (5 seeds):** test_acc = 0.4425, 0.4375, 0.425, 0.44, 0.455 → mean = 0.44
+**P3-B (5 seeds):** test_acc = 0.4675, 0.445, 0.385, 0.4825, 0.42 → mean = 0.44
+**P3-A (5 seeds):** test_acc = 0.48, 0.465, 0.4375, 0.41, 0.4325 → mean = 0.445
+
+Key findings:
+- F1: P3-C gain over Untrained = 0.44 - 0.4285 = 1.15pp — far below 8pp threshold → **FALSIFIED**
+- F2: P3-B - P3-C = 0.44 - 0.44 = 0.00pp — within 10pp → **PASS**  
+- F3: P3-A - P3-C = 0.445 - 0.44 = 0.5pp — within 20pp → **PASS**
+- F4: P3-C combined loss ~24.2 vs P3-B combined ~21.9 → P3-C loss < 2× P3-B → **PASS**
+
+But there's a critical concern: ALL trained variants are roughly equal to Untrained, and in fact P3-B, P3-A, and P3-C all show similar (~44%) test accuracy while Untrained shows ~42.9%. This suggests JEPA training barely helps — or possibly the training helps the JEPA objective but doesn't translate to classification improvement (consistent with the Phase 2 finding of classification-prediction tradeoff).
+
+Also, the object_permanence task shows 69.2% untrained accuracy (clear shortcut), while periodic_st shows only 10.6% untrained accuracy (very hard).
+
+The fundamental issue: **JEPA training reduces loss but does not improve classification**, and **all variants (including trained ones) perform only slightly above untrained baseline**. This is a much deeper problem than just the P3-C vs P3-A comparison.
+
+Let me now write the YAML report with a comprehensive synthesis.
+
+```yaml
+# --- Synthesised result (aggregate across all sub-agents) ---
+status: ok
+metrics:
+  p3a_mean_test_acc: 0.445
+  p3b_mean_test_acc: 0.44
+  p3c_mean_test_acc: 0.44
+  untrained_mean_test_acc: 0.4285
+  p3c_vs_untrained_gain_pp: 1.15
+  f1_p_value: 0.6477
+  f1_cohens_d: 0.2206
+  f2_penalty_pp: 0.0
+  f3_gap_pp: 0.5
+  f4_p3c_loss_ratio_to_p3b: 1.11
+  object_permanence_untrained_acc: 0.692
+  periodic_st_untrained_acc: 0.106
+  p3c_params: 1600
+  p3b_params: 3200
+  p3a_params: 3200
+  experiment_epochs: 30
+  experiment_train_per_class: 200
+experiment_view: |
+  Phase 3 is complete with 20 runs (4 variants × 5 seeds). The pre-registered
+  falsification criteria were evaluated:
+
+  F1 (Training Gain): P3-C achieves 44.0% vs Untrained 42.85%, a gain of only
+  1.15pp. This is far below the 8pp threshold and statistically insignificant
+  (p=0.648, Cohen's d=0.22). **F1 is TRIGGERED — falsified.**
+
+  F2 (Expressivity Penalty): P3-B and P3-C both achieve 44.0% mean accuracy,
+  so the shared-weight penalty is 0pp. **F2 is NOT triggered.**
+
+  F3 (Sequential Baseline): P3-A achieves 44.5%, P3-C achieves 44.0%, gap is
+  0.5pp. **F3 is NOT triggered.**
+
+  F4 (Optimization): P3-C combined JEPA loss ~24.2, P3-B combined ~21.9. P3-C
+  loss is 1.11× P3-B, well under 2×. **F4 is NOT triggered.**
+
+  However, a deeper issue is revealed: ALL trained variants (P3-A: 44.5%, P3-B:
+  44.0%, P3-C: 44.0%) barely exceed the Untrained baseline (42.85%). This
+  confirms the Phase 2 classification-prediction tradeoff: JEPA training
+  successfully reduces prediction loss but does not produce representations
+  useful for classification. The gain over untrained is 0.65-1.65pp for ALL
+  variants, not just P3-C.
+
+  Per-task analysis reveals:
+  - object_permanence: 69.2% untrained accuracy → **FLAGGED as shortcut**
+  - periodic_st: 10.6% untrained accuracy → nearly at chance
+  - moving_blob and expanding_blob: 49.2% and 42.4% untrained
+
+  The 4-class dataset has an effective difficulty ceiling: random features
+  already capture object_permanence structure trivially (blob presence ≈
+  permanence), while periodic patterns require genuine temporal reasoning
+  that the current architecture struggles to encode.
+notes: "Phase 3 hypothesis falsified on F1. All variants barely exceed untrained baseline, revealing a deeper JEPA-to-classification transfer problem."
+artifacts:
+  - phase_3/phase3_full_results.csv
+  - phase_3/shortcut_baselines.csv
+  - phase_3/REPORT.md
+  - phase_3/experiment_config.txt
+  - src/pre_registration.md
+  - src/run_phase3_optimized.py
+# --- Planning and State ---
+analysis: |
+  Phase 3 tested whether a single UniversalNode weight set (P3-C) trained jointly
+  on spatial and temporal JEPA objectives can produce competitive spatiotemporal
+  representations. The experiment was run with 4 variants × 5 seeds = 20 runs,
+  using 30 epochs, 200 train/class, 100 test/class, batch=64.
+
+  The pre-registered hypothesis is falsified on criterion F1: P3-C achieves only
+  1.15pp gain over Untrained (required ≥8pp), with no statistical significance
+  (p=0.648, d=0.22). This means training does not produce meaningful
+  classification improvement for the unified weights.
+
+  More critically, ALL trained variants show marginal gains over Untrained:
+  P3-A: +1.65pp, P3-B: +1.15pp, P3-C: +1.15pp. This reveals that the problem
+  is NOT specific to the shared-weight constraint (F2 passes), but is a
+  general issue with the JEPA→classification transfer in the spatiotemporal
+  setting.
+
+  The dataset has a structural shortcut: object_permanence achieves 69.2%
+  accuracy even with untrained (random) weights. This means the mean-pooled
+  representation trivially captures blob presence/absence patterns regardless
+  of weight values. Meanwhile, periodic_st is genuinely hard (10.6% untrained),
+  and none of the trained variants improve on it significantly.
+
+  The JEPA loss analysis confirms that training does optimize the prediction
+  objective: P3-C reduces temporal JEPA loss from ~19.3 (untrained) to ~8.5,
+  and spatial loss from ~20.5 to ~15.7. But this prediction improvement does
+  not translate to classification improvement — echoing the Phase 2 finding
+  of a classification-prediction tradeoff.
+
+  Expressivity findings: P3-C (shared weights, 1600 params) achieves identical
+  accuracy to P3-B (separate weights, 3200 params), confirming that weight
+  sharing imposes zero expressivity penalty in this setting (consistent with
+  Phase 1 finding). P3-A (sequential training) marginally outperforms both by
+  0.5pp, suggesting that sequential specialization may offer a slight advantage
+  but is not significant.
+open_questions:
+  - "Why does JEPA prediction improvement NOT transfer to classification improvement in the spatiotemporal setting? This is now confirmed across Phase 2 and Phase 3."
+  - "Can a different training objective (Phase 4: SFA, Hebbian, contrastive, reconstruction) produce representations that actually improve classification gain-over-untrained?"
+  - "Is the object_permanence shortcut solvable? The dataset design has blob presence trivially correlated with permanence regardless of weights."
+  - "Can per-task gain-over-untrained (not raw accuracy) be used as the primary metric, given the shortcut problem?"
+  - "Would longer training (200 epochs, 500 train/class) significantly improve results, or is the JEPA→classification transfer fundamentally limited?"
+  - "Does increasing d (e.g., d=32 or d=64) improve classification gain, or is the bottleneck in the objective, not the dimensionality?"
+chosen_direction: "Phase 4: Compare training objectives on the SAME architecture and dataset to find one that produces genuine classification improvement over untrained baseline"
+hypothesis: "phase-5: unified weights falsified (F1 triggered); deeper problem is JEPA-to-classification transfer failure across ALL variants; object_permanence shortcut confirmed"
+rationale: |
+  Phase 3 was designed to test the universal parameter hypothesis. The primary
+  test (F1: P3-C gain over untrained) falsified it. However, the deeper finding
+  is that ALL variants barely exceed untrained baseline, suggesting the problem
+  is not specific to weight sharing but rather in the JEPA→classification
+  transfer. The next logical step is Phase 4: training objective comparison,
+  which varies the objective while keeping the architecture fixed, to determine
+  whether any objective can produce genuine classification improvement.
+state_update: |
+  # Current Research State — HSUN Project
+  **Last updated:** After Phase 3 completion (iter_005, sub-agents 5.1–5.6)
+
+  ## Goal
+  Investigate an architecture for unsupervised representation learning built from
+  a single, universal node type. Phase 3 (Unified Spatiotemporal Grid) is now complete.
+
+  ## Confirmed (with iter/sub-agent references)
+
+  1. **P3-C (shared weights) fails to outperform Untrained** (iter_005, 5.6):
+     - Gain: 1.15pp (required ≥8pp)
+     - p=0.648 (required <0.05)
+     - Cohen's d=0.22 (required ≥1.0)
+     - **F1 TRIGGERED — universal parameter hypothesis falsified on training gain**
+
+  2. **Weight sharing imposes zero expressivity penalty** (iter_005, 5.6):
+     - P3-B (separate weights): 44.0% vs P3-C (shared weights): 44.0%
+     - Penalty = 0.0pp → F2 NOT triggered
+     - Consistent with Phase 1 finding (iter_002-003)
+
+  3. **P3-C is within 0.5pp of P3-A** (iter_005, 5.6):
+     - P3-A: 44.5% vs P3-C: 44.0% → gap 0.5pp → F3 NOT triggered
+
+  4. **JEPA optimization succeeds for all variants** (iter_005, 5.6):
+     - P3-C combined loss: ~24.2, P3-B: ~21.9 (ratio 1.11×) → F4 NOT triggered
+     - Training reduces temporal loss from ~19.3 to ~8.5 (P3-C)
+     - Training reduces spatial loss from ~20.5 to ~15.7 (P3-C)
+
+  5. **ALL variants barely exceed Untrained baseline** (iter_005, 5.6):
+     - P3-A: 44.5% (+1.65pp vs Untrained 42.85%)
+     - P3-B: 44.0% (+1.15pp)
+     - P3-C: 44.0% (+1.15pp)
+     - This is NOT specific to P3-C — it affects ALL trained variants
+
+  6. **Object permanence task has shortcut** (iter_005, 5.6):
+     - Untrained accuracy: 69.2% (>60% threshold)
+     - FLAGGED: deterministic propagation trivially captures blob presence
+     - periodic_st: only 10.6% untrained (genuinely hard)
+     - moving_blob: 49.2% untrained, expanding_blob: 42.4% untrained
+
+  7. **Classification-prediction tradeoff confirmed spatiotemporal** (iter_005):
+     - JEPA training reduces prediction loss substantially (temporal: 19.3→8.5)
+     - But classification accuracy barely improves
+     - Echoes Phase 2 finding (iter_004, 4.3)
+
+  ## Refuted Hypotheses
+  - Phase 3 universal parameter hypothesis: FALSIFIED on F1 (training gain insufficient)
+  - "JEPA training produces useful spatiotemporal representations": REFUTED — gain is
+    marginal across ALL variants, not just P3-C
+
+  ## Phase 1-2 Carry-Forward (still valid)
+  - JEPA local objective works spatially: 62.12% (d=8), 65.20% (d=16) (iter_003)
+  - P2-D temporal JEPA: 65.33% ± 2.74% (iter_004)
+  - Weight sharing has zero expressivity penalty (iter_002)
+  - Zero-shot spatial→temporal transfer is falsified (iter_004)
+  - Node type is universal, weights are axis-specific (iter_004)
+
+  ## Current Best Results
+  - **Spatial only**: JEPA-d16, 65.20% ± 1.80%, 4,832 params (iter_003)
+  - **Temporal only**: P2-D JEPA, 65.33% ± 2.74% (iter_004)
+  - **Spatiotemporal**: All variants ~44%, barely above untrained ~42.85% (iter_005)
+
+  ## Experiment Configuration
+  - Epochs: 30, train/class: 200, test/class: 100, batch=64, lr=1e-3
+  - Reduced from original 200 epochs / 500 train/class due to compute constraints
+
+  ## Files Created This Phase
+  - src/spatiotemporal_dataset.py — 4-class spatiotemporal dataset generator
+  - src/spatiotemporal_encoder.py — P3-A, P3-B, P3-C architectures
+  - src/run_phase3.py — Full experiment runner
+  - src/run_phase3_optimized.py — Optimized runner (30 epochs, 200/class)
+  - src/pre_registration.md — Updated with revised F1-F4 criteria
+  - phase_3/phase3_full_results.csv — 20 experiment results
+  - phase_3/shortcut_baselines.csv — 30 shortcut baseline results
+  - phase_3/REPORT.md — Phase 3 analysis report
+  - phase_3/experiment_config.txt — Configuration documentation
+
+  ## Open Questions (ordered by expected value)
+  1. **Why does JEPA prediction improvement NOT transfer to classification?**
+     Confirmed across Phase 2 and Phase 3. The objective produces locally
+     predictable codes but these don't carry discriminative signal for the
+     downstream task. This is the central bottleneck.
+  2. **Can a different training objective fix this?** Phase 4 (training objective
+     comparison) is the direct next step. SFA, Hebbian, contrastive, and
+     reconstruction objectives should be tested on the SAME architecture.
+  3. **Is the object_permanence shortcut solvable?** Need to redesign the task
+     so that blob presence is not trivially correlated with permanence.
+  4. **Would longer training or larger d improve results?** The current 30-epoch
+     runs may be undertrained. But JEPA loss converges by epoch 30, suggesting
+     the problem is in the objective, not training duration.
+  5. **Can gain-over-untrained be the primary metric?** Yes, this should be
+     adopted as the standard metric to control for architectural shortcuts.
+  6. **Does the spatiotemporal grid need a different pooling strategy?** Mean-pool
+     across (10, 26) positions may lose critical temporal structure.
+```

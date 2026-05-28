@@ -230,3 +230,53 @@ Zero-shot transfer is
 
 **Notes:** Phase 2 complete: zero-shot transfer falsified (F0+F1), but P2-D competitive and JEPA works temporally (F2+F3).
 
+
+---
+```yaml
+cached_tokens: 1792704
+cost_usd: 1.52794
+hypothesis: 'phase-5: unified weights falsified (F1 triggered); deeper problem is
+  JEPA-to-classification transfer failure across ALL variants; object_permanence shortcut
+  confirmed'
+input_tokens: 3667976
+iter: 5
+metrics:
+  experiment_epochs: 30
+  experiment_train_per_class: 200
+  f1_cohens_d: 0.2206
+  f1_p_value: 0.6477
+  f2_penalty_pp: 0.0
+  f3_gap_pp: 0.5
+  f4_p3c_loss_ratio_to_p3b: 1.11
+  object_permanence_untrained_acc: 0.692
+  p3a_mean_test_acc: 0.445
+  p3a_params: 3200
+  p3b_mean_test_acc: 0.44
+  p3b_params: 3200
+  p3c_mean_test_acc: 0.44
+  p3c_params: 1600
+  p3c_vs_untrained_gain_pp: 1.15
+  periodic_st_untrained_acc: 0.106
+  untrained_mean_test_acc: 0.4285
+output_tokens: 93991
+status: ok
+```
+
+## iter_005: phase-5: unified weights falsified (F1 triggered); deeper problem is JEPA-to-classification transfer failure across ALL variants; object_permanence shortcut confirmed
+
+**Analysis:** Phase 3 tested whether a single UniversalNode weight set (P3-C) trained jointly
+on spatial and temporal JEPA objectives can produce competitive spatiotemporal
+representations. The experiment was run with 4 variants × 5 seeds = 20 runs,
+using 30 epochs, 200 train/class, 100 test/class, batch=64.
+
+The pre-registered hypothesis is falsified on criterion F1: P3-C achieves only
+1.15pp gain over Untrain
+
+**Status:** ok
+
+**Metrics:** `{'p3a_mean_test_acc': 0.445, 'p3b_mean_test_acc': 0.44, 'p3c_mean_test_acc': 0.44, 'untrained_mean_test_acc': 0.4285, 'p3c_vs_untrained_gain_pp': 1.15, 'f1_p_value': 0.6477, 'f1_cohens_d': 0.2206, 'f2_penalty_pp': 0.0, 'f3_gap_pp': 0.5, 'f4_p3c_loss_ratio_to_p3b': 1.11, 'object_permanence_untrained_acc': 0.692, 'periodic_st_untrained_acc': 0.106, 'p3c_params': 1600, 'p3b_params': 3200, 'p3a_params': 3200, 'experiment_epochs': 30, 'experiment_train_per_class': 200}`
+
+**Experimenter view:** 
+
+**Notes:** Phase 3 hypothesis falsified on F1. All variants barely exceed untrained baseline, revealing a deeper JEPA-to-classification transfer problem.
+
