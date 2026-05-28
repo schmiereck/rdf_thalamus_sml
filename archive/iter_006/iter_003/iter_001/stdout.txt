@@ -1,0 +1,393 @@
+
+[Tool Call: list_dir({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml'})]
+
+[Tool Result: [DIR] -p
+[DIR] .git
+      .gitignore
+[DIR] .venv
+      _check_csv.py
+      _compute_stats.py
+      _debug.txt
+      _fix_encoding.py
+      _fix_rho.py
+      _fix_st.py
+      _gen_report.py
+      _profile_fast.py
+      _profile_mid.py
+      _profile_speed.py
+      _time_one.py
+      _tst.txt
+[DIR] archive
+      config.toml
+      current_state.md
+      experiment_log.md
+      goal.md
+      hyper_search.py
+      manager_log.md
+      phase3_diagnostic_report.md
+      phase3_run.log
+[DIR] phase_0
+[DI...]
+
+
+[Tool Call: list_dir({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src'})]
+
+[Tool Result: [DIR] __pycache__
+      _bench_compare.py
+      dataset_phase1.py
+      diagnostic_phase1.py
+      diagnostic_phase3_vicreg.py
+[DIR] encoders
+      eval_phase1.py
+      harness.py
+      hierarchical_encoder.py
+      node.py
+      phase3_run.log
+[DIR] phase_3
+      pooling_comparison_results.csv
+      pre_registration.md
+      profile_p3b.py
+      run_phase0.py
+      run_phase1.py
+      run_phase1_v2.py
+      run_phase2.py
+      run_phase2_baselines.py
+      run_phase3.py
+      run_phase3_backgro...]
+
+
+[Tool Call: read_file({'content': '', 'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\spatiotemporal_encoder.py'})]
+
+[Tool Result: """
+Spatiotemporal Encoder for Phase 3.
+
+Implements the sequential spatial-then-temporal encoder over a
+(16 spatial × 32 temporal) binary grid using stacked kernel-3,
+stride-1 UniversalNodes.
+
+Both spatial and temporal forward/backward passes are **fully
+vectorized** — no Python loops over spatial/temporal positions.
+
+Three variants
+--------------
+* **P3-A** – One master spatial node + one master temporal node.
+  Trained sequentially (spatial first, then temporal).
+* **P3-B** – One master spatia...]
+
+
+[Tool Call: read_file({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\run_phase3_optimized.py'})]
+
+[Tool Result: """
+Phase 3 Optimized Experiment Runner.
+
+Settings: 30 epochs, 200 train/class, 100 test/class, batch=64, 5 seeds.
+Saves results incrementally after each run.
+
+Order: Untrained (fastest) → P3-C (primary hypothesis) → P3-B → P3-A (slowest).
+"""
+
+from __future__ import annotations
+
+import csv
+import os
+import sys
+import time
+from typing import Dict, List
+
+import numpy as np
+
+sys.path.insert(0, os.path.dirname(__file__))
+
+from spatiotemporal_dataset import (
+    generate_spatiotemporal_dataset,
+   ...]
+
+
+[Tool Call: read_file({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\training_objectives.py'})]
+
+[Tool Result: """
+Training objectives for Phase 1 -- pure NumPy implementations.
+
+Includes:
+  - JEPALoss          : Spatial bidirectional JEPA with per-layer linear predictors + VICReg
+  - ContrastiveLoss   : NT-Xent with 2-layer projection MLP
+  - SFALoss           : Slowness (temporal difference) + variance penalty
+  - HebbianLoss       : Oja's rule online updates on encoder nodes
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+
+# ================================================================...]
+
+
+[Tool Call: read_file({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\spatiotemporal_dataset.py'})]
+
+[Tool Result: """
+Spatiotemporal Dataset Generator for Phase 3.
+
+Generates four categories of spatiotemporal sequences on a 16x32 binary grid
+(16 spatial positions x 32 timesteps). Designed so that shortcut baselines
+(single-frame and temporal-average projections) achieve at-chance performance,
+forcing the model to reason about temporal dynamics.
+
+Classes (4-class classification):
+    0 = moving_blob       -- blob position follows a LINEAR trajectory (wrapped mod 16)
+    1 = expanding_blob    -- blob width os...]
+
+
+[Tool Call: read_file({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\run_phase3.py'})]
+
+[Tool Result: """
+Phase 3 Experiment Runner for HSUN.
+
+Runs all three spatiotemporal variants (P3-A, P3-B, P3-C) plus untrained
+baseline and shortcut baselines across 5 seeds.
+
+Training protocol:
+  - P3-A: alpha=1.0 (spatial only) for 200 epochs,
+          then freeze spatial master node, alpha=0.0 (temporal only) for 200 epochs.
+  - P3-B/C: alpha=0.5 jointly for 200 epochs.
+  - Untrained: random init, freeze encoder, train only JEPA predictors.
+
+Evaluation:
+  - Linear probe (SimpleLogisticRegression, max_ite...]
+
+
+[Tool Call: read_file({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\run_phase3_parallel.py'})]
+
+[Tool Result: """
+Phase 3 Parallel Experiment Runner for HSUN.
+
+Runs all four spatiotemporal variants (P3-A, P3-B, P3-C, Untrained)
+across 5 seeds [42, 43, 44, 45, 46] for 200 epochs in parallel
+using multiprocessing.Pool.
+
+Results are saved to individual CSV files per variant, plus shortcut
+baselines and a parameter comparison summary.
+"""
+
+from __future__ import annotations
+
+import csv
+import os
+import sys
+import time
+from multiprocessing import Pool
+from typing import Dict, List
+
+import numpy as np
+
+sys.pa...]
+
+Let me check the existing phase_3 results directory and the diagnostic file:
+
+
+
+[Tool Call: list_dir({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\phase_3'})]
+
+[Tool Result: ]
+
+
+[Tool Call: read_file({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\diagnostic_phase3_vicreg.py'})]
+
+[Tool Result: """
+Phase 3 Variance Diagnostic + Pooling Comparison
+
+Trains P3-C, measures per-epoch variance at every layer,
+compares untrained baseline, and evaluates 4 pooling strategies
+for downstream classification.
+"""
+
+import sys, os
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
+
+import numpy as np
+import csv
+import time
+
+from spatiotemporal_dataset import generate_spatiotemporal_dataset, N_CLASSES
+from spatiotemporal_encoder import SpatiotemporalEncoder
+from training_objectives import JE...]
+
+
+[Tool Call: read_file({'end_line': 80, 'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\node.py', 'start_line': 1})]
+
+[Tool Result: --- lines 1 to 80 of 370 ---
+"""
+UniversalNode -- single-layer auto-encoder unit for HSUN Phase 0-E.
+
+Architecture
+------------
+  x_3d (batch, 3, d_in)  --> flatten --> (batch, 3*d_in)
+  z    = tanh(x_flat @ W_enc + b_enc)          # (batch, d_out)  -- "code"
+  xrec = z       @ W_dec + b_dec              # (batch, 3*d_in)
+           --> reshape --> (batch, 3, d_in)
+
+Loss  = MSE(x_3d, xrec) + l1_lambda * mean(|z|)
+
+All analytical gradients are provided in ``compute_gradients`` and verified
+below ...]
+
+
+[Tool Call: read_file({'end_line': 80, 'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\harness.py', 'start_line': 1})]
+
+[Tool Result: --- lines 1 to 80 of 371 ---
+"""
+HSUN Phase 0 -- Experimental Harness
+
+Dataset generator, similarity evaluator, encoder interface, and utility functions
+for the smoke-test of hierarchical sparse universal nodes.
+
+Dependencies: numpy, scipy only -- no external ML libraries.
+"""
+
+from __future__ import annotations
+
+import itertools
+from abc import ABC, abstractmethod
+from typing import Dict, List, Tuple
+
+import numpy as np
+from scipy.stats import spearmanr
+
+
+# -------------------------------------...]
+
+
+[Tool Call: list_dir({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\phase_3'})]
+
+[Tool Result:       _dedup.py
+      _run_p3a_43.py
+      clean_dedup.py
+      comprehensive_analysis.py
+      dedup.py
+      diagnostic_report.md
+      experiment_config.txt
+      fast_run.log
+      phase3_full_results.csv
+      phase3_results.csv
+      REPORT.md
+      run.log
+      run_p3a_final.log
+      run_p3a_final.py
+      run_parallel.log
+      run_phase3_final.py
+      run_remaining.log
+      shortcut_baselines.csv]
+
+Now I have a complete understanding of the codebase. Let me create the new file:
+
+
+
+[Tool Call: write_file({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\run_phase3_vicreg_fix.py', 'content': '"""\nPhase 3 VICReg Fix — Pooled VICReg gradient injection.\n\nThis runner implements the Pooled VICReg loss applied directly on the\nmean-pooled representation z_pooled, and propagates its gradient back\ninto the encoder backward pass via the last temporal code gradient.\n\nSix conditions across 5 seeds, run via multiprocessing.\n\nConditions:\n  A: P3-C, no pooled VICReg, readout=\'pooled\'\n  B: P3-C, no pooled VICReg, readout=\'spatial_pooled_then_flat\'\n  C: P3-C, pooled VICReg, readout=\'pooled\'\n  D: P3-C, pooled VICReg, readout=\'spatial_pooled_then_flat\'\n  E: Untrained, no pooled VICReg, readout=\'pooled\'\n  F: Untrained, no pooled VICReg, readout=\'spatial_pooled_then_flat\'\n"""\n\nfrom __future__ import annotations\n\nimport csv\nimport math\nimport os\nimport sys\nimport time\nfrom multiprocessing import Pool\n\nimport numpy as np\n\nsys.path.insert(0, os.path.dirname(__file__))\n\nfrom spatiotemporal_dataset import generate_spatiotemporal_dataset, N_CLASSES\nfrom spatiotemporal_encoder import SpatiotemporalEncoder\nfrom training_objectives import JEPALoss, _Adam\nfrom harness import SimpleLogisticRegression\nfrom run_phase3 import (\n    create_jepa_losses,\n    reshape_for_spatial_jepa,\n    reshape_spatial_grads_back,\n    reshape_for_temporal_jepa,\n    reshape_temporal_grads_back,\n)\n\n\n# ---------------------------------------------------------------------------\n#  Configuration\n# ---------------------------------------------------------------------------\n\nSEEDS = [42, 43, 44, 45, 46]\nD = 16\nD_OUT = 16\nN_TRAIN_PER_CLASS = 200\nN_TEST_PER_CLASS = 100\nEPOCHS = 30\nBATCH_SIZE = 64\nLR = 1e-3\nALPHA = 0.5\nOUTPUT_DIR = "phase_3"\nRESULTS_CSV = os.path.join(OUTPUT_DIR, "pooled_vicreg_results.csv")\nREPORT_MD = os.path.join(OUTPUT_DIR, "REPORT_vicreg_fix.md")\n\n\n# ---------------------------------------------------------------------------\n#  1. Pooled VICReg loss & gradient\n# ---------------------------------------------------------------------------\n\ndef pooled_vicreg_loss(z_pooled: np.ndarray, eps: float = 1.0) -> dict:\n    """\n    Compute VICReg loss (variance + covariance) directly on the pooled\n    representation, shape (B, d_out).\n\n    Parameters\n    ----------\n    z_pooled : np.ndarray, shape (B, d_out)\n    eps : float  -- minimum acceptable standard deviation\n\n    Returns\n    -------\n    dict with keys \'loss\', \'var_loss\', \'cov_loss\', \'std\'.\n    """\n    b, d = z_pooled.shape  # (B, d_out)\n\n    mean = z_pooled.mean(axis=0, keepdims=True)  # (1, d)\n    std = np.sqrt(z_pooled.var(axis=0, ddof=0) + 1e-12)  # (d,)\n\n    # Variance loss: mean_j max(0, eps - std_j)\n    var_loss = float(np.mean(np.maximum(0.0, eps - std)))\n\n    # Covariance loss: (1/d) * sum_{j!=k} C_{jk}^2\n    zc = z_pooled - mean  # (B, d)\n    cov = (zc.T @ zc) / b  # (d, d)\n    mask = 1.0 - np.eye(d)\n    cov_loss = float(np.sum(cov ** 2 * mask) / d)\n\n    return {\n        "loss": 25.0 * var_loss + 25.0 * cov_loss,\n        "var_loss": var_loss,\n        "cov_loss": cov_loss,\n        "std": float(np.mean(std)),\n    }\n\n\ndef pooled_vicreg_grad(\n    z_pooled: np.ndarray,\n    lambda_var: float = 25.0,\n    lambda_cov: float = 25.0,\n    eps: float = 1.0,\n) -> np.ndarray:\n    """\n    Compute gradient of pooled VICReg loss w.r.t. z_pooled.\n\n    Parameters\n    ----------\n    z_pooled : np.ndarray, shape (B, d_out)\n    lambda_var : float  -- weight for variance term (default 25.0)\n    lambda_cov : float  -- weight for covariance term (default 25.0)\n    eps : float  -- minimum acceptable std\n\n    Returns\n    -------\n    dL_dz_pooled : np.ndarray, shape (B, d_out)\n    """\n    B, d = z_pooled.shape\n\n    mean = z_pooled.mean(axis=0, keepdims=True)  # (1, d)\n    std = np.sqrt(z_pooled.var(axis=0, ddof=0) + 1e-12)  # (d,)\n    mask_var = (std < eps).astype(float)  # (d,)\n\n    # --- Gradient w.r.t. variance loss ---\n    # L_var = (1/d) * sum_j max(0, eps - std_j)\n    # dL_var/d(z_pooled[i,j]) = -(lambda_var / (B * d)) *\n    #                            mask_var[j] * (z_pooled[i,j] - mean_j) / (B * std_j)\n    # Wait, let me redo: L_var = mean_j max(0, eps - std_j)\n    # dL_var/d std_j = -(1/d) * mask_var[j]\n    # std_j = sqrt( (1/B) sum_i (z[i,j] - mean_j)^2 + eps2 )\n    # d std_j / d z[i,j] = (z[i,j] - mean_j) / (B * std_j)\n    # d mean_j / d z[i,j] = 1/B, but since z[i,j]-mean appears in std:\n    # d std_j / d z[i,j] = (z[i,j] - mean_j) / (B * std_j) after chain rule\n\n    # dL_var/d z[i,j] = (-1/d * mask_var[j]) * (z[i,j] - mean_j) / (B * std_j)\n    # scaled by lambda_var:\n    zc = z_pooled - mean  # (B, d)\n    dL_var_dz = (\n        -lambda_var\n        * mask_var[None, :]   # (1, d) broadcast\n        * zc\n        / (B * d * std[None, :] + 1e-12)\n    )  # (B, d)\n\n    # --- Gradient w.r.t. covariance loss ---\n    # L_cov = (1/d) sum_{j!=k} C_{jk}^2\n    # C = zc^T @ zc / B, C_{jk} = (1/B) sum_i zc[i,j] * zc[i,k]\n    # d L_cov / d zc[i,:] = (2 / (B * d)) * sum_{k != j} C_{jk} * zc[i,k]\n    # = (2 / (B * d)) * (zc[i,:] @ C_off)_j  where C_off = off-diagonal C\n    zc_centered = z_pooled - mean  # (B, d)\n    cov = (zc_centered.T @ zc_centered) / B  # (d, d)\n    C_off = cov * (1.0 - np.eye(d))  # (d, d), zero diagonal\n\n    # dL_cov/dzc[i,:] = (lambda_cov * 2 / (B * d)) * C_off @ zc[i,:]^T\n    # = (lambda_cov * 2 / (B * d)) * (zc_centered @ C_off.T)[i,:]\n    # But C is symmetric so C_off.T = C_off\n    dL_cov_dz = (lambda_cov * 2.0 / (B * d)) * (zc_centered @ C_off)  # (B, d)\n\n    dL_dz = dL_var_dz + dL_cov_dz  # (B, d)\n    return dL_dz\n\n\n# ---------------------------------------------------------------------------\n#  2. Training epoch with Pooled VICReg\n# ---------------------------------------------------------------------------\n\ndef train_jepa_epoch_with_pooled_vicreg(\n    encoder: SpatiotemporalEncoder,\n    spatial_jepas: list[JEPALoss],\n    temporal_jepas: list[JEPALoss],\n    train_grid: np.ndarray,\n    batch_size: int,\n    rng: np.random.Generator,\n    alpha: float = ALPHA,\n    adam_spatial: _Adam | None = None,\n    adam_temporal: _Adam | None = None,\n    use_pooled_vicreg: bool = False,\n    lambda_var: float = 25.0,\n    lambda_cov: float = 25.0,\n    eps: float = 1.0,\n) -> dict:\n    """\n    Train one epoch, optionally adding pooled VICReg gradient to the\n    last temporal code gradient.\n\n    The key line: after computing pooled VICReg gradient dL_dz_pooled (B, d_out),\n    we expand it to shape (B, T_final, S_final, d_out) by broadcasting\n    (since pooled = mean over T_final and S_final), and add:\n\n        temporal_code_grads[-1] += dL_dpooled_expanded / (1.0 - alpha)\n\n    The division by (1 - alpha) corrects for the temporal backward pass\n    weighting.\n    """\n    n_samples = train_grid.shape[0]\n    perm = rng.permutation(n_samples)\n\n    total_spatial_loss = 0.0\n    total_temporal_loss = 0.0\n    total_combined_loss = 0.0\n    total_pooled_var_loss = 0.0\n    total_pooled_cov_loss = 0.0\n    total_pooled_std = 0.0\n    n_batches = 0\n\n    for start in range(0, n_samples, batch_size):\n        end = min(start + batch_size, n_samples)\n        batch = train_grid[perm[start:end]]  # (B, S, T)\n\n        fwd = encoder.forward_with_intermediates(batch)\n\n        # --- Spatial JEPA ---\n        spatial_losses = []\n        spatial_code_grads = []\n        for l in range(encoder.n_spatial_layers):\n            out = fwd["spatial_outputs"][l]  # (B, S_l, T, d)\n            B, S_l, T, d = out.shape\n            jepa_in = reshape_for_spatial_jepa(out)\n            result = spatial_jepas[l].step([jepa_in])\n            spatial_losses.append(result["loss"])\n            cg = result["code_grads"][0]\n            cg_back = reshape_spatial_grads_back(cg, B, S_l, T, d)\n            spatial_code_grads.append(cg_back)\n\n        # --- Temporal JEPA ---\n        temporal_losses = []\n        temporal_code_grads = []\n        for l in range(encoder.n_temporal_layers):\n            out = fwd["temporal_outputs"][l]  # (B, T_l, S_final, d)\n            B, T_l, S_f, d = out.shape\n            jepa_in = reshape_for_temporal_jepa(out)\n            result = temporal_jepas[l].step([jepa_in])\n            temporal_losses.append(result["loss"])\n            cg = result["code_grads"][0]\n            cg_back = reshape_temporal_grads_back(cg, B, T_l, S_f, d)\n            temporal_code_grads.append(cg_back)\n\n        # --- Pooled VICReg gradient injection ---\n        if use_pooled_vicreg:\n            z_pooled = fwd["pooled"]  # (B, d_out)\n            dL_dzp = pooled_vicreg_grad(z_pooled, lambda_var, lambda_cov, eps)  # (B, d_out)\n\n            # Expand to last temporal output shape: (B, T_final, S_final, d_out)\n            T_final, S_final = fwd["temporal_outputs"][-1].shape[1:3]\n            # pooled = mean over axes 1 and 2 of temporal_outputs[-1]\n            dL_dpooled_expanded = dL_dzp[:, None, None, :] / (T_final * S_final)  # (B,1,1,d_out) broadcast\n            dL_dpooled_expanded = np.broadcast_to(\n                dL_dpooled_expanded,\n                fwd["temporal_outputs"][-1].shape,\n            ).copy()  # (B, T_final, S_final, d_out)\n\n            # Add to last temporal code gradient, scaled by 1/(1-alpha)\n            temporal_code_grads[-1] = temporal_code_grads[-1] + dL_dpooled_expanded / (1.0 - alpha)\n\n            # Record pooled VICReg metrics\n            pv_metrics = pooled_vicreg_loss(z_pooled, eps)\n            total_pooled_var_loss += pv_metrics["var_loss"]\n            total_pooled_cov_loss += pv_metrics["cov_loss"]\n            total_pooled_std += pv_metrics["std"]\n        else:\n            total_pooled_var_loss += 0.0\n            total_pooled_cov_loss += 0.0\n            total_pooled_std += float(np.sqrt(fwd["pooled"].var(axis=0, ddof=0).mean() + 1e-12))\n\n        # --- Backprop through encoder ---\n        if adam_spatial is not None or adam_temporal is not None:\n            grads = encoder.backward(\n                fwd,\n                dL_dspatial_codes=spatial_code_grads,\n                dL_dtemporal_codes=temporal_code_grads,\n                alpha=alpha,\n            )\n\n            if encoder.variant == "P3-C":\n                combined = {\n                    k: grads["dL_dspatial"][k] + grads["dL_dtemporal"][k]\n                    for k in grads["dL_dspatial"]\n                }\n                adam_spatial.step(\n                    {\n                        "W_enc": encoder.master_spatial.W_enc,\n                        "b_enc": encoder.master_spatial.b_enc,\n                        "W_dec": encoder.master_spatial.W_dec,\n                        "b_dec": encoder.master_spatial.b_dec,\n                    },\n                    combined,\n                )\n            else:\n                if adam_spatial is not None:\n                    adam_spatial.step(\n                        {\n                            "W_enc": encoder.master_spatial.W_enc,\n                            "b_enc": encoder.master_spatial.b_enc,\n                            "W_dec": encoder.master_spatial.W_dec,\n                            "b_dec": encoder.master_spatial.b_dec,\n                        },\n                        grads["dL_dspatial"],\n                    )\n                if adam_temporal is not None:\n                    adam_temporal.step(\n                        {\n                            "W_enc": encoder.master_temporal.W_enc,\n                            "b_enc": encoder.master_temporal.b_enc,\n                            "W_dec": encoder.master_temporal.W_dec,\n                            "b_dec": encoder.master_temporal.b_dec,\n                        },\n                        grads["dL_dtemporal"],\n                    )\n\n        avg_spatial = float(np.mean(spatial_losses)) if spatial_losses else 0.0\n        avg_temporal = float(np.mean(temporal_losses)) if temporal_losses else 0.0\n        combined = alpha * avg_spatial + (1.0 - alpha) * avg_temporal\n\n        total_spatial_loss += avg_spatial\n        total_temporal_loss += avg_temporal\n        total_combined_loss += combined\n        n_batches += 1\n\n    return {\n        "spatial_loss": total_spatial_loss / n_batches,\n        "temporal_loss": total_temporal_loss / n_batches,\n        "combined_loss": total_combined_loss / n_batches,\n        "pooled_var_loss": total_pooled_var_loss / n_batches,\n        "pooled_cov_loss": total_pooled_cov_loss / n_batches,\n        "pooled_std": total_pooled_std / n_batches,\n    }\n\n\n# ---------------------------------------------------------------------------\n#  3. Classification v2 — supports multiple readout representations\n# ---------------------------------------------------------------------------\n\ndef evaluate_classification_v2(\n    encoder: SpatiotemporalEncoder,\n    train_grid: np.ndarray,\n    train_y: np.ndarray,\n    test_grid: np.ndarray,\n    test_y: np.ndarray,\n    seed: int = 42,\n    readout: str = "pooled",\n) -> dict:\n    """\n    Fit linear probe on representations and compute accuracies.\n\n    readout : str\n        - \'pooled\': use fwd["pooled"] (B, d_out)\n        - \'spatial_pooled_then_flat\': mean over spatial axis of last\n          temporal output, then flatten.\n          fwd["temporal_outputs"][-1].mean(axis=2).reshape(len(y), -1)\n    """\n    fwd_train = encoder.forward_with_intermediates(train_grid)\n    fwd_test = encoder.forward_with_intermediates(test_grid)\n\n    if readout == "pooled":\n        train_feats = fwd_train["pooled"]  # (n_train, d_out)\n        test_feats = fwd_test["pooled"]   # (n_test, d_out)\n    elif readout == "spatial_pooled_then_flat":\n        temp_last_tr = fwd_train["temporal_outputs"][-1]  # (B, T_final, S_final, d_out)\n        temp_last_te = fwd_test["temporal_outputs"][-1]\n        # Mean over spatial axis (axis=2), then flatten\n        train_feats = temp_last_tr.mean(axis=2).reshape(len(train_y), -1)\n        test_feats = temp_last_te.mean(axis=2).reshape(len(test_y), -1)\n    else:\n        raise ValueError(f"Unknown readout type: {readout}")\n\n    probe = SimpleLogisticRegression(\n        n_classes=N_CLASSES,\n        n_features=train_feats.shape[1],\n        lr=0.1,\n        max_iter=2000,\n        seed=seed,\n    )\n    probe.fit(train_feats, train_y)\n\n    train_acc = float(probe.score(train_feats, train_y))\n    test_acc = float(probe.score(test_feats, test_y))\n\n    per_class = {}\n    for cls in range(N_CLASSES):\n        mask = test_y == cls\n        if mask.sum() > 0:\n            cls_acc = float(probe.score(test_feats[mask], test_y[mask]))\n        else:\n            cls_acc = 0.0\n        per_class[f"class_{cls}_acc"] = cls_acc\n\n    return {\n        "train_acc": train_acc,\n        "test_acc": test_acc,\n        **per_class,\n    }\n\n\n# ---------------------------------------------------------------------------\n#  4. Single experiment runner (parameterized)\n# ---------------------------------------------------------------------------\n\ndef run_single_experiment_with_fixes(args: tuple) -> dict:\n    """\n    Run one experiment.\n\n    args : tuple (\n        condition, seed, use_pooled_vicreg, readout_type,\n        epochs, batch_size, lr\n    )\n\n    condition : str  -- \'P3-C\' or \'Untrained\'\n    """\n    (condition, seed, use_pooled_vicreg, readout_type,\n     epochs, batch_size, lr) = args\n\n    rng = np.random.default_rng(seed)\n\n    # Generate dataset\n    ds = generate_spatiotemporal_dataset(\n        n_train_per_class=N_TRAIN_PER_CLASS,\n        n_test_per_class=N_TEST_PER_CLASS,\n        noise_flip_prob=0.10,\n        seed=seed,\n    )\n    train_grid = ds["train_grid"]\n    train_y = ds["train_y"]\n    test_grid = ds["test_grid"]\n    test_y = ds["test_y"]\n\n    # Create encoder\n    enc_variant = "P3-C" if condition == "P3-C" else "P3-C"  # Untrained also uses P3-C architecture\n    encoder = SpatiotemporalEncoder(\n        variant=enc_variant,\n        d=D,\n        d_out=D_OUT,\n        n_spatial_layers=3,\n        n_temporal_layers=3,\n        l1_lambda=0.0,\n        seed=seed,\n    )\n    param_count = encoder.get_parameter_count()\n\n    # Create JEPA losses\n    spatial_jepas = create_jepa_losses(encoder.n_spatial_layers, D_OUT, lr=lr)\n    temporal_jepas = create_jepa_losses(encoder.n_temporal_layers, D_OUT, lr=lr)\n\n    # Set up Adam optimizers\n    adam_spatial = None\n    adam_temporal = None\n    update_encoder = (condition != "Untrained")\n    if update_encoder:\n        adam_spatial = _Adam(\n            {\n                "W_enc": encoder.master_spatial.W_enc,\n                "b_enc": encoder.master_spatial.b_enc,\n                "W_dec": encoder.master_spatial.W_dec,\n                "b_dec": encoder.master_spatial.b_dec,\n            },\n            lr=lr,\n        )\n        adam_temporal = adam_spatial  # P3-C: shared node -> shared Adam\n\n    # Training\n    t0 = time.time()\n    for epoch in range(epochs):\n        metrics = train_jepa_epoch_with_pooled_vicreg(\n            encoder,\n            spatial_jepas,\n            temporal_jepas,\n            train_grid,\n            batch_size,\n            rng,\n            alpha=ALPHA,\n            adam_spatial=adam_spatial if update_encoder else None,\n            adam_temporal=adam_temporal if update_encoder else None,\n            use_pooled_vicreg=use_pooled_vicreg,\n        )\n    t1 = time.time()\n    training_time = t1 - t0\n\n    # Final losses (from last batch avg — recompute on full train set for accuracy)\n    final_fwd = encoder.forward_with_intermediates(train_grid)\n    spatial_codes_full = [\n        reshape_for_spatial_jepa(final_fwd["spatial_outputs"][l])\n        for l in range(encoder.n_spatial_layers)\n    ]\n    temporal_codes_full = [\n        reshape_for_temporal_jepa(final_fwd["temporal_outputs"][l])\n        for l in range(encoder.n_temporal_layers)\n    ]\n    s_fwd = spatial_jepas[0].forward(spatial_codes_full)\n    t_fwd = temporal_jepas[0].forward(temporal_codes_full)\n\n    final_spatial_loss = s_fwd["loss"]\n    final_temporal_loss = t_fwd["loss"]\n\n    if use_pooled_vicreg:\n        pv = pooled_vicreg_loss(final_fwd["pooled"])\n        final_pooled_var_loss = pv["var_loss"]\n        final_pooled_cov_loss = pv["cov_loss"]\n        final_pooled_std = pv["std"]\n    else:\n        final_pooled_std = float(np.sqrt(final_fwd["pooled"].var(axis=0, ddof=0) + 1e-12).mean())\n        final_pooled_var_loss = 0.0\n        final_pooled_cov_loss = 0.0\n\n    # Classification evaluation\n    eval_results = evaluate_classification_v2(\n        encoder, train_grid, train_y, test_grid, test_y, seed=seed,\n        readout=readout_type,\n    )\n\n    return {\n        "condition": condition,\n        "seed": seed,\n        "use_pooled_vicreg": use_pooled_vicreg,\n        "readout_type": readout_type,\n        "train_acc": eval_results["train_acc"],\n        "test_acc": eval_results["test_acc"],\n        "final_spatial_jepa_loss": final_spatial_loss,\n        "final_temporal_jepa_loss": final_temporal_loss,\n        "final_pooled_std": final_pooled_std,\n        "final_pooled_var_loss": final_pooled_var_loss,\n        "final_pooled_cov_loss": final_pooled_cov_loss,\n        "training_time_sec": training_time,\n        "param_count": param_count,\n        "class_0_acc": eval_results["class_0_acc"],\n        "class_1_acc": eval_results["class_1_acc"],\n        "class_2_acc": eval_results["class_2_acc"],\n        "class_3_acc": eval_results["class_3_acc"],\n    }\n\n\n# ---------------------------------------------------------------------------\n#  5. Incremental CSV writer\n# ---------------------------------------------------------------------------\n\nFIELDNAMES = [\n    "condition", "seed", "use_pooled_vicreg", "readout_type",\n    "train_acc", "test_acc",\n    "final_spatial_jepa_loss", "final_temporal_jepa_loss",\n    "final_pooled_std", "final_pooled_var_loss", "final_pooled_cov_loss",\n    "training_time_sec", "param_count",\n    "class_0_acc", "class_1_acc", "class_2_acc", "class_3_acc",\n]\n\n\ndef save_result_incrementally(result: dict, csv_path: str) -> None:\n    file_exists = os.path.exists(csv_path)\n    with open(csv_path, "a", newline="") as f:\n        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)\n        if not file_exists:\n            writer.writeheader()\n        writer.writerow(result)\n\n\n# ---------------------------------------------------------------------------\n#  6. Main with conditions and multiprocessing\n# ---------------------------------------------------------------------------\n\ndef main(dry_run: bool = False):\n    os.makedirs(OUTPUT_DIR, exist_ok=True)\n\n    # Remove old results file to start fresh\n    if os.path.exists(RESULTS_CSV):\n        os.remove(RESULTS_CSV)\n\n    # Define conditions\n    conditions = [\n        # (condition, use_pooled_vicreg, readout_type, label)\n        ("P3-C", False, "pooled", "A: P3-C, no VICReg, readout=pooled"),\n        ("P3-C", False, "spatial_pooled_then_flat", "B: P3-C, no VICReg, readout=spatial_pooled"),\n        ("P3-C", True, "pooled", "C: P3-C, VICReg, readout=pooled"),\n        ("P3-C", True, "spatial_pooled_then_flat", "D: P3-C, VICReg, readout=spatial_pooled"),\n        ("Untrained", False, "pooled", "E: Untrained, readout=pooled"),\n        ("Untrained", False, "spatial_pooled_then_flat", "F: Untrained, readout=spatial_pooled"),\n    ]\n\n    if dry_run:\n        seeds_to_use = [42]\n        ep = 1\n    else:\n        seeds_to_use = SEEDS\n        ep = EPOCHS\n\n    # Build task list\n    tasks = []\n    labels = []\n    for (cond, use_pv, readout, label) in conditions:\n        for seed in seeds_to_use:\n            tasks.append((cond, seed, use_pv, readout, ep, BATCH_SIZE, LR))\n            labels.append(label)\n\n    total_tasks = len(tasks)\n    mode = "DRY-RUN" if dry_run else "FULL RUN"\n    print("=" * 70)\n    print(f"  PHASE 3 VICREG FIX — {mode}")\n    print(f"  Tasks: {total_tasks}")\n    print(f"  Epochs: {ep}, Batch size: {BATCH_SIZE}, LR: {LR}")\n    print(f"  Seeds: {seeds_to_use}")\n    print(f"  Conditions: {len(conditions)}")\n    print("=" * 70)\n\n    t_start = time.time()\n\n    if dry_run:\n        # Single-threaded for debug\n        all_results = [run_single_experiment_with_fixes(t) for t in tasks]\n    else:\n        # Multiprocessing\n        n_workers = min(5, total_tasks)  # parallel across seeds\n        with Pool(processes=n_workers) as pool:\n            all_results = pool.map(run_single_experiment_with_fixes, tasks)\n\n    t_end = time.time()\n    print(f"\\n  All runs completed in {t_end - t_start:.1f}s")\n\n    # Save all results incrementally\n    for r in all_results:\n        save_result_incrementally(r, RESULTS_CSV)\n    print(f"  Results saved to {RESULTS_CSV}")\n\n    # Summary\n    print("\\n  Summary (mean ± std):")\n    for label in [c[3] for c in conditions]:\n        cond_key = label.split(":")[0].strip()\n        rows = [r for r in all_results if r["condition"] == cond_key\n                and (not use_pv or r["use_pooled_vicreg"] == use_pv)\n                and r["readout_type"] == readout]\n        # Better matching\n        pass\n\n    for (cond, use_pv, readout, label) in conditions:\n        rows = [r for r in all_results\n                if r["condition"] == cond\n                and r["use_pooled_vicreg"] == use_pv\n                and r["readout_type"] == readout]\n        if rows:\n            test_accs = [r["test_acc"] for r in rows]\n            print(\n                f"    {label:50s}: test_acc={np.mean(test_accs):.4f}±{np.std(test_accs, ddof=1 if len(test_accs)>1 else 0):.4f}"\n            )\n\n    print("=" * 70)\n    return all_results\n\n\n# ---------------------------------------------------------------------------\n#  7. Statistical Analysis & Report\n# ---------------------------------------------------------------------------\n\ndef run_statistical_analysis(results: list[dict]) -> None:\n    """\n    Run paired t-test and Cohen\'s d between Condition D and Untrained+spatial_pooled.\n    Generate comprehensive markdown report.\n    """\n    from scipy import stats\n\n    os.makedirs(OUTPUT_DIR, exist_ok=True)\n\n    # Extract Condition D: P3-C, use_pooled_vicreg=True, readout=\'spatial_pooled_then_flat\'\n    d_rows = [r for r in results\n              if r["condition"] == "P3-C"\n              and r["use_pooled_vicreg"] is True\n              and r["readout_type"] == "spatial_pooled_then_flat"]\n    d_rows.sort(key=lambda x: x["seed"])\n\n    # Extract Untrained+spatial_pooled: Untrained, readout=\'spatial_pooled_then_flat\'\n    u_rows = [r for r in results\n              if r["condition"] == "Untrained"\n              and r["readout_type"] == "spatial_pooled_then_flat"]\n    u_rows.sort(key=lambda x: x["seed"])\n\n    assert len(d_rows) == 5, f"Expected 5 Condition D results, got {len(d_rows)}"\n    assert len(u_rows) == 5, f"Expected 5 Untrained results, got {len(u_rows)}"\n\n    # Pair by seed\n    d_accs = np.array([r["test_acc"] for r in d_rows])\n    u_accs = np.array([r["test_acc"] for r in u_rows])\n\n    # Paired t-test\n    t_stat, p_val = stats.ttest_rel(d_accs, u_accs)\n\n    # Gain in percentage points\n    gain = float(d_accs.mean() - u_accs.mean())\n\n    # Cohen\'s d (paired)\n    diff = d_accs - u_accs\n    cohens_d = float(diff.mean() / (diff.std(ddof=1) + 1e-12))\n\n    # Criteria checks\n    gain_ok = gain >= 0.08    # >= 8 percentage points\n    p_ok = p_val < 0.05\n    d_ok = cohens_d >= 0.8\n    all_pass = gain_ok and p_ok and d_ok\n\n    # Also collect per-condition summaries\n    cond_data = {}\n    for (cond, use_pv, readout, label) in [\n        ("P3-C", False, "pooled", "A"),\n        ("P3-C", False, "spatial_pooled_then_flat", "B"),\n        ("P3-C", True, "pooled", "C"),\n        ("P3-C", True, "spatial_pooled_then_flat", "D"),\n        ("Untrained", False, "pooled", "E: Untrained+pooled"),\n        ("Untrained", False, "spatial_pooled_then_flat", "F: Untrained+spatial_pooled"),\n    ]:\n        rows = [r for r in results\n                if r["condition"] == cond\n                and r["use_pooled_vicreg"] == use_pv\n                and r["readout_type"] == readout]\n        if rows:\n            accs = np.array([r["test_acc"] for r in rows])\n            pstd = np.array([r["final_pooled_std"] for r in rows])\n            sl = np.array([r["final_spatial_jepa_loss"] for r in rows])\n            tl = np.array([r["final_temporal_jepa_loss"] for r in rows])\n            cond_data[label] = {\n                "mean_acc": float(accs.mean()),\n                "std_acc": float(np.std(accs, ddof=1)),\n                "mean_pooled_std": float(pstd.mean()),\n                "mean_spatial_loss": float(sl.mean()),\n                "mean_temporal_loss": float(tl.mean()),\n                "individual_accs": accs.tolist(),\n            }\n\n    # Build report\n    report_lines = []\n    report_lines.append("# Phase 3 VICReg Fix — Comprehensive Report")\n    report_lines.append("")\n    report_lines.append(f"**Generated**: {time.strftime(\'%Y-%m-%d %H:%M:%S\')}")\n    report_lines.append("")\n\n    # Experiment setup\n    report_lines.append("## Experiment Setup")\n    report_lines.append("")\n    report_lines.append(f"- **Epochs**: {EPOCHS}")\n    report_lines.append(f"- **Batch size**: {BATCH_SIZE}")\n    report_lines.append(f"- **Learning rate**: {LR}")\n    report_lines.append(f"- **Seeds**: {SEEDS}")\n    report_lines.append(f"- **Train per class**: {N_TRAIN_PER_CLASS}")\n    report_lines.append(f"- **Test per class**: {N_TEST_PER_CLASS}")\n    report_lines.append(f"- **Alpha**: {ALPHA}")\n    report_lines.append("")\n    report_lines.append("## Conditions")\n    report_lines.append("")\n    report_lines.append("| Label | Encoder | Pooled VICReg | Readout |")\n    report_lines.append("|-------|---------|---------------|---------|")\n    report_lines.append("| A | P3-C | No | pooled |")\n    report_lines.append("| B | P3-C | No | spatial_pooled_then_flat |")\n    report_lines.append("| C | P3-C | Yes | pooled |")\n    report_lines.append("| D | P3-C | Yes | spatial_pooled_then_flat |")\n    report_lines.append("| E | Untrained | No | pooled |")\n    report_lines.append("| F | Untrained | No | spatial_pooled_then_flat |")\n    report_lines.append("")\n\n    # Results table\n    report_lines.append("## Results Summary")\n    report_lines.append("")\n    report_lines.append("| Condition | Mean Test Acc | Std Acc | Pooled Std | Spatial Loss | Temporal Loss |")\n    report_lines.append("|-----------|--------------:|--------:|-----------:|-------------:|--------------:|")\n    for label in ["A", "B", "C", "D", "E: Untrained+pooled", "F: Untrained+spatial_pooled"]:\n        if label in cond_data:\n            d = cond_data[label]\n            report_lines.append(\n                f"| {label} | {d[\'mean_acc\']:.4f} | {d[\'std_acc\']:.4f} | "\n                f"{d[\'mean_pooled_std\']:.4f} | {d[\'mean_spatial_loss\']:.4f} | {d[\'mean_temporal_loss\']:.4f} |"\n            )\n    report_lines.append("")\n\n    # Per-seed detail\n    report_lines.append("### Per-seed Detail")\n    report_lines.append("")\n    report_lines.append("| Seed | D (P3-C+VICReg+spatial) | F (Untrained+spatial) | Diff |")\n    report_lines.append("|------|-------------------------|-----------------------|------|")\n    for r_d, r_u in zip(d_rows, u_rows):\n        assert r_d["seed"] == r_u["seed"], "Seed mismatch"\n        diff = r_d["test_acc"] - r_u["test_acc"]\n        report_lines.append(\n            f"| {r_d[\'seed\']} | {r_d[\'test_acc\']:.4f} | {r_u[\'test_acc\']:.4f} | {diff:+.4f} |"\n        )\n    report_lines.append("")\n\n    # Statistical analysis\n    report_lines.append("## Statistical Analysis: Condition D vs Untrained+spatial_pooled")\n    report_lines.append("")\n    report_lines.append(f"- **Mean accuracy (D)**: {d_accs.mean():.4f}")\n    report_lines.append(f"- **Mean accuracy (Untrained+spatial_pooled)**: {u_accs.mean():.4f}")\n    report_lines.append(f"- **Gain**: {gain:.4f} ({gain*100:.2f} percentage points)")\n    report_lines.append(f"- **Paired t-test**: t = {t_stat:.4f}, p = {p_val:.6f}")\n    report_lines.append(f"- **Cohen\'s d (paired)**: {cohens_d:.4f}")\n    report_lines.append("")\n\n    # Criteria checks\n    report_lines.append("### Criteria Checks")\n    report_lines.append("")\n    report_lines.append(f"| Criterion | Threshold | Observed | Status |")\n    report_lines.append(f"|-----------|-----------|----------|--------|")\n    report_lines.append(\n        f"| D gain ≥ 8pp | ≥ 0.08 | {gain:.4f} | {\'PASS\' if gain_ok else \'FAIL\'} |"\n    )\n    report_lines.append(\n        f"| p-value < 0.05 | < 0.05 | {p_val:.6f} | {\'PASS\' if p_ok else \'FAIL\'} |"\n    )\n    report_lines.append(\n        f"| Cohen\'s d ≥ 0.8 | ≥ 0.8 | {cohens_d:.4f} | {\'PASS\' if d_ok else \'FAIL\'} |"\n    )\n    report_lines.append("")\n\n    # Verdict\n    report_lines.append("## Falsification Verdict")\n    report_lines.append("")\n    if all_pass:\n        report_lines.append(\n            "**✅ PASSED** — All three criteria are met. The Pooled VICReg + "\n            "spatial_pooled_then_flat readout (Condition D) significantly outperforms "\n            "the untrained baseline with spatial_pooled_then_flat readout, "\n            "with a gain of {:.2f}pp, p = {:.6f}, and Cohen\'s d = {:.4f}.".format(\n                gain * 100, p_val, cohens_d\n            )\n        )\n    else:\n        report_lines.append("**❌ FAILED** — Not all criteria are met. The hypothesis that "\n                            "Pooled VICReg training significantly improves downstream "\n                            "classification is **not falsified** (i.e. the specific claim "\n                            "that Condition D beats Untrained+spatial_pooled by ≥8pp with "\n                            "p<0.05 and d≥0.8 is not supported by these results.)")\n        if not gain_ok:\n            report_lines.append(f"  - Gain {gain*100:.2f}pp < 8pp threshold")\n        if not p_ok:\n            report_lines.append(f"  - p-value {p_val:.6f} ≥ 0.05")\n        if not d_ok:\n            report_lines.append(f"  - Cohen\'s d {cohens_d:.4f} < 0.8")\n    report_lines.append("")\n\n    # Interpretation\n    report_lines.append("## Interpretation")\n    report_lines.append("")\n    # Additional comparisons\n    if "C" in cond_data and "A" in cond_data:\n        c_gain = cond_data["C"]["mean_acc"] - cond_data["A"]["mean_acc"]\n        report_lines.append(\n            f"- **C vs A** (VICReg effect on pooled readout): {c_gain*100:+.2f}pp"\n        )\n    if "D" in cond_data and "B" in cond_data:\n        d_gain_b = cond_data["D"]["mean_acc"] - cond_data["B"]["mean_acc"]\n        report_lines.append(\n            f"- **D vs B** (VICReg effect on spatial_pooled readout): {d_gain_b*100:+.2f}pp"\n        )\n    if "D" in cond_data and "C" in cond_data:\n        d_vs_c = cond_data["D"]["mean_acc"] - cond_data["C"]["mean_acc"]\n        report_lines.append(\n            f"- **D vs C** (spatial_pooled vs pooled with VICReg): {d_vs_c*100:+.2f}pp"\n        )\n    if "B" in cond_data and "A" in cond_data:\n        b_vs_a = cond_data["B"]["mean_acc"] - cond_data["A"]["mean_acc"]\n        report_lines.append(\n            f"- **B vs A** (spatial_pooled vs pooled without VICReg): {b_vs_a*100:+.2f}pp"\n        )\n    if "F: Untrained+spatial_pooled" in cond_data and "E: Untrained+pooled" in cond_data:\n        f_vs_e = cond_data["F: Untrained+spatial_pooled"]["mean_acc"] - cond_data["E: Untrained+pooled"]["mean_acc"]\n        report_lines.append(\n            f"- **F vs E** (readout effect on untrained): {f_vs_e*100:+.2f}pp"\n        )\n    report_lines.append("")\n\n    # Write report\n    with open(REPORT_MD, "w") as f:\n        f.write("\\n".join(report_lines))\n\n    print(f"\\n  Statistical analysis complete. Report saved to: {REPORT_MD}")\n    print(f"  Gain: {gain*100:.2f}pp, p={p_val:.6f}, d={cohens_d:.4f}")\n    print(f"  Verdict: {\'PASS\' if all_pass else \'FAIL\'}")\n\n\n# ---------------------------------------------------------------------------\n#  Entry point\n# ---------------------------------------------------------------------------\n\nif __name__ == "__main__":\n    import argparse\n\n    parser = argparse.ArgumentParser()\n    parser.add_argument("--dry-run", action="store_true", help="Single seed, 1 epoch debug run")\n    args = parser.parse_args()\n\n    results = main(dry_run=args.dry_run)\n\n    if not args.dry_run:\n        run_statistical_analysis(results)\n'})]
+
+[Tool Result: Successfully wrote to C:\Users\thomas\Projekte\rdf_thalamus_sml\src\run_phase3_vicreg_fix.py]
+
+
+[Tool Call: bash({'command': 'cd /c/Users/thomas/Projekte/rdf_thalamus_sml && python src/run_phase3_vicreg_fix.py --dry-run 2>&1'})]
+
+[Tool Result: exit_code: 1
+stdout: 
+stderr: Das System kann den angegebenen Pfad nicht finden.
+]
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python src\\run_phase3_vicreg_fix.py --dry-run 2>&1'})]
+
+[Tool Result: exit_code: 0
+stdout: ======================================================================
+  PHASE 3 VICREG FIX � DRY-RUN
+  Tasks: 6
+  Epochs: 1, Batch size: 64, LR: 0.001
+  Seeds: [42]
+  Conditions: 6
+======================================================================
+
+  All runs completed in 36.0s
+  Results saved to phase_3\pooled_vicreg_results.csv
+
+  Summary (mean � std):
+    A: P3-C, no VICReg, readout=pooled                : test_acc=0.4800�0.0000
+    B: P3-C, no VICReg, r...]
+
+The dry run works. Now let's run the full experiment:
+
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python src\\run_phase3_vicreg_fix.py 2>&1', 'timeout': '3600'})]
+
+[Tool Result: exit_code: 1
+stdout: ======================================================================
+  PHASE 3 VICREG FIX � FULL RUN
+  Tasks: 30
+  Epochs: 30, Batch size: 64, LR: 0.001
+  Seeds: [42, 43, 44, 45, 46]
+  Conditions: 6
+======================================================================
+
+  All runs completed in 1239.1s
+  Results saved to phase_3\pooled_vicreg_results.csv
+
+  Summary (mean � std):
+    A: P3-C, no VICReg, readout=pooled                : test_acc=0.4400�0.0108
+    ...]
+
+
+[Tool Call: read_file({'end_line': 875, 'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\run_phase3_vicreg_fix.py', 'start_line': 860})]
+
+[Tool Result: --- lines 860 to 875 of 889 ---
+        f_vs_e = cond_data["F: Untrained+spatial_pooled"]["mean_acc"] - cond_data["E: Untrained+pooled"]["mean_acc"]
+        report_lines.append(
+            f"- **F vs E** (readout effect on untrained): {f_vs_e*100:+.2f}pp"
+        )
+    report_lines.append("")
+
+    # Write report
+    with open(REPORT_MD, "w") as f:
+        f.write("\n".join(report_lines))
+
+    print(f"\n  Statistical analysis complete. Report saved to: {REPORT_MD}")
+    print(f"  Gain: {gain*100...]
+
+
+[Tool Call: read_file({'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\phase_3\\pooled_vicreg_results.csv'})]
+
+[Tool Result: condition,seed,use_pooled_vicreg,readout_type,train_acc,test_acc,final_spatial_jepa_loss,final_temporal_jepa_loss,final_pooled_std,final_pooled_var_loss,final_pooled_cov_loss,training_time_sec,param_count,class_0_acc,class_1_acc,class_2_acc,class_3_acc
+P3-C,42,False,pooled,0.445,0.4425,18.5220831863055,9.01534186603424,0.07274529323071374,0.0,0.0,207.83137488365173,1600,0.61,0.19,0.28,0.69
+P3-C,43,False,pooled,0.46,0.4375,18.20115307223184,8.72085126153079,0.07039510208025884,0.0,0.0,207.8235673...]
+
+The CSV looks correct. Just a Unicode encoding issue on the report writer. Let me fix that and also generate the report properly:
+
+
+
+[Tool Call: read_file({'end_line': 875, 'path': 'C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml\\src\\run_phase3_vicreg_fix.py', 'start_line': 866})]
+
+[Tool Result: --- lines 866 to 875 of 889 ---
+    # Write report
+    with open(REPORT_MD, "w") as f:
+        f.write("\n".join(report_lines))
+
+    print(f"\n  Statistical analysis complete. Report saved to: {REPORT_MD}")
+    print(f"  Gain: {gain*100:.2f}pp, p={p_val:.6f}, d={cohens_d:.4f}")
+    print(f"  Verdict: {'PASS' if all_pass else 'FAIL'}")
+
+
+# ---------------------------------------------------------------------------]
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python -c "\nfrom scipy import stats\nimport numpy as np\nimport csv\n\n# Read CSV results\nwith open(\'phase_3/pooled_vicreg_results.csv\', \'r\', newline=\'\') as f:\n    reader = csv.DictReader(f)\n    results = list(reader)\n\n# Extract D: P3-C+VICReg+spatial_pooled_then_flat\nd_rows = [r for r in results if r[\'condition\']==\'P3-C\' and r[\'use_pooled_vicreg\']==\'True\' and r[\'readout_type\']==\'spatial_pooled_then_flat\']\nd_rows.sort(key=lambda x: int(x[\'seed\']))\n\n# Extract F: Untrained+spatial_pooled_then_flat\nf_rows = [r for r in results if r[\'condition\']==\'Untrained\' and r[\'readout_type\']==\'spatial_pooled_then_flat\']\nf_rows.sort(key=lambda x: int(x[\'seed\']))\n\nd_accs = np.array([float(r[\'test_acc\']) for r in d_rows])\nf_accs = np.array([float(r[\'test_acc\']) for r in f_rows])\n\nprint(\'D accs:\', d_accs)\nprint(\'F accs:\', f_accs)\n\nt_stat, p_val = stats.ttest_rel(d_accs, f_accs)\ngain = float(d_accs.mean() - f_accs.mean())\ndiff = d_accs - f_accs\ncohens_d = float(diff.mean() / (diff.std(ddof=1) + 1e-12))\n\nprint(f\'T-stat: {t_stat}\')\nprint(f\'p-val: {p_val}\')\nprint(f\'Gain: {gain:.4f} ({gain*100:.2f}pp)\')\nprint(f\'Cohens d: {cohens_d:.4f}\')\nprint(f\'Gain>=8pp: {gain>=0.08}\')\nprint(f\'p<0.05: {p_val<0.05}\')\nprint(f\'d>=0.8: {cohens_d>=0.8}\')\nprint(f\'ALL PASS: {(gain>=0.08) and (p_val<0.05) and (cohens_d>=0.8)}\')\n"\n'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
+
+
+[Tool Call: bash({'command': 'cd C:\\Users\\thomas\\Projekte\\rdf_thalamus_sml && python -c "\nfrom scipy import stats\nimport numpy as np\nimport csv\n\nwith open(\'phase_3/pooled_vicreg_results.csv\', \'r\', newline=\'\') as f:\n    reader = csv.DictReader(f)\n    results = list(reader)\n\nd_rows = [r for r in results if r[\'condition\']==\'P3-C\' and r[\'use_pooled_vicreg\']==\'True\' and r[\'readout_type\']==\'spatial_pooled_then_flat\']\nd_rows.sort(key=lambda x: int(x[\'seed\']))\nf_rows = [r for r in results if r[\'condition\']==\'Untrained\' and r[\'readout_type\']==\'spatial_pooled_then_flat\']\nf_rows.sort(key=lambda x: int(x[\'seed\']))\n\nd_accs = np.array([float(r[\'test_acc\']) for r in d_rows])\nf_accs = np.array([float(r[\'test_acc\']) for r in f_rows])\n\nprint(\'D accs:\', d_accs)\nprint(\'F accs:\', f_accs)\n\nt_stat, p_val = stats.ttest_rel(d_accs, f_accs)\ngain = float(d_accs.mean() - f_accs.mean())\ndiff = d_accs - f_accs\ncohens_d = float(diff.mean() / (diff.std(ddof=1) + 1e-12))\n\nprint(\'T-stat:\', t_stat)\nprint(\'p-val:\', p_val)\nprint(\'Gain: {:.4f} ({:.2f}pp)\'.format(gain, gain*100))\nprint(\'Cohens d: {:.4f}\'.format(cohens_d))\nprint(\'Gain>=8pp:\', gain>=0.08)\nprint(\'p<0.05:\', p_val<0.05)\nprint(\'d>=0.8:\', cohens_d>=0.8)\nprint(\'ALL PASS:\', (gain>=0.08) and (p_val<0.05) and (cohens_d>=0.8))\n"\n'})]
+
+[Tool Result: exit_code: 0
+stdout: 
+stderr: ]
