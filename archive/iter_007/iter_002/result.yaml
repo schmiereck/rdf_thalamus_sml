@@ -1,0 +1,43 @@
+artifacts:
+- phase_4/analysis.py
+- phase_4/REPORT.md
+- src/pre_registration.md
+experimenter_view: 'Phase 4 statistical analysis successfully completed. All 45 runs
+  validated.
+
+  Key finding: pooled VICReg is the dominant factor preventing collapse and improving
+
+  accuracy, not the training objective itself (+57.15pp for SFA, +33.45pp for Recon).
+
+  SFA without VICReg completely collapses to chance (25%). F2 triggered because both
+
+  SFA+VICReg and Reconstruction+VICReg significantly exceed JEPA+VICReg by >20pp.
+
+  F3 was NOT triggered despite rigorous testing (Manager''s directive applied).
+
+  The Manager''s prediction that VICReg would not help reconstruction was wrong.
+
+  Reconstruction + VICReg (83.00%) is recommended as the new default objective.
+
+  '
+log_excerpt: "=== Summary (percentages) ===\n  JEPA no VICReg: 53.50% +/- 2.36%\n\
+  \  JEPA +VICReg: 61.55% +/- 4.86%\n  SFA no VICReg: 25.00% +/- 0.00%\n  SFA +VICReg:\
+  \ 82.15% +/- 3.02%\n  Hebbian no VICReg: 43.90% +/- 6.33%\n  Hebbian +VICReg: 48.55%\
+  \ +/- 6.83%\n  Reconstruction no VICReg: 49.55% +/- 7.79%\n  Reconstruction +VICReg:\
+  \ 83.00% +/- 2.27%\n  untrained no VICReg: 52.10% +/- 3.56%\n\nF1 (JEPA+VICReg <\
+  \ 55%): NOT triggered (61.55%)\nF2 (other >= JEPA+VICReg + 3pp): TRIGGERED\nF3 (VICReg\
+  \ hurts, non-Recon): NOT triggered\n\nReport written to phase_4/REPORT.md\nLength:\
+  \ 13399 characters, 314 lines\n"
+metrics:
+  f1_triggered: false
+  f2_triggered: true
+  f3_triggered: false
+  hebbian_vicreg_acc: 48.55
+  jepra_vicreg_acc: 61.55
+  recon_vicreg_acc: 83.0
+  sfa_vicreg_acc: 82.15
+  total_runs: 45
+  untrained_acc: 52.1
+notes: Phase 4 report generated; pre-registration updated with results. F2 triggered,
+  Reconstruction+VICReg best at 83%.
+status: ok

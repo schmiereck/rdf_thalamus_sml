@@ -54,4 +54,58 @@ Experimental config (unchanged from pre-registration):
 - Seeds: [42, 43, 44, 45, 46]
 
 ---
+
+## 4. Actual Results (post-experiment)
+
+**All 45 runs completed successfully.** Full results: `phase_4/phase4_results.csv`. Detailed statistical report: `phase_4/REPORT.md`.
+
+### 4.1 Test Accuracy Summary
+
+| Objective | VICReg | Mean ± Std (%) |
+|-----------|--------|----------------|
+| JEPA | No | 53.50 ± 2.36 |
+| JEPA | **Yes** | 61.55 ± 4.86 |
+| SFA | No | 25.00 ± 0.00 |
+| SFA | Yes | 82.15 ± 3.02 |
+| Hebbian | No | 43.90 ± 6.33 |
+| Hebbian | Yes | 48.55 ± 6.83 |
+| Reconstruction | No | 49.55 ± 7.79 |
+| Reconstruction | **Yes** | 83.00 ± 2.27 |
+| Untrained | N/A | 52.10 ± 3.56 |
+
+### 4.2 Hypothesis Evaluation
+
+| Hypothesis | Prediction | Actual | Outcome |
+|------------|------------|--------|---------|
+| H1: JEPA+VICReg ≥ 55% | ≥ 55% | 61.55% | **Supported** |
+| H2: No other objective exceeds JEPA+VICReg by ≥ 3pp | No other ≥ 64.55% | SFA+VICReg=82.15%, Recon+VICReg=83.00% | **Refuted** |
+| H3: VICReg improves most objectives (Reconstruction may be exception) | VICReg helps most | VICReg helps ALL objectives, including Reconstruction (+33.45pp) | **Partially refuted** (Reconstruction also benefited enormously) |
+
+### 4.3 Falsification Criteria
+
+| Criterion | Result | Triggered? |
+|-----------|--------|------------|
+| F1: JEPA+VICReg < 55% | 61.55% | **No** |
+| F2: Another objective exceeds JEPA+VICReg by ≥ 3pp | SFA+VICReg +20.60pp, Recon+VICReg +21.45pp | **Yes** |
+| F3: VICReg does not help (non-Recon) | All objective means increase with VICReg; paired t-test (JEPA, SFA) significant | **No** |
+
+### 4.4 Key Findings
+
+1. **VICReg is the dominant factor**: Pooled VICReg contributes +57.15pp (SFA) and +33.45pp (Reconstruction) — far larger than any training objective effect.
+2. **SFA without VICReg collapses to chance** (25.0% ± 0.00%), confirming theoretical predictions about representation collapse.
+3. **Reconstruction + VICReg is the best overall** (83.00%), but the Research Manager's prediction that VICReg would NOT help reconstruction was wrong — the gap is +33.45pp (p < 0.001).
+4. **Hebbian benefits least from VICReg** (+4.65pp, not statistically significant, p = 0.183), possibly because it already maximises variance.
+5. **JEPA without VICReg is barely above untrained** (+1.40pp, p = 0.317), suggesting local VICReg alone is insufficient.
+
+### 4.5 Recommendation
+
+**Reconstruction + pooled VICReg** is recommended as the default training objective for future iterations (83.00% accuracy, lowest variance). SFA + VICReg (82.15%) is a close second.
+
+### 4.6 Caveats
+
+- All objectives used a shared hyperparameter envelope optimized for JEPA; SFA and Hebbian may outperform with dedicated tuning.
+- Architecture is small (1,600 params); scaling to larger models may change the relative ranking.
+- Results are on the P3-C benchmark only; generalisation to other spatiotemporal tasks is untested.
+
+---
 *Created automatically by the RDF Orchestrator prior to iteration execution.*
