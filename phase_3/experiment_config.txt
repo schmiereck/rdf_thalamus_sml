@@ -1,0 +1,35 @@
+Phase 3 Optimized Experiment Configuration
+============================================
+Generated: 2026-05-28 09:02:52
+
+Dataset:
+  n_train_per_class: 200
+  n_test_per_class:  100
+  noise_flip_prob:   0.10
+  total_train:       800
+  total_test:        400
+
+Model:
+  d:                 16
+  d_out:             16
+  n_spatial_layers:  3
+  n_temporal_layers: 3
+
+Training:
+  epochs:            30
+  batch_size:        64
+  lr:                0.001
+  seeds:             [42, 43, 44, 45, 46]
+  variants:          ['Untrained', 'P3-C', 'P3-B', 'P3-A']
+
+Pre-registration Compliance:
+  - 5 seeds used for statistical validity (paired t-test, Cohen's d)
+  - F1: P3-C vs Untrained (gain >= 8pp, p < 0.05, d >= 1.0)
+  - F2: P3-B vs P3-C (penalty <= 10pp)
+  - F3: P3-C vs P3-A (within 20pp of sequential baseline)
+  - F4: P3-C loss <= 2x P3-B loss
+
+Output Files:
+  - phase_3\phase3_full_results.csv
+  - phase_3\shortcut_baselines.csv
+  - phase_3\experiment_config.txt

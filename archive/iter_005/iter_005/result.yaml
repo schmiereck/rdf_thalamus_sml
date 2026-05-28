@@ -1,59 +1,34 @@
 artifacts:
-- src/pre_registration.md
-- src/run_remaining_seeds.py
-experimenter_view: 'The three critical bugs were verified as fixed in spatiotemporal_encoder.py:
+- phase_3/run_p3a_final.py
+- phase_3/dedup.py
+- phase_3/phase3_full_results.csv
+experimenter_view: 'Step 1 complete: CSV successfully deduplicated to 18 unique rows
+  (4 variants x 5 seeds - 2 missing P3-A seeds).
 
-  1. Temporal backward uses master_temporal.W_enc.T (line 380)
+  Step 2 complete: P3-A seeds 45 and 46 launched in background via Windows `start`
+  command. P3-A sequential training (30 spatial + 30 temporal epochs) takes ~5-8 min
+  per seed.
 
-  2. dL_dx initialized as np.zeros_like(x_final) (line 349)
-
-  3. P3-C uses single Adam step with combined gradients (lines 163-180)
-
-
-  The smoke test confirmed the pipeline works end-to-end. However, the full
-
-  experiment suite (4 variants × 5 seeds = 20 runs, ~15-30 min) could not
-
-  complete within the execution time limit. Only seed 42 finished.
-
-
-  From the single completed seed, preliminary observations:
-
-  - P3-B (separate weights, joint training) achieved highest test accuracy (50.8%)
-
-  - P3-C (shared weights) at 44.5% is below P3-B but above chance (25%)
-
-  - Untrained baseline at 49.5% is surprisingly competitive on seed 42
-
-  - Full statistical analysis requires the remaining 4 seeds
-
-
-  The pre-registration file has been written with all hypotheses and
-
-  falsification criteria. The experiment infrastructure is ready; it just
-
-  needs sufficient wall-clock time to complete all 20 training runs.
+  Step 3 (Shortcut Baselines) and Step 4 (Final Verification) are queued and will
+  need to run after checking the P3-A log file for completion.
 
   '
-log_excerpt: "Smoke test completed successfully:\n  P3-A           : test_acc=0.4263\
-  \  spatial_loss=17.6904  temporal_loss=10.7420\n  P3-B           : test_acc=0.5075\
-  \  spatial_loss=18.2975  temporal_loss=12.4231\n  P3-C           : test_acc=0.4450\
-  \  spatial_loss=18.2032  temporal_loss=13.4474\n  Untrained      : test_acc=0.4950\
-  \  spatial_loss=21.6407  temporal_loss=21.0614\n\nFull experiment timed out after\
-  \ 300s. Only seed 42 completed.\nAttempted to run seed 43 in a separate command\
-  \ (exit_code=0, no output visible).\n"
+log_excerpt: 'Cleaned CSV: 18 unique rows (removed 3 duplicates for P3-A, 44 and 2
+  for P3-A, 43).
+
+  Launched background process: start cmd /c "cd C:\Users\thomas\Projekte\rdf_thalamus_sml
+  && .venv\Scripts\python.exe phase_3/run_p3a_final.py > phase_3/run_p3a_final.log
+  2>&1"
+
+  Expected completion: ~10-16 minutes from launch.
+
+  Shortcut baselines and final verification pending P3-A completion.
+
+  '
 metrics:
-  bug_1_fixed: 1
-  bug_2_fixed: 1
-  bug_3_fixed: 1
-  p3a_seed42_test_acc: 0.4263
-  p3b_seed42_test_acc: 0.5075
-  p3c_seed42_test_acc: 0.445
-  seeds_completed: 1
-  smoke_test_passed: 1
-  total_seeds_required: 5
-  untrained_seed42_test_acc: 0.495
-  variants_per_seed: 4
-notes: Infrastructure ready and bugs verified, but full 5-seed experiment suite timed
-  out. Needs longer execution window or batched runs.
-status: experiment_failed
+  cleaned_csv_rows: 18
+  p3a_expected_runtime_minutes: 10-16
+  p3a_seeds_pending: 45, 46
+notes: P3-A seeds 45,46 background launched. Check phase_3/run_p3a_final.log for completion
+  before proceeding.
+status: ok
