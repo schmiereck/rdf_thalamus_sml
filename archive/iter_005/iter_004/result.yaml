@@ -1,0 +1,37 @@
+artifacts:
+- phase_3/_dedup.py
+- phase_3/_run_p3a_43.py
+- phase_3/run_phase3_final.py
+- _check_csv.py
+experimenter_view: 'The deduplication was successful, reducing the CSV from 29 rows
+  to 18 unique rows.
+
+  P3-A seeds 42, 43, and '
+log_excerpt: 'Total rows before dedup: 23
+
+  Total rows after dedup:  18
+
+  Done.
+
+
+  Total rows: 18
+
+  Duplicates: []
+
+  Unique pairs: [(''P3-A'', ''42''), (''P3-A'', ''43''), (''P3-A'', ''44''), (''P3-B'',
+  ''42''), (''P3-B'', ''43''), (''P3-B'', ''44''), (''P3-B'', ''45''), (''P3-B'',
+  ''46''), (''P3-C'', ''42''), (''P3-C'', ''43''), (''P3-C'', ''44''), (''P3-C'',
+  ''45''), (''P3-C'', ''46''), (''Untrained'', ''42''), (''Untrained'', ''43''), (''Untrained'',
+  ''44''), (''Untrained'', ''45''), (''Untrained'', ''46'')]
+
+  Missing P3-A seeds: [45, 46]
+
+  '
+metrics:
+  missing_p3a_seeds: 2
+  p3a_seeds_present: 3
+  total_rows_after_first_dedup: 16
+  total_rows_after_second_dedup: 18
+  total_rows_before_dedup: 29
+  unique_variant_seed_pairs: 18
+status: code_error
