@@ -1,102 +1,100 @@
 # Current Research State — HSUN Project
-**Last updated:** After Phase 4 (iter_007, sub-agents 7.1–7.2)
+**Last updated:** After Phase 5 (iter_008, sub-agents 8.1–8.3)
 
 ## Goal
 Investigate an architecture for unsupervised representation learning built from
-a single, universal node type. Phase 4 (Training Objective Comparison) is now RESOLVED.
+a single, universal node type. All five gated phases are now COMPLETE.
 
 ## Confirmed (with iter/sub-agent references)
 
-### Phase 4 Resolution (iter_007)
-1. **Reconstruction + pooled VICReg is the best training objective** at 83.00% ± 2.27%
-   (iter_007, 7.1). This exceeds JEPA + pooled VICReg (61.55%) by 21.45pp.
+### Phase 5 Resolution (iter_008)
+1. **Within-layer semantic consistency is near-perfect (0.974)** for P5-A
+   (Reconstruction + pooled VICReg), confirming shared W_enc produces
+   position-consistent code semantics (iter_008, 8.3). F3 NOT triggered.
 
-2. **SFA + pooled VICReg is a close second** at 82.15% ± 3.02% (iter_007, 7.1).
-   SFA without VICReg completely collapses to 25.00% (chance).
+2. **Overall semantic consistency is 0.714** for P5-A, but untrained baseline
+   is already 0.675. **Training gain = +0.039** (F2 TRIGGERED: gain ≤ 0.05).
+   The consistency is predominantly structural (shared weights + tanh on binary
+   inputs), not training-induced (iter_008, 8.3).
 
-3. **Pooled VICReg is the DOMINANT anti-collapse factor** across all objectives
-   (iter_007, 7.1 + 7.2):
-   - SFA: +57.15pp (25.00% → 82.15%), p = 0.000002
-   - Reconstruction: +33.45pp (49.55% → 83.00%), p = 0.000943
-   - JEPA: +8.05pp (53.50% → 61.55%), p = 0.007
-   - Hebbian: +4.65pp (43.90% → 48.55%), p = 0.183 (not significant)
+3. **Two dominant semantic axes**: Magnitude (R² up to 0.84 at temporal_0) and
+   Gradient (R² up to 0.59). Variance, periodicity, and novelty are weakly
+   represented only at the deepest temporal layer (iter_008, 8.3).
 
-4. **Falsification criteria** (iter_007, 7.2):
-   - F1 (JEPA+VICReg < 55%): NOT triggered (61.55%) ✅
-   - F2 (other objective beats JEPA+VICReg by ≥ 3pp): TRIGGERED ❌
-     SFA+VICReg (+20.60pp) and Recon+VICReg (+21.45pp) both exceed
-   - F3 (VICReg hurts non-Recon objectives): NOT triggered ✅
+4. **Anchor regularization (P5-B) is counterproductive**: Anchored dims (0-4)
+   consistency = 0.700 < P5-A overall (0.714). Free dims (5-15) = 0.738.
+   F5 TRIGGERED (improvement = -0.014). The hand-designed probes conflict
+   with the natural code structure (iter_008, 8.3).
 
-5. **Research Manager's prediction was WRONG**: VICReg massively helps
-   Reconstruction (+33.45pp). The decoder's intrinsic anti-collapse mechanism
-   is insufficient on this architecture.
+5. **Disentanglement penalty (P5-C) has negligible effect**: Overall = 0.712
+   vs P5-A 0.714. β=0.01 is too small to matter (iter_008, 8.3).
 
-6. **JEPA without pooled VICReg is barely above untrained**: 53.50% vs 52.10%
-   (+1.40pp, p = 0.317, not significant). Local VICReg alone is insufficient.
+6. **Classification accuracy maintained**: P5-A=83.0%, P5-B=82.0%, P5-C=82.6%.
+   F4 NOT triggered (P5-B ≥ 75%) (iter_008, 8.3).
 
-7. **Hebbian is the weakest objective** even with VICReg (48.55%), below
-   untrained baseline (52.10%). Variance maximisation without structured
-   prediction or reconstruction is insufficient for discriminative features.
+7. **Cross-layer consistency**: P5-A=0.580, untrained=0.447. Training improves
+   cross-layer alignment by +0.133 — the largest training effect on consistency
+   (iter_008, 8.3).
 
-### Phase 3 Carry-Forward (still valid, iter_006)
-- P3-C with pooled VICReg + spatial_pooled readout: 61.55% (now superseded by Phase 4)
-- Pooled VICReg prevents collapse (+80.3% std increase)
-- spatial_pooled_then_flat readout preserves temporal discriminative information
+8. **Untrained high-consistency paradox**: Xavier-initialized W_enc with tanh
+   on binary inputs naturally produces outputs correlated with magnitude and
+   gradient. This structural prior creates 0.944 within-layer consistency
+   without training, but only 52.1% classification accuracy. Training sharpens
+   discriminative power (→83%) with minimal consistency gain (iter_008, 8.3).
 
-### Phase 1-2 Carry-Forward (still valid)
-- JEPA local objective works spatially: 62.12% (d=8), 65.20% (d=16) (iter_003)
-- P2-D temporal JEPA: 65.33% ± 2.74% (iter_004)
-- Weight sharing has zero expressivity penalty (iter_002, iter_005)
-- Zero-shot spatial→temporal transfer is falsified (iter_004)
-- Node type is universal, weights are axis-specific (iter_004)
+### Phase 4 Carry-Forward (iter_007)
+- Reconstruction + pooled VICReg is the best training objective (83.00%)
+- Pooled VICReg is the dominant anti-collapse factor across all objectives
+- JEPA refuted as best objective (F2 triggered in Phase 4)
+
+### Phase 3 Carry-Forward (iter_006)
+- P3-C (universal weights) + pooled VICReg + spatial_pooled readout = 61.55%
+- Universal parameter hypothesis SUPPORTED
+
+### Phase 1-2 Carry-Forward (iter_002–004)
+- JEPA local objective works spatially: 62.12% (d=8), 65.20% (d=16)
+- P2-D temporal JEPA: 65.33% ± 2.74%
+- Weight sharing has zero expressivity penalty
+- Zero-shot spatial→temporal transfer is falsified; node type is universal, weights are axis-specific
 
 ## Refuted Hypotheses
+- "Training produces significant semantic consistency gains over untrained baseline": REFUTED (F2, iter_008)
+- "Anchor regularization improves consistency": REFUTED (F5, iter_008)
 - "JEPA + pooled VICReg is the best training objective": REFUTED (iter_007)
-- "Reconstruction natively resists collapse (VICReg won't help)": REFUTED (iter_007)
-- "Local VICReg alone prevents collapse": REFUTED — JEPA without pooled VICReg
-  is barely above untrained (53.5% vs 52.1%, iter_007)
+- "Reconstruction natively resists collapse": REFUTED (iter_007)
+- "Zero-shot spatial→temporal weight transfer works": REFUTED (iter_004)
 
 ## Current Best Results
-- **Best overall**: Reconstruction + pooled VICReg, 83.00% ± 2.27%, 1,600 params (iter_007)
-- **Second best**: SFA + pooled VICReg, 82.15% ± 3.02% (iter_007)
-- **JEPA + pooled VICReg**: 61.55% ± 4.86% (iter_007, reproduces iter_006)
-- **Spatial only**: JEPA-d16, 65.20% ± 1.80% (iter_003)
-- **Temporal only**: P2-D JEPA, 65.33% ± 2.74% (iter_004)
-- **Untrained baseline**: 52.10% ± 3.56% (iter_007)
-
-## Experiment Configuration (Updated for Phase 5)
-- Architecture: P3-C (shared weights), d=16, d_out=16, 1,600 params
-- Training: 30 epochs, 200 train/class, 100 test/class, batch=64, lr=1e-3
-- **NEW default objective**: Reconstruction + pooled VICReg
-- Readout: spatial_pooled_then_flat (416 features)
-- Pooled VICReg: λ_var=25, λ_cov=25 on final representation
+- **Best classification**: Reconstruction + pooled VICReg, 83.00% ± 2.27%, 1,600 params (iter_007)
+- **Within-layer consistency**: 0.974 (P5-A, iter_008)
+- **Cross-layer consistency**: 0.580 (P5-A, iter_008)
+- **Overall consistency**: 0.714 (P5-A, iter_008)
+- **Dominant semantic axes**: Magnitude (R² up to 0.84), Gradient (R² up to 0.59)
 
 ## Files Created This Phase
-- src/run_phase4.py — Full Phase 4 experiment runner (fixed memory issues)
-- phase_4/phase4_results.csv — 45 experiment results
-- phase_4/analysis.py — Statistical analysis script
-- phase_4/REPORT.md — Comprehensive analysis report
-- src/pre_registration.md — Updated with actual results
+- src/semantic_probes.py — 5 semantic probe computation + downsampling
+- src/run_phase5.py — Phase 5 experiment runner
+- src/phase_5/phase5_results.csv — 20 experiment results
+- src/phase_5/REPORT.md — Comprehensive analysis report
 
 ## Open Questions (ordered by expected value)
-1. **Would dedicated hyperparameter tuning for SFA/Hebbian close the gap to
-   Reconstruction+VICReg?** The shared envelope (lr=1e-3, 30 epochs) was optimised
-   for JEPA. SFA and Hebbian deserve their own sweeps.
-2. **Is the VICReg variance term or covariance term the dominant anti-collapse
-   mechanism?** Ablating these would clarify the mechanism.
-3. **Does Reconstruction+VICReg produce semantically consistent dimensions?**
-   This is the Phase 5 question — do the 16 code dimensions carry interpretable
-   and consistent semantics across positions and layers?
-4. **Can we replace pooled VICReg with a cheaper anti-collapse mechanism?**
-   Batch norm, projection head, or explicit code normalization?
-5. **Would longer training (100+ epochs) further improve Reconstruction+VICReg
-   beyond 83%?** JEPA converges by epoch 30 but Reconstruction might benefit.
-6. **Does the Hebbian objective produce more semantically consistent dimensions?**
-   Despite lower accuracy, Hebbian's local variance maximisation might yield
-   more interpretable features.
+1. **Does the structural prior (shared weights + tanh + binary inputs) generalize
+   to continuous, higher-dimensional inputs?** The high untrained consistency
+   may be specific to binary inputs where tanh saturation creates natural
+   magnitude/gradient tuning.
+2. **Can the architecture maintain 80%+ accuracy on richer input spaces (e.g.,
+   1D physics sandbox with 128 RGB pixels, 3 objects)?** This is the stated
+   long-term target.
+3. **Would alternative activation functions (ReLU, GELU) change the balance
+   between structural and training-induced consistency?**
+4. **Is the two-axis dominance (magnitude, gradient) a feature or a limitation?**
+   It may mean the architecture is limited to spatial-structural representations
+   and cannot learn temporal-semantic features without deeper temporal processing.
+5. **What would a Phase 6 (convergence) synthesis conclude about the overall
+   viability of the universal node architecture?** All five gated phases are
+   now complete.
 
-## Recent Log (last 3 entries)
-- iter_007: Phase 4 complete. Reconstruction+VICReg=83%, SFA+VICReg=82.15%,
-  JEPA+VICReg=61.55%. F2 triggered. VICReg is dominant factor.
-- iter_006: Phase 3 resolved. P3-C+pooled VICReg+spatial_pooled readout=61.55%.
-- iter_005: Phase 3 initial failure. JEPA-to-classification transfer failure.
+## Project Status
+All five gated phases (0–4) are COMPLETE. The project is ready for a
+convergence phase that synthesizes findings across all phases and determines
+whether the HSUN architecture is viable for its stated long-term goals.

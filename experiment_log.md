@@ -426,3 +426,70 @@ THREE MAJOR FINDINGS:
 
 **Notes:** Phase 4 complete. F2 triggered. Reconstruction+VICReg best at 83%. VICReg is the dominant factor across all objectives.
 
+
+---
+```yaml
+cached_tokens: 729016
+campaign: phase-5-vector-semantics
+campaign_status: completed
+campaign_summary: 'Phase 5 resolved: codes show high within-layer consistency (0.974)
+  from shared-weight structural prior; training gain only +0.039 (F2 triggered); magnitude
+  and gradient are dominant semantic axes; anchor regularization is counterproductive.'
+cost_usd: 1.14172
+hypothesis: 'phase-8: Vector semantics investigation complete — high within-layer
+  consistency (0.974) confirms shared-weight structural prior; modest training gain
+  (+0.039) triggers F2; anchoring is counterproductive (F5); magnitude and gradient
+  are the two dominant semantic axes.'
+input_tokens: 2057681
+iter: 8
+metrics:
+  F1_triggered: false
+  F2_triggered: true
+  F3_triggered: false
+  F4_triggered: false
+  F5_triggered: true
+  P5-A_cross_layer_consistency: 0.58
+  P5-A_mean_test_acc: 0.83
+  P5-A_overall_consistency: 0.714
+  P5-A_std_test_acc: 0.0227
+  P5-A_within_layer_consistency: 0.974
+  P5-B_anchored_dim_consistency: 0.7
+  P5-B_free_dim_consistency: 0.738
+  P5-B_mean_test_acc: 0.82
+  P5-C_mean_test_acc: 0.826
+  total_experiments: 20
+  total_runtime_sec: 1777
+  training_gain_overall: 0.039
+  untrained_cross_layer_consistency: 0.447
+  untrained_mean_test_acc: 0.521
+  untrained_overall_consistency: 0.675
+  untrained_within_layer_consistency: 0.944
+output_tokens: 95823
+status: ok
+```
+
+## iter_008: phase-8: Vector semantics investigation complete — high within-layer consistency (0.974) confirms shared-weight structural prior; modest training gain (+0.039) triggers F2; anchoring is counterproductive (F5); magnitude and gradient are the two dominant semantic axes.
+
+**Analysis:** Phase 5 investigated whether code dimensions carry consistent, interpretable
+semantics across positions and layers. Three sub-agents (8.1, 8.2, 8.3) were
+used. 8.1 implemented semantic_probes.py. 8.2 read reference files but ran out
+of time. 8.3 implemented run_phase5.py and ran all 20 experiments.
+
+KEY FINDING 1 — STRUCTURAL PRIOR DOMINATES: The shared-weight P3-C architecture
+with tanh activatio
+
+**Status:** ok
+
+**Metrics:** `{'P5-A_mean_test_acc': 0.83, 'P5-A_std_test_acc': 0.0227, 'P5-B_mean_test_acc': 0.82, 'P5-C_mean_test_acc': 0.826, 'untrained_mean_test_acc': 0.521, 'P5-A_overall_consistency': 0.714, 'P5-A_within_layer_consistency': 0.974, 'P5-A_cross_layer_consistency': 0.58, 'untrained_overall_consistency': 0.675, 'untrained_within_layer_consistency': 0.944, 'untrained_cross_layer_consistency': 0.447, 'training_gain_overall': 0.039, 'P5-B_anchored_dim_consistency': 0.7, 'P5-B_free_dim_consistency': 0.738, 'F1_triggered': False, 'F2_triggered': True, 'F3_triggered': False, 'F4_triggered': False, 'F5_triggered': True, 'total_experiments': 20, 'total_runtime_sec': 1777}`
+
+**Experimenter view:** Phase 5 completed 20 experiments (3 variants × 5 seeds + 5 untrained).
+
+CLASSIFICATION: P5-A reproduces Phase 4 at 83.0% ± 2.27%. P5-B (81.95%)
+and P5-C (82.55%) maintain accuracy within 2pp, confirming anchor and
+disentanglement penalties do not destroy discriminative capacity.
+
+WITHIN-LAYER CONSISTENCY is extremely high: P5-A = 0.974, untrained = 0.944.
+Shared W_enc produces near-uniform semanti
+
+**Notes:** Phase 5 complete. F2 and F5 triggered. High consistency is largely structural (shared weights + tanh on binary inputs), not training-induced.
+
