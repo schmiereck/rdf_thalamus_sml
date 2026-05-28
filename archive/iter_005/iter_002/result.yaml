@@ -1,25 +1,46 @@
 artifacts:
-- phase3_diagnostic_report.md
-experimenter_view: "Completed a static code analysis of the Phase 3 spatiotemporal\
-  \ training\npipeline. Three critical bugs were identified that explain why trained\n\
-  encoders perform worse than untrained baselines (28–34% vs 49.5% test\naccuracy):\n\
-  \n1. BUG 1 (spatiotemporal_encoder.py:388): Temporal backward uses\n   self.master_spatial.W_enc.T\
-  \ instead of self.master_temporal.W_enc.T,\n   corrupting gradient flow for P3-B\
-  \ and P3-A phase 2.\n\n2. BUG 2 (spatiotemporal_encoder.py:358-365): A spurious\
-  \ constant\n   gradient from average pooling (np.full_like(x_final, 1/(T*S))) is\n\
-  \   added to dL_dx even though pooling is only used at evaluation time.\n   This\
-  \ phantom gradient pushes all representations in a positive\n   direction unrelated\
-  \ to the JEPA loss, affecting all variants.\n\n3. BUG 3 (run_phase3.py:156-190):\
-  \ For P3-C, adam_temporal and\n   adam_spatial are the same object, causing .step()\
-  \ to be called\n   twice per batch. Spatial gradients are applied twice, temporal\n\
-  \   once, and Adam's bias correction is corrupted.\n\nThe diagnostic report was\
-  \ written to phase3_diagnostic_report.md with\ndetailed code references, comparisons\
-  \ to working Phase 1/2 backward\npasses, and recommended fixes. No code was modified\
-  \ per instructions.\n"
-log_excerpt: 'Successfully wrote to phase3_diagnostic_report.md
+- src/run_phase3_optimized.py
+- src/profile_p3b.py
+- phase_3/phase3_full_results.csv
+experimenter_view: 'The optimized runner script was successfully created and validated.
+  Profiling
+
+  confirmed P3-B runs in ~92s with 30 epochs/200 train/class/batch=64 settings,
+
+  matching the ~90s target. However, the full 20-run suite could not complete
+
+  within the 5-minute execution limit. Four Untrained baseline runs completed
+
+  successfully (~74s each, test acc ~41%). Extrapolating: 5×Untrained (~370s) +
+
+  5×P3-C (~460s) + 5×P3-B (~460s) + 5×P3-A (~920s) ≈ 35 min total. The
+
+  script is correct and ready to resume; it saves incrementally after each run.
+
+  The untrained baseline already shows ~41% test accuracy (above chance 25%),
+
+  suggesting the linear probe on pooled representations captures some signal
+
+  even without JEPA training.
 
   '
-metrics: {}
-notes: 'Diagnostic complete: 3 critical bugs identified in Phase 3 backward pass and
-  training loop.'
-status: ok
+log_excerpt: "Profiling: P3-B, 30 epochs, 200 train/class, batch=64\nDataset: (800,\
+  \ 16, 32)\n  Epoch 0: spatial=21.4249, temporal=19.6038\n  Epoch 5: spatial=18.7635,\
+  \ temporal=13.4031\n  Epoch 10: spatial=17.6643, temporal=10.8630\n  Epoch 15: spatial=17.1997,\
+  \ temporal=9.0619\n  Epoch 20: spatial=16.9288, temporal=7.7559\n  Epoch 25: spatial=16.6474,\
+  \ temporal=6.8192\n  Epoch 29: spatial=16.3444, temporal=6.2513\nTraining time:\
+  \ 91.6s\n\nPartial results (4/20 runs):\nUntrained,42,0.4625,0.4825,21.57,20.90,74.1,0.47,0.60,0.19,0.67\n\
+  Untrained,43,0.4113,0.3925,20.81,19.11,74.5,0.32,0.48,0.10,0.67\nUntrained,44,0.3325,0.3450,20.46,19.41,74.5,0.61,0.04,0.03,0.70\n\
+  Untrained,45,0.4263,0.4300,20.04,18.38,74.4,0.47,0.52,0.08,0.65\n"
+metrics:
+  estimated_total_time_min: 33
+  p3a_expected_time_per_run_sec: 183.2
+  p3b_30epoch_profiling_time_sec: 91.6
+  p3b_expected_time_per_run_sec: 91.6
+  total_runs_planned: 20
+  untrained_mean_test_acc: 0.4125
+  untrained_mean_time_sec: 74.4
+  untrained_runs_completed: 4
+notes: Script ready but full suite needs ~35 min; only 4/20 runs completed before
+  timeout.
+status: experiment_failed
