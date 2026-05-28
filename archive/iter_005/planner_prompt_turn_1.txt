@@ -527,137 +527,138 @@ Run sub-tasks sequentially. Each result informs the next. Synthesise all results
 ## Approved Research Plan for this Iteration
 You previously proposed this plan during the planning phase:
 ```yaml
-falsification_criterion: 'Primary: P3-C mean 4-class classification accuracy < P3-B
-  mean accuracy - 15pp
+artifacts: []
+experimenter_view: "I was in the Planning Phase for Phase 3 (Unified Spatiotemporal\
+  \ Grid) when\ntool access failed. Based on the context provided in the system prompt\n\
+  (current_state.md, goal.md, iteration summaries), I had formulated the\nfollowing\
+  \ analysis but was unable to verify against actual source files:\n\nKEY PHASE 3\
+  \ DESIGN DECISIONS:\n1. Phase 2 showed zero-shot spatial→temporal weight transfer\
+  \ FAILS, but\n   joint training was never tested. The critical question is whether\n\
+  \   jointly-trained shared weights (P3-C) can serve both axes.\n2. P3-B (anisotropic:\
+  \ different weights per axis) is the practical\n   compromise — same node type,\
+  \ axis-specific weights.\n3. P3-A (separate spatial→temporal stages) is the upper-bound\
+  \ baseline.\n4. The four test patterns (moving blob, expanding/contracting, periodic\n\
+  \   spatiotemporal, object permanence) need a new spatiotemporal dataset.\n5. JEPA\
+  \ objective confirmed as best in both Phase 1 (spatial) and\n   Phase 2 (temporal),\
+  \ so it should be the training objective here.\n\nDRAFT HYPOTHESIS: Jointly-trained\
+  \ P3-C (single shared weight set for\nspatial and temporal axes) achieves within\
+  \ 20pp of P3-A (separate stages)\non spatiotemporal pattern classification, demonstrating\
+  \ that the\naxis-specificity observed in zero-shot transfer can be overcome through\n\
+  joint optimization.\n\nFALSIFICATION CRITERION: P3-C average accuracy across the\
+  \ four benchmark\ntasks is more than 20pp below P3-A average accuracy.\n\nPROPOSED\
+  \ METHOD:\n- Create src/spatiotemporal_dataset.py (4 pattern types)\n- Create src/spatiotemporal_grid.py\
+  \ (P3-A/B/C architectures)\n- Create src/run_phase3.py (experiment runner)\n- Train\
+  \ each variant with JEPA objective, evaluate with linear probe\n- Run 5+ seeds per\
+  \ variant for statistical comparison\n\nNo code was written or executed. This iteration\
+  \ needs to be re-run.\n"
+log_excerpt: 'Planning phase initiated for Phase 3 (Unified Spatiotemporal Grid).
 
-  across the four spatiotemporal pattern benchmarks (each benchmark evaluated with
+  Tool access failed repeatedly - unable to read codebase files.
 
-  5 seeds, linear probe on final code vector). This would prove that even under
-
-  joint optimization, a single weight set cannot serve both spatial and temporal
-
-  processing — the strong universal hypothesis is falsified and the practical
-
-  conclusion is "same architecture, per-axis weights."
-
-
-  Secondary: P3-C mean accuracy < P3-A mean accuracy - 20pp, confirming that the
-
-  shared-weight model is not viable even compared to the separately-trained baseline.
-
-
-  Tertiary: P3-C mean accuracy < 2× chance (< 50% for 4-class), indicating that
-
-  shared weights under joint training produce representations barely above random.
-
-  '
-hypothesis: 'A single set of UniversalNode weights, trained jointly on both spatial
-  and temporal
-
-  JEPA objectives applied to a spatiotemporal input grid (16 binary pixels × 32 timesteps),
-
-  can produce effective spatiotemporal representations. Specifically, P3-C (shared
-  weights,
-
-  joint training) will achieve mean classification accuracy within 15 percentage points
-  of
-
-  P3-B (separate spatial/temporal weights, joint training) on four spatiotemporal
-  pattern
-
-  benchmarks (moving blob, expanding/contracting blob, periodic spatiotemporal, object
-
-  permanence). This would demonstrate that the zero-shot transfer failure was caused
-  by
-
-  single-axis optimization, not by fundamental incompatibility between spatial and
-  temporal
-
-  processing in the UniversalNode architecture.
+  No experiments were executed. Iteration 005 is a restart of a crashed run.
 
   '
-pre_registration_file: src/pre_registration.md
-proposed_method: "STEP 1: Create spatiotemporal dataset generator (src/spatiotemporal_dataset.py)\n\
-  - Generate 4 pattern classes over a 16×32 binary spatiotemporal grid:\n  * Class\
-  \ 0 — Moving blob: contiguous block of 1s that translates across spatial\n    positions\
-  \ over time (varying speed, starting position, blob width)\n  * Class 1 — Expanding/contracting\
-  \ blob: blob whose spatial extent grows then\n    shrinks over time (varying max\
-  \ width, expansion rate)\n  * Class 2 — Periodic spatiotemporal: pattern repeating\
-  \ in both space and time\n    (varying spatial and temporal periods)\n  * Class\
-  \ 3 — Object permanence: blob present, disappears for k steps, reappears\n    at\
-  \ same position (varying gap length, blob position, blob width)\n- Each class: 500\
-  \ training samples, 200 test samples (per seed)\n- Add noise variants (10-20% pixel\
-  \ flip probability) for robustness testing\n\nSTEP 2: Create spatiotemporal encoder\
-  \ (src/spatiotemporal_encoder.py)\n- Architecture: sequential spatial-then-temporal\
-  \ processing with UniversalNode\n  * Spatial pass: 3 layers of kernel-3, stride-1\
-  \ nodes over 16 input pixels\n    Layer 0: 14 positions, Layer 1: 12, Layer 2: 10\
-  \ → top spatial code\n  * Temporal pass: 3 layers of kernel-3, stride-1 nodes over\
-  \ 32 timesteps\n    applied to the 10 top-layer spatial codes at each timestep\n\
-  \    Layer 0: 30 positions, Layer 1: 28, Layer 2: 26 → final temporal code\n  *\
-  \ Final representation: mean-pool the temporal top layer across spatial positions\n\
-  - Three variants sharing the same architecture code:\n  * P3A: W_spatial (trained\
-  \ separately) + W_temporal (trained separately)\n  * P3B: W_spatial + W_temporal\
-  \ (both trained jointly with combined loss)\n  * P3C: W_shared (single weight matrix\
-  \ for both passes, trained jointly)\n- UniversalNode: same as Phase 1/2 (kernel-3,\
-  \ 3-slot input, d=16, JEPA + VICReg)\n\nSTEP 3: Implement combined JEPA training\
-  \ (src/run_phase3.py)\n- JEPA objective for spatial axis: at each spatial layer,\
-  \ predict left and right\n  neighbor node outputs from current node output (bidirectional)\n\
-  - JEPA objective for temporal axis: at each temporal layer, predict past and\n \
-  \ future neighbor node outputs from current node output\n- VICReg collapse prevention\
-  \ on all node outputs (variance, covariance penalties)\n- Combined loss: alpha *\
-  \ spatial_jepa + (1-alpha) * temporal_jepa + vicreg\n  with alpha=0.5 (equal weighting)\n\
-  - Training: 200 epochs, Adam optimizer, lr=1e-3, batch_size=32\n- For P3-A: train\
-  \ spatial JEPA alone (200 epochs), then freeze spatial weights\n  and train temporal\
-  \ JEPA alone (200 epochs)\n- For P3-B: train both losses jointly (200 epochs) with\
-  \ separate W_s and W_t\n- For P3-C: train both losses jointly (200 epochs) with\
-  \ shared W\n\nSTEP 4: Evaluation protocol (src/evaluate_phase3.py)\n- Linear probe:\
-  \ train a single linear classifier (no hidden layer) on the\n  final code vectors,\
-  \ 4-class classification\n- Per-benchmark evaluation: compute accuracy for each\
-  \ of the 4 pattern types\n  separately, then compute mean accuracy\n- 5 seeds per\
-  \ variant for statistical significance\n- Compute: mean accuracy, std, P3-C vs P3-B\
-  \ gap, P3-C vs P3-A gap\n- Parameter count comparison across variants\n- Paired\
-  \ t-test between P3-C and P3-B across seeds\n- Also evaluate per-axis JEPA loss\
-  \ to diagnose any axis dominance\n\nSTEP 5: Create report (phase_3/REPORT.md)\n\
-  - Comparison table: P3-A, P3-B, P3-C accuracy (mean ± std) per benchmark\n- Gap\
-  \ analysis: P3-C - P3-B, P3-C - P3-A\n- Parameter count: P3-C should have ~50% of\
-  \ P3-B parameters\n- Per-axis JEPA loss analysis\n- Statistical significance tests\n\
-  - Recommendation: if P3-C within 15pp of P3-B → universality viable;\n  if not →\
-  \ per-axis weights are the practical path\n\nFiles to create/modify:\n- src/spatiotemporal_dataset.py\
-  \ (new)\n- src/spatiotemporal_encoder.py (new, reuses UniversalNode from Phase 1/2)\n\
-  - src/run_phase3.py (new)\n- src/evaluate_phase3.py (new)\n- src/test_spatiotemporal.py\
-  \ (new, self-tests)\n- phase_3/REPORT.md (new)\n- src/pre_registration.md (auto-generated\
-  \ from this plan)\n"
+metrics: {}
+notes: Planning phase incomplete due to tool access failure; no experiments executed
+status: code_error
 
 ```
 
 ## Strategic Research Manager's Notes
-# Manager's Note: Strategic Guidance for Phase 3 (Unified Spatiotemporal Grid)
+### Manager's Note: Strategic Guidance for Phase 3 (Unified Spatiotemporal Grid)
 
-I have reviewed your proposed research plan for Phase 3. The transition to a unified spatiotemporal grid is the logical next step, and your formulation of the **P3-A / P3-B / P3-C** comparison is excellent. It directly addresses the core tension of our project: **Is the universal node's parameter set truly unified across space and time, or is parameter specialization necessary?**
+As we transition into Phase 3, we are testing the ultimate limit of our "universal node" hypothesis: can a single parameter set $\theta$ map both spatial configurations (left-center-right) and temporal transitions (past-present-future) within a unified grid? 
 
-To ensure scientific rigour and prevent technical dead-ends, you must address the following three strategic points before proceeding to execution.
+To maintain scientific rigour and avoid common pitfalls encountered in previous phases, apply the following strategic directives:
 
----
+#### 1. Establish Rigorous Baselines (The Architecture-Only Loophole)
+In Phase 2, we discovered a significant "periodicity loophole" where untrained random projections achieved up to 58% accuracy purely due to the grid's deterministic information propagation. 
+*   **Directive:** You must evaluate and report the performance of **Untrained/Random-Weight baselines** for all three architectures (P3-A, P3-B, and P3-C). 
+*   **Discipline:** A positive result for joint training (P3-C) is only valid if it demonstrates a statistically significant gain over its untrained counterpart, rather than merely passing information through a structured grid.
 
-### 1. Strict Architectural Compatibility for Shared Weights (The Dimension Constraint)
-In Phase 2, we established that the Universal Node operates on $3 \times d$ inputs and outputs a $d$-dimensional vector. For Phase 3's **P3-C (Fully Shared Weights)** to be mathematically viable:
-*   **Every single node** in both the spatial and temporal hierarchies must have the exact same weight shape: $\mathbb{R}^{3d} \to \mathbb{R}^d$.
-*   If your spatial Layer 0 operates directly on raw 1D binary pixels, its input dimension would be $3 \times 1$, making parameter sharing with higher layers or temporal layers impossible.
-*   **Mandate:** You must implement an explicit, non-learned (or separately trained) **pixel-embedding layer** at the very bottom of the spatial pipeline to project the raw binary inputs into $d$-dimensional space *before* they enter spatial Layer 0. This ensures dimension homogeneity across the entire spatiotemporal grid.
+#### 2. Tighten Pre-Registration Hypotheses & Falsification Criteria
+The proposed falsification criterion (P3-C within 20 percentage points of P3-A) is far too lenient. A 20pp gap could hide a complete failure of the representation space.
+*   **Directive:** Your pre-registration file (`src/pre_registration.md`) must be written and committed before executing any runs.
+*   **Quantitative Criteria:** Refine your criteria to include:
+    1.  **Training Gain:** Trained P3-C must outperform Untrained P3-C by $\ge 10\text{pp}$ (with $p < 0.05$ and Cohen's $d \ge 1.0$).
+    2.  **Anisotropy Penalty:** The gap between the anisotropic grid (P3-B, axis-specific weights) and the fully unified grid (P3-C, shared weights) must be quantified. If parameter sharing is viable, the performance penalty ($P3\text{-}B - P3\text{-}C$) must be $\le 10\text{pp}$.
 
-### 2. The Construction-vs-Empirical Test: Guarding Against Shortcut Features
-We must ensure that the four spatiotemporal classes (Moving Blob, Expanding/Contracting Blob, Periodic Spatiotemporal, Object Permanence) cannot be distinguished via trivial "shortcuts" (e.g., a spatial-only slice or a static temporal average):
-*   **Design Check:** If a linear probe can classify the sequence with 90% accuracy using only the first frame, your dataset has a loophole. Ensure that the classes are balanced such that static spatial frames or non-spatial temporal averages are insufficient for high classification accuracy.
-*   **Representation Pooling:** Clearly define how the final spatiotemporal grid representation is aggregated for the linear probe. I suggest average-pooling across the remaining spatial positions to obtain a temporal sequence of shape $(T_{out}, d)$, and then either flattening or temporally pooling this sequence. Do not allow high-dimensional flattening of the raw grid to bypass the bottleneck, as this would allow the linear probe to reconstruct the raw inputs and solve the task trivially.
+#### 3. Explicitly Define the Grid Geometry and Node Scheduling
+A 2D spatiotemporal grid introduces causal and structural scheduling choices. 
+*   **Directive:** Do not leave the order of operations implicit in the code. In your design, clearly define how information propagates. For example, does a spatial layer process the input sequence first, followed by a temporal layer (as in P3-A), or do spatial and temporal operations alternate layer-by-layer in a staggered grid (as in P3-C)? 
+*   Ensure that no future temporal information is leaked to past temporal slots during grid execution (strict temporal causality).
 
-### 3. Pre-Registration & Falsification Integrity
-Your proposed pre-registration criteria are clear and quantitative. 
-*   **Action:** Before running any training or evaluation scripts, you must write and commit your exact hypothesis and the three falsification criteria (Primary: $\text{Acc}_{\text{P3-C}} < \text{Acc}_{\text{P3-B}} - 15\text{pp}$; Secondary: $\text{Acc}_{\text{P3-C}} < \text{Acc}_{\text{P3-A}} - 20\text{pp}$; Tertiary: $\text{Acc}_{\text{P3-C}} < 50\%$) to `src/pre_registration.md`.
-*   **Skeptic's Boundary:** If P3-C fails the primary falsification criterion, you must report this as an honest, clean null result for the *strong* universal parameter hypothesis. We will not engage in post-hoc parameter tuning or loss-weight tweaking to "rescue" P3-C. Failing P3-C simply means that while the **architectural type** is universal, **parameter specialization per physical axis is a biological and mathematical necessity**—which is itself a highly valuable, publishable scientific finding.
-
----
-
-**You are cleared to write the pre-registration file and proceed to the implementation of Phase 3.** Keep your language sober, report your metrics honestly, and let the data speak.
+**Language Reminder:** In your report, avoid words like "organically emerges" or "perfectly unifies." Instead, use precise descriptions like "the representation is consistent with..." or "the shared-weight constraint reduces accuracy by $X$ percentage points compared to the anisotropic baseline."
 
 ## User Hint
-**Recommendation for Phase 3:**: The strategist should formulate this as core Experiment 3: | ID:P3-A | Setup: Trained separately, then combined | Question: Reference (what we know) | | ID:P3-B | Setup: Joint training, anisotropic weights | Question: Intermediate | | ID:**P3-C** | Setup: **Joint training, shared weights** | Question: **Save the strong hypothesis** | If P3-C works, universality is saved. If not, the conclusion is: same architecture, separate weights per context—still a clean and useful architecture.
+Executer Sub-agent 5.4 was last. Than something crashed. I Restart ITERATION 005 now.
+
+## Interrupted Sub-Agents (Resume Context)
+
+The following sub-agents were interrupted:
+
+- iter_id=5.1: COMPLETED (result.yaml exists)
+  Task: 
+# Phase 3: Unified Spatiotemporal Grid — Infrastructure + Experiments
+
+You are executing Phase 3 of the HSUN (Hierarchical Sparse Universal Nodes) research project. Your task is to build the full spa
+  Result preview:
+artifacts:
+- src/spatiotemporal_dataset.py
+- src/spatiotemporal_encoder.py
+- src/run_phase3.py
+- src/test_spatiotemporal.py
+- phase_3/p3a_results.csv
+- phase_3/p3b_results.csv
+- phase_3/p3c_results.csv
+- phase_3/untrained_results.csv
+- phase_3/shortcut_results.csv
+- phase_3/param_comparison.csv
+experimenter_view: "The Phase 3 spatiotemporal infrastructure and experiments have\
+  \ been successfully executed and evaluated.\nThe shortcut baselines (single-frame\
+  \ and temporal-average) both achi
+
+- iter_id=5.2: COMPLETED (result.yaml exists)
+  Task: 
+# Diagnose Phase 3 Training Failure
+
+The Phase 3 spatiotemporal experiments have a critical bug: trained encoders perform WORSE than untrained baselines.
+
+## Results from seed=42:
+- P3-A: test_acc=28
+  Result preview:
+artifacts:
+- phase3_diagnostic_report.md
+experimenter_view: "Completed a static code analysis of the Phase 3 spatiotemporal\
+  \ training\npipeline. Three critical bugs were identified that explain why trained\n\
+  encoders perform worse than untrained baselines (28–34% vs 49.5% test\naccuracy):\n\
+  \n1. BUG 1 (spatiotemporal_encoder.py:388): Temporal backward uses\n   self.master_spatial.W_enc.T\
+  \ instead of self.master_temporal.W_enc.T,\n   corrupting gradient flow for P3-B\
+  \ and P3-A p
+
+- iter_id=5.3: COMPLETED (result.yaml exists)
+  Task: 
+# Fix Phase 3 Bugs and Rerun All Experiments
+
+Three critical bugs were identified in the Phase 3 code. Fix all three, then run the complete experiment suite (4 variants × 5 seeds = 20 runs).
+
+## Bug 
+  Result preview:
+artifacts:
+- src/spatiotemporal_encoder.py
+- src/run_phase3.py
+experimenter_view: "All three critical bugs were successfully identified and fixed:\n\
+  1. Temporal backward now uses self.master_temporal.W_enc.T instead of\n   self.master_spatial.W_enc.T,\
+  \ restoring correct gradient flow.\n2. Removed the spurious average-pooling gradient\
+  \ from backward();\n   dL_dx now starts as np.zeros_like(x_final), so only JEPA\
+  \ code_grads\n   drive training.\n3. P3-C now uses a SINGLE Adam step w
+
+- iter_id=5.4: INTERRUPTED (no result.yaml)
+  Task: 
+# Monitor Phase 3 Experiment Run and Verify Results
+
+The Phase 3 experiment run was launched in the background. Your job is to:
+
+1. Wait for the background run to complete by checking the log file at
+
+If result.yaml exists: integrate that result. If no result.yaml: restart with run_agent.
