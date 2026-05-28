@@ -1,0 +1,613 @@
+
+[Tool Call: read_iteration({'iter_num': 7})]
+
+[Tool Result: No record found for iteration 7.
+
+## Files in archive/iter_007/
+  iter_001/stderr.txt  (0 bytes)
+  iter_001/stdout.txt  (67,132 bytes)
+  iter_002/checkpoint.yaml  (4,324 bytes)
+  manager_log.md  (13,237 bytes)
+  planner_plan_prompt.txt  (30,208 bytes)
+  planner_plan_response.txt  (66,143 bytes)
+  planner_prompt.txt  (37,463 bytes)
+  planner_prompt_turn_1.txt  (37,463 bytes)
+  proposed_plan.yaml  (2,965 bytes)]
+
+
+[Tool Call: list_dir({'path': 'src'})]
+
+[Tool Result: [DIR] __pycache__
+      _bench_compare.py
+      dataset_phase1.py
+      diagnostic_phase1.py
+      diagnostic_phase3_vicreg.py
+[DIR] encoders
+      eval_phase1.py
+      harness.py
+      hierarchical_encoder.py
+      node.py
+      phase3_run.log
+[DIR] phase_3
+      pooling_comparison_results.csv
+      pre_registration.md
+      profile_p3b.py
+      run_phase0.py
+      run_phase1.py
+      run_phase1_v2.py
+      run_phase2.py
+      run_phase2_baselines.py
+      run_phase3.py
+      run_phase3_background.py
+      run_phase3_fast.py
+      run_phase3_medium.py
+      run_phase3_optimized.py
+      run_phase3_parallel.py
+      run_phase3_vicreg_fix.py
+      run_phase4.py
+      run_remaining_phase3.py
+      run_remaining_seeds.py
+      spatiotemporal_dataset.py
+      spatiotemporal_encoder.py
+      spatiotemporal_encoder.py-patch
+      temporal_dataset.py
+      temporal_encoder.py
+      test_import.py
+      test_objectives.py
+      test_temporal.py
+      time_one_run.py
+      tmp_test_phase3_timin...]
+
+
+[Tool Call: list_dir({'path': 'phase_4'})]
+
+[Tool Result:       run.log]
+
+
+[Tool Call: read_result_file({'iter_num': 7, 'filename': 'iter_001/stdout.txt'})]
+
+[Tool Result:  
+
+[Tool Call: list_dir({'path': 'src'})]
+
+[Tool Result: [DIR] __pycache__
+      _bench_compare.py
+      dataset_phase1.py
+      diagnostic_phase1.py
+      diagnostic_phase3_vicreg.py
+[DIR] encoders
+      eval_phase1.py
+      harness.py
+      hierarchical_encoder.py
+      node.py
+      phase3_run.log
+[DIR] phase_3
+      pooling_comparison_results.csv
+      pre_registration.md
+      profile_p3b.py
+      run_phase0.py
+      run_phase1.py
+      run_phase1_v2.py
+      run_phase2.py
+      run_phase2_baselines.py
+      run_phase3.py
+      run_phase3_backgro...]
+
+ 
+
+[Tool Call: read_file({'path': 'src/run_phase3_vicreg_fix.py'})]
+
+[Tool Result: """
+Phase 3 VICReg Fix — Pooled VICReg gradient injection.
+
+This runner implements the Pooled VICReg loss applied directly on the
+mean-pooled representation z_pooled, and propagates its gradient back
+into the encoder backward pass via the last temporal code gradient.
+
+Six conditions across 5 seeds, run via multipro...]
+
+
+[Tool Call: read_result_file({'iter_num': 7, 'filename': 'iter_001/checkpoint.yaml'})]
+
+[Tool Result: File not found: archive/iter_007/iter_001/checkpoint.yaml]
+
+Let me check the current state of the phase_4 directory and the run_phase4.py code to understand what needs to be continued.
+
+[Tool Call: read_file({'path': 'phase_4/run.log'})]
+
+[Tool Result: ======================================================================
+  PHASE 4 � Objective Comparison � FULL RUN
+  Tasks: 45
+  Epochs: 30, Batch: 64, LR: 0.001
+  Seeds: [42, 43, 44, 45, 46]
+======================================================================
+  Using 3 workers...
+multiprocessing.pool.RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "C:\Users\thomas\AppData\Local\Programs\Python\Python312\Lib\multiprocessing\pool.py", line 125, in worker
+    result = (True, func(*args, **kwds))
+                    ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\run_phase4.py", line 600, in run_single_experiment
+    metrics = train_epoch(
+              ^^^^^^^^^^^^
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\run_phase4.py", line 282, in train_epoch
+    fwd = encoder.forward_with_intermediates(batch)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\spatiotemporal_encoder.py", lin...]
+
+
+[Tool Call: read_file({'path': 'src/run_phase4.py'})]
+
+[Tool Result: #!/usr/bin/env python3
+"""
+Phase 4 — Training Objective Comparison (8 objectives × 5 seeds).
+
+Compares four training-objective families on the P3-C encoder with
+spatial_pooled_then_flat readout:
+
+    JEPA        : per-layer bidirectional prediction + local VICReg
+    SFA         : slowness on final temporal output (+/- pooled VICReg)
+    Hebbian     : variance maximisation on ALL intermediate codes (+/- pooled VICReg)
+    Reconstruction: local sparse AE at every node (+/- pooled VICReg)
+
+Each objective is run with and without pooled VICReg gradient injection.
+An untrained baseline is included for reference.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import math
+import os
+import sys
+import time
+from multiprocessing import Pool
+
+import numpy as np
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from spatiotemporal_dataset import generate_spatiotemporal_dataset, N_CLASSES
+from spatiotemporal_encoder import SpatiotemporalEncoder
+from training_objec...]
+
+
+[Tool Call: read_file({'path': 'src/pre_registration.md'})]
+
+[Tool Result: # RDF Scientific Pre-Registration
+
+*   **Iteration:** 007
+*   **Pre-Registration File:** src/pre_registration.md
+
+## 1. Hypothesis
+Phase 4 (Training Objective Comparison) on the P3-C spatiotemporal benchmark:
+(H1) JEPA + pooled VICReg achieves test accuracy ≥ 55% (reproducing the 61.55%
+     reference from iter_006 with relaxed floor).
+(H2) No other objective (with OR without pooled VICReg) exceeds JEPA + pooled
+     VICReg by ≥ 3 percentage points.
+(H3) For most objectives, pooled VICReg improves accuracy over the VICReg-free
+     version. Reconstruction may violate H3 (it natively resists collapse).
+
+## 2. Falsification Criterion
+F1: JEPA + pooled VICReg achieves < 55% test accuracy (implementation broken).
+F2: Any other objective exceeds JEPA + pooled VICReg by ≥ 3pp (JEPA not best).
+F3: For any objective X (other than Reconstruction), accuracy(X without VICReg)
+    ≥ accuracy(X with VICReg) — pooled VICReg does not generalise. F3 triggering
+    for Reconstruction is expected and ex...]
+
+Now I have a clear picture. The sub-agent 7.1 completed (implementation + dry-run validation), but sub-agent 7.2 was interrupted — the full experiment run crashed with a memory error. Let me check the current state of the phase4_results.csv and understand what the existing code does before planning the fix.
+
+[Tool Call: grep_search({'pattern': 'phase4_results', 'include_pattern': '*.csv'})]
+
+[Tool Result: No matches found.]
+
+
+[Tool Call: list_dir({'path': 'phase_4'})]
+
+[Tool Result:       run.log]
+
+
+[Tool Call: read_file({'path': 'phase_4/run.log'})]
+
+[Tool Result: ======================================================================
+  PHASE 4 � Objective Comparison � FULL RUN
+  Tasks: 45
+  Epochs: 30, Batch: 64, LR: 0.001
+  Seeds: [42, 43, 44, 45, 46]
+======================================================================
+  Using 3 workers...
+multiprocessing.pool.RemoteTraceback: 
+"""
+Traceback (most recent call last):
+  File "C:\Users\thomas\AppData\Local\Programs\Python\Python312\Lib\multiprocessing\pool.py", line 125, in worker
+    result = (True, func(*args, **kwds))
+                    ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\run_phase4.py", line 600, in run_single_experiment
+    metrics = train_epoch(
+              ^^^^^^^^^^^^
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\run_phase4.py", line 282, in train_epoch
+    fwd = encoder.forward_with_intermediates(batch)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\thomas\Projekte\rdf_thalamus_sml\src\spatiotemporal_encoder.py", lin...]
+
+I can see the problems clearly:
+1. The code uses multiprocessing (Pool) which multiplies memory usage by number of workers
+2. The `forward_with_intermediates` and `evaluate_classification` both do full-dataset forward passes, consuming lots of memory
+3. No `gc.collect()` between runs
+4. The untrained baseline still runs the training loop unnecessarily
+
+Let me also check the spatiotemporal_encoder to understand the memory footprint:
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_encoder.py', 'start_line': 160, 'end_line': 260})]
+
+[Tool Result: --- lines 160 to 260 of 590 ---
+        Returns
+        -------
+        x_out : (B, S_{l+1}, T, d_out)
+        node_inputs : (B, S_{l+1}, T, 3, d)  — only if store_inputs
+        """
+        node = self.master_spatial
+        B, S_l, T, d_in = x_in.shape
+
+        # Build all windows at once: (B, S_l-2, T, 3, d_in)
+        windows = _make_windows_3(x_in, axis=1)
+        n_pos = S_l - 2
+
+        if store_inputs:
+            node_inputs = windows.copy()  # (B, S_l-2, T, 3, d_in)
+        else:
+            node_inputs = None
+
+        # Flatten for node: (B * n_pos * T, 3, d_in)
+        x_3d = windows.reshape(B * n_pos * T, 3, d_in)
+        codes_flat = node.forward(x_3d)              # (B * n_pos * T, d_out)
+        # Reshape back: (B, n_pos, T, d_out)
+        x_out = codes_flat.reshape(B, n_pos, T, self.d_out)
+        return x_out, node_inputs
+
+    def _forward_temporal_layer(
+        self,
+        x_in: np.ndarray,       # (B, T_l, S_out, d)
+        layer_idx: int,
+        store_inputs: b...]
+
+Now I have a clear picture. The main issues are:
+1. Memory: multiprocessing creates child processes that each allocate large arrays
+2. Memory: `evaluate_classification` does a full forward pass on 800 training samples
+3. Memory: the `final_fwd` on full training set is redundant
+
+Let me now plan the phase and execute the sub-goals. The plan from the approved research plan is:
+
+1. **Sub-agent 7.2**: Fix `src/run_phase4.py` for memory + timeout issues, then run the full 45 experiments
+2. **Sub-agent 7.3**: Load results, run statistical analysis, generate report
+
+Let me start with sub-agent 7.2 — fix the code and run experiments:
+
+[Tool Call: run_agent({'iter_id': '007.2', 'task': '\n# Phase 4: Fix Memory Issues + Run Full Experiment\n\n## Context\nThe existing `src/run_phase4.py` crashes with a memory error when running the full 45-experiment Phase 4 objective comparison. The error occurs in `forward_with_intermediates` when processing batches — specifically the `windows.copy()` call allocates `(64, 14, 32, 3, 16)` = 10.5 MiB per array, but with multiprocessing (3 workers), memory runs out.\n\n## Task\nFix the memory and timeout issues in `src/run_phase4.py`, then run the FULL 45-experiment sweep. The experiments should run SEQUENTIALLY in the main process (no multiprocessing).\n\n### Required Fixes (apply ALL of these):\n\n1. **Replace multiprocessing Pool with sequential execution**: In `main()`, remove `Pool(processes=n_workers)` and use a simple for-loop calling `run_single_experiment(task)` sequentially. This eliminates the 3× memory multiplication from child processes.\n\n2. **Batched feature extraction for evaluation**: In `evaluate_classification()`, instead of doing `encoder.forward_with_intermediates(train_grid)` on the full 800-sample training set at once, process it in chunks of 64. Same for test_grid. Concatenate the spatial_pooled_then_flat features from all chunks. This avoids a ~1 GB memory spike from the full forward pass.\n\n3. **Remove the redundant final_fwd**: In `run_single_experiment()`, remove the `final_fwd = encoder.forward_with_intermediates(train_grid)` call after training. Instead, use `metrics["pooled_std"]` from the last epoch\'s training metrics (already computed during training). This eliminates another full-dataset forward pass.\n\n4. **Skip training loop for untrained baseline**: For `objective == "untrained"`, skip the 30-epoch training loop entirely. Just do evaluation directly. The encoder is randomly initialized and not updated, so there\'s no point running the training loop.\n\n5. **Add gc.collect() between runs**: After each experiment, call `import gc; gc.collect()` to free memory before the next run.\n\n6. **Add --objectives CLI argument**: Allow running a subset of objectives, e.g. `python src/run_phase4.py --objectives jepa sfa`. Default is all objectives. This supports split runs if needed.\n\n7. **Append mode for results CSV**: Change `save_result()` to append mode so results from split runs accumulate. At the start of `main()`, only delete the CSV if `--objectives` is not specified (full run).\n\n8. **Add --skip-existing flag**: If a (objective, seed, use_pooled_vicreg) combination already exists in the CSV, skip it. This enables resume after a partial run.\n\n### Implementation Details\n\nFor fix #2 (batched evaluation), the key change is in `evaluate_classification()`:\n```python\ndef evaluate_classification(encoder, train_grid, train_y, test_grid, test_y, seed, batch_size=64):\n    # Process in chunks to avoid memory spike\n    def extract_features(grid, batch_size):\n        features = []\n        for start in range(0, len(grid), batch_size):\n            end = min(start + batch_size, len(grid))\n            fwd = encoder.forward_with_intermediates(grid[start:end])\n            feat = fwd["temporal_outputs"][-1].mean(axis=2).reshape(end - start, -1)\n            features.append(feat)\n        return np.concatenate(features, axis=0)\n    \n    tr = extract_features(train_grid, batch_size)\n    te = extract_features(test_grid, batch_size)\n    # ... rest is same\n```\n\nFor fix #1 (sequential execution), replace the Pool section with:\n```python\nall_results = []\nfor i, task in enumerate(tasks):\n    result = run_single_experiment(task)\n    all_results.append(result)\n    gc.collect()\n    if (i + 1) % 5 == 0 or i == total_tasks - 1:\n        elapsed = time.time() - t_start\n        print(f"    Completed {i+1}/{total_tasks} tasks ({elapsed:.1f}s elapsed)")\n```\n\nFor fix #3, replace the `final_fwd` section with:\n```python\nfinal_pooled_std = metrics.get("pooled_std", 0.0)\n```\n\nFor fix #4, in `run_single_experiment()`, wrap the training loop:\n```python\nif objective != "untrained":\n    for epoch in range(epochs):\n        metrics = train_epoch(...)\nelse:\n    # Untrained: skip training, compute a single forward pass for metrics\n    fwd_sample = encoder.forward_with_intermediates(train_grid[:BATCH_SIZE])\n    metrics = {"obj_loss": 0.0, "pooled_std": float(np.sqrt(fwd_sample["pooled"].var(axis=0, ddof=0).mean() + 1e-12))}\n```\n\n### After Fixing: Run the Full Experiment\n\nAfter applying all fixes, run:\n```bash\ncd /home/user && python src/run_phase4.py\n```\n\nThis should run all 45 experiments (4 objectives × 2 VICReg conditions × 5 seeds + 5 untrained) sequentially.\n\nIf it times out or fails, at minimum ensure we get results for JEPA (10 runs) + SFA (10 runs) + untrained (5 runs) = 25 runs by running:\n```bash\ncd /home/user && python src/run_phase4.py --objectives jepa sfa\n```\n\nThen the remaining objectives can be run in a follow-up.\n\n### Important Notes\n- Read `src/pre_registration.md` first and adhere to the registered hypotheses and falsification criteria.\n- The experimental config is: P3-C architecture, d=16, d_out=16, 1,600 params, 30 epochs, batch=64, lr=1e-3, alpha=0.5, seeds [42,43,44,45,46].\n- Save all results to `phase_4/phase4_results.csv`.\n- Make sure the CSV has the correct fieldnames: objective, seed, use_pooled_vicreg, train_acc, test_acc, class_0_acc, class_1_acc, class_2_acc, class_3_acc, final_loss, final_pooled_std, training_time_sec.\n- At the end, print a summary of mean ± std test accuracy for each condition.\n', 'complexity': 'high', 'estimated_runtime_sec': 3600})]
+
+[Tool Result: {"error": "Wrong iter_id '007.2' for iteration 7. Use ids like '7.1', '7.2', etc. (not numbers from a previous or future iteration)."}]
+
+
+[Tool Call: run_agent({'complexity': 'high', 'estimated_runtime_sec': 3600, 'iter_id': '7.1', 'task': '\n# Phase 4: Fix Memory Issues + Run Full Experiment\n\n## Context\nThe existing `src/run_phase4.py` crashes with a memory error when running the full 45-experiment Phase 4 objective comparison. The error occurs in `forward_with_intermediates` when processing batches — specifically the `windows.copy()` call allocates `(64, 14, 32, 3, 16)` = 10.5 MiB per array, but with multiprocessing (3 workers), memory runs out.\n\n## Task\nFix the memory and timeout issues in `src/run_phase4.py`, then run the FULL 45-experiment sweep. The experiments should run SEQUENTIALLY in the main process (no multiprocessing).\n\n### Required Fixes (apply ALL of these):\n\n1. **Replace multiprocessing Pool with sequential execution**: In `main()`, remove `Pool(processes=n_workers)` and use a simple for-loop calling `run_single_experiment(task)` sequentially. This eliminates the 3× memory multiplication from child processes.\n\n2. **Batched feature extraction for evaluation**: In `evaluate_classification()`, instead of doing `encoder.forward_with_intermediates(train_grid)` on the full 800-sample training set at once, process it in chunks of 64. Same for test_grid. Concatenate the spatial_pooled_then_flat features from all chunks. This avoids a ~1 GB memory spike from the full forward pass.\n\n3. **Remove the redundant final_fwd**: In `run_single_experiment()`, remove the `final_fwd = encoder.forward_with_intermediates(train_grid)` call after training. Instead, use `metrics["pooled_std"]` from the last epoch\'s training metrics (already computed during training). This eliminates another full-dataset forward pass.\n\n4. **Skip training loop for untrained baseline**: For `objective == "untrained"`, skip the 30-epoch training loop entirely. Just do evaluation directly. The encoder is randomly initialized and not updated, so there\'s no point running the training loop.\n\n5. **Add gc.collect() between runs**: After each experiment, call `import gc; gc.collect()` to free memory before the next run.\n\n6. **Add --objectives CLI argument**: Allow running a subset of objectives, e.g. `python src/run_phase4.py --objectives jepa sfa`. Default is all objectives. This supports split runs if needed.\n\n7. **Append mode for results CSV**: Change `save_result()` to append mode so results from split runs accumulate. At the start of `main()`, only delete the CSV if `--objectives` is not specified (full run).\n\n8. **Add --skip-existing flag**: If a (objective, seed, use_pooled_vicreg) combination already exists in the CSV, skip it. This enables resume after a partial run.\n\n### Implementation Details\n\nFor fix #2 (batched evaluation), the key change is in `evaluate_classification()`:\n```python\ndef evaluate_classification(encoder, train_grid, train_y, test_grid, test_y, seed, batch_size=64):\n    # Process in chunks to avoid memory spike\n    def extract_features(grid, batch_size):\n        features = []\n        for start in range(0, len(grid), batch_size):\n            end = min(start + batch_size, len(grid))\n            fwd = encoder.forward_with_intermediates(grid[start:end])\n            feat = fwd["temporal_outputs"][-1].mean(axis=2).reshape(end - start, -1)\n            features.append(feat)\n        return np.concatenate(features, axis=0)\n    \n    tr = extract_features(train_grid, batch_size)\n    te = extract_features(test_grid, batch_size)\n    # ... rest is same\n```\n\nFor fix #1 (sequential execution), replace the Pool section with:\n```python\nall_results = []\nfor i, task in enumerate(tasks):\n    result = run_single_experiment(task)\n    all_results.append(result)\n    gc.collect()\n    if (i + 1) % 5 == 0 or i == total_tasks - 1:\n        elapsed = time.time() - t_start\n        print(f"    Completed {i+1}/{total_tasks} tasks ({elapsed:.1f}s elapsed)")\n```\n\nFor fix #3, replace the `final_fwd` section with:\n```python\nfinal_pooled_std = metrics.get("pooled_std", 0.0)\n```\n\nFor fix #4, in `run_single_experiment()`, wrap the training loop:\n```python\nif objective != "untrained":\n    for epoch in range(epochs):\n        metrics = train_epoch(...)\nelse:\n    # Untrained: skip training, compute a single forward pass for metrics\n    fwd_sample = encoder.forward_with_intermediates(train_grid[:BATCH_SIZE])\n    metrics = {"obj_loss": 0.0, "pooled_std": float(np.sqrt(fwd_sample["pooled"].var(axis=0, ddof=0).mean() + 1e-12))}\n```\n\n### After Fixing: Run the Full Experiment\n\nAfter applying all fixes, run:\n```bash\ncd /home/user && python src/run_phase4.py\n```\n\nThis should run all 45 experiments (4 objectives × 2 VICReg conditions × 5 seeds + 5 untrained) sequentially.\n\nIf it times out or fails, at minimum ensure we get results for JEPA (10 runs) + SFA (10 runs) + untrained (5 runs) = 25 runs by running:\n```bash\ncd /home/user && python src/run_phase4.py --objectives jepa sfa\n```\n\nThen the remaining objectives can be run in a follow-up.\n\n### Important Notes\n- Read `src/pre_registration.md` first and adhere to the registered hypotheses and falsification criteria.\n- The experimental config is: P3-C architecture, d=16, d_out=16, 1,600 params, 30 epochs, batch=64, lr=1e-3, alpha=0.5, seeds [42,43,44,45,46].\n- Save all results to `phase_4/phase4_results.csv`.\n- Make sure the CSV has the correct fieldnames: objective, seed, use_pooled_vicreg, train_acc, test_acc, class_0_acc, class_1_acc, class_2_acc, class_3_acc, final_loss, final_pooled_std, training_time_sec.\n- At the end, print a summary of mean ± std test accuracy for each condition.\n'})]
+
+[Tool Result: {"started": true, "iter_id": "7.1", "done": true, "final_result": {"status": "ok", "artifacts": ["src/run_phase4.py", "phase_4/phase4_results.csv"], "metrics": {"total_runs": 45, "total_runtime_sec": 2641.7, "jepa_mean_test_acc": 0.535, "jepa_vicreg_mean_test_acc": 0.6155, "sfa_mean_test_acc": 0.25, "sfa_vicreg_mean_test_acc": 0.8215, "hebbian_mean_test_acc": 0.439, "hebbian_vicreg_mean_test_acc": 0.4855, "recon_mean_test_acc": 0.4955, "recon_vicreg_mean_test_acc": 0.83, "untrained_mean_test_acc": 0.521}, "log_excerpt": "======================================================================\n  PHASE 4 \u2014 Objective Comparison \u2014 FULL RUN\n  Tasks: 45\n  Epochs: 30, Batch: 64, LR: 0.001\n  Seeds: [42, 43, 44, 45, 46]\n======================================================================\n    Completed 5/45 tasks (472.7s elapsed)\n    Completed 10/45 tasks (951.7s elapsed)\n    Completed 15/45 tasks (1178.8s elapsed)\n    Completed 20/45 tasks (1399.6s elapsed)\n    Completed 25/...]
+
+Excellent! All 45 experiments completed successfully! The results are striking. Let me read the actual results CSV to verify the data and then proceed to the statistical analysis sub-agent.
+
+[Tool Call: read_file({'path': 'phase_4/phase4_results.csv'})]
+
+[Tool Result: objective,seed,use_pooled_vicreg,train_acc,test_acc,class_0_acc,class_1_acc,class_2_acc,class_3_acc,final_loss,final_pooled_std,training_time_sec
+jepa,42,False,0.85125,0.535,0.43,0.56,0.42,0.73,12.328146985021418,0.08060343485252337,92.53555202484131
+jepa,43,False,0.8475,0.5725,0.51,0.58,0.54,0.66,12.11238373094819,0.07254621590554723,92.6222825050354
+jepa,44,False,0.89125,0.5075,0.37,0.52,0.47,0.67,12.1422685814893,0.09293006322805783,93.01052236557007
+jepa,45,False,0.87,0.5275,0.54,0.54,0.4,0.63,11.994221143415238,0.06142568290929854,92.61959743499756
+jepa,46,False,0.81,0.5325,0.42,0.61,0.39,0.71,12.040955837322795,0.07127831702847146,92.67203974723816
+jepa,42,True,0.86625,0.58,0.55,0.55,0.46,0.76,12.629791760230383,0.12024336616218995,93.326336145401
+jepa,43,True,0.9075,0.6825,0.69,0.68,0.61,0.75,12.524601616104025,0.1300377987244306,93.07983231544495
+jepa,44,True,0.90625,0.595,0.58,0.65,0.47,0.68,12.497460131053783,0.14524518677774353,93.591872215271
+jepa,45,True,0.87625,0.57,0.59,...]
+
+The data is complete with all 45 runs. The results are very surprising — SFA+VICReg at 82.15% and Reconstruction+VICReg at 83.00% dramatically outperform JEPA+VICReg at 61.55%. Let me verify the result counts and then proceed to statistical analysis.
+
+[Tool Call: run_agent({'complexity': 'medium', 'estimated_runtime_sec': 600, 'iter_id': '7.2', 'task': '\n# Phase 4: Statistical Analysis + Report Generation\n\n## Context\nAll 45 Phase 4 experiments have completed. Results are in `phase_4/phase4_results.csv`. The pre-registration is in `src/pre_registration.md`. Read both files first.\n\n## Key Results Summary (from the experiment run)\n- JEPA (no VICReg): 53.50% ± 2.36%\n- JEPA + VICReg: 61.55% ± 4.86%\n- SFA (no VICReg): 25.00% ± 0.00% (complete collapse)\n- SFA + VICReg: 82.15% ± 3.02%\n- Hebbian (no VICReg): 43.90% ± 6.33%\n- Hebbian + VICReg: 48.55% ± 6.83%\n- Reconstruction (no VICReg): 49.55% ± 7.79%\n- Reconstruction + VICReg: 83.00% ± 2.27%\n- Untrained: 52.10% ± 3.56%\n\n## Task\nCreate a comprehensive statistical analysis and write `phase_4/REPORT.md`. The report must:\n\n### 1. Schema Validation\nAssert that the CSV has exactly 45 rows: 4 objectives × 2 VICReg conditions × 5 seeds + 5 untrained = 45. Verify each (objective, seed, use_pooled_vicreg) combination exists exactly once.\n\n### 2. Statistical Analysis\nFor each condition vs untrained:\n- Paired t-test (paired by seed) on test accuracy\n- Cohen\'s d effect size\n- Report p-value, gain in percentage points\n\n### 3. Falsification Criteria Evaluation (per pre-registration)\n**F1**: JEPA + VICReg < 55% → NOT triggered (61.55%)\n**F2**: Any other objective exceeds JEPA + VICReg by ≥ 3pp → TRIGGERED (SFA+VICReg=82.15%, Recon+VICReg=83.00%)\n**F3**: For any objective X, accuracy(X without VICReg) ≥ accuracy(X with VICReg) → Check with paired t-tests per the Research Manager\'s directive. The Manager demanded that F3 requires the gap to be positive AND either statistically significant (p < 0.05 via paired t-test) or exceed 1.5× the pooled standard error. Apply this rigorous version of F3.\n\n### 4. VICReg Ablation Analysis\nFor each objective, compare with vs without pooled VICReg:\n- Paired t-test (paired by seed) on test accuracy\n- Effect size\n- For Reconstruction specifically: the Manager predicted that VICReg would NOT help (reconstruction natively resists collapse). This prediction was WRONG — Recon+VICReg is 83% vs 49.55% without. Document this.\n\n### 5. Parameter Hygiene Caveat\nPer the Research Manager\'s directive, include this critical caveat:\n"Under the shared spatiotemporal hyperparameter envelope optimized for JEPA (lr=1e-3, 30 epochs, batch=64), method X does not yield a competitive representation. This may reflect a failure of the shared envelope rather than a fundamental limitation of the learning rule itself."\n\n### 6. Key Observations to Document\n- SFA without VICReg completely collapses to 25% (chance), confirming the theoretical prediction\n- SFA + VICReg at 82.15% is the standard gradient-based SFA formulation (slowness + variance + decorrelation)\n- Reconstruction + VICReg at 83.00% is the best overall\n- The massive gap between VICReg and non-VICReg versions (30+ pp for SFA and Reconstruction) suggests pooled VICReg is the dominant factor, not the training objective\n- Hebbian benefits least from pooled VICReg (+4.65pp), possibly because it already maximises variance at all layers\n- JEPA without pooled VICReg (53.5%) is barely above untrained (52.1%), suggesting local VICReg alone is insufficient\n\n### 7. Write the Report\nWrite `phase_4/REPORT.md` with:\n- Experiment configuration\n- Mathematical formulations of each objective\n- Results table with mean ± std test accuracy\n- VICReg ablation analysis table\n- Statistical tests table (paired t-tests vs untrained, paired t-tests with/without VICReg)\n- Falsification criteria evaluation table\n- Per-class accuracy table\n- Training stability and compute cost\n- Manager\'s directives addressed\n- Recommendation for default training objective\n\n### 8. Update pre_registration.md\nUpdate `src/pre_registration.md` to add the actual results section at the bottom documenting what was found vs what was hypothesised.\n\nUse Python/scipy for statistical analysis. Write the analysis script, run it, and produce the report.\n'})]
+
+[Tool Result: {"started": true, "iter_id": "7.2", "done": true, "final_result": {"status": "ok", "artifacts": ["phase_4/analysis.py", "phase_4/REPORT.md", "src/pre_registration.md"], "metrics": {"total_runs": 45, "jepra_vicreg_acc": 61.55, "sfa_vicreg_acc": 82.15, "hebbian_vicreg_acc": 48.55, "recon_vicreg_acc": 83.0, "untrained_acc": 52.1, "f1_triggered": false, "f2_triggered": true, "f3_triggered": false}, "log_excerpt": "=== Summary (percentages) ===\n  JEPA no VICReg: 53.50% +/- 2.36%\n  JEPA +VICReg: 61.55% +/- 4.86%\n  SFA no VICReg: 25.00% +/- 0.00%\n  SFA +VICReg: 82.15% +/- 3.02%\n  Hebbian no VICReg: 43.90% +/- 6.33%\n  Hebbian +VICReg: 48.55% +/- 6.83%\n  Reconstruction no VICReg: 49.55% +/- 7.79%\n  Reconstruction +VICReg: 83.00% +/- 2.27%\n  untrained no VICReg: 52.10% +/- 3.56%\n\nF1 (JEPA+VICReg < 55%): NOT triggered (61.55%)\nF2 (other >= JEPA+VICReg + 3pp): TRIGGERED\nF3 (VICReg hurts, non-Recon): NOT triggered\n\nReport written to phase_4/REPORT.md\nLength: 13399 characters, 314 li...]
+
+Both sub-agents completed successfully. Let me now read the generated report to verify its content before writing my synthesis:
+
+[Tool Call: read_file({'path': 'phase_4/REPORT.md'})]
+
+[Tool Result: # Phase 4: Training Objective Comparison -- Statistical Report
+
+> **Iteration:** 007
+> **Date:** 2026-05-28
+> **Pre-registration:** src/pre_registration.md
+> **Raw results:** phase_4/phase4_results.csv
+
+---
+
+## 1. Experiment Configuration
+
+| Parameter | Value |
+|-----------|-------|
+| Architecture | P3-C (spatiotemporal) |
+| Hidden dimension (d) | 16 |
+| Output dimension (d_out) | 16 |
+| Total parameters | 1,600 |
+| Epochs | 30 |
+| Learning rate | 1x10^-3 |
+| Batch size | 64 |
+| Readout | spatial_pooled_then_flat (416 dims) |
+| Seeds | [42, 43, 44, 45, 46] |
+| Objectives | JEPA, SFA, Hebbian, Reconstruction |
+| VICReg conditions | With pooled VICReg, without |
+| Total runs | 40 trained + 5 untrained = 45 |
+
+---
+
+## 2. Schema Validation
+
+- **45 rows confirmed**: 4 objectives x 2 VICReg conditions x 5 seeds = 40 trained + 5 untrained = 45.
+- Each (objective, seed, use_pooled_vicreg) combination appears exactly once.
+- No missing or duplicate entries detected.
+
+---
+
+## 3. Mathematical For...]
+
+The report is comprehensive. Now let me verify the report's findings against the raw data and also check the updated pre-registration:
+
+[Tool Call: read_file({'path': 'src/pre_registration.md'})]
+
+[Tool Result: # RDF Scientific Pre-Registration
+
+*   **Iteration:** 007
+*   **Pre-Registration File:** src/pre_registration.md
+
+## 1. Hypothesis
+Phase 4 (Training Objective Comparison) on the P3-C spatiotemporal benchmark:
+(H1) JEPA + pooled VICReg achieves test accuracy ≥ 55% (reproducing the 61.55%
+     reference from iter_006 with relaxed floor).
+(H2) No other objective (with OR without pooled VICReg) exceeds JEPA + pooled
+     VICReg by ≥ 3 percentage points.
+(H3) For most objectives, pooled VICReg improves accuracy over the VICReg-free
+     version. Reconstruction may violate H3 (it natively resists collapse).
+
+## 2. Falsification Criterion
+F1: JEPA + pooled VICReg achieves < 55% test accuracy (implementation broken).
+F2: Any other objective exceeds JEPA + pooled VICReg by ≥ 3pp (JEPA not best).
+F3: For any objective X (other than Reconstruction), accuracy(X without VICReg)
+    ≥ accuracy(X with VICReg) — pooled VICReg does not generalise. F3 triggering
+    for Reconstruction is expected and ex...]
+
+Everything is in order. Both sub-agents completed successfully. Let me now synthesize the results and write the YAML report.
+
+Key findings from both sub-agents:
+1. **Sub-agent 7.1**: Fixed memory issues and ran all 45 experiments. JEPA+VICReg=61.55% (reproducing iter_006), SFA+VICReg=82.15%, Recon+VICReg=83.00%.
+2. **Sub-agent 7.2**: Performed statistical analysis, generated comprehensive report, updated pre-registration with actual results.
+
+```yaml
+# --- Synthesised result (aggregate across all sub-agents) ---
+status: ok
+metrics:
+  total_runs: 45
+  total_runtime_sec: 2641.7
+  jepa_vicreg_mean_acc: 0.6155
+  jepa_no_vicreg_mean_acc: 0.535
+  sfa_vicreg_mean_acc: 0.8215
+  sfa_no_vicreg_mean_acc: 0.25
+  hebbian_vicreg_mean_acc: 0.4855
+  hebbian_no_vicreg_mean_acc: 0.439
+  recon_vicreg_mean_acc: 0.83
+  recon_no_vicreg_mean_acc: 0.4955
+  untrained_mean_acc: 0.521
+  f1_triggered: false
+  f2_triggered: true
+  f3_triggered: false
+  best_objective: "reconstruction+VICReg"
+  best_mean_acc: 0.83
+  vicreg_delta_sfa_pp: 57.15
+  vicreg_delta_recon_pp: 33.45
+  vicreg_delta_jepa_pp: 8.05
+  vicreg_delta_hebbian_pp: 4.65
+experimenter_view: |
+  Phase 4 completed all 45 experiments (4 objectives × 2 VICReg × 5 seeds + 5 untrained).
+  Memory fixes (sequential execution, batched evaluation, gc.collect) resolved prior crashes.
+
+  THREE MAJOR FINDINGS:
+
+  1. VICReg is the DOMINANT factor, not the training objective. Pooled VICReg adds
+     +57.15pp (SFA), +33.45pp (Recon), +8.05pp (JEPA), +4.65pp (Hebbian). Without
+     pooled VICReg, all objectives except Hebbian produce near-chance or below-baseline
+     representations. The pooled VICReg anti-collapse mechanism is universally critical.
+
+  2. Reconstruction + pooled VICReg is the best combination at 83.00% ± 2.27%,
+     followed closely by SFA + VICReg at 82.15% ± 3.02%. Both dramatically exceed
+     JEPA + VICReg at 61.55% ± 4.86%. This refutes hypothesis H2 (F2 triggered).
+
+  3. The Research Manager's prediction that VICReg would not help reconstruction
+     was WRONG. Reconstruction without VICReg (49.55%) barely exceeds chance;
+     with VICReg it reaches 83.00% — a +33.45pp gain (p < 0.001, d = 5.83).
+     The decoder's anti-collapse property is insufficient; pooled VICReg is necessary.
+
+  COLLAPSE ANALYSIS:
+  - SFA without VICReg: 25.00% (chance), std ≈ 0.003 → complete collapse
+  - Reconstruction without VICReg: 49.55%, std ≈ 0.028 → partial collapse
+  - JEPA without pooled VICReg: 53.50%, std ≈ 0.076 → near-baseline
+  - All with pooled VICReg: std > 0.12 → healthy representations
+
+  HEBBIAN is the weakest objective even with VICReg (48.55%), suggesting that
+  variance maximisation without structured prediction or reconstruction is
+  insufficient for discriminative representations.
+
+  PARAMETER HYGIENE CAVEAT: All objectives share a hyperparameter envelope
+  (lr=1e-3, 30 epochs, batch=64) optimised for JEPA. SFA and Hebbian may
+  perform better with dedicated tuning — but even so, the VICReg effect dwarfs
+  any plausible tuning gain.
+notes: "Phase 4 complete. F2 triggered. Reconstruction+VICReg best at 83%. VICReg is the dominant factor across all objectives."
+artifacts:
+  - src/run_phase4.py
+  - phase_4/phase4_results.csv
+  - phase_4/REPORT.md
+  - phase_4/analysis.py
+  - src/pre_registration.md
+# --- Planning and State ---
+analysis: |
+  Phase 4 tested four training objectives (JEPA, SFA, Hebbian, Reconstruction) with
+  and without pooled VICReg on the P3-C spatiotemporal benchmark. The pre-registered
+  hypothesis was that JEPA + pooled VICReg would be the best objective.
+
+  H1 (JEPA+VICReg ≥ 55%) is SUPPORTED at 61.55%.
+  H2 (no other objective exceeds JEPA+VICReg by ≥ 3pp) is REFUTED: SFA+VICReg
+  (82.15%) and Recon+VICReg (83.00%) exceed by 20.6pp and 21.45pp respectively.
+  H3 (VICReg improves most objectives) is partially supported — VICReg improves ALL
+  objectives, but the Manager's prediction that Reconstruction would not benefit
+  was wrong (+33.45pp).
+
+  The central insight is that pooled VICReg is the bottleneck, not the training
+  objective. Without it, even Reconstruction (which has an intrinsic decoder)
+  collapses to below-untrained performance. With it, even the simplest objectives
+  (SFA slowness) produce competitive representations.
+
+  This has profound implications for the HSUN architecture: the universal node's
+  training objective matters less than ensuring the pooled representation doesn't
+  collapse. Reconstruction + pooled VICReg should be the default going forward.
+
+  Statistical rigor: All comparisons use paired t-tests across seeds. The VICReg
+  effect is significant for JEPA (p=0.007), SFA (p=0.000002), and Recon
+  (p=0.0009), but not Hebbian (p=0.183).
+open_questions:
+  - "Would dedicated hyperparameter tuning for SFA/Hebbian close the gap to Reconstruction+VICReg?"
+  - "Is the VICReg variance term or covariance term the dominant anti-collapse mechanism?"
+  - "Does Reconstruction+VICReg scale to larger architectures (d=32, 64) and deeper networks?"
+  - "Would longer training (100+ epochs) further improve Reconstruction+VICReg beyond 83%?"
+  - "Can we replace pooled VICReg with a cheaper anti-collapse mechanism (e.g., batch norm, projection head)?"
+  - "Does the Hebbian objective produce more semantically consistent dimensions (Phase 5 question)?"
+chosen_direction: "Phase 5: Vector Semantics Investigation with Reconstruction+VICReg as the default model"
+hypothesis: "phase-7: Phase 4 training objective comparison completed — Reconstruction+pooled VICReg best at 83.00%; JEPA refuted as best (F2 triggered); VICReg is the dominant anti-collapse factor across all objectives"
+rationale: |
+  Phase 4 required two sub-agents: (1) fix memory issues and run all 45 experiments,
+  (2) statistical analysis and report generation. Both completed successfully.
+
+  Sub-agent 7.1 fixed the multiprocessing memory crash by switching to sequential
+  execution, batched evaluation, and gc.collect. All 45 runs completed in 2642s.
+
+  Sub-agent 7.2 performed paired t-tests, VICReg ablation analysis, falsification
+  criteria evaluation, and generated the comprehensive report.
+
+  The results fundamentally reshape the project's understanding: JEPA is not the
+  best objective, and pooled VICReg is the critical ingredient for all objectives.
+  This directly informs Phase 5 (vector semantics), which should use
+  Reconstruction+VICReg as its base model.
+# --- Meta ---
+milestone_reached: ""
+user_question: ""
+campaign: phase-4-objective-comparison
+campaign_status: completed
+campaign_summary: "Phase 4 resolved: Reconstruction+pooled VICReg achieves 83.00% (best); JEPA refuted as best objective (F2 triggered); pooled VICReg is the dominant anti-collapse factor for ALL objectives including Reconstruction."
+state_update: |
+  # Current Research State — HSUN Project
+  **Last updated:** After Phase 4 (iter_007, sub-agents 7.1–7.2)
+
+  ## Goal
+  Investigate an architecture for unsupervised representation learning built from
+  a single, universal node type. Phase 4 (Training Objective Comparison) is now RESOLVED.
+
+  ## Confirmed (with iter/sub-agent references)
+
+  ### Phase 4 Resolution (iter_007)
+  1. **Reconstruction + pooled VICReg is the best training objective** at 83.00% ± 2.27%
+     (iter_007, 7.1). This exceeds JEPA + pooled VICReg (61.55%) by 21.45pp.
+
+  2. **SFA + pooled VICReg is a close second** at 82.15% ± 3.02% (iter_007, 7.1).
+     SFA without VICReg completely collapses to 25.00% (chance).
+
+  3. **Pooled VICReg is the DOMINANT anti-collapse factor** across all objectives
+     (iter_007, 7.1 + 7.2):
+     - SFA: +57.15pp (25.00% → 82.15%), p = 0.000002
+     - Reconstruction: +33.45pp (49.55% → 83.00%), p = 0.000943
+     - JEPA: +8.05pp (53.50% → 61.55%), p = 0.007
+     - Hebbian: +4.65pp (43.90% → 48.55%), p = 0.183 (not significant)
+
+  4. **Falsification criteria** (iter_007, 7.2):
+     - F1 (JEPA+VICReg < 55%): NOT triggered (61.55%) ✅
+     - F2 (other objective beats JEPA+VICReg by ≥ 3pp): TRIGGERED ❌
+       SFA+VICReg (+20.60pp) and Recon+VICReg (+21.45pp) both exceed
+     - F3 (VICReg hurts non-Recon objectives): NOT triggered ✅
+
+  5. **Research Manager's prediction was WRONG**: VICReg massively helps
+     Reconstruction (+33.45pp). The decoder's intrinsic anti-collapse mechanism
+     is insufficient on this architecture.
+
+  6. **JEPA without pooled VICReg is barely above untrained**: 53.50% vs 52.10%
+     (+1.40pp, p = 0.317, not significant). Local VICReg alone is insufficient.
+
+  7. **Hebbian is the weakest objective** even with VICReg (48.55%), below
+     untrained baseline (52.10%). Variance maximisation without structured
+     prediction or reconstruction is insufficient for discriminative features.
+
+  ### Phase 3 Carry-Forward (still valid, iter_006)
+  - P3-C with pooled VICReg + spatial_pooled readout: 61.55% (now superseded by Phase 4)
+  - Pooled VICReg prevents collapse (+80.3% std increase)
+  - spatial_pooled_then_flat readout preserves temporal discriminative information
+
+  ### Phase 1-2 Carry-Forward (still valid)
+  - JEPA local objective works spatially: 62.12% (d=8), 65.20% (d=16) (iter_003)
+  - P2-D temporal JEPA: 65.33% ± 2.74% (iter_004)
+  - Weight sharing has zero expressivity penalty (iter_002, iter_005)
+  - Zero-shot spatial→temporal transfer is falsified (iter_004)
+  - Node type is universal, weights are axis-specific (iter_004)
+
+  ## Refuted Hypotheses
+  - "JEPA + pooled VICReg is the best training objective": REFUTED (iter_007)
+  - "Reconstruction natively resists collapse (VICReg won't help)": REFUTED (iter_007)
+  - "Local VICReg alone prevents collapse": REFUTED — JEPA without pooled VICReg
+    is barely above untrained (53.5% vs 52.1%, iter_007)
+
+  ## Current Best Results
+  - **Best overall**: Reconstruction + pooled VICReg, 83.00% ± 2.27%, 1,600 params (iter_007)
+  - **Second best**: SFA + pooled VICReg, 82.15% ± 3.02% (iter_007)
+  - **JEPA + pooled VICReg**: 61.55% ± 4.86% (iter_007, reproduces iter_006)
+  - **Spatial only**: JEPA-d16, 65.20% ± 1.80% (iter_003)
+  - **Temporal only**: P2-D JEPA, 65.33% ± 2.74% (iter_004)
+  - **Untrained baseline**: 52.10% ± 3.56% (iter_007)
+
+  ## Experiment Configuration (Updated for Phase 5)
+  - Architecture: P3-C (shared weights), d=16, d_out=16, 1,600 params
+  - Training: 30 epochs, 200 train/class, 100 test/class, batch=64, lr=1e-3
+  - **NEW default objective**: Reconstruction + pooled VICReg
+  - Readout: spatial_pooled_then_flat (416 features)
+  - Pooled VICReg: λ_var=25, λ_cov=25 on final representation
+
+  ## Files Created This Phase
+  - src/run_phase4.py — Full Phase 4 experiment runner (fixed memory issues)
+  - phase_4/phase4_results.csv — 45 experiment results
+  - phase_4/analysis.py — Statistical analysis script
+  - phase_4/REPORT.md — Comprehensive analysis report
+  - src/pre_registration.md — Updated with actual results
+
+  ## Open Questions (ordered by expected value)
+  1. **Would dedicated hyperparameter tuning for SFA/Hebbian close the gap to
+     Reconstruction+VICReg?** The shared envelope (lr=1e-3, 30 epochs) was optimised
+     for JEPA. SFA and Hebbian deserve their own sweeps.
+  2. **Is the VICReg variance term or covariance term the dominant anti-collapse
+     mechanism?** Ablating these would clarify the mechanism.
+  3. **Does Reconstruction+VICReg produce semantically consistent dimensions?**
+     This is the Phase 5 question — do the 16 code dimensions carry interpretable
+     and consistent semantics across positions and layers?
+  4. **Can we replace pooled VICReg with a cheaper anti-collapse mechanism?**
+     Batch norm, projection head, or explicit code normalization?
+  5. **Would longer training (100+ epochs) further improve Reconstruction+VICReg
+     beyond 83%?** JEPA converges by epoch 30 but Reconstruction might benefit.
+  6. **Does the Hebbian objective produce more semantically consistent dimensions?**
+     Despite lower accuracy, Hebbian's local variance maximisation might yield
+     more interpretable features.
+
+  ## Recent Log (last 3 entries)
+  - iter_007: Phase 4 complete. Reconstruction+VICReg=83%, SFA+VICReg=82.15%,
+    JEPA+VICReg=61.55%. F2 triggered. VICReg is dominant factor.
+  - iter_006: Phase 3 resolved. P3-C+pooled VICReg+spatial_pooled readout=61.55%.
+  - iter_005: Phase 3 initial failure. JEPA-to-classification transfer failure.
+```

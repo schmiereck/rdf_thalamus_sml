@@ -1,48 +1,47 @@
 # Current Research State — HSUN Project
-**Last updated:** After Phase 6 (iter_006, sub-agents 6.1–6.3)
+**Last updated:** After Phase 4 (iter_007, sub-agents 7.1–7.2)
 
 ## Goal
 Investigate an architecture for unsupervised representation learning built from
-a single, universal node type. Phase 3 (Unified Spatiotemporal Grid) is now RESOLVED.
+a single, universal node type. Phase 4 (Training Objective Comparison) is now RESOLVED.
 
 ## Confirmed (with iter/sub-agent references)
 
-### Phase 3 Resolution (iter_006)
-1. **VICReg was NOT omitted** — it was present in JEPALoss with λ_var=25, λ_cov=25
-   (iter_006, 6.1 code audit). The original pre-registered hypothesis was factually
-   incorrect.
+### Phase 4 Resolution (iter_007)
+1. **Reconstruction + pooled VICReg is the best training objective** at 83.00% ± 2.27%
+   (iter_007, 7.1). This exceeds JEPA + pooled VICReg (61.55%) by 21.45pp.
 
-2. **VICReg on intermediate codes is INEFFECTIVE** for the pooled representation
-   (iter_006, 6.2 diagnostic):
-   - Per-dim stds at intermediate layers: ~0.07-0.08 (target ≥1.0)
-   - VICReg gradient per element ≈ 0.0008/elem vs prediction gradient ≈ 0.016/elem
-   - The prediction gradient overwhelms VICReg by ~20×
-   - Mathematical cause: M = B*T*S = 28,672 elements dilutes the gradient
+2. **SFA + pooled VICReg is a close second** at 82.15% ± 3.02% (iter_007, 7.1).
+   SFA without VICReg completely collapses to 25.00% (chance).
 
-3. **Mean-pooling destroys discriminative information** (iter_006, 6.2 diagnostic):
-   - spatial_pooled_then_flat (53.5%) >> pooled (44.25%) = +9.25pp gap
-   - Temporal structure is the primary discriminative signal
-   - Mean-pooling over both space and time erases this signal
+3. **Pooled VICReg is the DOMINANT anti-collapse factor** across all objectives
+   (iter_007, 7.1 + 7.2):
+   - SFA: +57.15pp (25.00% → 82.15%), p = 0.000002
+   - Reconstruction: +33.45pp (49.55% → 83.00%), p = 0.000943
+   - JEPA: +8.05pp (53.50% → 61.55%), p = 0.007
+   - Hebbian: +4.65pp (43.90% → 48.55%), p = 0.183 (not significant)
 
-4. **Pooled VICReg fix is EFFECTIVE** (iter_006, 6.3 factorial experiment):
-   - Applying VICReg directly to pooled representation (M=B=64) concentrates
-     gradient 450× per element
-   - Per-dim pooled std: 0.072 → 0.130 (+80.3%, p < 0.001)
-   - Variance loss: 0.0 (inactive) → 0.87 (active)
+4. **Falsification criteria** (iter_007, 7.2):
+   - F1 (JEPA+VICReg < 55%): NOT triggered (61.55%) ✅
+   - F2 (other objective beats JEPA+VICReg by ≥ 3pp): TRIGGERED ❌
+     SFA+VICReg (+20.60pp) and Recon+VICReg (+21.45pp) both exceed
+   - F3 (VICReg hurts non-Recon objectives): NOT triggered ✅
 
-5. **Combined fix PASSES all falsification criteria** (iter_006, 6.3):
-   - P3-C + pooled VICReg + spatial_pooled_then_flat = 61.55% test accuracy
-   - Gain over untrained: +9.45pp (threshold ≥8pp) ✅
-   - p = 0.013 (threshold <0.05) ✅
-   - Cohen's d = 1.91 (threshold ≥1.0) ✅
-   - F2 (sharing penalty): 0.0pp ✅
-   - F3 (within 20pp of P3-A): 61.55% >> 24.5% ✅
-   - F4 (loss ratio): 27.4 < 43.75 ✅
+5. **Research Manager's prediction was WRONG**: VICReg massively helps
+   Reconstruction (+33.45pp). The decoder's intrinsic anti-collapse mechanism
+   is insufficient on this architecture.
 
-6. **Both fixes are NECESSARY** (iter_006, 6.3 2×2 factorial):
-   - Readout-only (no VICReg): +1.4pp over untrained (NOT significant)
-   - VICReg-only (pooled readout): +7.75pp (just below 8pp threshold)
-   - Both together: +9.45pp (significant, large effect)
+6. **JEPA without pooled VICReg is barely above untrained**: 53.50% vs 52.10%
+   (+1.40pp, p = 0.317, not significant). Local VICReg alone is insufficient.
+
+7. **Hebbian is the weakest objective** even with VICReg (48.55%), below
+   untrained baseline (52.10%). Variance maximisation without structured
+   prediction or reconstruction is insufficient for discriminative features.
+
+### Phase 3 Carry-Forward (still valid, iter_006)
+- P3-C with pooled VICReg + spatial_pooled readout: 61.55% (now superseded by Phase 4)
+- Pooled VICReg prevents collapse (+80.3% std increase)
+- spatial_pooled_then_flat readout preserves temporal discriminative information
 
 ### Phase 1-2 Carry-Forward (still valid)
 - JEPA local objective works spatially: 62.12% (d=8), 65.20% (d=16) (iter_003)
@@ -52,45 +51,52 @@ a single, universal node type. Phase 3 (Unified Spatiotemporal Grid) is now RESO
 - Node type is universal, weights are axis-specific (iter_004)
 
 ## Refuted Hypotheses
-- "VICReg was omitted from Phase 3 training": REFUTED — VICReg IS present (iter_006, 6.1)
-- "VICReg omission caused collapse": PARTIALLY REFUTED — VICReg is present but
-  INEFFECTIVE due to gradient dilution (iter_006, 6.2)
-- "The spatiotemporal architecture fundamentally cannot learn": REFUTED — P3-C
-  with pooled VICReg achieves 61.55% (iter_006, 6.3)
+- "JEPA + pooled VICReg is the best training objective": REFUTED (iter_007)
+- "Reconstruction natively resists collapse (VICReg won't help)": REFUTED (iter_007)
+- "Local VICReg alone prevents collapse": REFUTED — JEPA without pooled VICReg
+  is barely above untrained (53.5% vs 52.1%, iter_007)
 
 ## Current Best Results
-- **Spatial only**: JEPA-d16, 65.20% ± 1.80%, 4,832 params (iter_003)
+- **Best overall**: Reconstruction + pooled VICReg, 83.00% ± 2.27%, 1,600 params (iter_007)
+- **Second best**: SFA + pooled VICReg, 82.15% ± 3.02% (iter_007)
+- **JEPA + pooled VICReg**: 61.55% ± 4.86% (iter_007, reproduces iter_006)
+- **Spatial only**: JEPA-d16, 65.20% ± 1.80% (iter_003)
 - **Temporal only**: P2-D JEPA, 65.33% ± 2.74% (iter_004)
-- **Spatiotemporal (P3-C, pooled VICReg, spatial_pooled readout)**: 61.55% ± 4.67%, 1,600 params (iter_006)
-- **Spatiotemporal (P3-C, pooled VICReg, pooled readout)**: 49.15% ± 3.76% (iter_006)
+- **Untrained baseline**: 52.10% ± 3.56% (iter_007)
 
-## Experiment Configuration (Updated)
+## Experiment Configuration (Updated for Phase 5)
 - Architecture: P3-C (shared weights), d=16, d_out=16, 1,600 params
 - Training: 30 epochs, 200 train/class, 100 test/class, batch=64, lr=1e-3
-- NEW: Pooled VICReg (λ_var=25, λ_cov=25) on final representation
-- NEW: spatial_pooled_then_flat readout (416 features) for classification
+- **NEW default objective**: Reconstruction + pooled VICReg
+- Readout: spatial_pooled_then_flat (416 features)
+- Pooled VICReg: λ_var=25, λ_cov=25 on final representation
 
 ## Files Created This Phase
-- src/diagnostic_phase3_vicreg.py — Variance diagnostic + pooling comparison script
-- src/variance_diagnostic_results.csv — Per-epoch variance metrics
-- src/pooling_comparison_results.csv — Pooling strategy comparison
-- src/run_phase3_vicreg_fix.py — Full experiment runner with pooled VICReg
-- src/pre_registration.md — Updated with corrected hypothesis
-- phase_3/pooled_vicreg_results.csv — 30 experiment results (6 conditions × 5 seeds)
-- phase_3/REPORT_vicreg_fix.md — Comprehensive analysis report
-- phase_3/diagnostic_report.md — Diagnostic analysis
+- src/run_phase4.py — Full Phase 4 experiment runner (fixed memory issues)
+- phase_4/phase4_results.csv — 45 experiment results
+- phase_4/analysis.py — Statistical analysis script
+- phase_4/REPORT.md — Comprehensive analysis report
+- src/pre_registration.md — Updated with actual results
 
 ## Open Questions (ordered by expected value)
-1. **Should Phase 4 use pooled VICReg + spatial_pooled readout as standard?**
-   Yes — this resolves the known training collapse and readout bottleneck.
-2. **Can other training objectives (SFA, Hebbian, contrastive) also benefit
-   from pooled VICReg?** This should be tested in Phase 4.
-3. **Is the object_permanence shortcut (69.2% untrained with pooled readout)
-   still present with spatial_pooled readout?** Untrained spatial readout:
-   72.4% for class_3 (object_permanence) — shortcut persists.
-4. **Would longer training improve results?** JEPA loss converges by epoch 30,
-   but pooled VICReg might benefit from more epochs.
-5. **Can we close the gap to spatial-only (65.2%) and temporal-only (65.3%)?**
-   Currently at 61.55% — 3.7pp below single-axis performance.
-6. **Would P3-A with pooled VICReg exceed P3-C?** The sequential training
-   protocol might interact differently with pooled VICReg.
+1. **Would dedicated hyperparameter tuning for SFA/Hebbian close the gap to
+   Reconstruction+VICReg?** The shared envelope (lr=1e-3, 30 epochs) was optimised
+   for JEPA. SFA and Hebbian deserve their own sweeps.
+2. **Is the VICReg variance term or covariance term the dominant anti-collapse
+   mechanism?** Ablating these would clarify the mechanism.
+3. **Does Reconstruction+VICReg produce semantically consistent dimensions?**
+   This is the Phase 5 question — do the 16 code dimensions carry interpretable
+   and consistent semantics across positions and layers?
+4. **Can we replace pooled VICReg with a cheaper anti-collapse mechanism?**
+   Batch norm, projection head, or explicit code normalization?
+5. **Would longer training (100+ epochs) further improve Reconstruction+VICReg
+   beyond 83%?** JEPA converges by epoch 30 but Reconstruction might benefit.
+6. **Does the Hebbian objective produce more semantically consistent dimensions?**
+   Despite lower accuracy, Hebbian's local variance maximisation might yield
+   more interpretable features.
+
+## Recent Log (last 3 entries)
+- iter_007: Phase 4 complete. Reconstruction+VICReg=83%, SFA+VICReg=82.15%,
+  JEPA+VICReg=61.55%. F2 triggered. VICReg is dominant factor.
+- iter_006: Phase 3 resolved. P3-C+pooled VICReg+spatial_pooled readout=61.55%.
+- iter_005: Phase 3 initial failure. JEPA-to-classification transfer failure.

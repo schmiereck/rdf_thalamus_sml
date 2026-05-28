@@ -361,3 +361,68 @@ layers are ~0.07-0.08, far belo
 
 **Notes:** Phase 3 failure fully resolved. Two root causes (VICReg gradient dilution + pooling destruction) identified and fixed. Universal parameter hypothesis now SUPPORTED.
 
+
+---
+```yaml
+cached_tokens: 399104
+campaign: phase-4-objective-comparison
+campaign_status: completed
+campaign_summary: 'Phase 4 resolved: Reconstruction+pooled VICReg achieves 83.00%
+  (best); JEPA refuted as best objective (F2 triggered); pooled VICReg is the dominant
+  anti-collapse factor for ALL objectives including Reconstruction.'
+cost_usd: 2.65005
+hypothesis: 'phase-7: Phase 4 training objective comparison completed — Reconstruction+pooled
+  VICReg best at 83.00%; JEPA refuted as best (F2 triggered); VICReg is the dominant
+  anti-collapse factor across all objectives'
+input_tokens: 3532271
+iter: 7
+metrics:
+  best_mean_acc: 0.83
+  best_objective: reconstruction+VICReg
+  f1_triggered: false
+  f2_triggered: true
+  f3_triggered: false
+  hebbian_no_vicreg_mean_acc: 0.439
+  hebbian_vicreg_mean_acc: 0.4855
+  jepa_no_vicreg_mean_acc: 0.535
+  jepa_vicreg_mean_acc: 0.6155
+  recon_no_vicreg_mean_acc: 0.4955
+  recon_vicreg_mean_acc: 0.83
+  sfa_no_vicreg_mean_acc: 0.25
+  sfa_vicreg_mean_acc: 0.8215
+  total_runs: 45
+  total_runtime_sec: 2641.7
+  untrained_mean_acc: 0.521
+  vicreg_delta_hebbian_pp: 4.65
+  vicreg_delta_jepa_pp: 8.05
+  vicreg_delta_recon_pp: 33.45
+  vicreg_delta_sfa_pp: 57.15
+output_tokens: 57945
+status: ok
+```
+
+## iter_007: phase-7: Phase 4 training objective comparison completed — Reconstruction+pooled VICReg best at 83.00%; JEPA refuted as best (F2 triggered); VICReg is the dominant anti-collapse factor across all objectives
+
+**Analysis:** Phase 4 tested four training objectives (JEPA, SFA, Hebbian, Reconstruction) with
+and without pooled VICReg on the P3-C spatiotemporal benchmark. The pre-registered
+hypothesis was that JEPA + pooled VICReg would be the best objective.
+
+H1 (JEPA+VICReg ≥ 55%) is SUPPORTED at 61.55%.
+H2 (no other objective exceeds JEPA+VICReg by ≥ 3pp) is REFUTED: SFA+VICReg
+(82.15%) and Recon+VICReg (83.00%) exceed
+
+**Status:** ok
+
+**Metrics:** `{'total_runs': 45, 'total_runtime_sec': 2641.7, 'jepa_vicreg_mean_acc': 0.6155, 'jepa_no_vicreg_mean_acc': 0.535, 'sfa_vicreg_mean_acc': 0.8215, 'sfa_no_vicreg_mean_acc': 0.25, 'hebbian_vicreg_mean_acc': 0.4855, 'hebbian_no_vicreg_mean_acc': 0.439, 'recon_vicreg_mean_acc': 0.83, 'recon_no_vicreg_mean_acc': 0.4955, 'untrained_mean_acc': 0.521, 'f1_triggered': False, 'f2_triggered': True, 'f3_triggered': False, 'best_objective': 'reconstruction+VICReg', 'best_mean_acc': 0.83, 'vicreg_delta_sfa_pp': 57.15, 'vicreg_delta_recon_pp': 33.45, 'vicreg_delta_jepa_pp': 8.05, 'vicreg_delta_hebbian_pp': 4.65}`
+
+**Experimenter view:** Phase 4 completed all 45 experiments (4 objectives × 2 VICReg × 5 seeds + 5 untrained).
+Memory fixes (sequential execution, batched evaluation, gc.collect) resolved prior crashes.
+
+THREE MAJOR FINDINGS:
+
+1. VICReg is the DOMINANT factor, not the training objective. Pooled VICReg adds
+   +57.15pp (SFA), +33.45pp (Recon), +8.05pp (JEPA), +4.65pp (Hebbian). Without
+   pooled VICReg, all objectives ex
+
+**Notes:** Phase 4 complete. F2 triggered. Reconstruction+VICReg best at 83%. VICReg is the dominant factor across all objectives.
+
