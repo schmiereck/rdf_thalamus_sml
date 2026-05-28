@@ -1,34 +1,83 @@
-artifacts: []
-experimenter_view: "I was in the Planning Phase for Phase 3 (Unified Spatiotemporal\
-  \ Grid) when\ntool access failed. Based on the context provided in the system prompt\n\
-  (current_state.md, goal.md, iteration summaries), I had formulated the\nfollowing\
-  \ analysis but was unable to verify against actual source files:\n\nKEY PHASE 3\
-  \ DESIGN DECISIONS:\n1. Phase 2 showed zero-shot spatial→temporal weight transfer\
-  \ FAILS, but\n   joint training was never tested. The critical question is whether\n\
-  \   jointly-trained shared weights (P3-C) can serve both axes.\n2. P3-B (anisotropic:\
-  \ different weights per axis) is the practical\n   compromise — same node type,\
-  \ axis-specific weights.\n3. P3-A (separate spatial→temporal stages) is the upper-bound\
-  \ baseline.\n4. The four test patterns (moving blob, expanding/contracting, periodic\n\
-  \   spatiotemporal, object permanence) need a new spatiotemporal dataset.\n5. JEPA\
-  \ objective confirmed as best in both Phase 1 (spatial) and\n   Phase 2 (temporal),\
-  \ so it should be the training objective here.\n\nDRAFT HYPOTHESIS: Jointly-trained\
-  \ P3-C (single shared weight set for\nspatial and temporal axes) achieves within\
-  \ 20pp of P3-A (separate stages)\non spatiotemporal pattern classification, demonstrating\
-  \ that the\naxis-specificity observed in zero-shot transfer can be overcome through\n\
-  joint optimization.\n\nFALSIFICATION CRITERION: P3-C average accuracy across the\
-  \ four benchmark\ntasks is more than 20pp below P3-A average accuracy.\n\nPROPOSED\
-  \ METHOD:\n- Create src/spatiotemporal_dataset.py (4 pattern types)\n- Create src/spatiotemporal_grid.py\
-  \ (P3-A/B/C architectures)\n- Create src/run_phase3.py (experiment runner)\n- Train\
-  \ each variant with JEPA objective, evaluate with linear probe\n- Run 5+ seeds per\
-  \ variant for statistical comparison\n\nNo code was written or executed. This iteration\
-  \ needs to be re-run.\n"
-log_excerpt: 'Planning phase initiated for Phase 3 (Unified Spatiotemporal Grid).
+falsification_criterion: "The hypothesis is falsified if ANY of the following hold:\n\
+  F1: P3-C mean accuracy across 4 tasks < P3-A mean accuracy - 20pp\n    (shared-weight\
+  \ constraint costs too much expressivity)\nF2: P3-C mean accuracy is within 5pp\
+  \ of untrained-baseline accuracy\n    (shared weights fail to learn meaningful spatiotemporal\
+  \ structure;\n     gain-over-untrained ≤ 5pp, using the periodicity-loophole control\n\
+  \     established in Phase 2)\nF3: P3-C JEPA training loss fails to converge (final\
+  \ loss > 2× P3-B final loss)\n    (optimization failure due to conflicting axis\
+  \ objectives)\n"
+hypothesis: 'A single UniversalNode weight set trained jointly on both spatial and
+  temporal
 
-  Tool access failed repeatedly - unable to read codebase files.
+  JEPA objectives in a unified 2D grid (P3-C) achieves ≥80% of the accuracy of
 
-  No experiments were executed. Iteration 005 is a restart of a crashed run.
+  the two-stage architecture with separate spatial and temporal weights (P3-A) on
+
+  four spatiotemporal benchmark tasks. Specifically, if P3-A achieves mean
+
+  accuracy A% across the four tasks, P3-C achieves A_C ≥ A - 20 percentage points.
+
+  The underlying mechanism is that joint training allows the shared weights to
+
+  discover a representation subspace where both spatial and temporal neighbor
+
+  prediction are simultaneously well-served, avoiding the axis-specific overfitting
+
+  that caused zero-shot transfer failure in Phase 2.
 
   '
-metrics: {}
-notes: Planning phase incomplete due to tool access failure; no experiments executed
-status: code_error
+pre_registration_file: src/pre_registration.md
+proposed_method: "Phase 3: Unified Spatiotemporal Grid experiment.\n\nSTEP 0 — Resume\
+  \ interrupted work:\n- Check archive/iter_005/ for any completed artifacts from\
+  \ the interrupted\n  iteration 005.7. If significant implementation progress exists,\
+  \ resume from\n  there; otherwise start fresh.\n\nSTEP 1 — Implement spatiotemporal\
+  \ dataset (src/spatiotemporal_dataset.py):\n- Four benchmark generators, each producing\
+  \ (T=32, S=16) binary matrices:\n  a) Moving blob: blob of width 3-5 translating\
+  \ left/right/stationary/random-walk\n     across S positions over T timesteps. 4-class\
+  \ classification.\n  b) Expanding/contracting blob: blob centered at a position,\
+  \ size changes\n     (expanding, contracting, steady, pulsating). 4-class classification.\n\
+  \  c) Periodic spatiotemporal: patterns with periods (2,3,4) in time and/or\n  \
+  \   space, plus aperiodic random. 4-class classification.\n  d) Object permanence:\
+  \ blob at fixed position, disappears for k∈{0,2,4,8}\n     timesteps mid-sequence,\
+  \ then reappears. 4-class classification.\n- Training set: 2000 samples per task\
+  \ (balanced classes)\n- Test set: 500 samples per task (balanced classes, held-out\
+  \ seeds)\n\nSTEP 2 — Implement grid architectures (src/spatiotemporal_grid.py):\n\
+  - UniversalGrid base class with configurable axis-weight sharing\n- P3-A (SeparateStagesEncoder):\n\
+  \  * Spatial encoder: 3 spatial-only UniversalNode layers applied at each\n    time\
+  \ step independently (S=16→14→12→10, d=16)\n  * Temporal encoder: 3 temporal-only\
+  \ UniversalNode layers applied at each\n    spatial position independently on spatial\
+  \ codes (T=32→30→28→26)\n  * Spatial weights trained first, frozen; then temporal\
+  \ weights trained\n  * Total: 2 weight sets (W_spatial, W_temporal)\n- P3-B (AnisotropicGridEncoder):\n\
+  \  * 3 alternating spatial+temporal pass pairs (6 passes total)\n  * Spatial passes\
+  \ use W_spatial, temporal passes use W_temporal\n  * Both trained jointly with combined\
+  \ JEPA loss\n  * Total: 2 weight sets (W_spatial, W_temporal)\n- P3-C (UnifiedGridEncoder):\n\
+  \  * Same architecture as P3-B but W_spatial = W_temporal = W_shared\n  * Single\
+  \ weight set trained with combined spatial+temporal JEPA loss\n  * Total: 1 weight\
+  \ set (W_shared)\n- Use d=16 throughout (best from Phase 1)\n- Use existing UniversalNode\
+  \ class from Phase 1/2\n\nSTEP 3 — Implement JEPA training for 2D grid (src/train_grid.py):\n\
+  - For each spatial pass node output z(s,t): bidirectional JEPA loss\n  predicting\
+  \ z(s-1,t) and z(s+1,t) from z(s,t)\n- For each temporal pass node output z(s,t):\
+  \ bidirectional JEPA loss\n  predicting z(s,t-1) and z(s,t+1) from z(s,t)\n- VICReg\
+  \ variance + covariance regularization at each layer\n- Total loss = λ_s · L_spatial_JEPA\
+  \ + λ_t · L_temporal_JEPA + λ_v · L_VICReg\n- For P3-C: both spatial and temporal\
+  \ losses contribute gradients to W_shared\n- For P3-A: sequential training (spatial\
+  \ first, then temporal)\n- Training: Adam, lr=1e-3, 200 epochs, batch_size=64\n\n\
+  STEP 4 — Implement evaluation (src/eval_grid.py):\n- Extract top-layer codes: (T',\
+  \ S', d) → mean-pool → d-dimensional code\n- Linear probe: logistic regression on\
+  \ codes for each of 4 tasks\n- Also evaluate untrained baseline (random-init weights,\
+  \ no training)\n- Report: per-task accuracy, aggregate accuracy, parameter counts,\n\
+  \  JEPA loss curves, gain-over-untrained\n\nSTEP 5 — Run experiments (src/run_phase3.py):\n\
+  - 3 architectures (P3-A, P3-B, P3-C) × 5 seeds = 15 training runs\n- + 1 untrained\
+  \ baseline × 5 seeds = 5 runs\n- Total: 20 runs\n- For each run: train JEPA → extract\
+  \ codes → 4 linear probes\n- Save raw results to phase_3/results.csv\n\nSTEP 6 —\
+  \ Statistical analysis and report (phase_3/REPORT.md):\n- Mean ± std accuracy per\
+  \ architecture per task\n- Paired t-test: P3-C vs P3-A (primary falsification test)\n\
+  - Gain-over-untrained for each architecture (periodicity-loophole control)\n- Parameter\
+  \ count comparison (P3-C should be ~50% of P3-A/B)\n- JEPA loss comparison (convergence,\
+  \ final values)\n- Clear pass/fail verdict for each falsification criterion\n\n\
+  Files to create/modify:\n- src/spatiotemporal_dataset.py (NEW)\n- src/spatiotemporal_grid.py\
+  \ (NEW — P3-A, P3-B, P3-C architectures)\n- src/train_grid.py (NEW — JEPA training\
+  \ for 2D grid)\n- src/eval_grid.py (NEW — linear probe evaluation)\n- src/run_phase3.py\
+  \ (NEW — experiment runner)\n- src/test_phase3.py (NEW — self-tests for grid architecture\
+  \ and dataset)\n- phase_3/REPORT.md (OUTPUT — comparison report)\n- phase_3/results.csv\
+  \ (OUTPUT — raw results)\n"

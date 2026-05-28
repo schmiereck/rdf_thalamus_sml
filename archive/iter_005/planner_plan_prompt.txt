@@ -525,4 +525,4 @@ Plan and execute the next research phase. Break it into sub-tasks:
 Run sub-tasks sequentially. Each result informs the next. Synthesise all results into your final YAML report.
 
 ## User Hint
-Executer Sub-agent 5.4 was last. Than something crashed. I Restart ITERATION 005 now.
+The only open question is whether joint spatiotemporal training produces a single weight set that works on both axes. The strategist should prioritize P3-C (fully unified grid, single node type) as the main hypothesis and explicitly define it as a falsification criterion: does P3-C beat the separate-stage P3-A after joint training? -- Info: May be Iteration 005.7 was interrupted by an Windows-Update. Check this and continue there.
