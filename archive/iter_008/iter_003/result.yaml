@@ -1,0 +1,48 @@
+artifacts:
+- src/run_phase5.py
+- src/phase_5/REPORT.md
+- src/phase_5/phase5_results.csv
+experimenter_view: 'Phase 5 completed successfully across 20 experiments (30 epochs,
+  5 seeds, 4 variants).
+
+  All three trained variants achieved ~82-83% classification accuracy vs 52% for untrained.
+
+  Within-layer semantic consistency was extremely high at 0.974, strongly supporting
+  that
+
+  code dimensions carry stable semantics. However, overall consistency was 0.714 with
+  a
+
+  modest training gain of only +0.039 over untrained (0.757), triggering falsification
+
+  criterion F2. The anchor regularization in P5-B actually slightly decreased consistency
+
+  (anchored dims 0.700 vs free dims 0.738), triggering F5. The primary hypothesis
+  is
+
+  partially supported: dimensions are highly consistent within layers, but training
+  provides
+
+  only marginal gains in cross-layer/global semantic alignment.
+
+  '
+log_excerpt: "[16/20] UNTRAINED_seed42... acc=0.5650, consistency=0.757 (1679.0s)\n\
+  [17/20] UNTRAINED_seed43... acc=0.5425, consistency=0.633 (1703.5s)\n[18/20] UNTRAINED_seed44...\
+  \ acc=0.4800, consistency=0.682 (1728.0s)\n[19/20] UNTRAINED_seed45... acc=0.4900,\
+  \ consistency=0.618 (1752.6s)\n[20/20] UNTRAINED_seed46... acc=0.5275, consistency=0.686\
+  \ (1776.8s)\n\nTraining gain (P5-A vs Untrained): +0.039\nReport saved to phase_5\\\
+  REPORT.md\n\nSummary:\n  P5-A        : acc=0.8300, consistency=0.714\n  P5-B   \
+  \     : acc=0.8195, consistency=0.726\n  P5-C        : acc=0.8255, consistency=0.712\n\
+  \  untrained   : acc=0.5210, consistency=0.675\n======================================================================\n"
+metrics:
+  P5-A_accuracy: 0.83
+  P5-A_overall_consistency: 0.714
+  P5-A_within_layer_consistency: 0.974
+  P5-B_accuracy: 0.8195
+  P5-C_accuracy: 0.8255
+  total_runtime_sec: 1776.8
+  training_gain: 0.039
+  untrained_accuracy: 0.521
+notes: Phase 5 complete; high within-layer consistency but modest training gain and
+  anchor improvements.
+status: ok
