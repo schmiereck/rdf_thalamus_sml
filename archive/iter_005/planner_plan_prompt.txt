@@ -525,4 +525,4 @@ Plan and execute the next research phase. Break it into sub-tasks:
 Run sub-tasks sequentially. Each result informs the next. Synthesise all results into your final YAML report.
 
 ## User Hint
-**Recommendation for Phase 3:**: The strategist should formulate this as core Experiment 3: | ID:P3-A | Setup: Trained separately, then combined | Question: Reference (what we know) | | ID:P3-B | Setup: Joint training, anisotropic weights | Question: Intermediate | | ID:**P3-C** | Setup: **Joint training, shared weights** | Question: **Save the strong hypothesis** | If P3-C works, universality is saved. If not, the conclusion is: same architecture, separate weights per context—still a clean and useful architecture.
+Executer Sub-agent 5.4 was last. Than something crashed. I Restart ITERATION 005 now.

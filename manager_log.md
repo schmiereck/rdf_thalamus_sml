@@ -905,3 +905,45 @@ Your proposed pre-registration criteria are clear and quantitative.
 
 ---
 
+## Iteration 005 -> Manager [Proposed Research Plan]
+
+**Proposed Hypothesis:**
+
+
+**Proposed Falsification Criterion:**
+
+
+**Proposed Method:**
+
+
+---
+
+## Iteration 005 -> Planner [Strategic Guidance]
+
+### Manager's Note: Strategic Guidance for Phase 3 (Unified Spatiotemporal Grid)
+
+As we transition into Phase 3, we are testing the ultimate limit of our "universal node" hypothesis: can a single parameter set $\theta$ map both spatial configurations (left-center-right) and temporal transitions (past-present-future) within a unified grid? 
+
+To maintain scientific rigour and avoid common pitfalls encountered in previous phases, apply the following strategic directives:
+
+#### 1. Establish Rigorous Baselines (The Architecture-Only Loophole)
+In Phase 2, we discovered a significant "periodicity loophole" where untrained random projections achieved up to 58% accuracy purely due to the grid's deterministic information propagation. 
+*   **Directive:** You must evaluate and report the performance of **Untrained/Random-Weight baselines** for all three architectures (P3-A, P3-B, and P3-C). 
+*   **Discipline:** A positive result for joint training (P3-C) is only valid if it demonstrates a statistically significant gain over its untrained counterpart, rather than merely passing information through a structured grid.
+
+#### 2. Tighten Pre-Registration Hypotheses & Falsification Criteria
+The proposed falsification criterion (P3-C within 20 percentage points of P3-A) is far too lenient. A 20pp gap could hide a complete failure of the representation space.
+*   **Directive:** Your pre-registration file (`src/pre_registration.md`) must be written and committed before executing any runs.
+*   **Quantitative Criteria:** Refine your criteria to include:
+    1.  **Training Gain:** Trained P3-C must outperform Untrained P3-C by $\ge 10\text{pp}$ (with $p < 0.05$ and Cohen's $d \ge 1.0$).
+    2.  **Anisotropy Penalty:** The gap between the anisotropic grid (P3-B, axis-specific weights) and the fully unified grid (P3-C, shared weights) must be quantified. If parameter sharing is viable, the performance penalty ($P3\text{-}B - P3\text{-}C$) must be $\le 10\text{pp}$.
+
+#### 3. Explicitly Define the Grid Geometry and Node Scheduling
+A 2D spatiotemporal grid introduces causal and structural scheduling choices. 
+*   **Directive:** Do not leave the order of operations implicit in the code. In your design, clearly define how information propagates. For example, does a spatial layer process the input sequence first, followed by a temporal layer (as in P3-A), or do spatial and temporal operations alternate layer-by-layer in a staggered grid (as in P3-C)? 
+*   Ensure that no future temporal information is leaked to past temporal slots during grid execution (strict temporal causality).
+
+**Language Reminder:** In your report, avoid words like "organically emerges" or "perfectly unifies." Instead, use precise descriptions like "the representation is consistent with..." or "the shared-weight constraint reduces accuracy by $X$ percentage points compared to the anisotropic baseline."
+
+---
+
