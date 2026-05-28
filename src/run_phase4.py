@@ -18,11 +18,11 @@ from __future__ import annotations
 
 import argparse
 import csv
+import gc
 import math
 import os
 import sys
 import time
-from multiprocessing import Pool
 
 import numpy as np
 
@@ -494,16 +494,23 @@ def evaluate_classification(
     test_grid: np.ndarray,
     test_y: np.ndarray,
     seed: int,
+    batch_size: int = 64,
 ) -> dict:
     """
     Fit SimpleLogisticRegression on spatial_pooled_then_flat readout.
+    Process feature extraction in chunks to avoid memory spike.
     """
-    fwd_train = encoder.forward_with_intermediates(train_grid)
-    fwd_test = encoder.forward_with_intermediates(test_grid)
+    def extract_features(grid, batch_size):
+        features = []
+        for start in range(0, len(grid), batch_size):
+            end = min(start + batch_size, len(grid))
+            fwd = encoder.forward_with_intermediates(grid[start:end])
+            feat = fwd["temporal_outputs"][-1].mean(axis=2).reshape(end - start, -1)
+            features.append(feat)
+        return np.concatenate(features, axis=0)
 
-    # spatial_pooled_then_flat: mean over spatial axis, flatten
-    tr = fwd_train["temporal_outputs"][-1].mean(axis=2).reshape(len(train_y), -1)
-    te = fwd_test["temporal_outputs"][-1].mean(axis=2).reshape(len(test_y), -1)
+    tr = extract_features(train_grid, batch_size)
+    te = extract_features(test_grid, batch_size)
 
     probe = SimpleLogisticRegression(
         n_classes=N_CLASSES,
@@ -596,27 +603,32 @@ def run_single_experiment(args: tuple) -> dict:
 
     # Training
     t0 = time.time()
-    for epoch in range(epochs):
-        metrics = train_epoch(
-            encoder,
-            train_grid,
-            BATCH_SIZE,
-            rng,
-            objective=objective,
-            adam_spatial=adam_spatial if update_encoder else None,
-            adam_temporal=adam_temporal if update_encoder else None,
-            adam_decoder=adam_decoder if update_encoder else None,
-            spatial_jepas=spatial_jepas,
-            temporal_jepas=temporal_jepas,
-            use_pooled_vicreg=use_pooled_vicreg,
-        )
+    if objective != "untrained":
+        for epoch in range(epochs):
+            metrics = train_epoch(
+                encoder,
+                train_grid,
+                BATCH_SIZE,
+                rng,
+                objective=objective,
+                adam_spatial=adam_spatial if update_encoder else None,
+                adam_temporal=adam_temporal if update_encoder else None,
+                adam_decoder=adam_decoder if update_encoder else None,
+                spatial_jepas=spatial_jepas,
+                temporal_jepas=temporal_jepas,
+                use_pooled_vicreg=use_pooled_vicreg,
+            )
+    else:
+        # Untrained: skip training, compute a single forward pass for metrics
+        fwd_sample = encoder.forward_with_intermediates(train_grid[:BATCH_SIZE])
+        metrics = {
+            "obj_loss": 0.0,
+            "pooled_std": float(np.sqrt(fwd_sample["pooled"].var(axis=0, ddof=0).mean() + 1e-12)),
+        }
     t1 = time.time()
 
-    # Final pooled std
-    final_fwd = encoder.forward_with_intermediates(train_grid)
-    final_pooled_std = float(
-        np.sqrt(final_fwd["pooled"].var(axis=0, ddof=0).mean() + 1e-12)
-    )
+    # Final pooled std from last epoch (avoids redundant full-dataset forward pass)
+    final_pooled_std = metrics.get("pooled_std", 0.0)
 
     # Classification
     eval_res = evaluate_classification(encoder, train_grid, train_y,
@@ -662,16 +674,47 @@ def save_result(result: dict, csv_path: str) -> None:
 #  7. Main experiment orchestration
 # =============================================================================
 
-def main(dry_run: bool = False):
+def load_existing_results(csv_path: str) -> set:
+    """Load existing (objective, seed, use_pooled_vicreg) tuples from CSV."""
+    existing = set()
+    if not os.path.exists(csv_path):
+        return existing
+    try:
+        with open(csv_path, "r", newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                key = (
+                    row["objective"],
+                    int(row["seed"]),
+                    row["use_pooled_vicreg"].lower() == "true",
+                )
+                existing.add(key)
+    except Exception:
+        pass
+    return existing
+
+
+def main(dry_run: bool = False, objectives: list[str] | None = None, skip_existing: bool = False):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    if os.path.exists(RESULTS_CSV):
+    # Determine which objectives to run
+    selected_objectives = objectives if objectives else OBJECTIVES
+    # Include untrained if no --objectives filter is given or explicitly part of selection
+    include_untrained = (objectives is None) or ("untrained" in objectives)
+
+    # Only delete CSV for a full run (no --objectives)
+    if objectives is None and os.path.exists(RESULTS_CSV):
         os.remove(RESULTS_CSV)
+
+    existing = load_existing_results(RESULTS_CSV) if skip_existing else set()
 
     # Build task list
     tasks = []
     task_labels = []
-    for objective in OBJECTIVES:
+    for objective in selected_objectives:
+        if objective not in OBJECTIVES:
+            print(f"  Warning: unknown objective '{objective}', skipping.")
+            continue
         for use_pv in [False, True]:
             if dry_run:
                 seeds_to_use = [42]
@@ -680,18 +723,26 @@ def main(dry_run: bool = False):
                 seeds_to_use = SEEDS
                 ep = EPOCHS
             for seed in seeds_to_use:
+                key = (objective, seed, use_pv)
+                if skip_existing and key in existing:
+                    continue
                 label = f"{objective.upper()}{'+' if use_pv else '-'}VICReg_seed{seed}"
                 tasks.append((objective, seed, use_pv, ep))
                 task_labels.append(label)
 
     # Untrained baseline
-    if dry_run:
-        tasks.append(("untrained", 42, False, 1))
-        task_labels.append("UNTRAINED_seed42")
-    else:
-        for seed in SEEDS:
-            tasks.append(("untrained", seed, False, EPOCHS))
-            task_labels.append(f"UNTRAINED_seed{seed}")
+    if include_untrained:
+        if dry_run:
+            key = ("untrained", 42, False)
+            if not (skip_existing and key in existing):
+                tasks.append(("untrained", 42, False, 1))
+                task_labels.append("UNTRAINED_seed42")
+        else:
+            for seed in SEEDS:
+                key = ("untrained", seed, False)
+                if not (skip_existing and key in existing):
+                    tasks.append(("untrained", seed, False, EPOCHS))
+                    task_labels.append(f"UNTRAINED_seed{seed}")
 
     total_tasks = len(tasks)
     mode = "DRY-RUN" if dry_run else "FULL RUN"
@@ -704,24 +755,17 @@ def main(dry_run: bool = False):
 
     t_start = time.time()
 
-    if dry_run:
-        all_results = [run_single_experiment(t) for t in tasks]
-    else:
-        n_workers = min(1, total_tasks)
-        print(f"  Using {n_workers} workers...")
-        with Pool(processes=n_workers) as pool:
-            # Use imap_unordered for better progress visibility
-            all_results = []
-            for i, result in enumerate(pool.imap_unordered(run_single_experiment, tasks)):
-                all_results.append(result)
-                if (i + 1) % 5 == 0 or i == total_tasks - 1:
-                    elapsed = time.time() - t_start
-                    print(f"    Completed {i+1}/{total_tasks} tasks ({elapsed:.1f}s elapsed)")
+    all_results = []
+    for i, task in enumerate(tasks):
+        result = run_single_experiment(task)
+        all_results.append(result)
+        save_result(result, RESULTS_CSV)
+        gc.collect()
+        if (i + 1) % 5 == 0 or i == total_tasks - 1:
+            elapsed = time.time() - t_start
+            print(f"    Completed {i+1}/{total_tasks} tasks ({elapsed:.1f}s elapsed)")
 
     t_end = time.time()
-
-    for r in all_results:
-        save_result(r, RESULTS_CSV)
 
     print(f"\n  All runs completed in {t_end - t_start:.1f}s")
     print(f"  Results saved to {RESULTS_CSV}")
@@ -1050,7 +1094,7 @@ On `z̄ ∈ ℝ^{B×d_out}` (mean-pooled from final temporal layer):
     lines.append("")
 
     # Write report
-    with open(REPORT_MD, "w") as f:
+    with open(REPORT_MD, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
     print(f"\n  Report saved to {REPORT_MD}")
 
@@ -1063,9 +1107,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true",
                         help="Single seed, 1 epoch debug run")
+    parser.add_argument("--objectives", nargs="+", default=None,
+                        help="Subset of objectives to run (e.g. jepa sfa)")
+    parser.add_argument("--skip-existing", action="store_true",
+                        help="Skip combinations already present in results CSV")
     args = parser.parse_args()
 
-    results = main(dry_run=args.dry_run)
+    results = main(dry_run=args.dry_run, objectives=args.objectives, skip_existing=args.skip_existing)
 
-    if not args.dry_run:
+    if not args.dry_run and args.objectives is None:
         run_statistical_analysis(results)

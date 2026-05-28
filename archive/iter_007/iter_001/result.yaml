@@ -1,43 +1,49 @@
 artifacts:
-- src/pre_registration.md
 - src/run_phase4.py
 - phase_4/phase4_results.csv
-experimenter_view: "Phase 4 implementation is complete and validated via dry-run.\
-  \ All 9\nconditions (4 objectives × 2 VICReg settings + untrained) executed\nsuccessfully\
-  \ with no crashes, no NaNs, and sensible accuracy values.\n\nKey dry-run observations\
-  \ (1 epoch, seed 42):\n- SFA without VICReg collapsed to near-untrained performance\
-  \ (55.5%),\n  confirming the theoretical prediction that pure slowness has a trivial\n\
-  \  constant solution.\n- SFA with VICReg jumped to 70.75%, validating the Lagrangian\
-  \ relaxation\n  formulation as standard gradient-based SFA.\n- Reconstruction without\
-  \ VICReg performed poorly (42.25%), but with VICReg\n  reached 69.25% — this suggests\
-  \ the decoder needs more epochs to develop\n  its anti-collapse property, or the\
-  \ λ_l1 sparsity needs tuning.\n- JEPA+VICReg (62.25%) is in the expected range for\
-  \ a 1-epoch run.\n- Hebbian variance maximisation works (63.5% without, 65% with\
-  \ VICReg),\n  demonstrating that intermediate-layer variance maximisation is a viable\n\
-  \  training signal distinct from pooled VICReg.\n\nThe full 45-run experiment (8\
-  \ trained × 5 seeds + 5 untrained, 30 epochs\neach) requires ~20-30 minutes and\
-  \ should be launched separately. The\nimplementation is production-ready.\n"
+experimenter_view: "All 45 experiments completed successfully. The memory fixes (sequential\n\
+  execution, batched evaluation, skipping untrained training loop,\ngc.collect between\
+  \ runs) eliminated the prior crashes.\n\nKey scientific findings:\n1. F1 (JEPA+VICReg\
+  \ < 55%): NOT triggered. JEPA+VICReg achieves 61.55%.\n2. F2 (another objective\
+  \ beats JEPA+VICReg by ≥3pp): TRIGGERED.\n   Reconstruction+VICReg (83.00%) and\
+  \ SFA+VICReg (82.15%) both\n   dramatically outperform JEPA+VICReg (61.55%).\n3.\
+  \ F3 (objective without VICReg ≥ with VICReg): NOT triggered for\n   any objective.\
+  \ Pooled VICReg improves every objective, including\n   Reconstruction (49.55% →\
+  \ 83.00%), contrary to the manager's\n   expectation that reconstruction natively\
+  \ resists collapse.\n\nThe most striking result is that SFA+VICReg and Reconstruction+VICReg\n\
+  achieve ~82-83% test accuracy, far above the JEPA reference. Without\npooled VICReg,\
+  \ SFA collapses completely (25% = chance). This confirms\nthat VICReg is the critical\
+  \ anti-collapse mechanism across all\nobjectives, not just JEPA.\n\nThe untrained\
+  \ baseline (52.1%) is surprisingly close to JEPA without\nVICReg (53.5%), suggesting\
+  \ JEPA's local VICReg alone provides only\nmarginal benefit on this architecture\
+  \ without the pooled constraint.\n"
 log_excerpt: "======================================================================\n\
-  \  PHASE 4 — Objective Comparison — DRY-RUN\n  Tasks: 9\n  Epochs: 1, Batch: 64,\
-  \ LR: 0.001\n  Seeds: [42]\n======================================================================\n\
-  \n  All runs completed in 42.6s\n  Results saved to phase_4\\phase4_results.csv\n\
-  \n  Summary (mean ± std test accuracy):\n    JEPA                  : 0.6175 ± 0.0000\n\
-  \    JEPA+VICReg           : 0.6225 ± 0.0000\n    SFA                   : 0.5550\
-  \ ± 0.0000\n    SFA+VICReg            : 0.7075 ± 0.0000\n    HEBBIAN           \
-  \    : 0.6350 ± 0.0000\n    HEBBIAN+VICReg        : 0.6500 ± 0.0000\n    RECON \
-  \                : 0.4225 ± 0.0000\n    RECON+VICReg          : 0.6925 ± 0.0000\n\
-  \    UNTRAINED             : 0.5650 ± 0.0000\n======================================================================\n"
+  \  PHASE 4 — Objective Comparison — FULL RUN\n  Tasks: 45\n  Epochs: 30, Batch:\
+  \ 64, LR: 0.001\n  Seeds: [42, 43, 44, 45, 46]\n======================================================================\n\
+  \    Completed 5/45 tasks (472.7s elapsed)\n    Completed 10/45 tasks (951.7s elapsed)\n\
+  \    Completed 15/45 tasks (1178.8s elapsed)\n    Completed 20/45 tasks (1399.6s\
+  \ elapsed)\n    Completed 25/45 tasks (1640.5s elapsed)\n    Completed 30/45 tasks\
+  \ (1884.0s elapsed)\n    Completed 35/45 tasks (2254.7s elapsed)\n    Completed\
+  \ 40/45 tasks (2631.6s elapsed)\n    Completed 45/45 tasks (2641.7s elapsed)\n\n\
+  \  All runs completed in 2641.7s\n  Results saved to phase_4\\phase4_results.csv\n\
+  \n  Summary (mean ± std test accuracy):\n    JEPA                  : 0.5350 ± 0.0236\n\
+  \    JEPA+VICReg           : 0.6155 ± 0.0486\n    SFA                   : 0.2500\
+  \ ± 0.0000\n    SFA+VICReg            : 0.8215 ± 0.0302\n    HEBBIAN           \
+  \    : 0.4390 ± 0.0633\n    HEBBIAN+VICReg        : 0.4855 ± 0.0683\n    RECON \
+  \                : 0.4955 ± 0.0779\n    RECON+VICReg          : 0.8300 ± 0.0227\n\
+  \    UNTRAINED             : 0.5210 ± 0.0356\n======================================================================\n"
 metrics:
-  dry_run_duration_sec: 42.6
-  dry_run_tasks: 9
-  hebbian_no_vicreg_dry: 0.635
-  hebbian_with_vicreg_dry: 0.65
-  jepa_no_vicreg_dry: 0.6175
-  jepa_with_vicreg_dry: 0.6225
-  recon_no_vicreg_dry: 0.4225
-  recon_with_vicreg_dry: 0.6925
-  sfa_no_vicreg_dry: 0.555
-  sfa_with_vicreg_dry: 0.7075
-  untrained_dry: 0.565
-notes: Dry-run validated; full experiment ready to launch (45 runs, ~20-30 min).
+  hebbian_mean_test_acc: 0.439
+  hebbian_vicreg_mean_test_acc: 0.4855
+  jepa_mean_test_acc: 0.535
+  jepa_vicreg_mean_test_acc: 0.6155
+  recon_mean_test_acc: 0.4955
+  recon_vicreg_mean_test_acc: 0.83
+  sfa_mean_test_acc: 0.25
+  sfa_vicreg_mean_test_acc: 0.8215
+  total_runs: 45
+  total_runtime_sec: 2641.7
+  untrained_mean_test_acc: 0.521
+notes: Full 45-run Phase 4 sweep completed. F2 falsification triggered; JEPA is not
+  the best objective.
 status: ok
