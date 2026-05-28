@@ -1,0 +1,37 @@
+artifacts:
+- src/run_remaining_seeds.py
+- src/time_one_run.py
+- src/test_import.py
+experimenter_view: 'The Phase 3 JEPA implementation in pure NumPy is prohibitively
+  slow. A single
+
+  200-epoch run is estimated at ~58 minutes based on the 2-epoch smoke test
+
+  taking 34.8s. With 16 remaining runs needed, total time would be ~15.5 hours.
+
+  The existing results file contains only seed 42 for all 4 variants:
+
+  P3-A: 42.6%, P3-B: 50.8%, P3-C: 44.5%, Untrained: 49.5% test accuracy.
+
+  To complete this task, the code would need significant optimization
+
+  (vectorization, JIT compilation, or GPU acceleration) or the execution
+
+  environment would need much longer timeouts.
+
+  '
+log_excerpt: "Running smoke test (2 epochs)...\n  Variant: P3-B, Seed: 43, Epochs:\
+  \ 2\n    Dataset: train=(2000, 16, 32), test=(800, 16, 32)\n    Encoder: P3-B, params=3200\n\
+  \    Joint training (alpha=0.5) for 2 epochs...\n      Epoch 0: spatial_loss=19.0917,\
+  \ temporal_loss=15.1386, combined=17.1151\n      Epoch 1: spatial_loss=17.4635,\
+  \ temporal_loss=11.5647, combined=14.5141\n    Training completed in 34.8s\n   \
+  \ Classification: train=0.5060, test=0.4950\nCommand timed out after 300 seconds\n"
+metrics:
+  estimated_single_run_200epochs_sec: 3480
+  estimated_total_16runs_min: 928
+  estimated_total_16runs_sec: 55680
+  existing_seeds_completed: 1
+  remaining_seeds_needed: 16
+  smoke_test_2epochs_duration_sec: 34.8
+notes: Task not completed — pure NumPy JEPA is ~60 min/run, far exceeding tool timeouts.
+status: experiment_failed
