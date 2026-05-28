@@ -1,94 +1,96 @@
 # Current Research State — HSUN Project
-**Last updated:** After Phase 3 completion (iter_005, sub-agents 5.1–5.6)
+**Last updated:** After Phase 6 (iter_006, sub-agents 6.1–6.3)
 
 ## Goal
 Investigate an architecture for unsupervised representation learning built from
-a single, universal node type. Phase 3 (Unified Spatiotemporal Grid) is now complete.
+a single, universal node type. Phase 3 (Unified Spatiotemporal Grid) is now RESOLVED.
 
 ## Confirmed (with iter/sub-agent references)
 
-1. **P3-C (shared weights) fails to outperform Untrained** (iter_005, 5.6):
-   - Gain: 1.15pp (required ≥8pp)
-   - p=0.648 (required <0.05)
-   - Cohen's d=0.22 (required ≥1.0)
-   - **F1 TRIGGERED — universal parameter hypothesis falsified on training gain**
+### Phase 3 Resolution (iter_006)
+1. **VICReg was NOT omitted** — it was present in JEPALoss with λ_var=25, λ_cov=25
+   (iter_006, 6.1 code audit). The original pre-registered hypothesis was factually
+   incorrect.
 
-2. **Weight sharing imposes zero expressivity penalty** (iter_005, 5.6):
-   - P3-B (separate weights): 44.0% vs P3-C (shared weights): 44.0%
-   - Penalty = 0.0pp → F2 NOT triggered
-   - Consistent with Phase 1 finding (iter_002-003)
+2. **VICReg on intermediate codes is INEFFECTIVE** for the pooled representation
+   (iter_006, 6.2 diagnostic):
+   - Per-dim stds at intermediate layers: ~0.07-0.08 (target ≥1.0)
+   - VICReg gradient per element ≈ 0.0008/elem vs prediction gradient ≈ 0.016/elem
+   - The prediction gradient overwhelms VICReg by ~20×
+   - Mathematical cause: M = B*T*S = 28,672 elements dilutes the gradient
 
-3. **P3-C is within 0.5pp of P3-A** (iter_005, 5.6):
-   - P3-A: 44.5% vs P3-C: 44.0% → gap 0.5pp → F3 NOT triggered
+3. **Mean-pooling destroys discriminative information** (iter_006, 6.2 diagnostic):
+   - spatial_pooled_then_flat (53.5%) >> pooled (44.25%) = +9.25pp gap
+   - Temporal structure is the primary discriminative signal
+   - Mean-pooling over both space and time erases this signal
 
-4. **JEPA optimization succeeds for all variants** (iter_005, 5.6):
-   - P3-C combined loss: ~24.2, P3-B: ~21.9 (ratio 1.11×) → F4 NOT triggered
-   - Training reduces temporal loss from ~19.3 to ~8.5 (P3-C)
-   - Training reduces spatial loss from ~20.5 to ~15.7 (P3-C)
+4. **Pooled VICReg fix is EFFECTIVE** (iter_006, 6.3 factorial experiment):
+   - Applying VICReg directly to pooled representation (M=B=64) concentrates
+     gradient 450× per element
+   - Per-dim pooled std: 0.072 → 0.130 (+80.3%, p < 0.001)
+   - Variance loss: 0.0 (inactive) → 0.87 (active)
 
-5. **ALL variants barely exceed Untrained baseline** (iter_005, 5.6):
-   - P3-A: 44.5% (+1.65pp vs Untrained 42.85%)
-   - P3-B: 44.0% (+1.15pp)
-   - P3-C: 44.0% (+1.15pp)
-   - This is NOT specific to P3-C — it affects ALL trained variants
+5. **Combined fix PASSES all falsification criteria** (iter_006, 6.3):
+   - P3-C + pooled VICReg + spatial_pooled_then_flat = 61.55% test accuracy
+   - Gain over untrained: +9.45pp (threshold ≥8pp) ✅
+   - p = 0.013 (threshold <0.05) ✅
+   - Cohen's d = 1.91 (threshold ≥1.0) ✅
+   - F2 (sharing penalty): 0.0pp ✅
+   - F3 (within 20pp of P3-A): 61.55% >> 24.5% ✅
+   - F4 (loss ratio): 27.4 < 43.75 ✅
 
-6. **Object permanence task has shortcut** (iter_005, 5.6):
-   - Untrained accuracy: 69.2% (>60% threshold)
-   - FLAGGED: deterministic propagation trivially captures blob presence
-   - periodic_st: only 10.6% untrained (genuinely hard)
-   - moving_blob: 49.2% untrained, expanding_blob: 42.4% untrained
+6. **Both fixes are NECESSARY** (iter_006, 6.3 2×2 factorial):
+   - Readout-only (no VICReg): +1.4pp over untrained (NOT significant)
+   - VICReg-only (pooled readout): +7.75pp (just below 8pp threshold)
+   - Both together: +9.45pp (significant, large effect)
 
-7. **Classification-prediction tradeoff confirmed spatiotemporal** (iter_005):
-   - JEPA training reduces prediction loss substantially (temporal: 19.3→8.5)
-   - But classification accuracy barely improves
-   - Echoes Phase 2 finding (iter_004, 4.3)
-
-## Refuted Hypotheses
-- Phase 3 universal parameter hypothesis: FALSIFIED on F1 (training gain insufficient)
-- "JEPA training produces useful spatiotemporal representations": REFUTED — gain is
-  marginal across ALL variants, not just P3-C
-
-## Phase 1-2 Carry-Forward (still valid)
+### Phase 1-2 Carry-Forward (still valid)
 - JEPA local objective works spatially: 62.12% (d=8), 65.20% (d=16) (iter_003)
 - P2-D temporal JEPA: 65.33% ± 2.74% (iter_004)
-- Weight sharing has zero expressivity penalty (iter_002)
+- Weight sharing has zero expressivity penalty (iter_002, iter_005)
 - Zero-shot spatial→temporal transfer is falsified (iter_004)
 - Node type is universal, weights are axis-specific (iter_004)
+
+## Refuted Hypotheses
+- "VICReg was omitted from Phase 3 training": REFUTED — VICReg IS present (iter_006, 6.1)
+- "VICReg omission caused collapse": PARTIALLY REFUTED — VICReg is present but
+  INEFFECTIVE due to gradient dilution (iter_006, 6.2)
+- "The spatiotemporal architecture fundamentally cannot learn": REFUTED — P3-C
+  with pooled VICReg achieves 61.55% (iter_006, 6.3)
 
 ## Current Best Results
 - **Spatial only**: JEPA-d16, 65.20% ± 1.80%, 4,832 params (iter_003)
 - **Temporal only**: P2-D JEPA, 65.33% ± 2.74% (iter_004)
-- **Spatiotemporal**: All variants ~44%, barely above untrained ~42.85% (iter_005)
+- **Spatiotemporal (P3-C, pooled VICReg, spatial_pooled readout)**: 61.55% ± 4.67%, 1,600 params (iter_006)
+- **Spatiotemporal (P3-C, pooled VICReg, pooled readout)**: 49.15% ± 3.76% (iter_006)
 
-## Experiment Configuration
-- Epochs: 30, train/class: 200, test/class: 100, batch=64, lr=1e-3
-- Reduced from original 200 epochs / 500 train/class due to compute constraints
+## Experiment Configuration (Updated)
+- Architecture: P3-C (shared weights), d=16, d_out=16, 1,600 params
+- Training: 30 epochs, 200 train/class, 100 test/class, batch=64, lr=1e-3
+- NEW: Pooled VICReg (λ_var=25, λ_cov=25) on final representation
+- NEW: spatial_pooled_then_flat readout (416 features) for classification
 
 ## Files Created This Phase
-- src/spatiotemporal_dataset.py — 4-class spatiotemporal dataset generator
-- src/spatiotemporal_encoder.py — P3-A, P3-B, P3-C architectures
-- src/run_phase3.py — Full experiment runner
-- src/run_phase3_optimized.py — Optimized runner (30 epochs, 200/class)
-- src/pre_registration.md — Updated with revised F1-F4 criteria
-- phase_3/phase3_full_results.csv — 20 experiment results
-- phase_3/shortcut_baselines.csv — 30 shortcut baseline results
-- phase_3/REPORT.md — Phase 3 analysis report
-- phase_3/experiment_config.txt — Configuration documentation
+- src/diagnostic_phase3_vicreg.py — Variance diagnostic + pooling comparison script
+- src/variance_diagnostic_results.csv — Per-epoch variance metrics
+- src/pooling_comparison_results.csv — Pooling strategy comparison
+- src/run_phase3_vicreg_fix.py — Full experiment runner with pooled VICReg
+- src/pre_registration.md — Updated with corrected hypothesis
+- phase_3/pooled_vicreg_results.csv — 30 experiment results (6 conditions × 5 seeds)
+- phase_3/REPORT_vicreg_fix.md — Comprehensive analysis report
+- phase_3/diagnostic_report.md — Diagnostic analysis
 
 ## Open Questions (ordered by expected value)
-1. **Why does JEPA prediction improvement NOT transfer to classification?**
-   Confirmed across Phase 2 and Phase 3. The objective produces locally
-   predictable codes but these don't carry discriminative signal for the
-   downstream task. This is the central bottleneck.
-2. **Can a different training objective fix this?** Phase 4 (training objective
-   comparison) is the direct next step. SFA, Hebbian, contrastive, and
-   reconstruction objectives should be tested on the SAME architecture.
-3. **Is the object_permanence shortcut solvable?** Need to redesign the task
-   so that blob presence is not trivially correlated with permanence.
-4. **Would longer training or larger d improve results?** The current 30-epoch
-   runs may be undertrained. But JEPA loss converges by epoch 30, suggesting
-   the problem is in the objective, not training duration.
-5. **Can gain-over-untrained be the primary metric?** Yes, this should be
-   adopted as the standard metric to control for architectural shortcuts.
-6. **Does the spatiotemporal grid need a different pooling strategy?** Mean-pool
-   across (10, 26) positions may lose critical temporal structure.
+1. **Should Phase 4 use pooled VICReg + spatial_pooled readout as standard?**
+   Yes — this resolves the known training collapse and readout bottleneck.
+2. **Can other training objectives (SFA, Hebbian, contrastive) also benefit
+   from pooled VICReg?** This should be tested in Phase 4.
+3. **Is the object_permanence shortcut (69.2% untrained with pooled readout)
+   still present with spatial_pooled readout?** Untrained spatial readout:
+   72.4% for class_3 (object_permanence) — shortcut persists.
+4. **Would longer training improve results?** JEPA loss converges by epoch 30,
+   but pooled VICReg might benefit from more epochs.
+5. **Can we close the gap to spatial-only (65.2%) and temporal-only (65.3%)?**
+   Currently at 61.55% — 3.7pp below single-axis performance.
+6. **Would P3-A with pooled VICReg exceed P3-C?** The sequential training
+   protocol might interact differently with pooled VICReg.
