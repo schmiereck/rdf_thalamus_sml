@@ -1,0 +1,190 @@
+# Sub-Planner Task (depth 1)
+
+Your iter_id context is `6.3`. When spawning sub-agents via run_agent, form their IDs as `6.3.1`, `6.3.2`, etc.
+
+## Goal
+
+## Task: Fix Phase 3 — Add Pooled VICReg + Better Readout, Run 5-Seed Experiment
+
+### CRITICAL CONTEXT from Diagnostic (iter 6.2)
+
+Two root causes identified for Phase 3 failure:
+
+**Problem 1: VICReg is INEFFECTIVE on intermediate codes**
+- Per-dim std at all layers: ~0.07-0.08 (VICReg target: ≥1.0)
+- Variance DECREASED during training (not increased)
+- Math: VICReg gradient per element = λ/(M·d·std). For M=B·T·S=28672 (spatial layer 0), gradient ≈ 0.0008/elem. Prediction gradient ≈ 0.016/elem. VICReg is overwhelmed ~20×.
+- FIX: Add a separate VICReg loss on the POOLED representation (shape (B, d_out) = (64, 16)). Here M=B=64, so gradient per element ≈ 25/(64·16·0.07) ≈ 0.33/elem — 400× stronger than per-layer VICReg.
+
+**Problem 2: Mean-pooling destroys discriminative information**
+- Pooled (B,16): 44.25% test acc
+- spatial_pooled_then_flat (B,416): 53.5% test acc  (+9.25pp)
+- FIX: Use spatial_pooled_then_flat as the classification readout. This means: from the final temporal output (B, 26, 10, 16), mean-pool over spatial (axis=2) → (B, 26, 16), then flatten → (B, 416).
+
+### EXPERIMENT DESIGN (Pre-registered)
+
+This is a 2×2 factorial with the existing baseline:
+
+| Condition | Pooled VICReg | Readout | Expected role |
+|-----------|--------------|---------|---------------|
+| A (baseline) | No | Pooled | Reuse iter_005 P3-C results |
+| B (readout-only) | No | spatial_pooled_then_flat | Quantify readout improvement |
+| C (VICReg-only) | Yes | Pooled | Quantify VICReg improvement |
+| D (both fixes) | Yes | spatial_pooled_then_flat | PRIMARY: both fixes combined |
+
+**New runs needed:**
+- B: P3-C + current training + spatial_pooled_then_flat readout → 5 seeds
+- C: P3-C + pooled VICReg + pooled readout → 5 seeds
+- D: P3-C + pooled VICReg + spatial_pooled_then_flat readout → 5 seeds
+- Untrained + spatial_pooled_then_flat readout → 5 seeds
+
+**Falsification criteria (same as pre-registration):**
+- Condition D must achieve ≥8pp gain over untrained (spatial_pooled readout baseline)
+- Gain must be statistically significant (paired t-test p < 0.05, Cohen's d ≥ 0.8)
+
+### IMPLEMENTATION PLAN
+
+**Step 1: Create src/run_phase3_vicreg_fix.py**
+
+Based on src/run_phase3_optimized.py, with these modifications:
+
+1. **Add pooled VICReg function** (implement in the new file):
+```python
+def pooled_vicreg_loss(z_pooled, eps=1.0):
+    """
+    Compute VICReg variance + covariance loss on pooled representation.
+    z_pooled: (B, d) 
+    Returns: var_loss, cov_loss (scalars)
+    """
+    B, d = z_pooled.shape
+    # Variance: mean of max(0, 1 - std_j) over dimensions
+    std = np.sqrt(z_pooled.var(axis=0, ddof=0) + 1e-12)
+    var_loss = float(np.mean(np.maximum(0.0, eps - std)))
+    
+    # Covariance: (1/d) * sum of off-diagonal C_{j,k}^2
+    zc = z_pooled - z_pooled.mean(axis=0, keepdims=True)
+    cov = (zc.T @ zc) / B
+    mask = 1.0 - np.eye(d)
+    cov_loss = float(np.sum(cov ** 2 * mask) / d)
+    
+    return var_loss, cov_loss
+```
+
+2. **Add pooled VICReg gradient function**:
+```python
+def pooled_vicreg_grad(z_pooled, lambda_var=25.0, lambda_cov=25.0, eps=1.0):
+    """
+    Compute gradient of VICReg loss w.r.t. z_pooled.
+    z_pooled: (B, d)
+    Returns: dL_dz_pooled: (B, d)
+    """
+    B, d = z_pooled.shape
+    mu = z_pooled.mean(axis=0, keepdims=True)
+    std = np.sqrt(z_pooled.var(axis=0, ddof=0) + 1e-12)
+    
+    # Variance gradient
+    mask = (std < eps).astype(float)
+    dz_var = -(lambda_var / d) * mask * (z_pooled - mu) / (B * std + 1e-12)
+    
+    # Covariance gradient
+    zc = z_pooled - mu
+    cov = (zc.T @ zc) / B
+    C_off = cov * (1.0 - np.eye(d))
+    dz_cov = (lambda_cov * 4.0 / (B * d)) * (zc @ C_off)
+    
+    return dz_var + dz_cov
+```
+
+3. **Modify train_jepa_epoch** to optionally include pooled VICReg:
+   - After the forward pass, compute pooled VICReg loss on `fwd["pooled"]`
+   - Compute pooled VICReg gradient
+   - The pooled VICReg gradient needs to be backpropagated through the encoder. This is tricky because the current backward() expects code-level gradients, not pooled-level gradients.
+   
+   **Simpler approach**: Since the pooled representation is `x_temporal.mean(axis=(1,2))`, the gradient of the loss w.r.t. x_temporal is `dL_dz_pooled` expanded back: `dL_dx_temporal = dL_dz_pooled[:, None, None, :] / (T_final * S_final)` where T_final=26, S_final=10. This is then added to the temporal code gradients.
+
+   Actually, the simplest approach is to add the pooled VICReg gradient as an additional term in `dL_dtemporal_codes[-1]`:
+   ```python
+   # After JEPA training step, add pooled VICReg gradient
+   if use_pooled_vicreg:
+       dL_dpooled = pooled_vicreg_grad(fwd["pooled"])
+       # Expand to temporal output shape: (B, T_final, S_final, d)
+       # pooled = x_temporal.mean(axis=(1,2))
+       # So dL/dx_temporal = dL/dpooled / (T_final * S_final) broadcast
+       dL_dpooled_expanded = dL_dpooled[:, None, None, :] / (T_final * S_final)
+       dL_dtemporal_codes[-1] += dL_dpooled_expanded  # Add to last temporal layer's gradient
+   ```
+
+   Wait, this isn't quite right. The pooled VICReg gradient should flow through the entire backward pass, not just the last temporal layer. But adding it to the last temporal layer's code gradient is the most direct path.
+
+   Actually, the encoder's backward() function takes `dL_dtemporal_codes` which are gradients w.r.t. each temporal layer's output. The gradient of the pooled representation w.r.t. the last temporal layer's output is: `dL/dpooled * dpooled/dx_temporal = dL/dpooled / (T*S)`. This is correct.
+
+   But we also need to consider: the pooled VICReg gradient should also flow back through the spatial layers (since the temporal layers depend on spatial outputs). This happens naturally through the backward() function — the temporal code gradient propagates backward through the temporal layers and then through the spatial layers.
+
+4. **Add classification with spatial_pooled_then_flat readout**:
+   ```python
+   def evaluate_classification_v2(encoder, train_grid, train_y, test_grid, test_y, 
+                                  seed=42, readout='spatial_pooled_then_flat'):
+       fwd_train = encoder.forward_with_intermediates(train_grid)
+       fwd_test = encoder.forward_with_intermediates(test_grid)
+       
+       if readout == 'pooled':
+           train_repr = fwd_train["pooled"]
+           test_repr = fwd_test["pooled"]
+       elif readout == 'spatial_pooled_then_flat':
+           # temporal_outputs[-1] shape: (B, T_final=26, S_final=10, d=16)
+           # Mean over spatial (axis=2): (B, 26, 16)
+           train_repr = fwd_train["temporal_outputs"][-1].mean(axis=2).reshape(len(train_y), -1)
+           test_repr = fwd_test["temporal_outputs"][-1].mean(axis=2).reshape(len(test_y), -1)
+       
+       probe = SimpleLogisticRegression(n_classes=N_CLASSES, n_features=train_repr.shape[1], 
+                                         lr=0.1, max_iter=2000, seed=seed)
+       probe.fit(train_repr, train_y)
+       train_acc = float(probe.score(train_repr, train_y))
+       test_acc = float(probe.score(test_repr, test_y))
+       return {"train_acc": train_acc, "test_acc": test_acc}
+   ```
+
+**Step 2: Run the full experiment**
+
+For each condition (B, C, D, Untrained+spatial_pooled) × 5 seeds [42, 43, 44, 45, 46]:
+- 30 epochs, 200 train/class, 100 test/class, batch=64, lr=1e-3
+- P3-C variant, d=16, d_out=16
+- Save results incrementally to CSV
+
+IMPORTANT: The pooled VICReg lambda values should be λ_var=25, λ_cov=25 (same as the per-layer VICReg). The mathematical justification for using the same weights is that the pooled representation has M=B=64 elements (vs M≈28672 for per-layer codes), so the gradient will be ~450× more concentrated per element, which is what we need.
+
+Also measure and report: per-dim std of pooled representation after training, VICReg var_loss/cov_loss at final epoch.
+
+**Step 3: Statistical analysis**
+
+For the PRIMARY comparison (Condition D vs Untrained+spatial_pooled):
+- Mean test accuracy ± std for each condition
+- Gain over untrained (pp)
+- Paired t-test p-value
+- Cohen's d effect size
+- Falsification decision: D gain ≥ 8pp, p < 0.05, d ≥ 0.8?
+
+Also compare all 4 conditions to quantify the contribution of each fix.
+
+**Step 4: Write results report**
+
+Save to `phase_3/REPORT_vicreg_fix.md` with:
+- Experiment design
+- Results table (all conditions × seeds)
+- Statistical analysis
+- Falsification decision
+- Mechanistic evidence: per-dim variance diagnostic comparing conditions
+- Conclusion
+
+### FILES TO REFERENCE
+- src/run_phase3_optimized.py (base template)
+- src/run_phase3.py (helper functions: create_jepa_losses, train_jepa_epoch, etc.)
+- src/spatiotemporal_encoder.py (SpatiotemporalEncoder)
+- src/spatiotemporal_dataset.py (generate_spatiotemporal_dataset)
+- src/training_objectives.py (JEPALoss, _Adam)
+- src/harness.py (SimpleLogisticRegression)
+
+### ESTIMATED RUNTIME
+Each run takes ~2-5 minutes. 20 runs (4 conditions × 5 seeds) × ~3 min = ~60 minutes.
+Plus analysis and reporting: ~30 min.
+Total: ~90 minutes.
