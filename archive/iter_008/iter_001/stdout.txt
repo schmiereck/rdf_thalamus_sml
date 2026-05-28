@@ -1,0 +1,4298 @@
+
+[Tool Call: list_dir({'path': 'src'})]
+[Tool Result: [DIR] __pycache__
+      _bench_compare.py
+      dataset_phase1.py
+      diagnostic_phase1.py
+      diagnostic_phase3_vicreg.py
+[DIR] encoders
+      eval_phase1.py
+      harness.py
+      hierarchical_encoder.py
+      node.py
+      phase3_run.log
+[DIR] phase_3
+      pooling_comparison_results.csv
+      pre_registration.md
+      profile_p3b.py
+      run_phase0.py
+      run_phase1.py
+      run_phase1_v2.py
+      run_phase2.py
+      run_phase2_baselines.py
+      run_phase3.py
+      run_phase3_background.py
+      run_phase3_fast.py
+      run_phase3_medium.py
+      run_phase3_optimized.py
+      run_phase3_parallel.py
+      run_phase3_vicreg_fix.py
+      run_phase4.py
+      run_remaining_phase3.py
+      run_remaining_seeds.py
+      spatiotemporal_dataset.py
+      spatiotemporal_encoder.py
+      spatiotemporal_encoder.py-patch
+      temporal_dataset.py
+      temporal_encoder.py
+      test_import.py
+      test_objectives.py
+      test_temporal.py
+      time_one_run.py
+      tmp_test_phase3_timing.py
+      training_objectives.py
+      variance_diagnostic_results.csv]
+ 
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_encoder.py'})]
+[Tool Result: """
+Spatiotemporal Encoder for Phase 3.
+
+Implements the sequential spatial-then-temporal encoder over a
+(16 spatial × 32 temporal) binary grid using stacked kernel-3,
+stride-1 UniversalNodes.
+
+Both spatial and temporal forward/backward passes are **fully
+vectorized** — no Python loops over spatial/temporal positions.
+
+Three variants
+--------------
+* **P3-A** – One master spatial node + one master temporal node.
+  Trained sequentially (spatial first, then temporal).
+* **P3-B** – One master spatial node + one master temporal node
+  (separate objects, trained jointly with both losses).
+* **P3-C** – A *single* master node reused for *both* spatial and
+  temporal passes (strong universal hypothesis).
+
+Architecture
+------------
+Input           : (B, S=16, T=32)  binary
+Embedding       : (2, d) lookup — Xavier-initialised, frozen
+Spatial stages  : 3 × kernel-3 / stride-1 over the S axis
+                  (16 → 14 → 12 → 10 spatial positions)
+Transpose        : (B, 10, T, d_out)  →  (B, T, 10, d_out)
+Temporal stages  : 3 × kernel-3 / stride-1 over the T axis
+                  (32 → 30 → 28 → 26 temporal positions)
+Average pool     : mean over remaining 10 spatial × 26 temporal positions
+Output          : (B, d_out)  ==  (B, 16)
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+from node import UniversalNode
+
+
+# ---------------------------------------------------------------------------
+#  Sliding-window helpers (fully vectorised, no Python loops)
+# ---------------------------------------------------------------------------
+
+def _make_windows_3(x_in: np.ndarray, axis: int = 0) -> np.ndarray:
+    """
+    Build kernel-3 sliding windows along the given axis.
+
+    Parameters
+    ----------
+    x_in : (B, N_l, M, d)
+    axis : which axis the kernel slides over (typically 1)
+
+    Returns
+    -------
+    windows : (B, N_l-2, M, 3, d)
+    """
+    if axis == 1:
+        # Fast slicing for axis=1 — avoids np.take copies and is extremely fast
+        return np.stack([
+            x_in[:, :-2, ...],
+            x_in[:, 1:-1, ...],
+            x_in[:, 2:, ...],
+        ], axis=-2)
+    return np.stack([
+        np.take(x_in, range(0, x_in.shape[axis] - 2), axis=axis),
+        np.take(x_in, range(1, x_in.shape[axis] - 1), axis=axis),
+        np.take(x_in, range(2, x_in.shape[axis]    ), axis=axis),
+    ], axis=-2)
+
+
+# ---------------------------------------------------------------------------
+#  Spatiotemporal Encoder
+# ---------------------------------------------------------------------------
+
+class SpatiotemporalEncoder:
+    """Sequential spatial→temporal encoder with configurable weight sharing."""
+
+    def __init__(
+        self,
+        variant: str = "P3-B",
+        d: int = 16,
+        d_out: int = 16,
+        n_spatial_layers: int = 3,
+        n_temporal_layers: int = 3,
+        l1_lambda: float = 0.002,
+        seed: int = 42,
+    ):
+        if variant not in ("P3-A", "P3-B", "P3-C"):
+            raise ValueError(
+                f"variant must be one of ('P3-A', 'P3-B', 'P3-C'), got '{variant}'"
+            )
+        if d_out != d:
+            raise ValueError(
+                f"d_out must equal d for dimension homogeneity, got d={d}, d_out={d_out}"
+            )
+
+        self.variant = variant
+        self.d = d
+        self.d_out = d_out
+        self.n_spatial_layers = n_spatial_layers
+        self.n_temporal_layers = n_temporal_layers
+        self.l1_lambda = l1_lambda
+        self.seed = seed
+
+        # --- Non-learned binary embedding (2, d) ---
+        rng = np.random.default_rng(seed)
+        scale = np.sqrt(2.0 / (1 + d))  # Xavier scale for (2, d)
+        self.embedding: np.ndarray = rng.standard_normal((2, d)) * scale
+
+        # --- Master nodes ---
+        self.master_spatial = UniversalNode(
+            d=d,
+            l1_lambda=l1_lambda,
+            seed=seed,
+            d_out=d_out,
+        )
+        if variant == "P3-C":
+            # Same object for both axes
+            self.master_temporal = self.master_spatial
+        else:
+            self.master_temporal = UniversalNode(
+                d=d,
+                l1_lambda=l1_lambda,
+                seed=seed + 100,
+                d_out=d_out,
+            )
+
+        # --- Positions per layer (kernel-3 stride-1 reduces dim by 2 each layer) ---
+        self.spatial_nodes_per_layer = [
+            16 - 2 * (l + 1) for l in range(n_spatial_layers)
+        ]  # e.g. [14, 12, 10]
+        self.temporal_nodes_per_layer = [
+            32 - 2 * (l + 1) for l in range(n_temporal_layers)
+        ]  # e.g. [30, 28, 26]
+
+    # ------------------------------------------------------------------
+    #  Helpers
+    # ------------------------------------------------------------------
+
+    def _embed(self, x_binary: np.ndarray) -> np.ndarray:
+        """
+        Map raw binary (B, S, T) → (B, S, T, d) via frozen lookup table.
+        """
+        idx = x_binary.astype(int)                     # (B, S, T)
+        return self.embedding[idx]                      # (B, S, T, d)
+
+    # ------------------------------------------------------------------
+    #  Forward — fully vectorised
+    # ------------------------------------------------------------------
+
+    def _forward_spatial_layer(
+        self,
+        x_in: np.ndarray,       # (B, S_l, T, d)
+        layer_idx: int,
+        store_inputs: bool = False,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
+        """
+        Apply kernel-3 stride-1 sliding window over the S axis.
+
+        Returns
+        -------
+        x_out : (B, S_{l+1}, T, d_out)
+        node_inputs : (B, S_{l+1}, T, 3, d)  — only if store_inputs
+        """
+        node = self.master_spatial
+        B, S_l, T, d_in = x_in.shape
+
+        # Build all windows at once: (B, S_l-2, T, 3, d_in)
+        windows = _make_windows_3(x_in, axis=1)
+        n_pos = S_l - 2
+
+        if store_inputs:
+            node_inputs = windows.copy()  # (B, S_l-2, T, 3, d_in)
+        else:
+            node_inputs = None
+
+        # Flatten for node: (B * n_pos * T, 3, d_in)
+        x_3d = windows.reshape(B * n_pos * T, 3, d_in)
+        codes_flat = node.forward(x_3d)              # (B * n_pos * T, d_out)
+        # Reshape back: (B, n_pos, T, d_out)
+        x_out = codes_flat.reshape(B, n_pos, T, self.d_out)
+        return x_out, node_inputs
+
+    def _forward_temporal_layer(
+        self,
+        x_in: np.ndarray,       # (B, T_l, S_out, d)
+        layer_idx: int,
+        store_inputs: bool = False,
+    ) -> tuple[np.ndarray, np.ndarray | None]:
+        """
+        Apply kernel-3 stride-1 sliding window over the T axis.
+
+        Returns
+        -------
+        x_out : (B, T_{l+1}, S_out, d_out)
+        node_inputs : (B, T_{l+1}, S_out, 3, d)  — only if store_inputs
+        """
+        node = self.master_temporal
+        B, T_l, S_out, d_in = x_in.shape
+
+        # Build all windows at once: (B, T_l-2, S_out, 3, d_in)
+        windows = _make_windows_3(x_in, axis=1)
+        n_pos = T_l - 2
+
+        if store_inputs:
+            node_inputs = windows.copy()  # (B, T_l-2, S_out, 3, d_in)
+        else:
+            node_inputs = None
+
+        # Flatten for node: (B * n_pos * S_out, 3, d_in)
+        x_3d = windows.reshape(B * n_pos * S_out, 3, d_in)
+        codes_flat = node.forward(x_3d)              # (B * n_pos * S_out, d_out)
+        x_out = codes_flat.reshape(B, n_pos, S_out, self.d_out)
+        return x_out, node_inputs
+
+    # ------------------------------------------------------------------
+    #  Forward with intermediates
+    # ------------------------------------------------------------------
+
+    def forward_with_intermediates(self, x_binary: np.ndarray) -> dict:
+        """
+        Full forward pass storing all intermediates needed for backward.
+
+        Parameters
+        ----------
+        x_binary : np.ndarray, shape (B, S=16, T=32) or (B, S*T)
+
+        Returns
+        -------
+        dict with keys:
+            embeddings      : (B, 16, 32, d)
+            spatial_outputs  : list of 3 × (B, S_l_out, T, d)
+            spatial_inputs   : list of 3 × (B, S_l_out, T, 3, d)
+            temporal_outputs : list of 3 × (B, T_l_out, S_final, d)
+            temporal_inputs  : list of 3 × (B, T_l_out, S_final, 3, d)
+            pooled           : (B, d_out)  — mean-pooled final code
+        """
+        # Accept flat (B, S*T) and reshape
+        if x_binary.ndim == 2 and x_binary.shape[1] == 16 * 32:
+            x_binary = x_binary.reshape(-1, 16, 32)
+
+        B = x_binary.shape[0]
+
+        # --- Embed ---
+        emb = self._embed(x_binary)                  # (B, 16, 32, d)
+
+        # --- Spatial pass (3 layers) ---
+        spatial_outputs: list[np.ndarray] = []
+        spatial_inputs: list[np.ndarray] = []
+
+        x_spatial = emb
+        for l in range(self.n_spatial_layers):
+            x_out, inp_3d = self._forward_spatial_layer(
+                x_spatial, l, store_inputs=True
+            )
+            spatial_outputs.append(x_out)
+            spatial_inputs.append(inp_3d)             # type: ignore[arg-type]
+            x_spatial = x_out
+
+        # --- Transpose for temporal processing ---
+        x_spatial = x_spatial.transpose(0, 2, 1, 3)   # (B, T, S_final, d)
+
+        # --- Temporal pass (3 layers) ---
+        temporal_outputs: list[np.ndarray] = []
+        temporal_inputs: list[np.ndarray] = []
+
+        x_temporal = x_spatial
+        for l in range(self.n_temporal_layers):
+            x_out, inp_3d = self._forward_temporal_layer(
+                x_temporal, l, store_inputs=True
+            )
+            temporal_outputs.append(x_out)
+            temporal_inputs.append(inp_3d)             # type: ignore[arg-type]
+            x_temporal = x_out
+
+        # --- Average pool across space and time ---
+        pooled = x_temporal.mean(axis=(1, 2))          # (B, d_out)
+
+        return {
+            "embeddings": emb,
+            "spatial_outputs": spatial_outputs,
+            "spatial_inputs": spatial_inputs,
+            "temporal_outputs": temporal_outputs,
+            "temporal_inputs": temporal_inputs,
+            "pooled": pooled,
+        }
+
+    # ------------------------------------------------------------------
+    #  Backward — fully vectorised
+    # ------------------------------------------------------------------
+
+    def backward(
+        self,
+        fwd: dict,
+        dL_dspatial_codes: list[np.ndarray],
+        dL_dtemporal_codes: list[np.ndarray],
+        alpha: float = 0.5,
+    ) -> dict:
+        """
+        Propagate code-level gradients back through temporal and spatial
+        passes to produce gradients for the master nodes and the embedding.
+
+        Parameters
+        ----------
+        fwd : dict
+            The output of ``forward_with_intermediates``.
+        dL_dspatial_codes : list of np.ndarray
+            External JEPA gradients for each spatial layer.
+            Each has shape matching the corresponding spatial_output.
+        dL_dtemporal_codes : list of np.ndarray
+            External JEPA gradients for each temporal layer.
+            Each has shape matching the corresponding temporal_output.
+        alpha : float
+            Weighting: alpha for spatial gradients, (1-alpha) for temporal
+            when combining at the interface.  In practice the gradients
+            are processed axis by axis, but this controls the scaling.
+
+        Returns
+        -------
+        dict with keys:
+            'dL_dspatial'  : dict with W_enc, b_enc, W_dec, b_dec gradients
+            'dL_dtemporal' : dict with W_enc, b_enc, W_dec, b_dec gradients
+            'dL_dembedding': gradient table (2, d)
+        """
+        B = fwd["embeddings"].shape[0]
+        d = self.d
+        d_out = self.d_out
+
+        # Accumulator for each master node's parameters
+        spatial_grads: dict[str, np.ndarray] = {
+            "W_enc": np.zeros_like(self.master_spatial.W_enc),
+            "b_enc": np.zeros_like(self.master_spatial.b_enc),
+            "W_dec": np.zeros_like(self.master_spatial.W_dec),
+            "b_dec": np.zeros_like(self.master_spatial.b_dec),
+        }
+        temporal_grads: dict[str, np.ndarray] = {
+            "W_enc": np.zeros_like(self.master_temporal.W_enc),
+            "b_enc": np.zeros_like(self.master_temporal.b_enc),
+            "W_dec": np.zeros_like(self.master_temporal.W_dec),
+            "b_dec": np.zeros_like(self.master_temporal.b_dec),
+        }
+
+        # ====================================================================
+        #  TEMPORAL BACKWARD (process layers in reverse) — vectorised
+        # ====================================================================
+
+        # Initial gradient comes only from JEPA code_grads, not from pooling
+        x_final = fwd["temporal_outputs"][-1]          # (B, T_final, S_final, d_out)
+        dL_dx = np.zeros_like(x_final)
+
+        # Add external temporal JEPA gradients for the last layer
+        dL_dx = dL_dx + dL_dtemporal_codes[-1] * (1.0 - alpha)
+
+        for l in reversed(range(self.n_temporal_layers)):
+            dL_dx_total = dL_dx
+
+            node_inputs = fwd["temporal_inputs"][l]         # (B, T_l_out, S_final, 3, d)
+            code_out = fwd["temporal_outputs"][l]           # (B, T_l_out, S_final, d_out)
+
+            # --- Backprop through tanh activation ---
+            dL_dz = dL_dx_total * (1.0 - code_out ** 2)    # (B, T_l_out, S_final, d_out)
+
+            # Flatten all positions at once
+            B, n_pos, S, _, d_in = node_inputs.shape
+            dL_dz_flat = dL_dz.reshape(B * n_pos * S, d_out)
+            inp_flat = node_inputs.reshape(B * n_pos * S, 3 * d_in)
+
+            # Parameter gradients (sum across all positions + batch)
+            dW_enc = inp_flat.T @ dL_dz_flat / B
+            db_enc = dL_dz_flat.mean(axis=0)
+
+            temporal_grads["W_enc"] += dW_enc
+            temporal_grads["b_enc"] += db_enc
+            dW_dec = np.zeros_like(self.master_temporal.W_dec)
+            db_dec = np.zeros_like(self.master_temporal.b_dec)
+            temporal_grads["W_dec"] += dW_dec
+            temporal_grads["b_dec"] += db_dec
+
+            # Gradient w.r.t. input
+            dL_dx_flat = dL_dz_flat @ self.master_temporal.W_enc.T   # (B*n_pos*S, 3*d)
+            dL_dx_reshaped = dL_dx_flat.reshape(B, n_pos, S, 3, d_in)  # (B, n_pos, S, 3, d)
+
+            # Scatter gradient into layer input (3 kernel offsets → 3 slice-adds)
+            dL_dlayer_input = np.zeros((B, n_pos + 2, S, d_in))
+            dL_dlayer_input[:, 0:n_pos,   :, :] += dL_dx_reshaped[:, :, :, 0, :]
+            dL_dlayer_input[:, 1:n_pos+1, :, :] += dL_dx_reshaped[:, :, :, 1, :]
+            dL_dlayer_input[:, 2:n_pos+2, :, :] += dL_dx_reshaped[:, :, :, 2, :]
+
+            if l > 0:
+                dL_dx = dL_dlayer_input
+                ext = dL_dtemporal_codes[l - 1] * (1.0 - alpha)
+                dL_dx = dL_dx + ext
+            else:
+                dL_dx = dL_dlayer_input  # (B, 32, S_final, d)
+
+        n_total_temporal_positions = sum(self.temporal_nodes_per_layer)
+        for key in temporal_grads:
+            temporal_grads[key] /= n_total_temporal_positions
+
+        # ====================================================================
+        #  SPATIAL BACKWARD — vectorised
+        # ====================================================================
+
+        # dL_dx is (B, 32, S_final, d) → transpose to (B, S_final, 32, d)
+        dL_dx = dL_dx.transpose(0, 2, 1, 3)
+
+        assert dL_dx.shape[1] == self.spatial_nodes_per_layer[-1], \
+            (f"Mismatch: dL_dx spatial dim {dL_dx.shape[1]} vs "
+             f"expected {self.spatial_nodes_per_layer[-1]}")
+
+        for l in reversed(range(self.n_spatial_layers)):
+            dL_dx_total = dL_dx + dL_dspatial_codes[l] * alpha
+
+            node_inputs = fwd["spatial_inputs"][l]   # (B, S_l_out, T, 3, d)
+            code_out = fwd["spatial_outputs"][l]     # (B, S_l_out, T, d_out)
+
+            # --- Backprop through tanh ---
+            dL_dz = dL_dx_total * (1.0 - code_out ** 2)   # (B, S_l_out, T, d_out)
+
+            B, n_pos, T, _, d_in = node_inputs.shape
+            dL_dz_flat = dL_dz.reshape(B * n_pos * T, d_out)
+            inp_flat = node_inputs.reshape(B * n_pos * T, 3 * d_in)
+
+            # Parameter gradients
+            dW_enc = inp_flat.T @ dL_dz_flat / B
+            db_enc = dL_dz_flat.mean(axis=0)
+
+            spatial_grads["W_enc"] += dW_enc
+            spatial_grads["b_enc"] += db_enc
+            dW_dec = np.zeros_like(self.master_spatial.W_dec)
+            db_dec = np.zeros_like(self.master_spatial.b_dec)
+            spatial_grads["W_dec"] += dW_dec
+            spatial_grads["b_dec"] += db_dec
+
+            # Gradient w.r.t. input
+            dL_dx_flat = dL_dz_flat @ self.master_spatial.W_enc.T
+            dL_dx_reshaped = dL_dx_flat.reshape(B, n_pos, T, 3, d_in)  # (B, n_pos, T, 3, d)
+
+            # Scatter into layer input
+            dL_dlayer_input = np.zeros((B, n_pos + 2, T, d_in))
+            dL_dlayer_input[:, 0:n_pos,   :, :] += dL_dx_reshaped[:, :, :, 0, :]
+            dL_dlayer_input[:, 1:n_pos+1, :, :] += dL_dx_reshaped[:, :, :, 1, :]
+            dL_dlayer_input[:, 2:n_pos+2, :, :] += dL_dx_reshaped[:, :, :, 2, :]
+
+            if l > 0:
+                dL_dx = dL_dlayer_input
+            else:
+                dL_dx = dL_dlayer_input  # (B, 16, 32, d)
+
+        n_total_spatial_positions = sum(self.spatial_nodes_per_layer)
+        for key in spatial_grads:
+            spatial_grads[key] /= n_total_spatial_positions
+
+        # --- Embedding gradient — frozen (non-learned), so return zeros ---
+        dL_dembedding = np.zeros_like(self.embedding)
+
+        return {
+            "dL_dspatial": spatial_grads,
+            "dL_dtemporal": temporal_grads,
+            "dL_dembedding": dL_dembedding,
+        }
+
+    # ------------------------------------------------------------------
+    #  Parameter Count
+    # ------------------------------------------------------------------
+
+    def get_parameter_count(self) -> int:
+        count = 0  # embedding is frozen / non-learned
+        count += self.master_spatial.W_enc.size + self.master_spatial.b_enc.size
+        count += self.master_spatial.W_dec.size + self.master_spatial.b_dec.size
+        if self.variant != "P3-C":
+            count += self.master_temporal.W_enc.size + self.master_temporal.b_enc.size
+            count += self.master_temporal.W_dec.size + self.master_temporal.b_dec.size
+        return count
+
+
+# ==============================================================================
+#  Self-test
+# ==============================================================================
+
+if __name__ == "__main__":
+    print("=" * 65)
+    print("  SpatiotemporalEncoder -- Self-Test (vectorised)")
+    print("=" * 65)
+
+    rng = np.random.default_rng(7)
+    B, S, T = 4, 16, 32
+
+    for variant in ("P3-A", "P3-B", "P3-C"):
+        enc = SpatiotemporalEncoder(variant=variant, d=16, d_out=16, seed=42)
+        print(f"\n--- Variant: {variant} ---")
+        print(f"  Parameter count = {enc.get_parameter_count()}")
+
+        if variant == "P3-C":
+            assert enc.master_spatial is enc.master_temporal
+            print("  P3-C: spatial and temporal nodes are same object  [OK]")
+        else:
+            assert enc.master_spatial is not enc.master_temporal
+            print("  Separate spatial/temporal nodes  [OK]")
+
+        # --- Forward pass ---
+        x_binary = (rng.random((B, S, T)) < 0.5).astype(np.float64)
+
+        fwd = enc.forward_with_intermediates(x_binary)
+
+        print(f"  embeddings shape  : {fwd['embeddings'].shape}")
+        assert fwd["embeddings"].shape == (B, 16, 32, 16)
+
+        for l in range(enc.n_spatial_layers):
+            so = fwd["spatial_outputs"][l]
+            si = fwd["spatial_inputs"][l]
+            expected_spatial = S - 2 * (l + 1)
+            print(f"  spatial layer {l}: output {so.shape}, input {si.shape}")
+            assert so.shape == (B, expected_spatial, T, 16)
+            assert si.shape == (B, expected_spatial, T, 3, 16)
+
+        for l in range(enc.n_temporal_layers):
+            to_ = fwd["temporal_outputs"][l]
+            ti = fwd["temporal_inputs"][l]
+            expected_temporal = T - 2 * (l + 1)
+            print(f"  temporal layer {l}: output {to_.shape}, input {ti.shape}")
+            assert to_.shape == (B, expected_temporal, 10, 16)
+            assert ti.shape == (B, expected_temporal, 10, 3, 16)
+
+        print(f"  pooled shape      : {fwd['pooled'].shape}")
+        assert fwd["pooled"].shape == (B, 16)
+        print("  Forward pass: all shapes correct  [OK]")
+
+        # --- Backward pass ---
+        dL_dspatial = [
+            rng.standard_normal(fwd["spatial_outputs"][l].shape)
+            for l in range(enc.n_spatial_layers)
+        ]
+        dL_dtemporal = [
+            rng.standard_normal(fwd["temporal_outputs"][l].shape)
+            for l in range(enc.n_temporal_layers)
+        ]
+
+        grads = enc.backward(fwd, dL_dspatial, dL_dtemporal, alpha=0.5)
+
+        for key in ("W_enc", "b_enc", "W_dec", "b_dec"):
+            assert grads["dL_dspatial"][key].shape == getattr(
+                enc.master_spatial, key
+            ).shape, f"Shape mismatch in spatial grads[{key}]"
+            assert grads["dL_dtemporal"][key].shape == getattr(
+                enc.master_temporal, key
+            ).shape, f"Shape mismatch in temporal grads[{key}]"
+
+        assert grads["dL_dembedding"].shape == (2, 16)
+        print("  Backward pass: all gradient shapes correct  [OK]")
+
+        # Embedding gradient should be zeros (frozen)
+        assert np.allclose(grads["dL_dembedding"], 0), \
+            "Embedding gradient should be zeros for frozen embedding"
+        print("  Embedding gradient is zeros (frozen)  [OK]")
+
+        assert np.any(np.abs(grads["dL_dspatial"]["W_enc"]) > 0), \
+            "Spatial W_enc gradient is all zeros"
+        assert np.any(np.abs(grads["dL_dtemporal"]["W_enc"]) > 0), \
+            "Temporal W_enc gradient is all zeros"
+        print("  Gradient magnitudes non-zero  [OK]")
+
+    # --- Test with flat input (B, S*T) ---
+    print("\n--- Flat input (B, S*T) ---")
+    enc_flat = SpatiotemporalEncoder(variant="P3-B", d=16, d_out=16, seed=42)
+    x_flat = (rng.random((B, 16 * 32)) < 0.5).astype(np.float64)
+    fwd_flat = enc_flat.forward_with_intermediates(x_flat)
+    assert fwd_flat["pooled"].shape == (B, 16)
+    print(f"  Flat input {x_flat.shape} -> pooled {fwd_flat['pooled'].shape}  [OK]")
+
+    dL_ds_flat = [np.zeros_like(fwd_flat["spatial_outputs"][l]) for l in range(3)]
+    dL_dt_flat = [np.zeros_like(fwd_flat["temporal_outputs"][l]) for l in range(3)]
+    grads_flat = enc_flat.backward(fwd_flat, dL_ds_flat, dL_dt_flat, alpha=0.5)
+    print("  Backward with flat input: shapes correct  [OK]")
+
+    # --- Parameter count comparison ---
+    print("\n--- Parameter Count Comparison ---")
+    count_a = SpatiotemporalEncoder("P3-A", d=16, d_out=16, seed=42).get_parameter_count()
+    count_b = SpatiotemporalEncoder("P3-B", d=16, d_out=16, seed=42).get_parameter_count()
+    count_c = SpatiotemporalEncoder("P3-C", d=16, d_out=16, seed=42).get_parameter_count()
+    print(f"  P3-A params = {count_a}")
+    print(f"  P3-B params = {count_b}")
+    print(f"  P3-C params = {count_c}")
+    assert count_a == count_b, "P3-A and P3-B should have identical parameter counts"
+    assert count_c == count_a // 2, "P3-C should have half the parameters of P3-A/B"
+    print("  P3-C has ~50% of P3-A/B parameters  [OK]")
+
+    print("\n" + "-" * 65)
+    print("  ALL SELF-TESTS PASSED")
+    print("=" * 65)
+]
+
+[Tool Call: read_file({'path': 'src/run_phase4.py'})]
+[Tool Result: #!/usr/bin/env python3
+"""
+Phase 4 — Training Objective Comparison (8 objectives × 5 seeds).
+
+Compares four training-objective families on the P3-C encoder with
+spatial_pooled_then_flat readout:
+
+    JEPA        : per-layer bidirectional prediction + local VICReg
+    SFA         : slowness on final temporal output (+/- pooled VICReg)
+    Hebbian     : variance maximisation on ALL intermediate codes (+/- pooled VICReg)
+    Reconstruction: local sparse AE at every node (+/- pooled VICReg)
+
+Each objective is run with and without pooled VICReg gradient injection.
+An untrained baseline is included for reference.
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import gc
+import math
+import os
+import sys
+import time
+
+import numpy as np
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from spatiotemporal_dataset import generate_spatiotemporal_dataset, N_CLASSES
+from spatiotemporal_encoder import SpatiotemporalEncoder
+from training_objectives import JEPALoss, _Adam
+from harness import SimpleLogisticRegression
+from run_phase3 import (
+    create_jepa_losses,
+    reshape_for_spatial_jepa,
+    reshape_spatial_grads_back,
+    reshape_for_temporal_jepa,
+    reshape_temporal_grads_back,
+)
+
+
+# ---------------------------------------------------------------------------
+#  Configuration
+# ---------------------------------------------------------------------------
+
+SEEDS = [42, 43, 44, 45, 46]
+D = 16
+D_OUT = 16
+N_TRAIN_PER_CLASS = 200
+N_TEST_PER_CLASS = 100
+EPOCHS = 30
+BATCH_SIZE = 64
+LR = 1e-3
+ALPHA = 0.5
+LAMBDA_HEBB = 25.0
+LAMBDA_L1 = 0.01
+OUTPUT_DIR = "phase_4"
+RESULTS_CSV = os.path.join(OUTPUT_DIR, "phase4_results.csv")
+REPORT_MD = os.path.join(OUTPUT_DIR, "REPORT.md")
+
+OBJECTIVES = ["jepa", "sfa", "hebbian", "recon"]
+
+
+# =============================================================================
+#  1. Pooled VICReg loss & gradient  (reuse from run_phase3_vicreg_fix.py)
+# =============================================================================
+
+def pooled_vicreg_loss(z_pooled: np.ndarray, eps: float = 1.0) -> dict:
+    """
+    VICReg (variance + covariance) on pooled representation z_pooled, shape (B, d_out).
+    """
+    b, d = z_pooled.shape
+    mean = z_pooled.mean(axis=0, keepdims=True)
+    std = np.sqrt(z_pooled.var(axis=0, ddof=0) + 1e-12)
+    var_loss = float(np.mean(np.maximum(0.0, eps - std)))
+    zc = z_pooled - mean
+    cov = (zc.T @ zc) / b
+    mask = 1.0 - np.eye(d)
+    cov_loss = float(np.sum(cov ** 2 * mask) / d)
+    return {
+        "loss": 25.0 * var_loss + 25.0 * cov_loss,
+        "var_loss": var_loss,
+        "cov_loss": cov_loss,
+        "std": float(np.mean(std)),
+    }
+
+
+def pooled_vicreg_grad(
+    z_pooled: np.ndarray,
+    lambda_var: float = 25.0,
+    lambda_cov: float = 25.0,
+    eps: float = 1.0,
+) -> np.ndarray:
+    """Gradient of pooled VICReg loss w.r.t. z_pooled."""
+    B, d = z_pooled.shape
+    mean = z_pooled.mean(axis=0, keepdims=True)
+    std = np.sqrt(z_pooled.var(axis=0, ddof=0) + 1e-12)
+    mask_var = (std < eps).astype(float)
+
+    zc = z_pooled - mean
+    dL_var_dz = (
+        -lambda_var
+        * mask_var[None, :]
+        * zc
+        / (B * d * std[None, :] + 1e-12)
+    )
+
+    zc_centered = z_pooled - mean
+    cov = (zc_centered.T @ zc_centered) / B
+    C_off = cov * (1.0 - np.eye(d))
+    dL_cov_dz = (lambda_cov * 2.0 / (B * d)) * (zc_centered @ C_off)
+    return dL_var_dz + dL_cov_dz
+
+
+# =============================================================================
+#  2. Objective-specific loss / gradient dispatchers
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+#  2a. JEPA — everything happens inside the epoch loop via JEPALoss classes
+# ---------------------------------------------------------------------------
+
+# (code gradients are handled inline by calling spatial_jepas[l].step() etc.)
+
+# ---------------------------------------------------------------------------
+#  2b. SFA — slowness on final temporal output
+# ---------------------------------------------------------------------------
+
+def sfa_loss_and_grad(z: np.ndarray) -> dict:
+    """
+    Compute SFA slowness loss and gradient for z of shape (B, T, S, d).
+
+    L_slow = (1 / (B*(T-1)*S*d)) * Σ_{b,s,t≥1} ||z[b,t,s,:] - z[b,t-1,s,:]||²
+
+    Returns dict with keys 'loss', 'grad' (same shape as z).
+    """
+    B, T, S, d = z.shape
+    if T <= 1:
+        return {"loss": 0.0, "grad": np.zeros_like(z)}
+
+    denom = B * (T - 1) * S * d
+    delta = z[:, 1:, :, :] - z[:, :-1, :, :]    # (B, T-1, S, d)
+    loss = float(np.mean(delta ** 2))
+
+    grad = np.zeros_like(z)
+    coeff = 2.0 / denom
+    grad[:, 1:, :, :] += coeff * delta
+    grad[:, :-1, :, :] -= coeff * delta
+
+    return {"loss": loss, "grad": grad}
+
+
+# ---------------------------------------------------------------------------
+#  2c. Hebbian — variance maximisation on ALL intermediate codes
+# ---------------------------------------------------------------------------
+
+def hebbian_loss_and_grad(z: np.ndarray, lambda_hebb: float = LAMBDA_HEBB) -> dict:
+    """
+    Variance maximisation (negative variance) for z of shape (B, P1, P2, d).
+
+    L_Hebb = -(lambda_hebb/d) * Σ_j Var(z[:, :, :, j])
+
+    Gradient: dL/dz = -(2*lambda_hebb/(M*d)) * (z - mean)
+    where M = B*P1*P2.
+
+    Returns dict with keys 'loss', 'grad'.
+    """
+    orig_shape = z.shape
+    M = np.prod(orig_shape[:-1])
+    d = orig_shape[-1]
+
+    z_flat = z.reshape(-1, d)          # (M, d)
+    mean = z_flat.mean(axis=0, keepdims=True)
+    var = z_flat.var(axis=0, ddof=0).sum()
+
+    loss = float(-(lambda_hebb / d) * var)
+    grad_flat = -(2.0 * lambda_hebb / (M * d)) * (z_flat - mean)
+    grad = grad_flat.reshape(orig_shape)
+
+    return {"loss": loss, "grad": grad}
+
+
+# ---------------------------------------------------------------------------
+#  2d. Reconstruction — local sparse AE at each node
+# ---------------------------------------------------------------------------
+
+def recon_loss_and_grad(
+    code: np.ndarray,        # (B, P1, P2, d_out)  post-tanh code
+    node_input: np.ndarray,  # (B, P1, P2, 3, d)   raw node inputs
+    W_dec: np.ndarray,       # (d_out, 3*d)
+    b_dec: np.ndarray,       # (3*d,)
+    lambda_l1: float = LAMBDA_L1,
+    eps: float = 1e-12,
+) -> dict:
+    """
+    Local reconstruction: L = MSE(input, recon) + lambda_l1 * mean(|code|).
+
+    code shape: (B, P1, P2, d_out)
+    node_input shape: (B, P1, P2, 3, d)
+
+    Returns dict with:
+        'loss', 'code_grad', 'W_dec_grad', 'b_dec_grad'
+    """
+    B, P1, P2, d_out = code.shape
+    _, _, _, three, d = node_input.shape
+    D_in = three * d
+    M = B * P1 * P2
+
+    # Flatten
+    code_flat = code.reshape(M, d_out)                 # (M, d_out)
+    x_flat = node_input.reshape(M, D_in)               # (M, D_in)
+
+    # Reconstruct
+    recon_flat = code_flat @ W_dec + b_dec             # (M, D_in)
+
+    # MSE
+    diff = recon_flat - x_flat                         # (M, D_in)
+    mse = float(np.mean(diff ** 2))
+
+    # L1 sparsity
+    l1 = lambda_l1 * float(np.mean(np.abs(code_flat)))
+
+    loss = mse + l1
+
+    # --- gradients ---
+    dL_drecon = (2.0 / (M * D_in)) * diff              # (M, D_in)
+
+    # code gradient
+    dL_dcode = dL_drecon @ W_dec.T                     # (M, d_out)
+    dL_dcode += (lambda_l1 / (M * d_out)) * np.sign(code_flat)
+    code_grad = dL_dcode.reshape(B, P1, P2, d_out)
+
+    # decoder gradients
+    W_dec_grad = code_flat.T @ dL_drecon               # (d_out, D_in)
+    b_dec_grad = dL_drecon.sum(axis=0)                 # (D_in,)
+
+    return {
+        "loss": loss,
+        "code_grad": code_grad,
+        "W_dec_grad": W_dec_grad,
+        "b_dec_grad": b_dec_grad,
+    }
+
+
+# =============================================================================
+#  3. Unified training epoch
+# =============================================================================
+
+def train_epoch(
+    encoder: SpatiotemporalEncoder,
+    train_grid: np.ndarray,
+    batch_size: int,
+    rng: np.random.Generator,
+    objective: str = "jepa",
+    adam_spatial: _Adam | None = None,
+    adam_temporal: _Adam | None = None,
+    adam_decoder: _Adam | None = None,
+    spatial_jepas: list[JEPALoss] | None = None,
+    temporal_jepas: list[JEPALoss] | None = None,
+    use_pooled_vicreg: bool = False,
+) -> dict:
+    """
+    Train one epoch with the specified objective.
+
+    Returns dict with losses and metrics.
+    """
+    n_samples = train_grid.shape[0]
+    perm = rng.permutation(n_samples)
+
+    total_obj_loss = 0.0
+    total_pooled_var = 0.0
+    total_pooled_cov = 0.0
+    total_pooled_std = 0.0
+    n_batches = 0
+
+    for start in range(0, n_samples, batch_size):
+        end = min(start + batch_size, n_samples)
+        batch = train_grid[perm[start:end]]
+
+        fwd = encoder.forward_with_intermediates(batch)
+
+        # =====================================================================
+        #  Objective-specific code-gradient computation
+        # =====================================================================
+
+        if objective == "untrained":
+            # No training — zero code gradients for backward pass
+            spatial_code_grads = [np.zeros_like(fwd["spatial_outputs"][l])
+                                   for l in range(encoder.n_spatial_layers)]
+            temporal_code_grads = [np.zeros_like(fwd["temporal_outputs"][l])
+                                    for l in range(encoder.n_temporal_layers)]
+            obj_loss = 0.0
+        elif objective == "jepa":
+            # ---- Spatial JEPA ----
+            spatial_code_grads = []
+            spatial_losses = []
+            for l in range(encoder.n_spatial_layers):
+                out = fwd["spatial_outputs"][l]         # (B, S_l, T, d)
+                B, S_l, T, d = out.shape
+                jepa_in = reshape_for_spatial_jepa(out) # (B*T, S_l, d)
+                result = spatial_jepas[l].step([jepa_in])
+                spatial_losses.append(result["loss"])
+                cg = result["code_grads"][0]
+                spatial_code_grads.append(reshape_spatial_grads_back(cg, B, S_l, T, d))
+
+            # ---- Temporal JEPA ----
+            temporal_code_grads = []
+            temporal_losses = []
+            for l in range(encoder.n_temporal_layers):
+                out = fwd["temporal_outputs"][l]         # (B, T_l, S_f, d)
+                B, T_l, S_f, d = out.shape
+                jepa_in = reshape_for_temporal_jepa(out) # (B*S_f, T_l, d)
+                result = temporal_jepas[l].step([jepa_in])
+                temporal_losses.append(result["loss"])
+                cg = result["code_grads"][0]
+                temporal_code_grads.append(reshape_temporal_grads_back(cg, B, T_l, S_f, d))
+
+            obj_loss = ALPHA * np.mean(spatial_losses) + (1.0 - ALPHA) * np.mean(temporal_losses)
+
+        elif objective == "sfa":
+            # Slowness on FINAL temporal output only
+            z = fwd["temporal_outputs"][-1]  # (B, T_f, S_f, d_out)
+            sfa = sfa_loss_and_grad(z)
+
+            spatial_code_grads = [np.zeros_like(fwd["spatial_outputs"][l])
+                                   for l in range(encoder.n_spatial_layers)]
+            temporal_code_grads = [np.zeros_like(fwd["temporal_outputs"][l])
+                                    for l in range(encoder.n_temporal_layers)]
+            temporal_code_grads[-1] = sfa["grad"]
+
+            obj_loss = sfa["loss"]
+
+        elif objective == "hebbian":
+            # Variance maximisation on ALL intermediate codes
+            hebb_losses = []
+            spatial_code_grads = []
+            temporal_code_grads = []
+
+            for l in range(encoder.n_spatial_layers):
+                z = fwd["spatial_outputs"][l]
+                h = hebbian_loss_and_grad(z, LAMBDA_HEBB)
+                spatial_code_grads.append(h["grad"])
+                hebb_losses.append(h["loss"])
+
+            for l in range(encoder.n_temporal_layers):
+                z = fwd["temporal_outputs"][l]
+                h = hebbian_loss_and_grad(z, LAMBDA_HEBB)
+                temporal_code_grads.append(h["grad"])
+                hebb_losses.append(h["loss"])
+
+            obj_loss = np.mean(hebb_losses)
+
+        elif objective == "recon":
+            # Reconstruction + sparsity on ALL layers
+            recon_losses = []
+            spatial_code_grads = []
+            temporal_code_grads = []
+            dec_grads_spatial = []
+            dec_grads_temporal = []
+
+            node = encoder.master_spatial
+            W_dec = node.W_dec
+            b_dec = node.b_dec
+
+            for l in range(encoder.n_spatial_layers):
+                code = fwd["spatial_outputs"][l]
+                inp = fwd["spatial_inputs"][l]
+                r = recon_loss_and_grad(code, inp, W_dec, b_dec, LAMBDA_L1)
+                spatial_code_grads.append(r["code_grad"])
+                recon_losses.append(r["loss"])
+                dec_grads_spatial.append({"W_dec": r["W_dec_grad"], "b_dec": r["b_dec_grad"]})
+
+            for l in range(encoder.n_temporal_layers):
+                code = fwd["temporal_outputs"][l]
+                inp = fwd["temporal_inputs"][l]
+                r = recon_loss_and_grad(code, inp, W_dec, b_dec, LAMBDA_L1)
+                temporal_code_grads.append(r["code_grad"])
+                recon_losses.append(r["loss"])
+                dec_grads_temporal.append({"W_dec": r["W_dec_grad"], "b_dec": r["b_dec_grad"]})
+
+            obj_loss = np.mean(recon_losses)
+
+            # Update decoder separately (encoder.backward() gives zero decoder grads)
+            if adam_decoder is not None:
+                avg_W_dec_grad = (
+                    sum(g["W_dec"] for g in dec_grads_spatial + dec_grads_temporal)
+                    / (encoder.n_spatial_layers + encoder.n_temporal_layers)
+                )
+                avg_b_dec_grad = (
+                    sum(g["b_dec"] for g in dec_grads_spatial + dec_grads_temporal)
+                    / (encoder.n_spatial_layers + encoder.n_temporal_layers)
+                )
+                adam_decoder.step(
+                    {"W_dec": W_dec, "b_dec": b_dec},
+                    {"W_dec": avg_W_dec_grad, "b_dec": avg_b_dec_grad},
+                )
+
+        else:
+            raise ValueError(f"Unknown objective: {objective}")
+
+        # =====================================================================
+        #  Pooled VICReg injection (same mechanism as Phase 3)
+        # =====================================================================
+        if use_pooled_vicreg:
+            z_pooled = fwd["pooled"]  # (B, d_out)
+            dL_dzp = pooled_vicreg_grad(z_pooled)  # (B, d_out)
+
+            T_final, S_final = fwd["temporal_outputs"][-1].shape[1:3]
+            dL_expanded = dL_dzp[:, None, None, :] / (T_final * S_final)
+            dL_expanded = np.broadcast_to(
+                dL_expanded, fwd["temporal_outputs"][-1].shape
+            ).copy()
+
+            # Scale by 1/(1−α) to match temporal backward weighting
+            temporal_code_grads[-1] = temporal_code_grads[-1] + dL_expanded / (1.0 - ALPHA)
+
+            pv = pooled_vicreg_loss(z_pooled)
+            total_pooled_var += pv["var_loss"]
+            total_pooled_cov += pv["cov_loss"]
+            total_pooled_std += pv["std"]
+        else:
+            total_pooled_std += float(
+                np.sqrt(fwd["pooled"].var(axis=0, ddof=0).mean() + 1e-12)
+            )
+
+        # =====================================================================
+        #  Encoder backward + update
+        # =====================================================================
+        if adam_spatial is not None or adam_temporal is not None:
+            grads = encoder.backward(
+                fwd,
+                dL_dspatial_codes=spatial_code_grads,
+                dL_dtemporal_codes=temporal_code_grads,
+                alpha=ALPHA,
+            )
+
+            if encoder.variant == "P3-C":
+                combined = {
+                    k: grads["dL_dspatial"][k] + grads["dL_dtemporal"][k]
+                    for k in grads["dL_dspatial"]
+                }
+                adam_spatial.step(
+                    {
+                        "W_enc": encoder.master_spatial.W_enc,
+                        "b_enc": encoder.master_spatial.b_enc,
+                        "W_dec": encoder.master_spatial.W_dec,
+                        "b_dec": encoder.master_spatial.b_dec,
+                    },
+                    combined,
+                )
+            else:
+                if adam_spatial is not None:
+                    adam_spatial.step(
+                        {
+                            "W_enc": encoder.master_spatial.W_enc,
+                            "b_enc": encoder.master_spatial.b_enc,
+                            "W_dec": encoder.master_spatial.W_dec,
+                            "b_dec": encoder.master_spatial.b_dec,
+                        },
+                        grads["dL_dspatial"],
+                    )
+                if adam_temporal is not None:
+                    adam_temporal.step(
+                        {
+                            "W_enc": encoder.master_temporal.W_enc,
+                            "b_enc": encoder.master_temporal.b_enc,
+                            "W_dec": encoder.master_temporal.W_dec,
+                            "b_dec": encoder.master_temporal.b_dec,
+                        },
+                        grads["dL_dtemporal"],
+                    )
+
+        total_obj_loss += obj_loss
+        n_batches += 1
+
+    return {
+        "obj_loss": total_obj_loss / n_batches,
+        "pooled_var": total_pooled_var / n_batches,
+        "pooled_cov": total_pooled_cov / n_batches,
+        "pooled_std": total_pooled_std / n_batches,
+    }
+
+
+# =============================================================================
+#  4. Classification evaluation
+# =============================================================================
+
+def evaluate_classification(
+    encoder: SpatiotemporalEncoder,
+    train_grid: np.ndarray,
+    train_y: np.ndarray,
+    test_grid: np.ndarray,
+    test_y: np.ndarray,
+    seed: int,
+    batch_size: int = 64,
+) -> dict:
+    """
+    Fit SimpleLogisticRegression on spatial_pooled_then_flat readout.
+    Process feature extraction in chunks to avoid memory spike.
+    """
+    def extract_features(grid, batch_size):
+        features = []
+        for start in range(0, len(grid), batch_size):
+            end = min(start + batch_size, len(grid))
+            fwd = encoder.forward_with_intermediates(grid[start:end])
+            feat = fwd["temporal_outputs"][-1].mean(axis=2).reshape(end - start, -1)
+            features.append(feat)
+        return np.concatenate(features, axis=0)
+
+    tr = extract_features(train_grid, batch_size)
+    te = extract_features(test_grid, batch_size)
+
+    probe = SimpleLogisticRegression(
+        n_classes=N_CLASSES,
+        n_features=tr.shape[1],
+        lr=0.1,
+        max_iter=2000,
+        seed=seed,
+    )
+    probe.fit(tr, train_y)
+
+    train_acc = float(probe.score(tr, train_y))
+    test_acc = float(probe.score(te, test_y))
+
+    per_class = {}
+    for cls in range(N_CLASSES):
+        mask = test_y == cls
+        per_class[f"class_{cls}_acc"] = float(probe.score(te[mask], test_y[mask])) if mask.sum() > 0 else 0.0
+
+    return {
+        "train_acc": train_acc,
+        "test_acc": test_acc,
+        **per_class,
+    }
+
+
+# =============================================================================
+#  5. Single experiment runner
+# =============================================================================
+
+def run_single_experiment(args: tuple) -> dict:
+    """
+    args = (objective, seed, use_pooled_vicreg, epochs)
+
+    objective: 'jepa' | 'sfa' | 'hebbian' | 'recon' | 'untrained'
+    """
+    objective, seed, use_pooled_vicreg, epochs = args
+
+    rng = np.random.default_rng(seed)
+
+    ds = generate_spatiotemporal_dataset(
+        n_train_per_class=N_TRAIN_PER_CLASS,
+        n_test_per_class=N_TEST_PER_CLASS,
+        noise_flip_prob=0.10,
+        seed=seed,
+    )
+    train_grid = ds["train_grid"]
+    train_y = ds["train_y"]
+    test_grid = ds["test_grid"]
+    test_y = ds["test_y"]
+
+    encoder = SpatiotemporalEncoder(
+        variant="P3-C",
+        d=D,
+        d_out=D_OUT,
+        n_spatial_layers=3,
+        n_temporal_layers=3,
+        l1_lambda=0.0,
+        seed=seed,
+    )
+
+    update_encoder = (objective != "untrained")
+
+    # JEPA losses (only used by jepa objective)
+    spatial_jepas = None
+    temporal_jepas = None
+    if objective == "jepa" and update_encoder:
+        spatial_jepas = create_jepa_losses(encoder.n_spatial_layers, D_OUT, lr=LR)
+        temporal_jepas = create_jepa_losses(encoder.n_temporal_layers, D_OUT, lr=LR)
+
+    # Adam optimisers
+    adam_spatial = None
+    adam_temporal = None
+    adam_decoder = None
+    if update_encoder:
+        params_enc = {
+            "W_enc": encoder.master_spatial.W_enc,
+            "b_enc": encoder.master_spatial.b_enc,
+            "W_dec": encoder.master_spatial.W_dec,
+            "b_dec": encoder.master_spatial.b_dec,
+        }
+        adam_spatial = _Adam(params_enc, lr=LR)
+        adam_temporal = adam_spatial  # P3-C: shared
+
+        if objective == "recon":
+            adam_decoder = _Adam(
+                {"W_dec": encoder.master_spatial.W_dec,
+                 "b_dec": encoder.master_spatial.b_dec},
+                lr=LR,
+            )
+
+    # Training
+    t0 = time.time()
+    if objective != "untrained":
+        for epoch in range(epochs):
+            metrics = train_epoch(
+                encoder,
+                train_grid,
+                BATCH_SIZE,
+                rng,
+                objective=objective,
+                adam_spatial=adam_spatial if update_encoder else None,
+                adam_temporal=adam_temporal if update_encoder else None,
+                adam_decoder=adam_decoder if update_encoder else None,
+                spatial_jepas=spatial_jepas,
+                temporal_jepas=temporal_jepas,
+                use_pooled_vicreg=use_pooled_vicreg,
+            )
+    else:
+        # Untrained: skip training, compute a single forward pass for metrics
+        fwd_sample = encoder.forward_with_intermediates(train_grid[:BATCH_SIZE])
+        metrics = {
+            "obj_loss": 0.0,
+            "pooled_std": float(np.sqrt(fwd_sample["pooled"].var(axis=0, ddof=0).mean() + 1e-12)),
+        }
+    t1 = time.time()
+
+    # Final pooled std from last epoch (avoids redundant full-dataset forward pass)
+    final_pooled_std = metrics.get("pooled_std", 0.0)
+
+    # Classification
+    eval_res = evaluate_classification(encoder, train_grid, train_y,
+                                       test_grid, test_y, seed=seed)
+
+    return {
+        "objective": objective,
+        "seed": seed,
+        "use_pooled_vicreg": use_pooled_vicreg,
+        "train_acc": eval_res["train_acc"],
+        "test_acc": eval_res["test_acc"],
+        "class_0_acc": eval_res["class_0_acc"],
+        "class_1_acc": eval_res["class_1_acc"],
+        "class_2_acc": eval_res["class_2_acc"],
+        "class_3_acc": eval_res["class_3_acc"],
+        "final_loss": metrics["obj_loss"],
+        "final_pooled_std": final_pooled_std,
+        "training_time_sec": t1 - t0,
+    }
+
+
+# =============================================================================
+#  6. CSV writer
+# =============================================================================
+
+FIELDNAMES = [
+    "objective", "seed", "use_pooled_vicreg", "train_acc", "test_acc",
+    "class_0_acc", "class_1_acc", "class_2_acc", "class_3_acc",
+    "final_loss", "final_pooled_std", "training_time_sec",
+]
+
+
+def save_result(result: dict, csv_path: str) -> None:
+    file_exists = os.path.exists(csv_path)
+    with open(csv_path, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(result)
+
+
+# =============================================================================
+#  7. Main experiment orchestration
+# =============================================================================
+
+def load_existing_results(csv_path: str) -> set:
+    """Load existing (objective, seed, use_pooled_vicreg) tuples from CSV."""
+    existing = set()
+    if not os.path.exists(csv_path):
+        return existing
+    try:
+        with open(csv_path, "r", newline="") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                key = (
+                    row["objective"],
+                    int(row["seed"]),
+                    row["use_pooled_vicreg"].lower() == "true",
+                )
+                existing.add(key)
+    except Exception:
+        pass
+    return existing
+
+
+def main(dry_run: bool = False, objectives: list[str] | None = None, skip_existing: bool = False):
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    # Determine which objectives to run
+    selected_objectives = objectives if objectives else OBJECTIVES
+    # Include untrained if no --objectives filter is given or explicitly part of selection
+    include_untrained = (objectives is None) or ("untrained" in objectives)
+
+    # Only delete CSV for a full run (no --objectives)
+    if objectives is None and os.path.exists(RESULTS_CSV):
+        os.remove(RESULTS_CSV)
+
+    existing = load_existing_results(RESULTS_CSV) if skip_existing else set()
+
+    # Build task list
+    tasks = []
+    task_labels = []
+    for objective in selected_objectives:
+        if objective not in OBJECTIVES:
+            print(f"  Warning: unknown objective '{objective}', skipping.")
+            continue
+        for use_pv in [False, True]:
+            if dry_run:
+                seeds_to_use = [42]
+                ep = 1
+            else:
+                seeds_to_use = SEEDS
+                ep = EPOCHS
+            for seed in seeds_to_use:
+                key = (objective, seed, use_pv)
+                if skip_existing and key in existing:
+                    continue
+                label = f"{objective.upper()}{'+' if use_pv else '-'}VICReg_seed{seed}"
+                tasks.append((objective, seed, use_pv, ep))
+                task_labels.append(label)
+
+    # Untrained baseline
+    if include_untrained:
+        if dry_run:
+            key = ("untrained", 42, False)
+            if not (skip_existing and key in existing):
+                tasks.append(("untrained", 42, False, 1))
+                task_labels.append("UNTRAINED_seed42")
+        else:
+            for seed in SEEDS:
+                key = ("untrained", seed, False)
+                if not (skip_existing and key in existing):
+                    tasks.append(("untrained", seed, False, EPOCHS))
+                    task_labels.append(f"UNTRAINED_seed{seed}")
+
+    total_tasks = len(tasks)
+    mode = "DRY-RUN" if dry_run else "FULL RUN"
+    print("=" * 70)
+    print(f"  PHASE 4 — Objective Comparison — {mode}")
+    print(f"  Tasks: {total_tasks}")
+    print(f"  Epochs: {ep if dry_run else EPOCHS}, Batch: {BATCH_SIZE}, LR: {LR}")
+    print(f"  Seeds: {SEEDS if not dry_run else [42]}")
+    print("=" * 70)
+
+    t_start = time.time()
+
+    all_results = []
+    for i, task in enumerate(tasks):
+        result = run_single_experiment(task)
+        all_results.append(result)
+        save_result(result, RESULTS_CSV)
+        gc.collect()
+        if (i + 1) % 5 == 0 or i == total_tasks - 1:
+            elapsed = time.time() - t_start
+            print(f"    Completed {i+1}/{total_tasks} tasks ({elapsed:.1f}s elapsed)")
+
+    t_end = time.time()
+
+    print(f"\n  All runs completed in {t_end - t_start:.1f}s")
+    print(f"  Results saved to {RESULTS_CSV}")
+
+    # Quick summary
+    print("\n  Summary (mean ± std test accuracy):")
+    for objective in OBJECTIVES + ["untrained"]:
+        for use_pv in ([False, True] if objective != "untrained" else [False]):
+            rows = [r for r in all_results
+                    if r["objective"] == objective and r["use_pooled_vicreg"] == use_pv]
+            if rows:
+                accs = [r["test_acc"] for r in rows]
+                mean_acc = np.mean(accs)
+                std_acc = np.std(accs, ddof=1 if len(accs) > 1 else 0)
+                label = f"{objective.upper()}{'+VICReg' if use_pv else ''}"
+                print(f"    {label:22s}: {mean_acc:.4f} ± {std_acc:.4f}")
+
+    print("=" * 70)
+    return all_results
+
+
+# =============================================================================
+#  8. Statistical analysis & report
+# =============================================================================
+
+def run_statistical_analysis(results: list[dict]) -> None:
+    """Generate comprehensive markdown report."""
+    try:
+        from scipy import stats
+    except ImportError:
+        print("  scipy not available — skipping statistical tests.")
+        stats = None
+
+    # Organise results
+    grouped: dict[tuple, list[dict]] = {}
+    for r in results:
+        key = (r["objective"], r["use_pooled_vicreg"])
+        grouped.setdefault(key, []).append(r)
+
+    # Untrained baseline
+    untrained_rows = grouped.get(("untrained", False), [])
+    untrained_accs = np.array([r["test_acc"] for r in untrained_rows])
+
+    # ---- Summary table ----
+    summary: dict[tuple, dict] = {}
+    for key, rows in grouped.items():
+        accs = np.array([r["test_acc"] for r in rows])
+        times = np.array([r["training_time_sec"] for r in rows])
+        stds = np.array([r["final_pooled_std"] for r in rows])
+        summary[key] = {
+            "mean_acc": float(accs.mean()),
+            "std_acc": float(np.std(accs, ddof=1)) if len(accs) > 1 else 0.0,
+            "mean_time": float(times.mean()),
+            "mean_std": float(stds.mean()),
+            "accs": accs,
+            "rows": rows,
+        }
+
+    # ---- Paired t-tests vs untrained ----
+    ttest_results: dict[tuple, dict] = {}
+    if stats is not None and len(untrained_accs) > 0:
+        for key, s in summary.items():
+            if key[0] == "untrained":
+                continue
+            accs = s["accs"]
+            # Pair by seed
+            paired_untrained = []
+            paired_obj = []
+            for r in s["rows"]:
+                for u in untrained_rows:
+                    if r["seed"] == u["seed"]:
+                        paired_obj.append(r["test_acc"])
+                        paired_untrained.append(u["test_acc"])
+                        break
+            if len(paired_obj) > 1:
+                t_stat, p_val = stats.ttest_rel(paired_obj, paired_untrained)
+                gain = float(np.mean(paired_obj) - np.mean(paired_untrained))
+                diff = np.array(paired_obj) - np.array(paired_untrained)
+                cohens_d = float(diff.mean() / (diff.std(ddof=1) + 1e-12))
+                ttest_results[key] = {
+                    "gain": gain,
+                    "t": t_stat,
+                    "p": p_val,
+                    "cohens_d": cohens_d,
+                }
+
+    # ---- Falsification criteria ----
+    jepa_pv_key = ("jepa", True)
+    jepa_mean = summary.get(jepa_pv_key, {}).get("mean_acc", 0.0)
+
+    f1_triggered = jepa_mean < 0.55
+
+    f2_triggered = False
+    f2_obj = None
+    for key, s in summary.items():
+        if key[0] == "untrained":
+            continue
+        if s["mean_acc"] > jepa_mean + 0.03:
+            f2_triggered = True
+            f2_obj = key
+
+    f3_results: dict[str, bool] = {}
+    for obj in OBJECTIVES:
+        with_key = summary.get((obj, True), {"mean_acc": 0.0})["mean_acc"]
+        without_key = summary.get((obj, False), {"mean_acc": 0.0})["mean_acc"]
+        f3_results[obj] = without_key >= with_key
+
+    # ---- Build report ----
+    lines = []
+    lines.append("# Phase 4 — Training Objective Comparison Report")
+    lines.append("")
+    lines.append(f"**Generated**: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    lines.append("")
+
+    # Config
+    lines.append("## Experiment Configuration")
+    lines.append("")
+    lines.append(f"- **Architecture**: P3-C (d={D}, d_out={D_OUT})")
+    lines.append(f"- **Encoder layers**: 3 spatial + 3 temporal")
+    lines.append(f"- **Readout**: spatial_pooled_then_flat (26×16=416 dims)")
+    lines.append(f"- **Train/test**: {N_TRAIN_PER_CLASS} / {N_TEST_PER_CLASS} per class")
+    lines.append(f"- **Epochs**: {EPOCHS}, Batch size: {BATCH_SIZE}, LR: {LR}")
+    lines.append(f"- **Alpha**: {ALPHA}")
+    lines.append(f"- **Lambda Hebb**: {LAMBDA_HEBB}")
+    lines.append(f"- **Lambda L1 (recon)**: {LAMBDA_L1}")
+    lines.append(f"- **Seeds**: {SEEDS}")
+    lines.append("")
+
+    # Mathematical formulations
+    lines.append("## Mathematical Formulations")
+    lines.append("")
+    lines.append("### 1. JEPA")
+    lines.append("""
+For each layer code `Z ∈ ℝ^{N×P×d}`:
+- Prediction: `ẑ_{p+1} = W_pred·z_p + b_pred`
+- `L_pred = ½·mean((ẑ_{p+1} − z_{p+1})²) + ½·mean((ẑ_p − z_p)²)`
+- `L_var = mean_j max(0, 1 − σ_j(Z))`
+- `L_cov = (1/d) Σ_{j≠k} C_{jk}²`
+- `L_JEPA = L_pred + 25·L_var + 25·L_cov`
+""")
+    lines.append("### 2. SFA (Slow Feature Analysis)")
+    lines.append("""
+On final temporal output `z ∈ ℝ^{B×T×S×d}`:
+- `L_slow = (1/(B·(T−1)·S·d)) Σ_{b,s,t≥1} ‖z_{b,t,s} − z_{b,t−1,s}‖²`
+- With pooled VICReg: `L = L_slow + L_VICReg(z̄_pooled)` — standard gradient-based SFA (Lagrangian relaxation)
+- Without VICReg: pure slowness (expected collapse to constant)
+""")
+    lines.append("### 3. Hebbian (Variance Maximisation)")
+    lines.append("""
+On ALL intermediate codes `Z ∈ ℝ^{M×d}`:
+- `L_Hebb = −(λ_hebb/d) Σ_j Var(Z_j)`  where λ_hebb = 25.0
+- Gradient: `∂L/∂Z = −(2·λ_hebb/(M·d))·(Z − μ_Z)`  (pushes Z away from mean)
+- **Distinct from VICReg**: operates on ALL layers, MAXIMISES variance, has no decorrelation
+""")
+    lines.append("### 4. Reconstruction (Sparse AE)")
+    lines.append("""
+At every node: `x ∈ ℝ^{M×3d}`, `a = code ∈ ℝ^{M×d_out}`, `r = a·W_dec + b_dec`
+- `L_recon = MSE(x, r) + λ_l1·mean(|a|)`  where λ_l1 = 0.01
+- `∂L/∂a = (2/(M·D_in))(r−x)·W_dec^T + (λ_l1/(M·d_out))·sign(a)`
+- Decoder updated separately (encoder.backward() leaves ∂L/∂W_dec = 0)
+""")
+    lines.append("### 5. Pooled VICReg (injected when enabled)")
+    lines.append("""
+On `z̄ ∈ ℝ^{B×d_out}` (mean-pooled from final temporal layer):
+- `L_VICReg = 25·mean_j max(0, 1−σ_j) + (25/d)·Σ_{j≠k} C_{jk}²`
+- Gradient expanded to (B, T_f, S_f, d_out) and added to `∂L/∂Z_{last}^{(t)}`
+""")
+    lines.append("")
+
+    # Results table
+    lines.append("## Results Summary")
+    lines.append("")
+    lines.append("| Objective | Pooled VICReg | Mean Test Acc | Std | Mean Pooled Std | Time (s) |")
+    lines.append("|-----------|---------------|--------------:|----:|----------------:|---------:|")
+    for obj in OBJECTIVES + ["untrained"]:
+        for use_pv in ([False, True] if obj != "untrained" else [False]):
+            s = summary.get((obj, use_pv))
+            if s:
+                pv_str = "Yes" if use_pv else "No"
+                lines.append(
+                    f"| {obj.upper():9s} | {pv_str:>13s} | {s['mean_acc']:.4f} | "
+                    f"{s['std_acc']:.4f} | {s['mean_std']:.4f} | {s['mean_time']:.1f} |"
+                )
+    lines.append("")
+
+    # VICReg ablation
+    lines.append("## VICReg Ablation Analysis")
+    lines.append("")
+    lines.append("| Objective | With VICReg | Without VICReg | Δ |")
+    lines.append("|-----------|------------:|---------------:|--:|")
+    for obj in OBJECTIVES:
+        with_acc = summary.get((obj, True), {}).get("mean_acc", 0.0)
+        without_acc = summary.get((obj, False), {}).get("mean_acc", 0.0)
+        delta = with_acc - without_acc
+        lines.append(f"| {obj.upper():9s} | {with_acc:.4f} | {without_acc:.4f} | {delta:+.4f} |")
+    lines.append("")
+
+    # Statistical tests
+    lines.append("## Statistical Tests vs Untrained Baseline")
+    lines.append("")
+    if ttest_results:
+        lines.append("| Objective | VICReg | Gain (pp) | t-stat | p-value | Cohen's d |")
+        lines.append("|-----------|--------|----------:|-------:|--------:|----------:|")
+        for key, tr in ttest_results.items():
+            obj, use_pv = key
+            lines.append(
+                f"| {obj.upper():9s} | {'Yes' if use_pv else 'No':>6s} | "
+                f"{tr['gain']*100:>7.2f} | {tr['t']:>6.3f} | {tr['p']:>7.5f} | {tr['cohens_d']:>9.4f} |"
+            )
+    else:
+        lines.append("No statistical tests available (scipy not installed or insufficient data).")
+    lines.append("")
+
+    # Falsification criteria
+    lines.append("## Falsification Criteria Evaluation")
+    lines.append("")
+    lines.append("| Criterion | Description | Status | Detail |")
+    lines.append("|-----------|-------------|--------|--------|")
+    lines.append(
+        f"| F1 | JEPA + VICReg < 55% | {'❌ TRIGGERED' if f1_triggered else '✅ PASS'} | "
+        f"JEPA+VICReg = {jepa_mean*100:.2f}% |"
+    )
+    lines.append(
+        f"| F2 | Another obj beats JEPA+VICReg by ≥3pp | {'❌ TRIGGERED' if f2_triggered else '✅ PASS'} | "
+        f"{'by ' + f2_obj[0].upper() + ('+VICReg' if f2_obj[1] else '') if f2_triggered else 'No objective exceeded'} |"
+    )
+    for obj, triggered in f3_results.items():
+        status = "❌ TRIGGERED" if triggered else "✅ PASS"
+        lines.append(
+            f"| F3 ({obj.upper()}) | {obj} w/o VICReg ≥ {obj} w/ VICReg | {status} | "
+            f"{'Expected' if obj == 'recon' and triggered else 'Not expected' if triggered else 'OK'} |"
+        )
+    lines.append("")
+
+    # Per-class accuracy
+    lines.append("## Per-Class Accuracy")
+    lines.append("")
+    lines.append("| Objective | VICReg | Class 0 | Class 1 | Class 2 | Class 3 |")
+    lines.append("|-----------|--------|---------|---------|---------|---------|")
+    for obj in OBJECTIVES + ["untrained"]:
+        for use_pv in ([False, True] if obj != "untrained" else [False]):
+            rows = grouped.get((obj, use_pv), [])
+            if rows:
+                c0 = np.mean([r["class_0_acc"] for r in rows])
+                c1 = np.mean([r["class_1_acc"] for r in rows])
+                c2 = np.mean([r["class_2_acc"] for r in rows])
+                c3 = np.mean([r["class_3_acc"] for r in rows])
+                pv_str = "Yes" if use_pv else "No"
+                lines.append(
+                    f"| {obj.upper():9s} | {pv_str:>6s} | {c0:.4f} | {c1:.4f} | {c2:.4f} | {c3:.4f} |"
+                )
+    lines.append("")
+
+    # Training stability
+    lines.append("## Training Stability Observations")
+    lines.append("")
+    for obj in OBJECTIVES:
+        for use_pv in [False, True]:
+            rows = grouped.get((obj, use_pv), [])
+            if rows:
+                losses = [r["final_loss"] for r in rows]
+                mean_loss = np.mean(losses)
+                std_loss = np.std(losses, ddof=1) if len(losses) > 1 else 0.0
+                label = f"{obj.upper()}{'+VICReg' if use_pv else ''}"
+                lines.append(f"- **{label}**: final loss = {mean_loss:.4f} ± {std_loss:.4f}")
+    lines.append("")
+
+    # Compute cost
+    lines.append("## Compute Cost")
+    lines.append("")
+    for obj in OBJECTIVES + ["untrained"]:
+        for use_pv in ([False, True] if obj != "untrained" else [False]):
+            s = summary.get((obj, use_pv))
+            if s:
+                label = f"{obj.upper()}{'+VICReg' if use_pv else ''}"
+                lines.append(f"- **{label}**: {s['mean_time']:.1f}s per run ({EPOCHS} epochs)")
+    lines.append("")
+
+    # Manager's directives
+    lines.append("## Manager's Directives Addressed")
+    lines.append("")
+    lines.append("### 1. Reconstruction without VICReg")
+    recon_no = summary.get(("recon", False), {}).get("mean_acc", 0.0)
+    recon_yes = summary.get(("recon", True), {}).get("mean_acc", 0.0)
+    lines.append(f"- Reconstruction without VICReg: **{recon_no*100:.2f}%**")
+    lines.append(f"- Reconstruction with VICReg: **{recon_yes*100:.2f}%**")
+    lines.append(f"- Δ = {((recon_yes - recon_no) * 100):+.2f}pp")
+    if recon_no >= recon_yes:
+        lines.append("- ✅ **Manager's prediction confirmed**: reconstruction natively resists collapse; adding pooled VICReg provides no benefit (or hurts).")
+    else:
+        lines.append("- ⚠️ Pooled VICReg improved reconstruction — the anti-collapse property of the decoder was not decisive in this setting.")
+    lines.append("")
+
+    lines.append("### 2. SFA + VICReg as Standard Gradient SFA")
+    lines.append("- SFA without pooled VICReg enforces only slowness, which has a trivial constant solution.")
+    lines.append("- SFA WITH pooled VICReg adds variance and covariance constraints via the Lagrangian relaxation L = L_slow + L_VICReg(z̄_pooled).")
+    lines.append("- This is precisely the gradient-based SFA formulation documented in the machine-learning literature.")
+    sfa_no = summary.get(("sfa", False), {}).get("mean_acc", 0.0)
+    sfa_yes = summary.get(("sfa", True), {}).get("mean_acc", 0.0)
+    lines.append(f"- Empirical result: SFA w/o VICReg = {sfa_no*100:.2f}%, SFA + VICReg = {sfa_yes*100:.2f}%")
+    lines.append("")
+
+    lines.append("### 3. Hebbian Mathematical Definition")
+    lines.append("- Our Hebbian objective is the gradient-based formulation of Oja's rule:")
+    lines.append("  'L_Hebb = −(λ_hebb/d) Σ_j Var(code_j)' — maximise output variance.")
+    lines.append("- This is DISTINCT from VICReg because:")
+    lines.append("  1. It operates on **ALL intermediate codes**, not only the pooled code.")
+    lines.append("  2. It **maximises variance** (opposite sign from VICReg's variance lower-bound).")
+    lines.append("  3. Without decorrelation, it produces **redundant (aligned) codes**.")
+    lines.append("")
+
+    # Recommendation
+    all_means = {key: s["mean_acc"] for key, s in summary.items() if key[0] != "untrained"}
+    if all_means:
+        best_key = max(all_means, key=all_means.get)
+        best_obj, best_pv = best_key
+        lines.append("## Recommendation")
+        lines.append("")
+        lines.append(f"**Best performing objective: {best_obj.upper()}{' + Pooled VICReg' if best_pv else ''}**")
+        lines.append(f"- Mean test accuracy: **{all_means[best_key]*100:.2f}%**")
+        lines.append("")
+        if best_obj == "jepa":
+            lines.append("JEPA + pooled VICReg is the recommended default training objective for Phase 3/P3-C architecture.")
+        else:
+            lines.append(f"Note: {best_obj.upper()} outperformed the JEPA reference. Consider integrating its principle into the default recipe.")
+    lines.append("")
+
+    # Write report
+    with open(REPORT_MD, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    print(f"\n  Report saved to {REPORT_MD}")
+
+
+# =============================================================================
+#  Entry point
+# =============================================================================
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Single seed, 1 epoch debug run")
+    parser.add_argument("--objectives", nargs="+", default=None,
+                        help="Subset of objectives to run (e.g. jepa sfa)")
+    parser.add_argument("--skip-existing", action="store_true",
+                        help="Skip combinations already present in results CSV")
+    args = parser.parse_args()
+
+    results = main(dry_run=args.dry_run, objectives=args.objectives, skip_existing=args.skip_existing)
+
+    if not args.dry_run and args.objectives is None:
+        run_statistical_analysis(results)
+]
+
+[Tool Call: read_file({'path': 'src/training_objectives.py'})]
+[Tool Result: """
+Training objectives for Phase 1 -- pure NumPy implementations.
+
+Includes:
+  - JEPALoss          : Spatial bidirectional JEPA with per-layer linear predictors + VICReg
+  - ContrastiveLoss   : NT-Xent with 2-layer projection MLP
+  - SFALoss           : Slowness (temporal difference) + variance penalty
+  - HebbianLoss       : Oja's rule online updates on encoder nodes
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+
+# ==============================================================================
+#  Adam helper
+# ==============================================================================
+
+class _Adam:
+    """Simple Adam optimizer for a dict of parameters."""
+
+    def __init__(
+        self,
+        params: dict,
+        lr: float = 1e-3,
+        beta1: float = 0.9,
+        beta2: float = 0.999,
+        eps: float = 1e-8,
+    ):
+        self.lr = lr
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.eps = eps
+        self.t = 0
+        self.m = {k: np.zeros_like(v) for k, v in params.items()}
+        self.v = {k: np.zeros_like(v) for k, v in params.items()}
+
+    def step(self, params: dict, grads: dict) -> None:
+        self.t += 1
+        for k in params:
+            self.m[k] = self.beta1 * self.m[k] + (1.0 - self.beta1) * grads[k]
+            self.v[k] = self.beta2 * self.v[k] + (1.0 - self.beta2) * (grads[k] ** 2)
+            m_hat = self.m[k] / (1.0 - self.beta1 ** self.t)
+            v_hat = self.v[k] / (1.0 - self.beta2 ** self.t)
+            params[k] -= self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
+
+
+# ==============================================================================
+#  JEPA Loss
+# ==============================================================================
+
+class JEPALoss:
+    """
+    Joint Embedding Predictive Architecture (JEPA) loss with:
+    * Per-layer linear predictors (d -> d)
+    * Spatial bidirectional prediction between adjacent positions within each layer
+    * VICReg-style variance + covariance penalties (weight 25.0 each)
+    * Adam updates for predictors
+    """
+
+    def __init__(self, n_layers: int, d: int, lr: float = 1e-3):
+        self.n_layers = n_layers
+        self.d = d
+        self.lr = lr
+
+        # Per-layer linear predictors: W_pred (d, d), b_pred (d,)
+        self.predictors: list[dict] = []
+        self.adams: list[_Adam] = []
+        rng = np.random.default_rng(42)
+        for _ in range(n_layers):
+            W_pred = rng.standard_normal((d, d)) * np.sqrt(2.0 / d)
+            b_pred = np.zeros(d)
+            params = {"W_pred": W_pred, "b_pred": b_pred}
+            self.predictors.append(params)
+            self.adams.append(_Adam(params, lr=lr))
+
+    @staticmethod
+    def _variance_loss(z: np.ndarray, eps: float = 1.0) -> float:
+        """
+        Variance penalty: mean over dimensions of max(0, 1 - std_j).
+        z has shape (..., d); std is computed over all elements except the last dim.
+        """
+        M = np.prod(z.shape[:-1])
+        z_flat = z.reshape(-1, z.shape[-1])
+        std = np.sqrt(z_flat.var(axis=0, ddof=0) + 1e-12)
+        return float(np.mean(np.maximum(0.0, eps - std)))
+
+    @staticmethod
+    def _covariance_loss(z: np.ndarray) -> float:
+        """
+        Covariance penalty: (1/d) * sum_{j!=k} C_{j,k}^2.
+        z has shape (..., d); covariance is over all elements except the last dim.
+        """
+        M = np.prod(z.shape[:-1])
+        d = z.shape[-1]
+        z_flat = z.reshape(-1, d)
+        zc = z_flat - z_flat.mean(axis=0, keepdims=True)
+        cov = (zc.T @ zc) / M
+        mask = 1.0 - np.eye(d)
+        return float(np.sum(cov ** 2 * mask) / d)
+
+    def forward(self, codes: list[np.ndarray]) -> dict:
+        """
+        Compute JEPA loss for a stack of layer codes.
+
+        Parameters
+        ----------
+        codes : list of np.ndarray, length n_layers
+            Each array has shape (B, P, d).
+
+        Returns
+        -------
+        dict with loss, pred_loss, var_loss, cov_loss, and intermediates.
+        """
+        total_loss = 0.0
+        total_pred = 0.0
+        total_var = 0.0
+        total_cov = 0.0
+
+        all_pred_data = []
+
+        for l in range(self.n_layers):
+            Z = codes[l]  # (B, P, d)
+            B, P, d = Z.shape
+            W_pred = self.predictors[l]["W_pred"]  # (d, d)
+            b_pred = self.predictors[l]["b_pred"]  # (d,)
+
+            # Extract neighbor pairs
+            z_p = Z[:, :-1, :]    # (B, P-1, d)
+            z_p1 = Z[:, 1:, :]    # (B, P-1, d)
+
+            # Flatten for matmul
+            z_p_2d = z_p.reshape(B * (P - 1), d)    # (B*(P-1), d)
+            z_p1_2d = z_p1.reshape(B * (P - 1), d)  # (B*(P-1), d)
+
+            # Predictions
+            zhat_p1 = z_p_2d @ W_pred + b_pred    # (B*(P-1), d)
+            zhat_p = z_p1_2d @ W_pred + b_pred    # (B*(P-1), d)
+
+            # Errors
+            e1 = zhat_p1 - z_p1_2d  # predict p+1 from p
+            e2 = zhat_p - z_p_2d    # predict p from p+1
+
+            # Prediction loss = MSE over all 2*B*(P-1) prediction pairs
+            pred_loss = 0.5 * np.mean(e1 ** 2) + 0.5 * np.mean(e2 ** 2)
+
+            # VICReg on the raw codes Z
+            var_loss = self._variance_loss(Z)
+            cov_loss = self._covariance_loss(Z)
+
+            loss = pred_loss + 25.0 * var_loss + 25.0 * cov_loss
+
+            total_loss += loss
+            total_pred += pred_loss
+            total_var += var_loss
+            total_cov += cov_loss
+
+            all_pred_data.append({
+                "Z": Z,
+                "z_p_2d": z_p_2d,
+                "z_p1_2d": z_p1_2d,
+                "zhat_p1": zhat_p1,
+                "zhat_p": zhat_p,
+                "e1": e1,
+                "e2": e2,
+                "B": B,
+                "P": P,
+            })
+
+        n_layers = self.n_layers
+        if n_layers > 0:
+            total_loss /= n_layers
+            total_pred /= n_layers
+            total_var /= n_layers
+            total_cov /= n_layers
+
+        return {
+            "loss": float(total_loss),
+            "pred_loss": float(total_pred),
+            "var_loss": float(total_var),
+            "cov_loss": float(total_cov),
+            "intermediates": {
+                "codes": codes,
+                "pred_data": all_pred_data,
+            },
+        }
+
+    def backward(self, cached: dict) -> tuple[list[dict], list[np.ndarray]]:
+        """
+        Compute gradients for all predictors and all layer codes.
+
+        Returns
+        -------
+        predictor_grads : list of dict, length n_layers
+            Each dict has keys "W_pred" and "b_pred".
+        code_grads : list of np.ndarray, length n_layers
+            Each array has shape (B, P, d).
+        """
+        codes = cached["codes"]
+        pred_data = cached["pred_data"]
+
+        predictor_grads: list[dict] = []
+        code_grads: list[np.ndarray] = []
+
+        for l in range(self.n_layers):
+            data = pred_data[l]
+            Z = data["Z"]
+            z_p_2d = data["z_p_2d"]
+            z_p1_2d = data["z_p1_2d"]
+            e1 = data["e1"]
+            e2 = data["e2"]
+            B = data["B"]
+            P = data["P"]
+            d = self.d
+
+            W_pred = self.predictors[l]["W_pred"]
+
+            denom = B * (P - 1) * d
+
+            # ---- Predictor gradients ----
+            dW_pred = (z_p_2d.T @ e1 + z_p1_2d.T @ e2) / denom
+            db_pred = (e1.sum(axis=0) + e2.sum(axis=0)) / denom
+
+            predictor_grads.append({
+                "W_pred": dW_pred,
+                "b_pred": db_pred,
+            })
+
+            # ---- Code gradients from prediction loss ----
+            dZ_pred = np.zeros_like(Z)  # (B, P, d)
+            e1_3d = e1.reshape(B, P - 1, d)
+            e2_3d = e2.reshape(B, P - 1, d)
+
+            # dZ[:, p, :]   gets  (e1 @ W^T - e2) / denom
+            # dZ[:, p+1, :] gets  (e2 @ W^T - e1) / denom
+            dZ_pred[:, :-1, :] += (e1_3d @ W_pred.T - e2_3d) / denom
+            dZ_pred[:, 1:, :] += (e2_3d @ W_pred.T - e1_3d) / denom
+
+            # ---- Code gradients from variance loss ----
+            M = B * P
+            z_flat = Z.reshape(-1, d)
+            mu = z_flat.mean(axis=0, keepdims=True)
+            std = np.sqrt(z_flat.var(axis=0, ddof=0) + 1e-12)
+            mask = (std < 1.0).astype(float)
+
+            dz_var_flat = -(25.0 / d) * mask * (z_flat - mu) / (M * std + 1e-12)
+            dZ_var = dz_var_flat.reshape(B, P, d)
+
+            # ---- Code gradients from covariance loss ----
+            zc = z_flat - mu  # (M, d)
+            cov = (zc.T @ zc) / M  # (d, d)
+            C_off = cov * (1.0 - np.eye(d))
+            dz_cov_flat = (25.0 * 4.0 / (M * d)) * (zc @ C_off)  # (M, d)
+            dZ_cov = dz_cov_flat.reshape(B, P, d)
+
+            dZ_total = dZ_pred + dZ_var + dZ_cov
+            code_grads.append(dZ_total)
+
+        return predictor_grads, code_grads
+
+    def step(self, codes: list[np.ndarray]) -> dict:
+        """Forward, backward, Adam update for predictors, and return everything."""
+        fwd = self.forward(codes)
+        p_grads, c_grads = self.backward(fwd["intermediates"])
+
+        for l in range(self.n_layers):
+            self.adams[l].step(self.predictors[l], p_grads[l])
+
+        return {**fwd, "predictor_grads": p_grads, "code_grads": c_grads}
+
+    def loss_and_grads(self, codes: list[np.ndarray]) -> dict:
+        """Convenience: forward + backward."""
+        fwd = self.forward(codes)
+        p_grads, c_grads = self.backward(fwd["intermediates"])
+        return {**fwd, "grads": p_grads, "code_grads": c_grads}
+
+
+# ==============================================================================
+#  Contrastive Loss
+# ==============================================================================
+
+class ContrastiveLoss:
+    """
+    NT-Xent contrastive loss with a 2-layer projection MLP:
+    10*d -> 5*d -> 2.5*d, with ReLU and L2 normalization.
+    """
+
+    def __init__(self, d: int, temp: float = 0.5, lr: float = 1e-3):
+        self.d = d  # base d (e.g. d=8 => input_dim=80, hidden=40, output=20)
+        self.temp = temp
+        self.lr = lr
+
+        self.input_dim = 10 * d
+        self.hidden = 5 * d
+        self.d_proj = int(2.5 * d)
+
+        rng = np.random.default_rng(43)
+
+        self.W1 = rng.standard_normal((self.input_dim, self.hidden)) * np.sqrt(2.0 / self.input_dim)
+        self.b1 = np.zeros(self.hidden)
+        self.W2 = rng.standard_normal((self.hidden, self.d_proj)) * np.sqrt(2.0 / self.hidden)
+        self.b2 = np.zeros(self.d_proj)
+
+        params = {
+            "W1": self.W1,
+            "b1": self.b1,
+            "W2": self.W2,
+            "b2": self.b2,
+        }
+        self.adam = _Adam(params, lr=lr)
+
+    def _project(
+        self, z: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Projection MLP with ReLU and L2 normalization.
+        Returns (proj, h1, pre_norm).
+        """
+        h1 = np.maximum(z @ self.W1 + self.b1, 0.0)
+        pre_norm = h1 @ self.W2 + self.b2
+        norm = np.linalg.norm(pre_norm, axis=-1, keepdims=True)
+        proj = pre_norm / np.maximum(norm, 1e-12)
+        return proj, h1, pre_norm
+
+    def forward(self, z1: np.ndarray, z2: np.ndarray) -> dict:
+        """
+        Compute NT-Xent loss between two augmented views.
+
+        Parameters
+        ----------
+        z1, z2 : np.ndarray, shape (B, 10 * d)
+
+        Returns
+        -------
+        dict with loss, proj, and intermediates.
+        """
+        B = z1.shape[0]
+
+        # Stack views: original + augmented
+        z = np.concatenate([z1, z2], axis=0)  # (2B, 10*d)
+
+        p, h1, pre_norm = self._project(z)  # (2B, d_proj)
+
+        # Similarity matrix
+        logits = p @ p.T / self.temp  # (2B, 2B)
+
+        # Mask out self-similarity
+        mask_self = np.eye(2 * B, dtype=bool)
+        logits_masked = np.where(mask_self, -1e9, logits)
+
+        # Positive pairs: for i, positive is at (i+B) % 2B
+        pos_indices = (np.arange(2 * B) + B) % (2 * B)
+
+        # Numerical stability
+        logits_max = np.max(logits_masked, axis=1, keepdims=True)
+        logits_stable = logits_masked - logits_max
+
+        exp_logits = np.exp(logits_stable)
+        sum_exp = np.sum(exp_logits, axis=1)
+
+        pos_logits = logits_stable[np.arange(2 * B), pos_indices]
+        log_prob = pos_logits - np.log(sum_exp)
+        loss = -np.mean(log_prob)
+
+        return {
+            "loss": float(loss),
+            "proj": p,
+            "intermediates": {
+                "z1": z1,
+                "z2": z2,
+                "z": z,
+                "p": p,
+                "h1": h1,
+                "pre_norm": pre_norm,
+                "logits": logits_masked,
+                "exp_logits": exp_logits,
+                "sum_exp": sum_exp,
+                "pos_indices": pos_indices,
+            },
+        }
+
+    def backward(self, cached: dict) -> dict:
+        """Compute gradients for projection MLP and input representations."""
+        z1 = cached["z1"]
+        z2 = cached["z2"]
+        z = cached["z"]
+        p = cached["p"]
+        h1 = cached["h1"]
+        pre_norm = cached["pre_norm"]
+        exp_logits = cached["exp_logits"]
+        sum_exp = cached["sum_exp"]
+        pos_indices = cached["pos_indices"]
+
+        B_total = z.shape[0]  # 2B
+        H1 = self.hidden
+        D_proj = self.d_proj
+
+        # Gradient w.r.t. logits
+        softmax = exp_logits / (sum_exp[:, None] + 1e-12)
+        softmax[np.arange(B_total), pos_indices] -= 1.0
+        d_logits = softmax / B_total
+
+        # Gradient w.r.t. projected representations
+        d_p = (d_logits @ p + d_logits.T @ p) / self.temp
+
+        # Backprop through L2 norm
+        norm = np.linalg.norm(pre_norm, axis=-1, keepdims=True)
+        d_pre = (d_p - p * np.sum(d_p * p, axis=-1, keepdims=True)) * norm
+
+        # Linear 2
+        dW2 = h1.T @ d_pre / B_total
+        db2 = d_pre.mean(axis=0)
+        d_h1 = d_pre @ self.W2.T
+
+        # ReLU 1
+        d_h1 *= (h1 > 0).astype(float)
+
+        # Linear 1
+        dW1 = z.T @ d_h1 / B_total
+        db1 = d_h1.mean(axis=0)
+        d_z = d_h1 @ self.W1.T
+
+        d_z1 = d_z[: B_total // 2]
+        d_z2 = d_z[B_total // 2 :]
+
+        return {
+            "W1": dW1,
+            "b1": db1,
+            "W2": dW2,
+            "b2": db2,
+            "d_z1": d_z1,
+            "d_z2": d_z2,
+        }
+
+    def step(self, z1: np.ndarray, z2: np.ndarray) -> dict:
+        """Forward, backward, and Adam update."""
+        fwd = self.forward(z1, z2)
+        grads = self.backward(fwd["intermediates"])
+
+        params = {
+            "W1": self.W1,
+            "b1": self.b1,
+            "W2": self.W2,
+            "b2": self.b2,
+        }
+        grad_params = {k: grads[k] for k in params}
+        self.adam.step(params, grad_params)
+
+        return fwd
+
+    def loss_and_grads(self, z1: np.ndarray, z2: np.ndarray) -> dict:
+        """Convenience: forward + backward."""
+        fwd = self.forward(z1, z2)
+        grads = self.backward(fwd["intermediates"])
+        return {**fwd, **grads}
+
+
+# ==============================================================================
+#  SFA Loss
+# ==============================================================================
+
+class SFALoss:
+    """
+    Slow Feature Analysis loss.
+
+    Encourages consecutive temporal representations to change slowly:
+        L_slowness = mean(||z[t] - z[t-delta]||^2)
+
+    Includes a variance penalty to avoid the trivial solution:
+        L_var = mean(max(0, 1 - std_i)^2)
+
+    Total loss = L_slowness + lambda_var * L_var
+    """
+
+    def __init__(self, delta_order: int = 1, lambda_var: float = 25.0):
+        self.delta_order = delta_order
+        self.lambda_var = lambda_var
+
+    def forward(self, z: np.ndarray) -> dict:
+        """
+        Parameters
+        ----------
+        z : np.ndarray, shape (T, d) or (B, T, d)
+
+        Returns
+        -------
+        dict with loss, slowness, variance, dL_dz
+        """
+        if z.ndim == 2:
+            z = z[None, ...]
+            squeeze = True
+        else:
+            squeeze = False
+
+        B, T, d = z.shape
+
+        if T <= self.delta_order:
+            slowness = 0.0
+            var_penalty = 0.0
+            loss = 0.0
+            dL_dz = np.zeros_like(z)
+            if squeeze:
+                dL_dz = dL_dz[0]
+            return {
+                "loss": float(loss),
+                "slowness": float(slowness),
+                "variance": float(var_penalty),
+                "dL_dz": dL_dz,
+            }
+
+        # Slowness: MSE of temporal differences
+        deltas = z[:, self.delta_order :, :] - z[:, : T - self.delta_order, :]
+        slowness = float(np.mean(deltas ** 2))
+
+        # Variance penalty: encourage std of each dim to be ~1
+        z_flat = z.reshape(-1, d)
+        std = np.sqrt(z_flat.var(axis=0, ddof=0) + 1e-12)
+        var_penalty = float(np.mean(np.maximum(0.0, 1.0 - std) ** 2))
+
+        loss = slowness + self.lambda_var * var_penalty
+
+        # Gradients
+        dL_dz = np.zeros_like(z)
+
+        # Slowness gradient
+        coeff = 2.0 / (B * (T - self.delta_order) * d)
+        dL_dz[:, self.delta_order :, :] += coeff * deltas
+        dL_dz[:, : T - self.delta_order, :] -= coeff * deltas
+
+        # Variance penalty gradient
+        N = B * T
+        mu = z_flat.mean(axis=0, keepdims=True)
+        mask = (std < 1.0).astype(float)
+        dz_var = (
+            -2.0 * (1.0 - std) * mask / (std + 1e-12) * (z_flat - mu) / N
+        )
+        dz_var = dz_var / d
+        dL_dz += self.lambda_var * dz_var.reshape(B, T, d)
+
+        if squeeze:
+            dL_dz = dL_dz[0]
+
+        return {
+            "loss": loss,
+            "slowness": slowness,
+            "variance": var_penalty,
+            "dL_dz": dL_dz,
+        }
+
+
+# ==============================================================================
+#  Hebbian Loss
+# ==============================================================================
+
+class HebbianLoss:
+    """
+    Online Hebbian learning via Oja's rule applied directly to encoder nodes.
+
+    For each node in the encoder, updates W_enc using:
+        W_enc <- W_enc + eta * (x^T @ y / B - W_enc @ (y^T @ y / B))
+
+    where x is the flattened node input and y is the node output (code).
+
+    Returns negative mean output variance as a monitoring loss.
+    """
+
+    def __init__(self, eta: float = 1e-3):
+        self.eta = eta
+
+    def update(self, encoder, x_binary: np.ndarray) -> float:
+        """
+        Apply Oja's rule to all nodes in the encoder.
+
+        Parameters
+        ----------
+        encoder : HierarchicalEncoder
+        x_binary : np.ndarray, shape (B, n_input)
+
+        Returns
+        -------
+        monitoring_loss : float
+            Negative mean output variance across all nodes.
+        """
+        # Run forward pass with intermediates
+        fwd = encoder.forward_with_intermediates(x_binary)
+        node_inputs = fwd["node_inputs"]  # list of (B, n_nodes_l, 3, d)
+
+        total_var = 0.0
+        total_features = 0
+
+        for l in range(encoder.n_layers):
+            n_nodes = encoder.n_nodes_per_layer[l]
+            layer_node_inputs = node_inputs[l]  # (B, n_nodes, 3, d)
+            B = layer_node_inputs.shape[0]
+
+            if encoder.sharing_mode == "none":
+                for p in range(n_nodes):
+                    x_3d = layer_node_inputs[:, p, :, :]  # (B, 3, d)
+                    node = encoder.nodes[l][p]
+
+                    # Forward to get code
+                    y = node.forward(x_3d)  # (B, d_out)
+
+                    # Flatten input
+                    x_flat = x_3d.reshape(B, -1)  # (B, d_in)
+
+                    # Oja's rule: ΔW = x^T y / B - W @ (y^T y / B)
+                    xTy = x_flat.T @ y / B  # (d_in, d_out)
+                    yTy = y.T @ y / B  # (d_out, d_out)
+
+                    delta_W = xTy - node.W_enc @ yTy
+                    node.W_enc += self.eta * delta_W
+                    node.b_enc += self.eta * y.mean(axis=0)
+
+                    # Monitoring: output variance
+                    per_feature_var = y.var(axis=0)
+                    total_var += np.sum(per_feature_var)
+                    total_features += node.d_out
+            else:
+                node = encoder.layer_nodes[l]
+                accum_delta_W = np.zeros_like(node.W_enc)
+                accum_delta_b = np.zeros_like(node.b_enc)
+
+                for p in range(n_nodes):
+                    x_3d = layer_node_inputs[:, p, :, :]  # (B, 3, d)
+
+                    # Forward to get code
+                    y = node.forward(x_3d)  # (B, d_out)
+
+                    # Flatten input
+                    x_flat = x_3d.reshape(B, -1)  # (B, d_in)
+
+                    # Oja's rule (accumulate, apply once)
+                    xTy = x_flat.T @ y / B  # (d_in, d_out)
+                    yTy = y.T @ y / B  # (d_out, d_out)
+
+                    delta_W = xTy - node.W_enc @ yTy
+                    accum_delta_W += delta_W
+                    accum_delta_b += y.mean(axis=0)
+
+                    # Monitoring: output variance
+                    per_feature_var = y.var(axis=0)
+                    total_var += np.sum(per_feature_var)
+                    total_features += node.d_out
+
+                node.W_enc += self.eta * accum_delta_W / n_nodes
+                node.b_enc += self.eta * accum_delta_b / n_nodes
+
+        monitoring_loss = -total_var / max(total_features, 1)
+        return float(monitoring_loss)
+
+    def __call__(self, encoder, x_binary: np.ndarray) -> float:
+        return self.update(encoder, x_binary)
+]
+
+[Tool Call: read_file({'path': 'src/run_phase3.py'})]
+[Tool Result: """
+Phase 3 Experiment Runner for HSUN.
+
+Runs all three spatiotemporal variants (P3-A, P3-B, P3-C) plus untrained
+baseline and shortcut baselines across 5 seeds.
+
+Training protocol:
+  - P3-A: alpha=1.0 (spatial only) for 200 epochs,
+          then freeze spatial master node, alpha=0.0 (temporal only) for 200 epochs.
+  - P3-B/C: alpha=0.5 jointly for 200 epochs.
+  - Untrained: random init, freeze encoder, train only JEPA predictors.
+
+Evaluation:
+  - Linear probe (SimpleLogisticRegression, max_iter=2000) on pooled representations.
+  - Test accuracy + per-class (per-benchmark) accuracies.
+  - Shortcut baselines: single-frame and temporal-average.
+
+Results saved to phase_3/ directory.
+"""
+
+from __future__ import annotations
+
+import csv
+import os
+import sys
+import time
+from typing import Dict, List
+
+import numpy as np
+
+sys.path.insert(0, os.path.dirname(__file__))
+
+from spatiotemporal_dataset import (
+    generate_spatiotemporal_dataset,
+    evaluate_all_shortcut_baselines,
+    N_CLASSES,
+    N_SPATIAL,
+    N_TIMESTEPS,
+)
+from spatiotemporal_encoder import SpatiotemporalEncoder
+from training_objectives import JEPALoss, _Adam
+from harness import SimpleLogisticRegression
+
+
+# ---------------------------------------------------------------------------
+#  Configuration
+# ---------------------------------------------------------------------------
+
+SEEDS = [42, 43, 44, 45, 46]
+D = 16
+D_OUT = 16
+BATCH_SIZE = 32
+EPOCHS = 200
+LR = 1e-3
+
+OUTPUT_DIR = "phase_3"
+RESULTS_CSV = os.path.join(OUTPUT_DIR, "phase3_results.csv")
+SHORTCUT_CSV = os.path.join(OUTPUT_DIR, "shortcut_baselines.csv")
+
+
+# ---------------------------------------------------------------------------
+#  Helpers
+# ---------------------------------------------------------------------------
+
+def create_jepa_losses(n_layers: int, d: int, lr: float = LR) -> list[JEPALoss]:
+    """Create a JEPALoss object per layer."""
+    return [JEPALoss(n_layers=1, d=d, lr=lr) for _ in range(n_layers)]
+
+
+def reshape_for_spatial_jepa(x: np.ndarray) -> np.ndarray:
+    """
+    Reshape spatial layer output (B, S, T, d) -> (B*T, S, d) for JEPA.
+    JEPA expects (batch, positions, d).
+    """
+    B, S, T, d = x.shape
+    return x.transpose(0, 2, 1, 3).reshape(B * T, S, d)
+
+
+def reshape_spatial_grads_back(grad: np.ndarray, B: int, S: int, T: int, d: int) -> np.ndarray:
+    """Reshape JEPA code gradients (B*T, S, d) back to (B, S, T, d)."""
+    return grad.reshape(B, T, S, d).transpose(0, 2, 1, 3)
+
+
+def reshape_for_temporal_jepa(x: np.ndarray) -> np.ndarray:
+    """
+    Reshape temporal layer output (B, T, S, d) -> (B*S, T, d) for JEPA.
+    """
+    B, T, S, d = x.shape
+    return x.transpose(0, 2, 1, 3).reshape(B * S, T, d)
+
+
+def reshape_temporal_grads_back(grad: np.ndarray, B: int, T: int, S: int, d: int) -> np.ndarray:
+    """Reshape JEPA code gradients (B*S, T, d) back to (B, T, S, d)."""
+    return grad.reshape(B, S, T, d).transpose(0, 2, 1, 3)
+
+
+def train_jepa_epoch(
+    encoder: SpatiotemporalEncoder,
+    spatial_jepas: list[JEPALoss],
+    temporal_jepas: list[JEPALoss],
+    train_grid: np.ndarray,
+    batch_size: int,
+    rng: np.random.Generator,
+    alpha: float,
+    adam_spatial: _Adam | None,
+    adam_temporal: _Adam | None,
+    adam_embedding: _Adam | None,
+) -> dict:
+    """
+    Train one epoch of JEPA on spatiotemporal data.
+
+    Returns dict with spatial_loss, temporal_loss, total_loss.
+    """
+    n_samples = train_grid.shape[0]
+    perm = rng.permutation(n_samples)
+
+    total_spatial_loss = 0.0
+    total_temporal_loss = 0.0
+    total_combined_loss = 0.0
+    n_batches = 0
+
+    for start in range(0, n_samples, batch_size):
+        end = min(start + batch_size, n_samples)
+        batch = train_grid[perm[start:end]]  # (B, S, T)
+
+        # Forward pass
+        fwd = encoder.forward_with_intermediates(batch)
+
+        # --- Spatial JEPA ---
+        spatial_losses = []
+        spatial_code_grads = []
+        for l in range(encoder.n_spatial_layers):
+            out = fwd["spatial_outputs"][l]  # (B, S_l, T, d)
+            B, S_l, T, d = out.shape
+            jepa_in = reshape_for_spatial_jepa(out)  # (B*T, S_l, d)
+            result = spatial_jepas[l].step([jepa_in])
+            spatial_losses.append(result["loss"])
+            # Gradient back to encoder
+            cg = result["code_grads"][0]  # (B*T, S_l, d)
+            cg_back = reshape_spatial_grads_back(cg, B, S_l, T, d)
+            spatial_code_grads.append(cg_back)
+
+        # --- Temporal JEPA ---
+        temporal_losses = []
+        temporal_code_grads = []
+        for l in range(encoder.n_temporal_layers):
+            out = fwd["temporal_outputs"][l]  # (B, T_l, S_final, d)
+            B, T_l, S_f, d = out.shape
+            jepa_in = reshape_for_temporal_jepa(out)  # (B*S_f, T_l, d)
+            result = temporal_jepas[l].step([jepa_in])
+            temporal_losses.append(result["loss"])
+            cg = result["code_grads"][0]  # (B*S_f, T_l, d)
+            cg_back = reshape_temporal_grads_back(cg, B, T_l, S_f, d)
+            temporal_code_grads.append(cg_back)
+
+        # --- Backprop through encoder ---
+        if adam_spatial is not None or adam_temporal is not None:
+            grads = encoder.backward(
+                fwd,
+                dL_dspatial_codes=spatial_code_grads,
+                dL_dtemporal_codes=temporal_code_grads,
+                alpha=alpha,
+            )
+
+            if encoder.variant == "P3-C":
+                # P3-C: spatial and temporal share the same master node.
+                # Use a SINGLE Adam step with combined gradients.
+                combined = {
+                    k: grads["dL_dspatial"][k] + grads["dL_dtemporal"][k]
+                    for k in grads["dL_dspatial"]
+                }
+                adam_spatial.step(
+                    {
+                        "W_enc": encoder.master_spatial.W_enc,
+                        "b_enc": encoder.master_spatial.b_enc,
+                        "W_dec": encoder.master_spatial.W_dec,
+                        "b_dec": encoder.master_spatial.b_dec,
+                    },
+                    combined,
+                )
+            else:
+                if adam_spatial is not None:
+                    adam_spatial.step(
+                        {
+                            "W_enc": encoder.master_spatial.W_enc,
+                            "b_enc": encoder.master_spatial.b_enc,
+                            "W_dec": encoder.master_spatial.W_dec,
+                            "b_dec": encoder.master_spatial.b_dec,
+                        },
+                        grads["dL_dspatial"],
+                    )
+
+                if adam_temporal is not None:
+                    adam_temporal.step(
+                        {
+                            "W_enc": encoder.master_temporal.W_enc,
+                            "b_enc": encoder.master_temporal.b_enc,
+                            "W_dec": encoder.master_temporal.W_dec,
+                            "b_dec": encoder.master_temporal.b_dec,
+                        },
+                        grads["dL_dtemporal"],
+                    )
+
+            if adam_embedding is not None:
+                # Embedding is frozen per design, but we keep the hook
+                pass
+
+        avg_spatial = float(np.mean(spatial_losses)) if spatial_losses else 0.0
+        avg_temporal = float(np.mean(temporal_losses)) if temporal_losses else 0.0
+        combined = alpha * avg_spatial + (1.0 - alpha) * avg_temporal
+
+        total_spatial_loss += avg_spatial
+        total_temporal_loss += avg_temporal
+        total_combined_loss += combined
+        n_batches += 1
+
+    return {
+        "spatial_loss": total_spatial_loss / n_batches,
+        "temporal_loss": total_temporal_loss / n_batches,
+        "combined_loss": total_combined_loss / n_batches,
+    }
+
+
+def evaluate_classification(
+    encoder: SpatiotemporalEncoder,
+    train_grid: np.ndarray,
+    train_y: np.ndarray,
+    test_grid: np.ndarray,
+    test_y: np.ndarray,
+    seed: int = 42,
+) -> dict:
+    """
+    Fit linear probe on pooled representations and compute accuracies.
+
+    Returns dict with train_acc, test_acc, and per-class test accuracies.
+    """
+    # Forward pass to get pooled representations
+    fwd_train = encoder.forward_with_intermediates(train_grid)
+    fwd_test = encoder.forward_with_intermediates(test_grid)
+
+    train_pooled = fwd_train["pooled"]  # (n_train, d_out)
+    test_pooled = fwd_test["pooled"]    # (n_test, d_out)
+
+    probe = SimpleLogisticRegression(
+        n_classes=N_CLASSES,
+        n_features=encoder.d_out,
+        lr=0.1,
+        max_iter=2000,
+        seed=seed,
+    )
+    probe.fit(train_pooled, train_y)
+
+    train_acc = float(probe.score(train_pooled, train_y))
+    test_acc = float(probe.score(test_pooled, test_y))
+
+    # Per-class accuracies
+    per_class = {}
+    for cls in range(N_CLASSES):
+        mask = test_y == cls
+        if mask.sum() > 0:
+            cls_acc = float(probe.score(test_pooled[mask], test_y[mask]))
+        else:
+            cls_acc = 0.0
+        per_class[f"class_{cls}_acc"] = cls_acc
+
+    return {
+        "train_acc": train_acc,
+        "test_acc": test_acc,
+        **per_class,
+    }
+
+
+def run_single_experiment(
+    variant: str,
+    seed: int,
+    epochs: int = EPOCHS,
+    batch_size: int = BATCH_SIZE,
+    lr: float = LR,
+    update_encoder: bool = True,
+) -> dict:
+    """
+    Run a single experiment configuration.
+
+    Parameters
+    ----------
+    variant : str
+        One of "P3-A", "P3-B", "P3-C", or "Untrained".
+    seed : int
+        Random seed.
+    epochs : int
+        Number of training epochs.
+    batch_size : int
+        Batch size.
+    lr : float
+        Learning rate.
+    update_encoder : bool
+        If False, freeze encoder and only train JEPA predictors.
+
+    Returns
+    -------
+    dict with all metrics.
+    """
+    print(f"\n    Variant: {variant}, Seed: {seed}, Epochs: {epochs}")
+    rng = np.random.default_rng(seed)
+
+    # Generate dataset
+    ds = generate_spatiotemporal_dataset(
+        n_train_per_class=500,
+        n_test_per_class=200,
+        noise_flip_prob=0.10,
+        seed=seed,
+    )
+    train_grid = ds["train_grid"]  # (n_train, 16, 32)
+    train_y = ds["train_y"]
+    test_grid = ds["test_grid"]
+    test_y = ds["test_y"]
+    print(f"      Dataset: train={train_grid.shape}, test={test_grid.shape}")
+
+    # Create encoder
+    if variant == "Untrained":
+        enc_variant = "P3-B"  # Use P3-B architecture for untrained baseline
+    else:
+        enc_variant = variant
+
+    encoder = SpatiotemporalEncoder(
+        variant=enc_variant,
+        d=D,
+        d_out=D_OUT,
+        n_spatial_layers=3,
+        n_temporal_layers=3,
+        l1_lambda=0.0,
+        seed=seed,
+    )
+    print(f"      Encoder: {enc_variant}, params={encoder.get_parameter_count()}")
+
+    # Create JEPA losses
+    spatial_jepas = create_jepa_losses(encoder.n_spatial_layers, D_OUT, lr=lr)
+    temporal_jepas = create_jepa_losses(encoder.n_temporal_layers, D_OUT, lr=lr)
+
+    # Set up Adam optimizers for encoder
+    adam_spatial = None
+    adam_temporal = None
+    if update_encoder:
+        adam_spatial = _Adam(
+            {
+                "W_enc": encoder.master_spatial.W_enc,
+                "b_enc": encoder.master_spatial.b_enc,
+                "W_dec": encoder.master_spatial.W_dec,
+                "b_dec": encoder.master_spatial.b_dec,
+            },
+            lr=lr,
+        )
+        if encoder.variant != "P3-C":
+            adam_temporal = _Adam(
+                {
+                    "W_enc": encoder.master_temporal.W_enc,
+                    "b_enc": encoder.master_temporal.b_enc,
+                    "W_dec": encoder.master_temporal.W_dec,
+                    "b_dec": encoder.master_temporal.b_dec,
+                },
+                lr=lr,
+            )
+        else:
+            # P3-C: spatial and temporal share the same master node,
+            # so we use a single Adam optimizer.
+            adam_temporal = adam_spatial
+
+    # Training
+    loss_history = []
+    t0 = time.time()
+
+    if variant == "P3-A":
+        # Phase 1: spatial only (alpha=1.0)
+        print(f"      Phase 1: Spatial-only training (alpha=1.0) for {epochs} epochs...")
+        for epoch in range(epochs):
+            metrics = train_jepa_epoch(
+                encoder, spatial_jepas, temporal_jepas,
+                train_grid, batch_size, rng,
+                alpha=1.0,
+                adam_spatial=adam_spatial,
+                adam_temporal=None,  # Don't update temporal during phase 1
+                adam_embedding=None,
+            )
+            loss_history.append(metrics)
+            if epoch % max(1, epochs // 10) == 0 or epoch == epochs - 1:
+                print(f"        Epoch {epoch}: spatial_loss={metrics['spatial_loss']:.4f}, "
+                      f"temporal_loss={metrics['temporal_loss']:.4f}")
+
+        # Phase 2: freeze spatial, temporal only (alpha=0.0)
+        print(f"      Phase 2: Freeze spatial, temporal-only training (alpha=0.0) for {epochs} epochs...")
+        for epoch in range(epochs):
+            metrics = train_jepa_epoch(
+                encoder, spatial_jepas, temporal_jepas,
+                train_grid, batch_size, rng,
+                alpha=0.0,
+                adam_spatial=None,  # Freeze spatial
+                adam_temporal=adam_temporal,
+                adam_embedding=None,
+            )
+            loss_history.append(metrics)
+            if epoch % max(1, epochs // 10) == 0 or epoch == epochs - 1:
+                print(f"        Epoch {epoch}: spatial_loss={metrics['spatial_loss']:.4f}, "
+                      f"temporal_loss={metrics['temporal_loss']:.4f}")
+
+    else:
+        # P3-B, P3-C, or Untrained: joint training with alpha=0.5
+        alpha = 0.5 if update_encoder else 0.5  # For untrained, alpha doesn't matter for encoder
+        print(f"      Joint training (alpha={alpha}) for {epochs} epochs...")
+        for epoch in range(epochs):
+            metrics = train_jepa_epoch(
+                encoder, spatial_jepas, temporal_jepas,
+                train_grid, batch_size, rng,
+                alpha=alpha,
+                adam_spatial=adam_spatial if update_encoder else None,
+                adam_temporal=adam_temporal if update_encoder else None,
+                adam_embedding=None,
+            )
+            loss_history.append(metrics)
+            if epoch % max(1, epochs // 10) == 0 or epoch == epochs - 1:
+                print(f"        Epoch {epoch}: spatial_loss={metrics['spatial_loss']:.4f}, "
+                      f"temporal_loss={metrics['temporal_loss']:.4f}, "
+                      f"combined={metrics['combined_loss']:.4f}")
+
+    t1 = time.time()
+    print(f"      Training completed in {t1 - t0:.1f}s")
+
+    # Final losses
+    if variant == "P3-A":
+        final_spatial_loss = loss_history[epochs - 1]["spatial_loss"]
+        final_temporal_loss = loss_history[2 * epochs - 1]["temporal_loss"]
+    else:
+        final_spatial_loss = loss_history[-1]["spatial_loss"]
+        final_temporal_loss = loss_history[-1]["temporal_loss"]
+
+    print(f"      Final spatial JEPA loss: {final_spatial_loss:.6f}")
+    print(f"      Final temporal JEPA loss: {final_temporal_loss:.6f}")
+
+    # Evaluate classification
+    eval_results = evaluate_classification(
+        encoder, train_grid, train_y, test_grid, test_y, seed=seed
+    )
+    print(f"      Classification: train={eval_results['train_acc']:.4f}, "
+          f"test={eval_results['test_acc']:.4f}")
+    for cls in range(N_CLASSES):
+        print(f"        Class {cls} accuracy: {eval_results[f'class_{cls}_acc']:.4f}")
+
+    result = {
+        "variant": variant,
+        "seed": seed,
+        "train_acc": eval_results["train_acc"],
+        "test_acc": eval_results["test_acc"],
+        "final_spatial_jepa_loss": final_spatial_loss,
+        "final_temporal_jepa_loss": final_temporal_loss,
+        "training_time_sec": t1 - t0,
+    }
+    for cls in range(N_CLASSES):
+        result[f"class_{cls}_acc"] = eval_results[f"class_{cls}_acc"]
+
+    return result
+
+
+def run_shortcut_baselines(seed: int) -> list[dict]:
+    """Run shortcut baselines for a single seed and return rows."""
+    ds = generate_spatiotemporal_dataset(
+        n_train_per_class=500,
+        n_test_per_class=200,
+        noise_flip_prob=0.10,
+        seed=seed,
+    )
+    results = evaluate_all_shortcut_baselines(
+        ds["train_x"], ds["train_y"], ds["test_x"], ds["test_y"],
+        frames_to_test=[0, 8, 16, 24, 31],
+    )
+
+    rows = []
+    for name, res in results.items():
+        rows.append({
+            "seed": seed,
+            "baseline_name": name,
+            "train_acc": res["train_acc"],
+            "test_acc": res["test_acc"],
+        })
+    return rows
+
+
+# ---------------------------------------------------------------------------
+#  Main
+# ---------------------------------------------------------------------------
+
+def main(smoke_test: bool = False):
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    if smoke_test:
+        print("=" * 70)
+        print("  PHASE 3 SMOKE TEST (2 epochs, 1 seed)")
+        print("=" * 70)
+        test_seeds = [42]
+        test_epochs = 2
+        test_variants = ["P3-A", "P3-B", "P3-C", "Untrained"]
+    else:
+        print("=" * 70)
+        print("  PHASE 3 FULL EXPERIMENT RUNNER")
+        print(f"  Variants: P3-A, P3-B, P3-C, Untrained")
+        print(f"  Seeds: {SEEDS}")
+        print(f"  Epochs: {EPOCHS}")
+        print("=" * 70)
+        test_seeds = SEEDS
+        test_epochs = EPOCHS
+        test_variants = ["P3-A", "P3-B", "P3-C", "Untrained"]
+
+    all_results: list[dict] = []
+    total_runs = len(test_variants) * len(test_seeds)
+    run_idx = 0
+
+    for variant in test_variants:
+        print(f"\n{'-' * 70}")
+        print(f"  Variant: {variant}")
+        print(f"{'-' * 70}")
+
+        for seed in test_seeds:
+            run_idx += 1
+            print(f"\n  [{run_idx}/{total_runs}]  seed={seed}")
+
+            result = run_single_experiment(
+                variant=variant,
+                seed=seed,
+                epochs=test_epochs,
+                batch_size=BATCH_SIZE,
+                lr=LR,
+                update_encoder=(variant != "Untrained"),
+            )
+            all_results.append(result)
+
+    # Save main results
+    fieldnames = [
+        "variant", "seed", "train_acc", "test_acc",
+        "final_spatial_jepa_loss", "final_temporal_jepa_loss",
+        "training_time_sec",
+        "class_0_acc", "class_1_acc", "class_2_acc", "class_3_acc",
+    ]
+
+    with open(RESULTS_CSV, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(all_results)
+
+    print(f"\n  Main results saved to: {RESULTS_CSV}")
+
+    # Run shortcut baselines (only once per seed, not per variant)
+    if not smoke_test:
+        print(f"\n{'-' * 70}")
+        print("  Running Shortcut Baselines")
+        print(f"{'-' * 70}")
+        shortcut_rows: list[dict] = []
+        for seed in test_seeds:
+            print(f"\n    Seed {seed}...")
+            rows = run_shortcut_baselines(seed)
+            shortcut_rows.extend(rows)
+            for row in rows:
+                print(f"      {row['baseline_name']:30s}  test_acc={row['test_acc']:.4f}")
+
+        with open(SHORTCUT_CSV, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=["seed", "baseline_name", "train_acc", "test_acc"])
+            writer.writeheader()
+            writer.writerows(shortcut_rows)
+
+        print(f"\n  Shortcut baseline results saved to: {SHORTCUT_CSV}")
+
+    # Summary
+    print("\n" + "=" * 70)
+    if smoke_test:
+        print("  SMOKE TEST COMPLETE")
+    else:
+        print("  ALL RUNS COMPLETE")
+    print("=" * 70)
+
+    print("\n  Summary (mean ± std):")
+    for variant in test_variants:
+        rows = [r for r in all_results if r["variant"] == variant]
+        if not rows:
+            continue
+        accs = [r["test_acc"] for r in rows]
+        s_losses = [r["final_spatial_jepa_loss"] for r in rows]
+        t_losses = [r["final_temporal_jepa_loss"] for r in rows]
+        print(
+            f"    {variant:15s}: test_acc={np.mean(accs):.4f}±{np.std(accs):.4f}  "
+            f"spatial_loss={np.mean(s_losses):.4f}±{np.std(s_losses):.4f}  "
+            f"temporal_loss={np.mean(t_losses):.4f}±{np.std(t_losses):.4f}"
+        )
+
+    return all_results
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Phase 3 Experiment Runner")
+    parser.add_argument("--smoke-test", action="store_true", help="Run quick smoke test (2 epochs, 1 seed)")
+    args = parser.parse_args()
+    main(smoke_test=args.smoke_test)
+]
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_dataset.py'})]
+[Tool Result: """
+Spatiotemporal Dataset Generator for Phase 3.
+
+Generates four categories of spatiotemporal sequences on a 16x32 binary grid
+(16 spatial positions x 32 timesteps). Designed so that shortcut baselines
+(single-frame and temporal-average projections) achieve at-chance performance,
+forcing the model to reason about temporal dynamics.
+
+Classes (4-class classification):
+    0 = moving_blob       -- blob position follows a LINEAR trajectory (wrapped mod 16)
+    1 = expanding_blob    -- blob width oscillates periodically in place (wrapped mod 16)
+    2 = periodic_st       -- blob position oscillates back-and-forth sinusoidally (wrapped mod 16)
+    3 = object_permanence -- blob stays put (wrapped mod 16), disappears for some steps
+
+CRITICAL design property: all four classes draw their initial spatial position
+from the SAME distribution (uniformly 0..15) and their base blob width from
+the SAME distribution (uniformly 2..4).  The CLASS label is encoded ONLY in
+the TEMPORAL TRAJECTORY of the blob.  Consequently:
+  - The marginal spatial distribution per-frame is IDENTICAL across classes
+  - The temporal-average profile is nearly identical across classes
+  - The only signal is the temporal correlation structure between frames
+
+ALL generators use MODULO-16 WRAPPING for positions, so the spatial marginal
+is truly uniform and there is NO boundary/bias signal for shortcut baselines.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+
+# ---------------------------------------------------------------------------
+#  Constants
+# ---------------------------------------------------------------------------
+
+N_SPATIAL = 16       # number of spatial positions (S)
+N_TIMESTEPS = 32     # number of timesteps (T)
+N_PIXELS = N_SPATIAL * N_TIMESTEPS  # flattened length = 512
+
+N_TRAIN_PER_CLASS = 500
+N_TEST_PER_CLASS = 200
+NOISE_FLIP_PROB = 0.10
+
+N_CLASSES = 4
+
+
+# ---------------------------------------------------------------------------
+#  Noise helper
+# ---------------------------------------------------------------------------
+
+def _add_noise(grid: np.ndarray, flip_prob: float, rng: np.random.Generator) -> np.ndarray:
+    """Flip each pixel independently with probability *flip_prob*."""
+    mask = rng.random(grid.shape) < flip_prob
+    noisy = grid.copy()
+    noisy[mask] = 1.0 - noisy[mask]
+    return noisy
+
+
+# ---------------------------------------------------------------------------
+#  Blob drawing helper with modulo-16 wrapping
+# ---------------------------------------------------------------------------
+
+def _draw_wrapped_blob(
+    seq: np.ndarray,          # shape (S, T), float array
+    t: int,
+    centre: int,
+    width: int,
+    n_spatial: int = N_SPATIAL,
+) -> None:
+    """
+    Draw a blob of given *width* centred at *centre* (mod n_spatial) into
+    ``seq[:, t]``, handling wrap-around via modulo arithmetic.
+
+    Parameters
+    ----------
+    seq : np.ndarray, shape (S, T)
+        The spatiotemporal grid (written in-place).
+    t : int
+        Timestep index.
+    centre : int
+        Centre pixel position (will be taken mod n_spatial).
+    width : int
+        Full width of the blob in pixels.
+    n_spatial : int
+        Number of spatial positions (default N_SPATIAL = 16).
+    """
+    half_w = width // 2
+    c = centre % n_spatial
+
+    # The blob covers positions [c - half_w, ..., c - half_w + width - 1] mod S
+    for offset in range(width):
+        pos = (c - half_w + offset) % n_spatial
+        seq[pos, t] = 1.0
+
+
+# ---------------------------------------------------------------------------
+#  Sequence generators: each returns  (n_samples, S, T)  float arrays
+# ---------------------------------------------------------------------------
+
+def _generate_moving_blob(
+    n_samples: int,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """
+    Class 0 -- A blob whose CENTRE follows a LINEAR trajectory across space,
+    wrapped modulo 16.
+
+    Starting position: uniform 0..15
+    Base width: uniform 2..4
+    Direction: random (left or right)
+    Speed: random integer 1..3 per timestep
+    """
+    seqs = np.zeros((n_samples, N_SPATIAL, N_TIMESTEPS), dtype=np.float64)
+    for i in range(n_samples):
+        start_x = rng.integers(0, N_SPATIAL)            # uniform 0..15
+        blob_width = rng.integers(2, 5)                  # 2, 3, or 4
+        direction = rng.choice([-1, 1])                  # left or right
+        speed = rng.integers(1, 4)                      # 1, 2, or 3 pixels/step
+
+        for t in range(N_TIMESTEPS):
+            x = int((start_x + direction * speed * t) % N_SPATIAL)
+            _draw_wrapped_blob(seqs[i], t, x, blob_width)
+    return seqs
+
+
+def _generate_expanding_blob(
+    n_samples: int,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """
+    Class 1 -- A blob centred at a FIXED spatial position (mod 16), but its
+    WIDTH periodically oscillates.
+
+    Starting position (centre): uniform 0..15
+    Base width: uniform 2..4
+    Oscillation: sinusoidal with period and amplitude chosen randomly.
+    """
+    seqs = np.zeros((n_samples, N_SPATIAL, N_TIMESTEPS), dtype=np.float64)
+    for i in range(n_samples):
+        centre = rng.integers(0, N_SPATIAL)              # uniform 0..15
+        base_width = rng.integers(2, 5)                  # 2, 3, or 4
+        period = rng.choice([8, 12, 16])
+        amplitude = rng.integers(1, 3)                   # ±1..2 additional half-width
+
+        for t in range(N_TIMESTEPS):
+            phase = 2 * np.pi * t / period
+            # Width oscillates around base_width
+            w = base_width + amplitude * np.sin(phase)
+            w = max(1, round(w))                         # min width 1, max ~base+amplitude
+            w = min(w, N_SPATIAL)                        # cap at N_SPATIAL
+            _draw_wrapped_blob(seqs[i], t, centre, w)
+    return seqs
+
+
+def _generate_periodic_spatiotemporal(
+    n_samples: int,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """
+    Class 2 -- A blob whose centre OSCILLATES back-and-forth sinusoidally,
+    with the centre position wrapped modulo 16.
+
+    Starting position: uniform 0..15
+    Base width: uniform 2..4
+    Centre trajectory: centre(t) = (start_x + round(amplitude * sin(2*pi*t/period))) mod 16
+    """
+    seqs = np.zeros((n_samples, N_SPATIAL, N_TIMESTEPS), dtype=np.float64)
+    for i in range(n_samples):
+        start_x = rng.integers(0, N_SPATIAL)             # uniform 0..15
+        blob_width = rng.integers(2, 5)                  # 2, 3, or 4
+        period = rng.choice([8, 12, 16, 20])
+        amplitude = rng.integers(2, 6)                   # oscillation range 2..5 pixels
+
+        for t in range(N_TIMESTEPS):
+            phase = 2 * np.pi * t / period
+            displacement = round(amplitude * np.sin(phase))
+            x = int((start_x + displacement) % N_SPATIAL)
+            _draw_wrapped_blob(seqs[i], t, x, blob_width)
+    return seqs
+
+
+def _generate_object_permanence(
+    n_samples: int,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """
+    Class 3 -- A blob that stays in one place (mod 16), then VANISHES for a
+    contiguous block of timesteps (the "occlusion" phase), then REAPPEARS at
+    the same location.
+
+    Starting position: uniform 0..15
+    Base width: uniform 2..4
+    Occlusion: random start frame and random duration.  Outside the occlusion
+    window the blob is fully visible at the same position.
+    """
+    seqs = np.zeros((n_samples, N_SPATIAL, N_TIMESTEPS), dtype=np.float64)
+    for i in range(n_samples):
+        centre = rng.integers(0, N_SPATIAL)              # uniform 0..15
+        blob_width = rng.integers(2, 5)                  # 2, 3, or 4
+        hide_start = rng.integers(5, 18)                 # occlusion begins between t=5..17
+        hide_duration = rng.integers(5, 16)              # occlusion lasts 5..15 frames
+        hide_end = min(hide_start + hide_duration, N_TIMESTEPS)
+
+        for t in range(N_TIMESTEPS):
+            if hide_start <= t < hide_end:
+                # Occluded: blob is invisible (do nothing)
+                continue
+            _draw_wrapped_blob(seqs[i], t, centre, blob_width)
+    return seqs
+
+
+# ---------------------------------------------------------------------------
+#  Main dataset builder
+# ---------------------------------------------------------------------------
+
+def generate_spatiotemporal_dataset(
+    n_train_per_class: int = N_TRAIN_PER_CLASS,
+    n_test_per_class: int = N_TEST_PER_CLASS,
+    noise_flip_prob: float = NOISE_FLIP_PROB,
+    seed: int = 42,
+) -> dict:
+    """
+    Build the Phase-3 spatiotemporal classification dataset.
+
+    Parameters
+    ----------
+    n_train_per_class : int
+        Training samples per class.
+    n_test_per_class : int
+        Testing samples per class.
+    noise_flip_prob : float
+        Per-pixel flip probability.
+    seed : int
+        Master RNG seed.
+
+    Returns
+    -------
+    dict with keys:
+        'train_x'   : np.ndarray, shape (n_train, S*T) -- flattened binary grids
+        'train_y'   : np.ndarray, shape (n_train,) -- class labels {0,1,2,3}
+        'test_x'    : np.ndarray, shape (n_test, S*T)
+        'test_y'    : np.ndarray, shape (n_test,)
+        'train_grid': np.ndarray, shape (n_train, S, T) -- original 2-D form
+        'test_grid' : np.ndarray, shape (n_test, S, T)
+    """
+    rng = np.random.default_rng(seed)
+
+    generators = [
+        _generate_moving_blob,
+        _generate_expanding_blob,
+        _generate_periodic_spatiotemporal,
+        _generate_object_permanence,
+    ]
+
+    n_train_total = N_CLASSES * n_train_per_class
+    n_test_total = N_CLASSES * n_test_per_class
+
+    # -- Training set --
+    train_grids: list[np.ndarray] = []
+    train_labels: list[np.ndarray] = []
+    for cls_idx, gen in enumerate(generators):
+        grid = gen(n_train_per_class, rng)
+        grid = _add_noise(grid, noise_flip_prob, rng)
+        train_grids.append(grid)
+        train_labels.append(np.full(n_train_per_class, cls_idx, dtype=np.int64))
+
+    train_x = np.vstack([g.reshape(n_train_per_class, N_PIXELS) for g in train_grids])
+    train_y = np.concatenate(train_labels)
+
+    # -- Test set --
+    test_grids: list[np.ndarray] = []
+    test_labels: list[np.ndarray] = []
+    for cls_idx, gen in enumerate(generators):
+        grid = gen(n_test_per_class, rng)
+        grid = _add_noise(grid, noise_flip_prob, rng)
+        test_grids.append(grid)
+        test_labels.append(np.full(n_test_per_class, cls_idx, dtype=np.int64))
+
+    test_x = np.vstack([g.reshape(n_test_per_class, N_PIXELS) for g in test_grids])
+    test_y = np.concatenate(test_labels)
+
+    train_grid_all = np.concatenate(train_grids, axis=0)
+    test_grid_all = np.concatenate(test_grids, axis=0)
+
+    return {
+        "train_x": train_x,
+        "train_y": train_y,
+        "test_x": test_x,
+        "test_y": test_y,
+        "train_grid": train_grid_all,
+        "test_grid": test_grid_all,
+    }
+
+
+# ---------------------------------------------------------------------------
+#  Shortcut baseline evaluators
+# ---------------------------------------------------------------------------
+
+def evaluate_single_frame_baseline(
+    train_x: np.ndarray,
+    train_y: np.ndarray,
+    test_x: np.ndarray,
+    test_y: np.ndarray,
+    frame_idx: int = 8,
+) -> dict:
+    """
+    Evaluate the single-frame shortcut baseline.
+
+    Uses only one timestep (frame_idx) of the spatiotemporal input as the
+    feature vector for logistic regression.
+
+    Parameters
+    ----------
+    train_x : np.ndarray, shape (n_train, S*T)
+    train_y : np.ndarray, shape (n_train,)
+    test_x  : np.ndarray, shape (n_test, S*T)
+    test_y  : np.ndarray, shape (n_test,)
+    frame_idx : int -- 0-based timestep index to extract.
+
+    Returns
+    -------
+    dict with keys 'train_acc', 'test_acc', 'n_samples_train', 'n_samples_test'.
+    """
+    from harness import SimpleLogisticRegression
+
+    n_train = train_x.shape[0]
+    n_test = test_x.shape[0]
+
+    def extract_frame(X: np.ndarray) -> np.ndarray:
+        return X.reshape(-1, N_SPATIAL, N_TIMESTEPS)[:, :, frame_idx]
+
+    X_train = extract_frame(train_x)
+    X_test = extract_frame(test_x)
+
+    n_classes = N_CLASSES
+    n_features = N_SPATIAL
+
+    model = SimpleLogisticRegression(n_classes, n_features, lr=0.1, max_iter=2000, seed=42)
+    model.fit(X_train, train_y)
+
+    train_acc = model.score(X_train, train_y)
+    test_acc = model.score(X_test, test_y)
+
+    return {
+        "train_acc": train_acc,
+        "test_acc": test_acc,
+        "n_samples_train": n_train,
+        "n_samples_test": n_test,
+    }
+
+
+def evaluate_temporal_average_baseline(
+    train_x: np.ndarray,
+    train_y: np.ndarray,
+    test_x: np.ndarray,
+    test_y: np.ndarray,
+) -> dict:
+    """
+    Evaluate the temporal-average shortcut baseline.
+
+    Averages over all 32 timesteps to produce a single (S,) feature vector
+    per sample, then applies logistic regression.
+
+    Parameters
+    ----------
+    train_x : np.ndarray, shape (n_train, S*T)
+    train_y : np.ndarray, shape (n_train,)
+    test_x  : np.ndarray, shape (n_test, S*T)
+    test_y  : np.ndarray, shape (n_test,)
+
+    Returns
+    -------
+    dict with keys 'train_acc', 'test_acc', 'n_samples_train', 'n_samples_test'.
+    """
+    from harness import SimpleLogisticRegression
+
+    n_train = train_x.shape[0]
+    n_test = test_x.shape[0]
+
+    def temporal_average(X: np.ndarray) -> np.ndarray:
+        return X.reshape(-1, N_SPATIAL, N_TIMESTEPS).mean(axis=2)
+
+    X_train = temporal_average(train_x)
+    X_test = temporal_average(test_x)
+
+    n_classes = N_CLASSES
+    n_features = N_SPATIAL
+
+    model = SimpleLogisticRegression(n_classes, n_features, lr=0.1, max_iter=2000, seed=42)
+    model.fit(X_train, train_y)
+
+    train_acc = model.score(X_train, train_y)
+    test_acc = model.score(X_test, test_y)
+
+    return {
+        "train_acc": train_acc,
+        "test_acc": test_acc,
+        "n_samples_train": n_train,
+        "n_samples_test": n_test,
+    }
+
+
+def evaluate_all_shortcut_baselines(
+    train_x: np.ndarray,
+    train_y: np.ndarray,
+    test_x: np.ndarray,
+    test_y: np.ndarray,
+    frames_to_test: list[int] | None = None,
+) -> dict:
+    """
+    Run all shortcut baseline evaluations and return a summary.
+
+    Parameters
+    ----------
+    train_x, train_y, test_x, test_y : as returned by generate_spatiotemporal_dataset.
+    frames_to_test : list of frame indices to try for single-frame baseline
+                     (default: [0, 8, 16, 24, 31]).
+
+    Returns
+    -------
+    dict summarising all baseline accuracies.
+    """
+    if frames_to_test is None:
+        frames_to_test = [0, 8, 16, 24, 31]
+
+    results = {}
+
+    # Temporal average
+    avg = evaluate_temporal_average_baseline(train_x, train_y, test_x, test_y)
+    results["temporal_average"] = avg
+
+    # Single frame for each requested frame index
+    for f in frames_to_test:
+        sf = evaluate_single_frame_baseline(train_x, train_y, test_x, test_y, frame_idx=f)
+        results[f"single_frame_t{f}"] = sf
+
+    return results
+
+
+# ---------------------------------------------------------------------------
+#  Self-test
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    print("=" * 65)
+    print("  Spatiotemporal Dataset -- Self-Test")
+    print("=" * 65)
+
+    # 1. Generate dataset
+    ds = generate_spatiotemporal_dataset(
+        n_train_per_class=N_TRAIN_PER_CLASS,
+        n_test_per_class=N_TEST_PER_CLASS,
+        noise_flip_prob=NOISE_FLIP_PROB,
+        seed=42,
+    )
+    n_train_total = N_CLASSES * N_TRAIN_PER_CLASS
+    n_test_total = N_CLASSES * N_TEST_PER_CLASS
+
+    assert ds["train_x"].shape == (n_train_total, N_PIXELS), \
+        f"Expected train_x ({n_train_total}, {N_PIXELS}), got {ds['train_x'].shape}"
+    assert ds["test_x"].shape == (n_test_total, N_PIXELS), \
+        f"Expected test_x ({n_test_total}, {N_PIXELS}), got {ds['test_x'].shape}"
+    assert ds["train_y"].shape == (n_train_total,)
+    assert ds["test_y"].shape == (n_test_total,)
+    assert ds["train_grid"].shape == (n_train_total, N_SPATIAL, N_TIMESTEPS)
+    assert ds["test_grid"].shape == (n_test_total, N_SPATIAL, N_TIMESTEPS)
+    assert set(np.unique(ds["train_y"])) == {0, 1, 2, 3}
+    assert set(np.unique(ds["test_y"])) == {0, 1, 2, 3}
+    print(f"  [OK] train_x: {ds['train_x'].shape}   test_x: {ds['test_x'].shape}")
+    print(f"  [OK] train_grid: {ds['train_grid'].shape}   test_grid: {ds['test_grid'].shape}")
+    print(f"  [OK] Labels: train={set(ds['train_y'].tolist())}  test={set(ds['test_y'].tolist())}")
+
+    # 2. Verify binary values (0/1 after noise)
+    assert set(np.unique(ds["train_x"])).issubset({0.0, 1.0}), "train_x not binary!"
+    assert set(np.unique(ds["test_x"])).issubset({0.0, 1.0}), "test_x not binary!"
+    print(f"  [OK] Binary values confirmed")
+
+    # 3. Evaluate shortcut baselines
+    print("\n  Evaluating shortcut baselines ...")
+    results = evaluate_all_shortcut_baselines(
+        ds["train_x"], ds["train_y"], ds["test_x"], ds["test_y"],
+    )
+
+    all_pass = True
+    for name, res in results.items():
+        test_acc = res["test_acc"]
+        status = "PASS" if test_acc <= 0.50 else "FAIL"
+        if status == "FAIL":
+            all_pass = False
+        print(f"  [{status}] {name:30s}  train={res['train_acc']:.4f}  test={test_acc:.4f}")
+
+    print()
+    if all_pass:
+        print("  ALL BASELINES <= 50% test accuracy -- GOOD")
+    else:
+        print("  WARNING: some baselines > 50% -- may need stronger randomisation")
+
+    print("=" * 65)
+    if all_pass:
+        print("  ALL SELF-TESTS PASSED")
+    else:
+        print("  SELF-TESTS FAILED -- baselines exceed 50%")
+    print("=" * 65)
+]
+
+[Tool Call: read_file({'path': 'src/harness.py'})]
+[Tool Result: """
+HSUN Phase 0 -- Experimental Harness
+
+Dataset generator, similarity evaluator, encoder interface, and utility functions
+for the smoke-test of hierarchical sparse universal nodes.
+
+Dependencies: numpy, scipy only -- no external ML libraries.
+"""
+
+from __future__ import annotations
+
+import itertools
+from abc import ABC, abstractmethod
+from typing import Dict, List, Tuple
+
+import numpy as np
+from scipy.stats import spearmanr
+
+
+# ---------------------------------------------------------------------------
+# Dataset Generator
+# ---------------------------------------------------------------------------
+
+class DatasetGenerator:
+    """
+    Generates the Phase 0 dataset:
+      - 8 base states: all 3-bit binary tuples (0,0,0) ... (1,1,1)
+      - 10 noise variants per base state (bit-flip prob 0.1)
+      - Total: 88 samples
+    """
+
+    NUM_BITS = 3
+    NOISE_VARIANTS_PER_STATE = 10
+    FLIP_PROB = 0.1
+
+    def __init__(self, seed: int | None = None) -> None:
+        self.rng = np.random.default_rng(seed)
+
+    @property
+    def base_states(self) -> np.ndarray:
+        """Return the 8 canonical 3-bit states as an (8, 3) array."""
+        states = np.array(
+            list(itertools.product([0, 1], repeat=self.NUM_BITS)), dtype=np.float64
+        )
+        return states
+
+    def _noisy_variants(self, state: np.ndarray, n: int) -> np.ndarray:
+        """Generate n noise variants of a single state by flipping bits."""
+        flip_mask = self.rng.random((n, self.NUM_BITS)) < self.FLIP_PROB
+        variants = state.astype(np.float64) + flip_mask.astype(np.float64)
+        variants = np.mod(variants, 2)
+        return variants
+
+    def get_base_states(self) -> np.ndarray:
+        """Return just the 8 base states -- shape (8, 3)."""
+        return self.base_states.copy()
+
+    def get_all_samples(self) -> np.ndarray:
+        """Return all 88 samples -- shape (88, 3)."""
+        base = self.base_states
+        samples: List[np.ndarray] = [base.copy()]
+        for i in range(base.shape[0]):
+            variants = self._noisy_variants(base[i], self.NOISE_VARIANTS_PER_STATE)
+            samples.append(variants)
+        return np.vstack(samples)
+
+
+# ---------------------------------------------------------------------------
+# Similarity Evaluator
+# ---------------------------------------------------------------------------
+
+class SimilarityEvaluator:
+    """
+    Computes pairwise input inverse Hamming distance and pairwise code
+    cosine similarity for the 8 base states, then calculates Spearman rho
+    STRICTLY on off-diagonal (distinct) pairs.
+    """
+
+    @staticmethod
+    def pairwise_hamming(states: np.ndarray) -> np.ndarray:
+        """Return an (N, N) matrix of Hamming distances between binary states."""
+        n = states.shape[0]
+        dist = np.zeros((n, n), dtype=np.float64)
+        for i in range(n):
+            for j in range(i + 1, n):
+                d = np.sum(states[i] != states[j])
+                dist[i, j] = d
+                dist[j, i] = d
+        return dist
+
+    @staticmethod
+    def inverse_hamming(hamming: np.ndarray) -> np.ndarray:
+        """Return 1 / (1 + hamming_distance)."""
+        return 1.0 / (1.0 + hamming)
+
+    @staticmethod
+    def pairwise_cosine(codes: np.ndarray) -> np.ndarray:
+        """Return an (N, N) matrix of cosine similarities between code vectors."""
+        norms = np.linalg.norm(codes, axis=1, keepdims=True)
+        # Guard against zero-norm vectors
+        norms = np.where(norms < 1e-12, 1.0, norms)
+        normalized = codes / norms
+        return normalized @ normalized.T
+
+    @classmethod
+    def evaluate(
+        cls, states: np.ndarray, codes: np.ndarray
+    ) -> Tuple[float, float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Compute Spearman rho on OFF-DIAGONAL pairs between code cosine similarity
+        and input inverse Hamming distance.
+
+        Parameters
+        ----------
+        states : np.ndarray, shape (N, 3)
+            The base input states (typically 8).
+        codes : np.ndarray, shape (N, dim_out)
+            The encoded codes for the base states.
+
+        Returns
+        -------
+        spearman_rho : float
+            Spearman rank correlation (off-diagonal only).
+        p_value : float
+            Two-sided p-value from spearmanr.
+        inv_ham_pairs : np.ndarray
+            Flattened inverse Hamming distances (off-diagonal).
+        cos_sim_pairs : np.ndarray
+            Flattened cosine similarities (off-diagonal).
+        row_indices : np.ndarray
+            Row indices for each off-diagonal pair.
+        col_indices : np.ndarray
+            Column indices for each off-diagonal pair.
+        """
+        assert states.shape[0] == codes.shape[0], (
+            f"states ({states.shape[0]}) and codes ({codes.shape[0]}) must match"
+        )
+
+        ham_dist = cls.pairwise_hamming(states)
+        inv_ham = cls.inverse_hamming(ham_dist)
+        cos_sim = cls.pairwise_cosine(codes)
+
+        n = states.shape[0]
+        # Extract upper-triangle indices (off-diagonal)
+        row_indices, col_indices = np.triu_indices(n, k=1)
+
+        inv_ham_pairs = inv_ham[row_indices, col_indices]
+        cos_sim_pairs = cos_sim[row_indices, col_indices]
+
+        rho, p_value = spearmanr(inv_ham_pairs, cos_sim_pairs)
+
+        return rho, p_value, inv_ham_pairs, cos_sim_pairs, row_indices, col_indices
+
+
+# ---------------------------------------------------------------------------
+# Encoder Interface
+# ---------------------------------------------------------------------------
+
+class EncoderBase(ABC):
+    """Abstract base class for all Phase 0 encoders."""
+
+    @abstractmethod
+    def train(self, inputs: np.ndarray, epochs: int = 50) -> dict:
+        """
+        Train the encoder on inputs.
+
+        Parameters
+        ----------
+        inputs : np.ndarray, shape (n_samples, 3)
+        epochs : int
+
+        Returns
+        -------
+        metrics : dict
+            Training metrics (e.g., loss history).
+        """
+        pass
+
+    @abstractmethod
+    def encode(self, inputs: np.ndarray) -> np.ndarray:
+        """
+        Encode inputs into code vectors.
+
+        Parameters
+        ----------
+        inputs : np.ndarray, shape (n_samples, 3)
+
+        Returns
+        -------
+        codes : np.ndarray, shape (n_samples, dim_out)
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def dim_out(self) -> int:
+        """Output dimension of the encoder."""
+        pass
+
+    @property
+    def name(self) -> str:
+        return self.__class__.__name__
+
+
+# ---------------------------------------------------------------------------
+# Utility Functions
+# ---------------------------------------------------------------------------
+
+def compute_sparsity(codes: np.ndarray, threshold: float = 0.01) -> float:
+    """
+    Compute the fraction of code activations below a given threshold.
+
+    Parameters
+    ----------
+    codes : np.ndarray, shape (n_samples, dim_out)
+    threshold : float
+        Below this value an activation is considered "inactive".
+
+    Returns
+    -------
+    sparsity : float in [0, 1]
+    """
+    return float(np.mean(np.abs(codes) < threshold))
+
+
+def compute_reconstruction_error(
+    original: np.ndarray, reconstructed: np.ndarray
+) -> float:
+    """Compute mean-squared reconstruction error."""
+    return float(np.mean((original - reconstructed) ** 2))
+
+
+class SimpleLogisticRegression:
+    """
+    Minimal softmax logistic regression implemented in numpy.
+    Suitable for a linear-probe baseline with no sklearn dependency.
+    """
+
+    def __init__(self, n_classes: int, n_features: int, lr: float = 0.1,
+                 max_iter: int = 1000, seed: int = 42):
+        self.n_classes = n_classes
+        self.n_features = n_features
+        self.lr = lr
+        self.max_iter = max_iter
+        rng = np.random.default_rng(seed)
+        self.W = rng.standard_normal((n_features, n_classes)) * 0.01
+        self.b = np.zeros(n_classes)
+
+    @staticmethod
+    def _softmax(z: np.ndarray) -> np.ndarray:
+        z_shifted = z - np.max(z, axis=1, keepdims=True)
+        exp_z = np.exp(z_shifted)
+        return exp_z / np.sum(exp_z, axis=1, keepdims=True)
+
+    def fit(self, X: np.ndarray, y: np.ndarray) -> "SimpleLogisticRegression":
+        n = X.shape[0]
+        # One-hot encode labels
+        y_oh = np.zeros((n, self.n_classes))
+        y_oh[np.arange(n), y.astype(int)] = 1.0
+
+        for _ in range(self.max_iter):
+            probs = self._softmax(X @ self.W + self.b)
+            grad_W = X.T @ (probs - y_oh) / n
+            grad_b = np.mean(probs - y_oh, axis=0)
+            self.W -= self.lr * grad_W
+            self.b -= self.lr * grad_b
+        return self
+
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        probs = self._softmax(X @ self.W + self.b)
+        return np.argmax(probs, axis=1)
+
+    def score(self, X: np.ndarray, y: np.ndarray) -> float:
+        preds = self.predict(X)
+        return float(np.mean(preds == y))
+
+
+def linear_probe_accuracy(
+    codes: np.ndarray, labels: np.ndarray
+) -> Tuple[float, SimpleLogisticRegression]:
+    """
+    Fit a simple logistic regression classifier on codes and return accuracy.
+
+    Parameters
+    ----------
+    codes : np.ndarray, shape (n_samples, dim_out)
+    labels : np.ndarray, shape (n_samples,) -- integer class labels
+
+    Returns
+    -------
+    accuracy : float
+    model : fitted SimpleLogisticRegression instance
+    """
+    n_classes = len(np.unique(labels))
+    n_features = codes.shape[1]
+    model = SimpleLogisticRegression(n_classes, n_features)
+    model.fit(codes, labels)
+    accuracy = float(model.score(codes, labels))
+    return accuracy, model
+
+
+# ---------------------------------------------------------------------------
+# Quick self-test (run with: python src/harness.py)
+# ---------------------------------------------------------------------------
+
+def _self_test() -> None:
+    print("=== Harness Self-Test ===")
+
+    # 1. Dataset
+    ds = DatasetGenerator(seed=42)
+    base = ds.get_base_states()
+    all_samples = ds.get_all_samples()
+    assert base.shape == (8, 3), f"Expected (8, 3), got {base.shape}"
+    assert all_samples.shape == (88, 3), f"Expected (88, 3), got {all_samples.shape}"
+    print(f"[OK] Dataset: base={base.shape}, all={all_samples.shape}")
+
+    # 2. Similarity evaluator (dummy codes: one-hot)
+    #    One-hot codes are orthogonal -> cosine similarity = 0 for all off-diagonal.
+    #    Spearman rho should be near 0 or undefined (constant cos_sim).
+    dummy_codes = np.eye(8)
+    rho, p_val, inv_h, cos_s, _, _ = SimilarityEvaluator.evaluate(base, dummy_codes)
+    n_pairs = inv_h.shape[0]
+    assert n_pairs == 28, f"Expected 28 off-diagonal pairs, got {n_pairs}"
+    # With one-hot codes, all off-diagonal cosine similarities are 0 -> constant.
+    # spearmanr may return NaN for constant inputs, which is expected.
+    print(f"[OK] Similarity eval: rho={rho}, p={p_val}, pairs={n_pairs}")
+    print(f"     Note: rho=NaN is expected for orthogonal (one-hot) codes.")
+
+    # 3. Utility: sparsity
+    sparsity = compute_sparsity(dummy_codes)
+    # One-hot has 7/8 entries = 0.875 below any small threshold
+    assert sparsity == 7 / 8, f"Expected 0.875, got {sparsity}"
+    print(f"[OK] Sparsity (one-hot): {sparsity:.4f}")
+
+    # 4. Utility: reconstruction error
+    recon_err = compute_reconstruction_error(base, base)
+    assert recon_err == 0.0
+    print(f"[OK] Reconstruction error (identity): {recon_err}")
+
+    # 5. Utility: linear probe
+    labels = np.arange(8)  # each state is its own class
+    acc, model = linear_probe_accuracy(dummy_codes, labels)
+    assert acc == 1.0, f"Expected 100% accuracy on identity, got {acc}"
+    print(f"[OK] Linear probe accuracy (one-hot): {acc:.4f}")
+
+    # 6. Verify inverse Hamming distances for 3-bit states
+    ham = SimilarityEvaluator.pairwise_hamming(base)
+    inv_h_full = SimilarityEvaluator.inverse_hamming(ham)
+    # Diagonal should be 1.0 (distance=0)
+    assert np.allclose(np.diag(inv_h_full), 1.0)
+    # Max inverse Hamming (distance=1) should be 0.5
+    assert 0.5 in inv_h_full
+    # Min inverse Hamming (distance=3) should be 0.25
+    assert 0.25 in inv_h_full
+    print(f"[OK] Inverse Hamming distances verified")
+
+    # 7. Test with a code set that should show positive correlation
+    #    Create codes proportional to inverse Hamming structure
+    #    (trivial test: just verify the pipeline runs on non-orthogonal codes)
+    rng = np.random.default_rng(123)
+    random_codes = rng.standard_normal((8, 16))
+    # Normalize
+    random_codes = random_codes / np.linalg.norm(random_codes, axis=1, keepdims=True)
+    rho2, p2, _, _, _, _ = SimilarityEvaluator.evaluate(base, random_codes)
+    print(f"[OK] Random codes rho={rho2:.4f}, p={p2:.4e}")
+
+    print("=== All self-tests passed ===")
+
+
+if __name__ == "__main__":
+    _self_test()
+]
+
+[Tool Call: read_file({'path': 'src/node.py'})]
+[Tool Result: """
+UniversalNode -- single-layer auto-encoder unit for HSUN Phase 0-E.
+
+Architecture
+------------
+  x_3d (batch, 3, d_in)  --> flatten --> (batch, 3*d_in)
+  z    = tanh(x_flat @ W_enc + b_enc)          # (batch, d_out)  -- "code"
+  xrec = z       @ W_dec + b_dec              # (batch, 3*d_in)
+           --> reshape --> (batch, 3, d_in)
+
+Loss  = MSE(x_3d, xrec) + l1_lambda * mean(|z|)
+
+All analytical gradients are provided in ``compute_gradients`` and verified
+below via a central-difference numerical check.
+"""
+
+from __future__ import annotations
+
+from typing import Dict
+
+import numpy as np
+
+
+class UniversalNode:
+    """A single universal node implementing an encoder --> decoder pair."""
+
+    def __init__(
+        self,
+        d: int,
+        l1_lambda: float = 0.01,
+        seed: int = 42,
+        d_out: int | None = None,
+        kwta_k: int | None = None,
+    ):
+        """
+        Parameters
+        ----------
+        d : int
+            Input dimensionality *per channel*.  The flattened input has
+            dimension ``3 * d`` (three channels).
+        l1_lambda : float
+            Weight for the L1 sparsity regulariser on the latent code.
+        seed : int
+            RNG seed for reproducible Xavier initialisation.
+        d_out : int or None
+            Latent code dimensionality.  If None, defaults to ``3 * d``.
+        kwta_k : int or None
+            If set, apply k-Winners-Take-All: keep only top-k activations.
+        """
+        self.d = d
+        self.d_in = 3 * d                    # flattened input dimension
+        self.d_out = d_out if d_out is not None else 3 * d
+        self.l1_lambda = l1_lambda
+        self.kwta_k = kwta_k
+
+        rng = np.random.default_rng(seed)
+
+        # -- Xavier (Glorot) initialisation --
+        # W_enc : (d_in, d_out)
+        scale_enc = np.sqrt(2.0 / (self.d_in + self.d_out))
+        self.W_enc = rng.standard_normal((self.d_in, self.d_out)) * scale_enc
+        self.b_enc = np.zeros(self.d_out)
+
+        # W_dec : (d_out, d_in)
+        scale_dec = np.sqrt(2.0 / (self.d_out + self.d_in))
+        self.W_dec = rng.standard_normal((self.d_out, self.d_in)) * scale_dec
+        self.b_dec = np.zeros(self.d_in)
+
+    # ------------------------------------------------------------------
+    # Forward pass helpers
+    # ------------------------------------------------------------------
+
+    def forward(self, x_3d: np.ndarray) -> np.ndarray:
+        """
+        Encode x_3d --> latent code.
+
+        Parameters
+        ----------
+        x_3d : np.ndarray, shape (batch, 3, d)
+
+        Returns
+        -------
+        code : np.ndarray, shape (batch, d_out)
+        """
+        batch = x_3d.shape[0]
+        x_flat = x_3d.reshape(batch, -1)           # (batch, d_in)
+        z = x_flat @ self.W_enc + self.b_enc        # (batch, d_out)
+        a = np.tanh(z)                             # (batch, d_out)
+
+        if self.kwta_k is not None:
+            # k-WTA: keep only top-k activations per sample
+            k = min(self.kwta_k, self.d_out)
+            # For each sample, find k-th largest absolute value
+            abs_a = np.abs(a)
+            threshold = np.sort(abs_a, axis=1)[:, -k][:, np.newaxis]  # k-th largest
+            mask = abs_a >= threshold
+            a = a * mask
+
+        return a
+
+    def reconstruct(self, code: np.ndarray) -> np.ndarray:
+        """
+        Decode latent code --> reconstructed x_3d.
+
+        Parameters
+        ----------
+        code : np.ndarray, shape (batch, d_out)
+
+        Returns
+        -------
+        x_rec : np.ndarray, shape (batch, 3, d)
+        """
+        batch = code.shape[0]
+        x_hat_flat = code @ self.W_dec + self.b_dec  # (batch, d_in)
+        x_rec = x_hat_flat.reshape(batch, 3, self.d)  # (batch, 3, d)
+        return x_rec
+
+    # ------------------------------------------------------------------
+    # Loss
+    # ------------------------------------------------------------------
+
+    def local_loss(self, x_3d: np.ndarray) -> float:
+        """
+        Compute the local (per-node) loss value.
+
+        Returns a scalar float: MSE + l1_lambda * mean(|code|).
+        When kwta_k is active, L1 penalty is skipped (sparsity is structural).
+        """
+        code = self.forward(x_3d)
+        recon = self.reconstruct(code)
+        mse = float(np.mean((x_3d - recon) ** 2))
+        if self.kwta_k is not None:
+            l1 = 0.0
+        else:
+            l1 = float(self.l1_lambda * np.mean(np.abs(code)))
+        return mse + l1
+
+    # ------------------------------------------------------------------
+    # Analytical gradients
+    # ------------------------------------------------------------------
+
+    def compute_gradients(self, x_3d: np.ndarray) -> Dict[str, np.ndarray]:
+        r"""
+        Compute analytical gradients of the local loss w.r.t. all four
+        trainable parameters **and** the input x_3d.
+
+        Returns a dict with keys:
+            'W_enc', 'b_enc', 'W_dec', 'b_dec', 'x_3d'
+
+        Notation (B = batch size):
+
+            x  = x_3d.reshape(B, D_in)           where D_in = 3*d
+            z  = x @ W_enc + b_enc                (B, D_out)
+            a  = tanh(z)                          (B, D_out)  -- code
+            r  = a @ W_dec + b_dec                (B, D_in)
+            xhat = r.reshape(B, 3, d)
+
+        Loss = mean((x_3d - xhat)^2) + lambda * mean(|a|)
+             = 1/(B*D_in) * sum_{b,i}(r_bi - x_bi)^2
+               + lambda/(B*D_out) * sum_{b,j}|a_bj|
+
+        Chain rule:
+            dL/dr   = 2/(B*D_in) * (r - x)                        (B, D_in)
+            dL/dWdec = a^T @ dL/dr                                 (D_out, D_in)
+            dL/dbdec = sum_b(dL/dr)                                (D_in,)
+            dL/da   = dL/dr @ W_dec^T + lambda/(B*D_out)*sign(a)   (B, D_out)
+            dL/dz   = dL/da * (1 - a^2)                           (B, D_out)
+            dL/dWenc = x^T @ dL/dz                                 (D_in, D_out)
+            dL/dbenc = sum_b(dL/dz)                                (D_out,)
+            dL/dx   = dL/dz @ W_enc^T - d_r  --> reshape to (B, 3, d)
+        """
+        batch = x_3d.shape[0]
+        D_in = self.d_in       # = 3 * d
+        D_out = self.d_out
+
+        # --- forward (need intermediates) ---
+        x_flat = x_3d.reshape(batch, D_in)            # (B, D_in)
+        z = x_flat @ self.W_enc + self.b_enc          # (B, D_out)
+        a = np.tanh(z)                                 # (B, D_out)  -- code
+
+        # Apply k-WTA mask if active (for gradient computation)
+        if self.kwta_k is not None:
+            k = min(self.kwta_k, self.d_out)
+            abs_a = np.abs(a)
+            threshold = np.sort(abs_a, axis=1)[:, -k][:, np.newaxis]
+            mask = abs_a >= threshold
+            a = a * mask
+
+        r = a @ self.W_dec + self.b_dec               # (B, D_in)
+
+        # --- gradient of MSE w.r.t. flat recon r ---
+        d_r = 2.0 / (batch * D_in) * (r - x_flat)     # (B, D_in)
+
+        # --- W_dec, b_dec ---
+        d_W_dec = a.T @ d_r                            # (D_out, D_in)
+        d_b_dec = np.sum(d_r, axis=0)                  # (D_in,)
+
+        # --- dL/da ---
+        d_a = d_r @ self.W_dec.T                       # (B, D_out)
+        # Add L1 gradient (only when not using k-WTA)
+        if self.kwta_k is None:
+            d_a += self.l1_lambda / (batch * D_out) * np.sign(a)
+
+        # Apply k-WTA mask to gradient (zero gradient for losing units)
+        if self.kwta_k is not None:
+            k = min(self.kwta_k, self.d_out)
+            abs_a_raw = np.abs(np.tanh(z))
+            threshold = np.sort(abs_a_raw, axis=1)[:, -k][:, np.newaxis]
+            mask = abs_a_raw >= threshold
+            d_a = d_a * mask
+
+        # --- dL/dz (tanh derivative: d(tanh)/dz = 1 - tanh^2) ---
+        # Only for winning units when k-WTA is active
+        d_z = d_a * (1.0 - np.tanh(z) ** 2)            # (B, D_out)
+
+        # --- W_enc, b_enc ---
+        d_W_enc = x_flat.T @ d_z                       # (D_in, D_out)
+        d_b_enc = np.sum(d_z, axis=0)                  # (D_out,)
+
+        # --- Gradient w.r.t. input x_3d ---
+        # The loss MSE = mean((recon - x)**2) depends on x directly (with gradient -d_r)
+        # as well as indirectly through the encoder (with gradient d_z @ W_enc^T)
+        d_x_flat = d_z @ self.W_enc.T - d_r            # (B, D_in)
+        d_x_3d = d_x_flat.reshape(batch, 3, self.d)    # (B, 3, d)
+
+        return {
+            "W_enc": d_W_enc,
+            "b_enc": d_b_enc,
+            "W_dec": d_W_dec,
+            "b_dec": d_b_dec,
+            "x_3d": d_x_3d,
+        }
+
+    # ------------------------------------------------------------------
+    # Parameter updates
+    # ------------------------------------------------------------------
+
+    def apply_gradients(self, grads: Dict[str, np.ndarray], lr: float) -> None:
+        """
+        Subtract lr * grads[key] from each parameter.
+        """
+        self.W_enc -= lr * grads["W_enc"]
+        self.b_enc -= lr * grads["b_enc"]
+        self.W_dec -= lr * grads["W_dec"]
+        self.b_dec -= lr * grads["b_dec"]
+
+    # ------------------------------------------------------------------
+    # Parameter sharing
+    # ------------------------------------------------------------------
+
+    def share_parameters_from(self, other_node: "UniversalNode") -> None:
+        """Copy all parameters from other_node."""
+        self.W_enc = other_node.W_enc.copy()
+        self.b_enc = other_node.b_enc.copy()
+        self.W_dec = other_node.W_dec.copy()
+        self.b_dec = other_node.b_dec.copy()
+
+
+# ======================================================================
+#  Numerical gradient check
+# ======================================================================
+
+def _numerical_gradient(
+    node: UniversalNode,
+    x_3d: np.ndarray,
+    eps: float = 1e-6,
+) -> Dict[str, np.ndarray]:
+    """
+    Compute numerical gradients via central differences for all
+    trainable parameters + the input x_3d.
+    """
+    grads: Dict[str, np.ndarray] = {}
+
+    for key in ("W_enc", "b_enc", "W_dec", "b_dec"):
+        param = getattr(node, key)
+        num_grad = np.zeros_like(param)
+        flat = param.ravel()
+        for idx in range(flat.size):
+            original = flat[idx]
+            flat[idx] = original + eps
+            loss_hi = node.local_loss(x_3d)
+            flat[idx] = original - eps
+            loss_lo = node.local_loss(x_3d)
+            flat[idx] = original
+            num_grad.ravel()[idx] = (loss_hi - loss_lo) / (2.0 * eps)
+        grads[key] = num_grad
+
+    # --- gradient w.r.t x_3d ---
+    # Temporarily perturb x_3d (node is stateless w.r.t x_3d).
+    num_x = np.zeros_like(x_3d)
+    flat_x = x_3d.ravel()
+    for idx in range(flat_x.size):
+        original = flat_x[idx]
+        flat_x[idx] = original + eps
+        loss_hi = node.local_loss(x_3d)
+        flat_x[idx] = original - eps
+        loss_lo = node.local_loss(x_3d)
+        flat_x[idx] = original
+        num_x.ravel()[idx] = (loss_hi - loss_lo) / (2.0 * eps)
+    grads["x_3d"] = num_x
+
+    return grads
+
+
+def _relative_error(a: np.ndarray, b: np.ndarray) -> float:
+    """Compute the element-wise maximum relative error."""
+    diff = np.abs(a - b)
+    denom = np.maximum(np.abs(a), np.abs(b))
+    denom = np.where(denom < 1e-15, 1.0, denom)   # avoid div-by-zero
+    return float(np.max(diff / denom))
+
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("  UniversalNode -- Numerical Gradient Check")
+    print("=" * 60)
+
+    rng = np.random.default_rng(7)
+    BATCH = 4
+    D = 5
+    D_OUT = 7
+
+    # Test without k-WTA
+    print("\n--- Without k-WTA ---")
+    node = UniversalNode(d=D, l1_lambda=0.01, seed=42, d_out=D_OUT)
+    x_3d = rng.standard_normal((BATCH, 3, D))
+
+    analytical = node.compute_gradients(x_3d)
+    numerical = _numerical_gradient(node, x_3d)
+
+    all_pass = True
+    for key in ("W_enc", "b_enc", "W_dec", "b_dec", "x_3d"):
+        a = analytical[key]
+        n = numerical[key]
+        rel_err = _relative_error(a, n)
+        ok = rel_err < 1e-5
+        status = "PASS" if ok else "FAIL"
+        all_pass = all_pass and ok
+        print(f"  {key:>8s}:  rel_err = {rel_err:.2e}  {status}")
+
+    print("-" * 60)
+    if all_pass:
+        print("  ALL GRADIENTS VERIFIED -- analytical approx numerical")
+    else:
+        print("  SOME GRADIENTS FAILED -- check the derivation!")
+
+    # Test with k-WTA
+    print("\n--- With k-WTA (k=3) ---")
+    node_kwta = UniversalNode(d=D, l1_lambda=0.0, seed=42, d_out=D_OUT, kwta_k=3)
+    x_3d_kwta = rng.standard_normal((BATCH, 3, D))
+
+    analytical_kwta = node_kwta.compute_gradients(x_3d_kwta)
+    numerical_kwta = _numerical_gradient(node_kwta, x_3d_kwta)
+
+    all_pass_kwta = True
+    for key in ("W_enc", "b_enc", "W_dec", "b_dec", "x_3d"):
+        a = analytical_kwta[key]
+        n = numerical_kwta[key]
+        rel_err = _relative_error(a, n)
+        ok = rel_err < 1e-5
+        status = "PASS" if ok else "FAIL"
+        all_pass_kwta = all_pass_kwta and ok
+        print(f"  {key:>8s}:  rel_err = {rel_err:.2e}  {status}")
+
+    print("-" * 60)
+    if all_pass_kwta:
+        print("  ALL k-WTA GRADIENTS VERIFIED -- analytical approx numerical")
+    else:
+        print("  SOME k-WTA GRADIENTS FAILED -- check the derivation!")
+    print("=" * 60)
+]
+
+[Tool Call: write_file({'path': 'src/semantic_probes.py', 'content': '"""\nSemantic Probes for Phase 5 — Vector Semantics Investigation.\n\nComputes 5 scalar semantic probe feature maps from raw (B, 16, 32) binary grids\nand provides downsampling functions to match encoder layer resolutions.\n"""\n\nfrom __future__ import annotations\n\nimport numpy as np\n\nPROBE_NAMES = ["magnitude", "gradient", "variance", "periodicity", "novelty"]\n\n\n# ---------------------------------------------------------------------------\n#  Individual probe computations\n# ---------------------------------------------------------------------------\n\ndef _probe_magnitude(grid: np.ndarray) -> np.ndarray:\n    """\n    Local average activity in a 3x3 window.\n    Spatial axis wraps modulo-16; temporal axis clamps at boundaries.\n    """\n    B, S, T = grid.shape\n    out = np.zeros_like(grid, dtype=np.float64)\n    for s in range(S):\n        s_start = (s - 1) % S\n        s_end = (s + 2) % S\n        t_start = max(0, s - 1)  # not used — we handle per-t below\n        # Build spatial slice with wrapping\n        if s_start < s_end:\n            s_slice = slice(s_start, s_end)\n        else:\n            # Wrap-around case\n            pass\n    \n    # Vectorised approach\n    for ds in range(-1, 2):\n        s_src = (np.arange(S) + ds) % S\n        for dt in range(-1, 2):\n            t_src = np.clip(np.arange(T) + dt, 0, T - 1)\n            # grid[:, s_src[:, None], t_src[None, :]] gives (B, S, T)\n            out += grid[:, s_src[:, None], t_src[None, :]]\n    out /= 9.0\n    return out\n\n\ndef _probe_gradient(grid: np.ndarray) -> np.ndarray:\n    """\n    Right-minus-left spatial gradient with modulo-16 wrapping.\n    mean(grid[(s+1)%16:(s+3)%16, t]) - mean(grid[(s-2)%16:s, t])\n    """\n    B, S, T = grid.shape\n    out = np.zeros_like(grid, dtype=np.float64)\n    \n    for s in range(S):\n        # Right window: positions (s+1)%S and (s+2)%S\n        r1 = (s + 1) % S\n        r2 = (s + 2) % S\n        right_mean = (grid[:, r1, :] + grid[:, r2, :]) / 2.0\n        \n        # Left window: positions (s-2)%S and (s-1)%S\n        l1 = (s - 2) % S\n        l2 = (s - 1) % S\n        left_mean = (grid[:, l1, :] + grid[:, l2, :]) / 2.0\n        \n        out[:, s, :] = right_mean - left_mean\n    \n    return out\n\n\ndef _probe_variance(grid: np.ndarray) -> np.ndarray:\n    """\n    Variance of grid[s, max(0,t-4):t+1] over the last 5 timesteps.\n    If t < 4, use available timesteps. Variance of single element = 0.\n    """\n    B, S, T = grid.shape\n    out = np.zeros_like(grid, dtype=np.float64)\n    \n    for t in range(T):\n        t_start = max(0, t - 4)\n        window = grid[:, :, t_start:t + 1]  # (B, S, n_steps)\n        n_steps = t + 1 - t_start\n        if n_steps <= 1:\n            out[:, :, t] = 0.0\n        else:\n            out[:, :, t] = window.var(axis=2, ddof=0)\n    \n    return out\n\n\ndef _probe_periodicity(grid: np.ndarray) -> np.ndarray:\n    """\n    Autocorrelation at lag 2 of grid[s, max(0,t-7):t+1].\n    Use at least 5 timesteps; if fewer, return 0.\n    Pearson correlation between x and x_{lag=2}.\n    """\n    B, S, T = grid.shape\n    out = np.zeros_like(grid, dtype=np.float64)\n    \n    for t in range(T):\n        t_start = max(0, t - 7)\n        n_steps = t + 1 - t_start\n        if n_steps < 5:\n            out[:, :, t] = 0.0\n            continue\n        \n        window = grid[:, :, t_start:t + 1]  # (B, S, n_steps)\n        x = window[:, :, :-2]   # (B, S, n_steps-2)\n        y = window[:, :, 2:]    # (B, S, n_steps-2)\n        \n        # Pearson correlation per (b, s)\n        mean_x = x.mean(axis=2, keepdims=True)\n        mean_y = y.mean(axis=2, keepdims=True)\n        dx = x - mean_x\n        dy = y - mean_y\n        \n        num = (dx * dy).sum(axis=2)\n        den = np.sqrt((dx ** 2).sum(axis=2) * (dy ** 2).sum(axis=2) + 1e-12)\n        \n        corr = num / den\n        # Handle constant sequences\n        corr = np.where(den < 1e-12, 0.0, corr)\n        out[:, :, t] = corr\n    \n    return out\n\n\ndef _probe_novelty(grid: np.ndarray) -> np.ndarray:\n    """\n    |grid[s, t] - grid[s, max(0, t-1)]|.\n    0 for t=0.\n    """\n    B, S, T = grid.shape\n    out = np.zeros_like(grid, dtype=np.float64)\n    \n    out[:, :, 0] = 0.0\n    if T > 1:\n        out[:, :, 1:] = np.abs(grid[:, :, 1:] - grid[:, :, :-1])\n    \n    return out\n\n\n# ---------------------------------------------------------------------------\n#  Public API\n# ---------------------------------------------------------------------------\n\ndef compute_all_probes(grid: np.ndarray) -> dict:\n    """\n    Compute all 5 probe feature maps from raw (B, 16, 32) binary grid.\n    Returns dict mapping probe_name -> (B, 16, 32) float array.\n    """\n    if grid.ndim == 2 and grid.shape[1] == 16 * 32:\n        grid = grid.reshape(-1, 16, 32)\n    \n    return {\n        "magnitude": _probe_magnitude(grid),\n        "gradient": _probe_gradient(grid),\n        "variance": _probe_variance(grid),\n        "periodicity": _probe_periodicity(grid),\n        "novelty": _probe_novelty(grid),\n    }\n\n\n# ---------------------------------------------------------------------------\n#  Downsampling\n# ---------------------------------------------------------------------------\n\ndef downsample_probes_spatial(probe_map: np.ndarray, layer_idx: int) -> np.ndarray:\n    """\n    Average probe values over the receptive field of each code position\n    in spatial layer `layer_idx`.\n    \n    For spatial layer l, output shape is (B, 16 - 2*(l+1), 32).\n    Position p covers input positions [p, p+1, ..., p+2*(l+1)].\n    """\n    B, S_in, T = probe_map.shape\n    kernel_size = 2 * (layer_idx + 1) + 1\n    S_out = S_in - 2 * (layer_idx + 1)\n    \n    out = np.zeros((B, S_out, T), dtype=np.float64)\n    for p in range(S_out):\n        window = probe_map[:, p:p + kernel_size, :]  # (B, kernel_size, T)\n        out[:, p, :] = window.mean(axis=1)\n    \n    return out\n\n\ndef downsample_probes_temporal(probe_map: np.ndarray, layer_idx: int) -> np.ndarray:\n    """\n    Average probe values over the receptive field of each code position\n    in temporal layer `layer_idx`.\n    \n    For temporal layer l, output has T_out = 32 - 2*(l+1) temporal positions.\n    Position p covers input timesteps [p, p+1, ..., p+2*(l+1)].\n    \n    Also downsample spatial axis from 16 to 10 positions using average over\n    [p, p+1, ..., p+6] for position p (7-position spatial receptive field).\n    Boundary positions are clamped.\n    """\n    B, S_in, T_in = probe_map.shape\n    assert S_in == 16, f"Expected S_in=16, got {S_in}"\n    \n    # First downsample spatial axis from 16 to 10\n    S_out = 10\n    spatial_down = np.zeros((B, S_out, T_in), dtype=np.float64)\n    for p in range(S_out):\n        s_end = min(p + 7, S_in)\n        window = probe_map[:, p:s_end, :]  # (B, up_to_7, T_in)\n        spatial_down[:, p, :] = window.mean(axis=1)\n    \n    # Then downsample temporal axis\n    kernel_size = 2 * (layer_idx + 1) + 1\n    T_out = T_in - 2 * (layer_idx + 1)\n    \n    out = np.zeros((B, T_out, S_out), dtype=np.float64)\n    for p in range(T_out):\n        window = spatial_down[:, :, p:p + kernel_size]  # (B, S_out, kernel_size)\n        out[:, p, :] = window.mean(axis=2)\n    \n    return out\n\n\ndef downsample_probes(probe_maps: dict, n_spatial_layers: int = 3,\n                      n_temporal_layers: int = 3) -> dict:\n    """\n    Downsample all probe maps to match encoder\'s layer resolutions.\n    \n    Returns dict with keys like \'spatial_0\', \'spatial_1\', \'spatial_2\',\n    \'temporal_0\', \'temporal_1\', \'temporal_2\'.\n    Each value is a dict mapping probe_name -> (B, n_pos1, n_pos2) shaped array.\n    For spatial: (B, S_l, 32)\n    For temporal: (B, T_l, 10)\n    """\n    result = {}\n    \n    for l in range(n_spatial_layers):\n        key = f"spatial_{l}"\n        result[key] = {}\n        for probe_name, probe_map in probe_maps.items():\n            ds = downsample_probes_spatial(probe_map, l)\n            result[key][probe_name] = ds\n    \n    for l in range(n_temporal_layers):\n        key = f"temporal_{l}"\n        result[key] = {}\n        for probe_name, probe_map in probe_maps.items():\n            ds = downsample_probes_temporal(probe_map, l)\n            result[key][probe_name] = ds\n    \n    return result\n\n\n# ---------------------------------------------------------------------------\n#  Self-test\n# ---------------------------------------------------------------------------\n\nif __name__ == "__main__":\n    print("=" * 65)\n    print("  Semantic Probes -- Self-Test")\n    print("=" * 65)\n    \n    rng = np.random.default_rng(42)\n    B = 4\n    grid = (rng.random((B, 16, 32)) < 0.5).astype(np.float64)\n    \n    probes = compute_all_probes(grid)\n    \n    for name, pmap in probes.items():\n        assert pmap.shape == (B, 16, 32), f"Probe {name}: expected (4,16,32), got {pmap.shape}"\n        assert not np.any(np.isnan(pmap)), f"Probe {name} contains NaN"\n        print(f"  {name:12s}: shape={pmap.shape}, min={pmap.min():.4f}, max={pmap.max():.4f}, mean={pmap.mean():.4f}")\n    \n    # Test downsampling\n    ds = downsample_probes(probes)\n    \n    for l in range(3):\n        key = f"spatial_{l}"\n        S_expected = 16 - 2 * (l + 1)\n        for name, pmap in ds[key].items():\n            assert pmap.shape == (B, S_expected, 32), f"{key}/{name}: expected (4,{S_expected},32), got {pmap.shape}"\n        print(f"  {key}: shapes OK (S={S_expected})")\n    \n    for l in range(3):\n        key = f"temporal_{l}"\n        T_expected = 32 - 2 * (l + 1)\n        for name, pmap in ds[key].items():\n            assert pmap.shape == (B, T_expected, 10), f"{key}/{name}: expected (4,{T_expected},10), got {pmap.shape}"\n        print(f"  {key}: shapes OK (T={T_expected})")\n    \n    print("\\n  ALL SELF-TESTS PASSED")\n    print("=" * 65)\n'})]
+[Tool Result: Successfully wrote to src/semantic_probes.py]
+
+
+[NUDGE RESPONSE]
+ I had just finished writing `src/semantic_probes.py` when my execution limit was reached. The second and most critical file, `src/run_phase5.py`, was not written, and the dry-run verification was not performed. The task is therefore incomplete.
+
+```yaml
+status: token_limit
+artifacts:
+  - src/semantic_probes.py
+metrics: {}
+log_excerpt: |
+  Successfully wrote to src/semantic_probes.py
+experimenter_view: |
+  Only the semantic probes module (src/semantic_probes.py) was implemented.
+  It includes all 5 probes (magnitude, gradient, variance, periodicity, novelty)
+  with correct boundary handling, plus downsampling functions for spatial and
+  temporal layers. However, the main Phase 5 runner (src/run_phase5.py) was
+  not written, and no dry-run verification was performed. The remaining work
+  is substantial: implement the training loop variants (P5-A/B/C), anchor loss,
+  disentanglement loss, semantic correlation analysis with FDR correction,
+  consistency scoring, classification evaluation, and report generation.
+notes: "Execution limit reached after writing semantic_probes.py but before run_phase5.py."
+```

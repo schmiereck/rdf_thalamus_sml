@@ -1,0 +1,25 @@
+artifacts:
+- src/semantic_probes.py
+experimenter_view: 'Only the semantic probes module (src/semantic_probes.py) was implemented.
+
+  It includes all 5 probes (magnitude, gradient, variance, periodicity, novelty)
+
+  with correct boundary handling, plus downsampling functions for spatial and
+
+  temporal layers. However, the main Phase 5 runner (src/run_phase5.py) was
+
+  not written, and no dry-run verification was performed. The remaining work
+
+  is substantial: implement the training loop variants (P5-A/B/C), anchor loss,
+
+  disentanglement loss, semantic correlation analysis with FDR correction,
+
+  consistency scoring, classification evaluation, and report generation.
+
+  '
+log_excerpt: 'Successfully wrote to src/semantic_probes.py
+
+  '
+metrics: {}
+notes: Execution limit reached after writing semantic_probes.py but before run_phase5.py.
+status: token_limit
