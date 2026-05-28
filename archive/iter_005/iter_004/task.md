@@ -1,47 +1,61 @@
+# Phase 3: Complete P3-A Runs and Clean Up Results
 
-# Monitor Phase 3 Experiment Run and Verify Results
+The Phase 3 experiment results file `phase_3/phase3_full_results.csv` has duplicate rows from multiple background processes. P3-A runs (the slowest variant, ~3 min each) are not yet in the file. You need to:
 
-The Phase 3 experiment run was launched in the background. Your job is to:
+## Task 1: Clean Up Duplicates
 
-1. Wait for the background run to complete by checking the log file at `src/phase3_run.log` periodically.
-2. Once the run completes, verify the results file at `phase_3/phase3_results.csv` has all 20 rows (4 variants × 5 seeds).
-3. Read the results and print a summary.
-4. If the background process has not finished yet, wait up to 30 minutes and keep checking.
-5. Also check `phase_3/shortcut_baselines.csv` for shortcut baseline results.
+Read the current CSV, deduplicate by keeping only the FIRST occurrence of each (variant, seed) pair, and write a clean version back.
 
-## How to Check
+## Task 2: Run Missing P3-A Experiments
 
-```bash
-# Check if the process is still running
-ps aux | grep run_phase3
+P3-A requires sequential training (spatial first 30 epochs, then temporal 30 epochs). Each run takes ~3 minutes. You need 5 runs (seeds 42-46).
 
-# Check the log file
-cat src/phase3_run.log
+Write a script that runs P3-A experiments and appends to the CLEANED CSV:
 
-# Count rows in results CSV
-wc -l phase_3/phase3_results.csv
+```python
+import sys, os, csv, time
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, 'src')
+
+# First, deduplicate
+import pandas as pd  # or use csv manually
+# Read, deduplicate by (variant, seed) keeping first, write back
+
+# Then run remaining P3-A experiments
+from run_phase3_optimized import run_single_experiment_opt, save_result_incrementally
+# ... check which P3-A seeds are missing and run them
 ```
 
-## What to Look For
+IMPORTANT: The `run_phase3_optimized.py` uses:
+- EPOCHS=30, N_TRAIN_PER_CLASS=200, N_TEST_PER_CLASS=100, BATCH_SIZE=64, LR=1e-3
+- For P3-A: sequential training (spatial first 30 epochs, then temporal 30 epochs)
+- The function is `run_single_experiment_opt(variant, seed, epochs, batch_size, lr, update_encoder, n_train_per_class, n_test_per_class)`
 
-- All 4 variants (P3-A, P3-B, P3-C, Untrained) should have 5 seeds each
-- Trained variants should significantly outperform the Untrained baseline (this was the bug symptom)
-- Shortcut baselines should be ≤50% (near chance for 4-class)
-- JEPA losses should converge to reasonable values (much lower than 20-25)
+## Task 3: Run Shortcut Baselines
 
-## If the Run Hasn't Started or Failed
+After P3-A is done, run shortcut baselines for all 5 seeds and save to `phase_3/shortcut_baselines.csv`.
 
-If the background process isn't running and no results exist, run the experiment yourself:
-```bash
-cd src && python run_phase3.py
-```
+## Task 4: Verify Final Results
 
-This will take approximately 20-40 minutes for 20 runs.
+After all runs, verify:
+- Exactly 20 unique (variant, seed) rows in the CSV
+- 4 variants × 5 seeds each
+- No duplicate rows
+- Reasonable accuracy values (all between 0 and 1)
+- Save the clean final results to `phase_3/phase3_full_results.csv`
 
-## Output
+## Working Directory
+`C:\Users\thomas\Projekte\rdf_thalamus_sml`
 
-Print the complete summary table of results. Specifically report:
-- Mean ± std test accuracy for each variant across 5 seeds
-- Per-class accuracy for each variant
-- Shortcut baseline results
-- Whether the Untrained baseline is now properly below trained variants
+## Key Information
+- The deduplication should keep the FIRST occurrence of each (variant, seed) pair
+- P3-A runs take ~3 minutes each (sequential spatial then temporal training)
+- All other variant runs (P3-B, P3-C, Untrained) should already be complete from prior runs
+- If pandas is not available, use manual csv deduplication
+- The shortcut baseline function is `evaluate_all_shortcut_baselines` from `src/spatiotemporal_dataset.py`
+
+## Expected Timing
+- Cleanup: ~1s
+- P3-A runs: 5 × ~180s = ~900s = ~15 min
+- Shortcut baselines: ~30s
+- Total: ~16 min
