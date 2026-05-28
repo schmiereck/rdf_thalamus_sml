@@ -14,16 +14,30 @@ discover a representation subspace where both spatial and temporal neighbor
 prediction are simultaneously well-served, avoiding the axis-specific overfitting
 that caused zero-shot transfer failure in Phase 2.
 
-## 2. Falsification Criterion
+## 2. Falsification Criteria
 The hypothesis is falsified if ANY of the following hold:
-F1: P3-C mean accuracy across 4 tasks < P3-A mean accuracy - 20pp
-    (shared-weight constraint costs too much expressivity)
-F2: P3-C mean accuracy is within 5pp of untrained-baseline accuracy
-    (shared weights fail to learn meaningful spatiotemporal structure;
-     gain-over-untrained ≤ 5pp, using the periodicity-loophole control
-     established in Phase 2)
-F3: P3-C JEPA training loss fails to converge (final loss > 2× P3-B final loss)
-    (optimization failure due to conflicting axis objectives)
+
+**F1 — Training gain insufficient:**
+P3-C mean test accuracy - Untrained mean test accuracy < 8pp OR p >= 0.05
+(via paired t-test across 5 seeds) OR Cohen's d < 1.0.
+This means P3-C fails to outperform the Untrained baseline with statistical
+significance (p < 0.05), strong effect size (Cohen's d ≥ 1.0), and absolute
+mean accuracy gain over untrained of at least 8pp. If P3-C fails this test,
+the unified weight hypothesis is falsified.
+
+**F2 — Shared-weight expressivity penalty too large:**
+P3-B mean test accuracy - P3-C mean test accuracy > 10pp.
+The shared-weight constraint in P3-C costs more than 10 percentage points
+relative to the anisotropic but jointly-trained P3-B baseline.
+
+**F3 — Not viable vs sequential baseline:**
+P3-C mean test accuracy < P3-A mean test accuracy - 20pp.
+The unified representation is not competitive with the sequential
+spatial-then-temporal baseline.
+
+**F4 — Optimization failure:**
+P3-C JEPA training loss > 2× P3-B final JEPA loss.
+The shared weights fail to optimize due to conflicting axis objectives.
 
 ## 3. Proposed Method
 Phase 3: Unified Spatiotemporal Grid experiment.
@@ -112,3 +126,4 @@ Files to create/modify:
 
 ---
 *Created automatically by the RDF Orchestrator prior to iteration execution.*
+*Updated with revised F2 criterion per Research Manager directive.*
