@@ -1,0 +1,155 @@
+I need to investigate the claim that VICReg's variance constraint was present in iter_003 but omitted in iter_005. Let me examine the code from both iterations.
+
+[Tool Call: read_iteration({'iter_num': 3})]
+
+[Tool Result: Tool not available: read_iteration]
+
+
+[Tool Call: read_iteration({'iter_num': 5})]
+
+[Tool Result: Tool not available: read_iteration]
+
+
+[Tool Call: list_iterations({})]
+
+[Tool Result: Tool not available: list_iterations]
+
+
+[Tool Call: read_file({'path': 'current_state.md'})]
+
+[Tool Result: Tool not available: read_file]
+
+
+[Tool Call: read_file({'path': 'goal.md'})]
+
+[Tool Result: Tool not available: read_file]
+
+
+[Tool Call: list_dir({'path': '.'})]
+
+[Tool Result: Tool not available: list_dir]
+
+
+[Tool Call: list_iterations({})]
+
+[Tool Result: Tool not available: list_iterations]
+
+
+[Tool Call: list_iterations({})]
+
+[Tool Result: Tool not available: list_iterations]
+
+
+[Tool Call: list_iterations({})]
+
+[Tool Result: Tool not available: list_iterations]
+
+
+[Tool Call: list_iterations({})]
+
+[Tool Result: Tool not available: list_iterations]
+
+
+[Tool Call: grep_search({'pattern': 'VICReg'})]
+
+[Tool Result: Tool not available: grep_search]
+
+
+[Tool Call: list_dir({'path': 'src'})]
+
+[Tool Result: Tool not available: list_dir]
+
+
+[Tool Call: read_file({'path': 'src/spatiotemporal_encoder.py'})]
+
+[Tool Result: Tool not available: read_file]
+
+Based on the information provided in the current state and the user's hint, I have sufficient context to formulate a hypothesis. The critical observation is that iter_003 (Phase 1) used VICReg (variance + covariance constraints) as collapse prevention alongside JEPA, achieving 62.12% (+16pp over untrained, p=0.0046). In iter_005 (Phase 3), all variants showed massive JEPA loss reduction but near-zero classification gain, which is the signature of representation collapse — outputs becoming invariant despite low prediction loss. The user identifies this as a VICReg omission. Let me verify by checking the available source files.
+
+[Tool Call: list_dir({'path': 'src'})]
+
+[Tool Result: Tool not available: list_dir]
+
+
+[Tool Call: grep_search({'include_pattern': '*.py', 'pattern': 'vicreg|VICReg|variance_constraint|collapse'})]
+
+[Tool Result: Tool not available: grep_search]
+
+The tools appear to be temporarily unavailable, but I have sufficient information from the current state summary and iteration records to formulate a rigorous plan. Let me synthesize the key evidence:
+
+**Critical diagnostic evidence from the record:**
+- **iter_003 (Phase 1)**: JEPA + VICReg → 62.12% (d=8), **+16pp over untrained** (p=0.0046, Cohen's d large). The experimenter notes explicitly: "bidirectional neighbor prediction in latent space + **VICReg collapse prevention**"
+- **iter_005 (Phase 3)**: JEPA (no VICReg mentioned) → 44.0%, **+1.15pp over untrained** (p=0.648, Cohen's d=0.22). Loss decreased dramatically (temporal: 19.3→8.5, spatial: 20.5→15.7) but classification flatlined
+
+This is the textbook signature of **invariance collapse**: the encoder learns to produce near-constant outputs that are trivially predictable (minimizing JEPA loss) but carry no discriminative information. VICReg's variance term (forcing std ≥ 1 per dimension) and covariance term (decorrelating dimensions) are precisely the mechanism that prevents this. Its omission explains why loss decreased while classification didn't improve — representations collapsed to a point.
+
+Now let me formulate the plan:
+
+```yaml
+hypothesis: |
+  The Phase 3 failure (P3-C gain of only 1.15pp over untrained, p=0.648, Cohen's d=0.22)
+  was caused by omission of VICReg collapse-prevention constraints from the training
+  objective. In iter_003, JEPA was trained WITH VICReg (variance: std ≥ 1 per dimension;
+  covariance: off-diagonal penalty), achieving +16pp over untrained. In iter_005,
+  JEPA was trained WITHOUT VICReg, causing representation collapse (loss decreases
+  but codes become invariant). Adding VICReg back to P3-C's JEPA training will
+  restore discriminative representations, achieving ≥8pp gain over untrained
+  baseline on spatiotemporal 4-class classification, with p < 0.05 and
+  Cohen's d ≥ 0.8.
+
+falsification_criterion: |
+  If P3-C with VICReg fails to achieve ≥8pp gain over untrained baseline
+  (i.e., test accuracy < 50.85%, given untrained ≈ 42.85%), OR the gain is
+  not statistically significant (p ≥ 0.05), OR the effect size is small
+  (Cohen's d < 0.8), then the problem is genuinely architectural — joint
+  spatial-temporal optimization fundamentally prevents JEPA from producing
+  discriminative representations, even with collapse prevention. This would
+  mean Phase 3's failure is NOT merely a training regression.
+
+proposed_method: |
+  MINIMAL BUG-FIX ITERATION — same architecture, same protocol, add VICReg back.
+  
+  Step 1: Examine iter_003's JEPA+VICReg implementation (src/ files from
+  archive/iter_003/) and iter_005's JEPA-only implementation to confirm
+  the VICReg omission. Document the diff.
+  
+  Step 2: Implement VICReg loss module (src/vicreg_loss.py) with:
+    - Variance term: max(0, 1 - std(z_dim)) per dimension, averaged
+    - Covariance term: off-diagonal elements of cov(z) squared, averaged
+    - Weight coefficients λ_var=25, λ_cov=1 (matching iter_003 settings
+      or standard VICReg defaults)
+  
+  Step 3: Modify the training loop (src/run_phase3_vicreg.py or
+  src/run_phase3_optimized.py) to add VICReg loss to the JEPA objective:
+    total_loss = jepa_loss + λ_var * var_loss + λ_cov * cov_loss
+    Applied to the final pooled representation (same as iter_003).
+  
+  Step 4: Run experiments with IDENTICAL protocol to iter_005:
+    - P3-C (shared weights, unified node): 5 seeds × 30 epochs
+    - P3-A (separate spatial+temporal) with VICReg: 5 seeds × 30 epochs
+      (control: does VICReg fix all variants or only P3-C?)
+    - Untrained baseline: 5 seeds (or reuse iter_005 baseline: 42.85%)
+    - Config: 200 train/class, 100 test/class, batch=64, lr=1e-3
+  
+  Step 5: Compute metrics:
+    - Mean test accuracy ± std for P3-C+VICReg and P3-A+VICReg
+    - Gain over untrained (pp)
+    - Two-sample t-test p-value
+    - Cohen's d effect size
+    - Per-dimension variance diagnostic (confirm VICReg is active: 
+      std per dim should be ≥ 1.0 after training)
+  
+  Step 6: Falsification decision:
+    - If P3-C+VICReg gain ≥ 8pp, p < 0.05, d ≥ 0.8 → regression confirmed,
+      Phase 3 result is revised upward, proceed to Phase 4
+    - If P3-C+VICReg gain < 8pp → genuine architectural problem,
+      need to investigate joint spatiotemporal optimization fundamentally
+  
+  Files to create/modify:
+    - src/vicreg_loss.py (NEW — VICReg loss implementation)
+    - src/run_phase3_vicreg.py (NEW — runner with VICReg, based on run_phase3_optimized.py)
+    - src/pre_registration.md (UPDATE — with this iteration's hypothesis)
+    - phase_3/REPORT_vicreg.md (NEW — results and analysis)
+
+pre_registration_file: "src/pre_registration.md"
+```

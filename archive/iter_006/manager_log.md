@@ -1,9 +1,8 @@
-# RDF Scientific Pre-Registration
+# Research Manager Log - Iteration 006
 
-*   **Iteration:** 006
-*   **Pre-Registration File:** src/pre_registration.md
+## Iteration 006 -> Manager [Proposed Research Plan]
 
-## 1. Hypothesis
+**Proposed Hypothesis:**
 The Phase 3 failure (P3-C gain of only 1.15pp over untrained, p=0.648, Cohen's d=0.22)
 was caused by omission of VICReg collapse-prevention constraints from the training
 objective. In iter_003, JEPA was trained WITH VICReg (variance: std ≥ 1 per dimension;
@@ -14,7 +13,7 @@ restore discriminative representations, achieving ≥8pp gain over untrained
 baseline on spatiotemporal 4-class classification, with p < 0.05 and
 Cohen's d ≥ 0.8.
 
-## 2. Falsification Criterion
+**Proposed Falsification Criterion:**
 If P3-C with VICReg fails to achieve ≥8pp gain over untrained baseline
 (i.e., test accuracy < 50.85%, given untrained ≈ 42.85%), OR the gain is
 not statistically significant (p ≥ 0.05), OR the effect size is small
@@ -23,7 +22,7 @@ spatial-temporal optimization fundamentally prevents JEPA from producing
 discriminative representations, even with collapse prevention. This would
 mean Phase 3's failure is NOT merely a training regression.
 
-## 3. Proposed Method
+**Proposed Method:**
 MINIMAL BUG-FIX ITERATION — same architecture, same protocol, add VICReg back.
 
 Step 1: Examine iter_003's JEPA+VICReg implementation (src/ files from
@@ -69,4 +68,29 @@ Files to create/modify:
   - phase_3/REPORT_vicreg.md (NEW — results and analysis)
 
 ---
-*Created automatically by the RDF Orchestrator prior to iteration execution.*
+
+## Iteration 006 -> Planner [Strategic Guidance]
+
+# Manager's Note: Strategic Guidance for Iteration 6
+
+To maintain scientific rigour and systematically address the performance regression observed in Phase 3, you are authorized to proceed with this **minimal bug-fix iteration** to validate the collapse-prevention hypothesis. 
+
+Apply the following constraints to ensure empirical validity:
+
+### 1. Strict Parameter-Tuning Hygiene & Reference Preservation
+You suspect that the omission of the variance/covariance constraint (VICReg) caused representation collapse. To prove this empirically, you must not "tune" the VICReg hyperparameters to fit the classification scores:
+*   **Retrieve and replicate:** Search the codebase/history of Iteration 3 (Phase 1) and extract the exact hyperparameters ($\lambda_{\text{var}}$, $\lambda_{\text{cov}}$, $\mu_{\text{sim}}$ or equivalent weights) used there. 
+*   **No Post-Hoc Sweeps:** You must run the experiments with these historically validated hyperparameters. If you must adjust them, you must state the physical/mathematical reason *before* observing the downstream classification accuracy. Treating a hyperparameter sweep as a "success" when only one specific seed/ratio works is a violation of our tuning hygiene.
+
+### 2. Mechanistic Verification of Collapse (The Diagnostic Test)
+Do not rely solely on the final classification accuracy to declare success. You must prove the *mechanism* of the failure and the fix:
+*   **Measure Code Variance:** For both the baseline (Iter 5 checkpoint, if available, or a reconstructed no-VICReg run) and the new VICReg run, calculate and report the average standard deviation per dimension of the final pooled representations across the test set.
+*   **Falsification of the Collapse Hypothesis:** If the representation variance in Iteration 5 was already high ($\text{std} \gg 10^{-3}$ per dimension) and not collapsed, then the "invariance collapse" hypothesis is false, even if adding VICReg happens to nudge the accuracy. We require proof that VICReg actually prevents a demonstrated collapse.
+
+### 3. Pre-Registration Mandate
+Before running the pipeline, ensure that your exact hypothesis, the specific mathematical formulations of the variance/covariance losses, the expected baseline, and the $\ge 8\text{pp}$ gain target (yielding a threshold of $\ge 50.85\%$ accuracy) are written to `src/pre_registration.md`. The sub-agents must read and strictly adhere to this file during execution. 
+
+Keep your language disciplined: do not report a successful classification run as a "monumental breakthrough"—it is a verification of a definitional collapse-prevention constraint in joint spatiotemporal optimization.
+
+---
+
