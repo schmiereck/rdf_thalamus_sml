@@ -1,94 +1,69 @@
 
-# Phase 4: Run Full Experiment &amp; Generate Report
+# Phase 4: Statistical Analysis + Report Generation
+
+## Context
+All 45 Phase 4 experiments have completed. Results are in `phase_4/phase4_results.csv`. The pre-registration is in `src/pre_registration.md`. Read both files first.
+
+## Key Results Summary (from the experiment run)
+- JEPA (no VICReg): 53.50% ± 2.36%
+- JEPA + VICReg: 61.55% ± 4.86%
+- SFA (no VICReg): 25.00% ± 0.00% (complete collapse)
+- SFA + VICReg: 82.15% ± 3.02%
+- Hebbian (no VICReg): 43.90% ± 6.33%
+- Hebbian + VICReg: 48.55% ± 6.83%
+- Reconstruction (no VICReg): 49.55% ± 7.79%
+- Reconstruction + VICReg: 83.00% ± 2.27%
+- Untrained: 52.10% ± 3.56%
 
 ## Task
-Run the full Phase 4 experiment and generate the statistical analysis report.
+Create a comprehensive statistical analysis and write `phase_4/REPORT.md`. The report must:
 
-### Step 1: Run Full Experiment
-Execute:
-```
-cd /home/user && python src/run_phase4.py
-```
+### 1. Schema Validation
+Assert that the CSV has exactly 45 rows: 4 objectives × 2 VICReg conditions × 5 seeds + 5 untrained = 45. Verify each (objective, seed, use_pooled_vicreg) combination exists exactly once.
 
-This runs 45 experiments (8 trained conditions × 5 seeds + 5 untrained baselines × 5 seeds),
-30 epochs each, with multiprocessing (5 workers). Expected runtime: ~20-30 minutes.
+### 2. Statistical Analysis
+For each condition vs untrained:
+- Paired t-test (paired by seed) on test accuracy
+- Cohen's d effect size
+- Report p-value, gain in percentage points
 
-Wait for it to complete. The results will be saved to `phase_4/phase4_results.csv`.
+### 3. Falsification Criteria Evaluation (per pre-registration)
+**F1**: JEPA + VICReg < 55% → NOT triggered (61.55%)
+**F2**: Any other objective exceeds JEPA + VICReg by ≥ 3pp → TRIGGERED (SFA+VICReg=82.15%, Recon+VICReg=83.00%)
+**F3**: For any objective X, accuracy(X without VICReg) ≥ accuracy(X with VICReg) → Check with paired t-tests per the Research Manager's directive. The Manager demanded that F3 requires the gap to be positive AND either statistically significant (p < 0.05 via paired t-test) or exceed 1.5× the pooled standard error. Apply this rigorous version of F3.
 
-### Step 2: Verify Results
-After completion, read `phase_4/phase4_results.csv` and verify:
-- All 45 rows present (9 conditions × 5 seeds)
-- No NaN or infinite values
-- Test accuracies are reasonable (between 0.25 and 0.95)
+### 4. VICReg Ablation Analysis
+For each objective, compare with vs without pooled VICReg:
+- Paired t-test (paired by seed) on test accuracy
+- Effect size
+- For Reconstruction specifically: the Manager predicted that VICReg would NOT help (reconstruction natively resists collapse). This prediction was WRONG — Recon+VICReg is 83% vs 49.55% without. Document this.
 
-### Step 3: Generate Statistical Report
-Create `phase_4/REPORT.md` with comprehensive analysis.
+### 5. Parameter Hygiene Caveat
+Per the Research Manager's directive, include this critical caveat:
+"Under the shared spatiotemporal hyperparameter envelope optimized for JEPA (lr=1e-3, 30 epochs, batch=64), method X does not yield a competitive representation. This may reflect a failure of the shared envelope rather than a fundamental limitation of the learning rule itself."
 
-Read the CSV and compute:
+### 6. Key Observations to Document
+- SFA without VICReg completely collapses to 25% (chance), confirming the theoretical prediction
+- SFA + VICReg at 82.15% is the standard gradient-based SFA formulation (slowness + variance + decorrelation)
+- Reconstruction + VICReg at 83.00% is the best overall
+- The massive gap between VICReg and non-VICReg versions (30+ pp for SFA and Reconstruction) suggests pooled VICReg is the dominant factor, not the training objective
+- Hebbian benefits least from pooled VICReg (+4.65pp), possibly because it already maximises variance at all layers
+- JEPA without pooled VICReg (53.5%) is barely above untrained (52.1%), suggesting local VICReg alone is insufficient
 
-**A. Comparison Table**
-For each of the 9 conditions, compute:
-- Mean ± std test accuracy across 5 seeds
-- Mean train accuracy
-- Mean pooled_std
-- Mean final_loss
-- Mean training_time_sec
+### 7. Write the Report
+Write `phase_4/REPORT.md` with:
+- Experiment configuration
+- Mathematical formulations of each objective
+- Results table with mean ± std test accuracy
+- VICReg ablation analysis table
+- Statistical tests table (paired t-tests vs untrained, paired t-tests with/without VICReg)
+- Falsification criteria evaluation table
+- Per-class accuracy table
+- Training stability and compute cost
+- Manager's directives addressed
+- Recommendation for default training objective
 
-**B. Statistical Tests**
-For each trained condition vs Untrained baseline:
-- Paired t-test (pair by seed)
-- Cohen's d (paired)
-- Mark significance: * p&lt;0.05, ** p&lt;0.01, *** p&lt;0.001
+### 8. Update pre_registration.md
+Update `src/pre_registration.md` to add the actual results section at the bottom documenting what was found vs what was hypothesised.
 
-**C. VICReg Ablation Analysis**
-For each objective (JEPA, SFA, Hebbian, Recon):
-- Compare with VICReg vs without VICReg
-- Paired t-test and Cohen's d
-- Report the difference in mean test accuracy
-
-**D. Falsification Criteria Evaluation**
-- F1: JEPA + pooled VICReg ≥ 55%? Report mean and individual seed values.
-- F2: Does any other objective (with OR without VICReg) exceed JEPA + pooled VICReg by ≥ 3pp?
-  Compute: max(other_means) - jepa_vicreg_mean. If ≥ 3pp, F2 is triggered.
-- F3: For each objective X, is accuracy(X without VICReg) ≥ accuracy(X with VICReg)?
-  Report for each objective.
-
-**E. Per-Class Accuracy Analysis**
-For each condition, compute mean per-class accuracy across seeds.
-Note any classes where specific objectives excel or fail.
-
-**F. Manager's Directives**
-1. **Reconstruction without VICReg**: Report its accuracy. The Manager noted reconstruction
-   "natively resists collapse." Does the evidence support this? Compare pooled_std of
-   Recon without VICReg vs other objectives without VICReg.
-2. **SFA + VICReg as standard SFA**: Document that SFA+VICReg is the standard gradient-based
-   SFA formulation (slowness loss + Lagrangian relaxation of variance/decorrelation constraints).
-3. **Hebbian mathematical definition**: Document that Hebbian = variance maximization on
-   intermediate codes, which is the gradient-based equivalent of Oja's rule. It is DISTINCT
-   from pooled VICReg because it operates on all intermediate codes and maximizes variance.
-
-**G. Formal Recommendation**
-Based on the evidence, recommend the default objective for Phase 5.
-Consider: accuracy, training stability, compute cost, and theoretical elegance.
-
-**Report Format:**
-Use markdown with tables. Include:
-- Title and date
-- Experiment Configuration section
-- Mathematical Formulations section (with LaTeX-style equations)
-- Results section with comparison table
-- Statistical Analysis section
-- Falsification Criteria section
-- VICReg Ablation section
-- Per-Class Analysis section
-- Manager's Directives section
-- Recommendation section
-
-## Key Notes
-- The dry run showed SFA+VICReg at 70.75% (1 epoch) vs JEPA+VICReg at 62.25%.
-  This is a potential F2 trigger if it holds at 30 epochs.
-- Reconstruction without VICReg was only 42.25% in the dry run (1 epoch).
-  The Manager expected it to "natively resist collapse." Check if 30 epochs
-  improves this, and examine pooled_std to assess whether collapse actually occurred.
-- The `src/run_phase4.py` file already exists and has been dry-run tested.
-  You do NOT need to modify it — just run it and analyze results.
+Use Python/scipy for statistical analysis. Write the analysis script, run it, and produce the report.
