@@ -1,26 +1,47 @@
 artifacts:
-- src/spatiotemporal_encoder.py
-- src/run_phase3.py
-experimenter_view: "All three critical bugs were successfully identified and fixed:\n\
-  1. Temporal backward now uses self.master_temporal.W_enc.T instead of\n   self.master_spatial.W_enc.T,\
-  \ restoring correct gradient flow.\n2. Removed the spurious average-pooling gradient\
-  \ from backward();\n   dL_dx now starts as np.zeros_like(x_final), so only JEPA\
-  \ code_grads\n   drive training.\n3. P3-C now uses a SINGLE Adam step with combined\
-  \ spatial+temporal\n   gradients, preventing double-application of spatial gradients\
-  \ and\n   corrupted running statistics.\nThe self-test passes for all three variants.\
-  \ The full experiment suite\n(4 variants × 5 seeds = 20 runs) was launched in the\
-  \ background.\n"
-log_excerpt: "--- Variant: P3-A ---\n  Parameter count = 3200\n  Forward pass: all\
-  \ shapes correct  [OK]\n  Backward pass: all gradient shapes correct  [OK]\n  Embedding\
-  \ gradient is zeros (frozen)  [OK]\n  Gradient magnitudes non-zero  [OK]\n--- Variant:\
-  \ P3-B ---\n  Forward pass: all shapes correct  [OK]\n  Backward pass: all gradient\
-  \ shapes correct  [OK]\n--- Variant: P3-C ---\n  Parameter count = 1600\n  P3-C:\
-  \ spatial and temporal nodes are same object  [OK]\n  Forward pass: all shapes correct\
-  \  [OK]\n  Backward pass: all gradient shapes correct  [OK]\nALL SELF-TESTS PASSED\n"
+- src/run_remaining_phase3.py
+experimenter_view: 'The script src/run_remaining_phase3.py was created and launched
+  successfully.
+
+  Due to multiple background Python processes, some duplicate rows were appended
+
+  to the CSV for P3-C (seeds 44-46) and P3-B (seeds 42-44). The background
+
+  processes are continuing to execute the remaining runs. P3-C completed all
+
+  5 seeds with mean test accuracy ~44.0%, comparable to the Untrained baseline
+
+  (~44.7%). P3-B is showing slightly higher accuracy (~44.5% so far). The
+
+  remaining P3-B seed 46 and all P3-A seeds (42-46) are still executing.
+
+  After completion, the CSV will need deduplication to remove duplicate rows
+
+  before statistical analysis.
+
+  '
+log_excerpt: 'Remaining runs: 13
+
+  Runs: [(''P3-C'', 44), (''P3-C'', 45), (''P3-C'', 46), (''P3-B'', 42), (''P3-B'',
+  43), (''P3-B'', 44), (''P3-B'', 45), (''P3-B'', 46), (''P3-A'', 42), (''P3-A'',
+  43), (''P3-A'', 44), (''P3-A'', 45), (''P3-A'', 46)]
+
+  [1/13] P3-C, seed=44 ... Completed in 184.8s. Test acc: 0.4250
+
+  [2/13] P3-C, seed=45 ... Completed in 170.4s. Test acc: 0.4400
+
+  [3/13] P3-C, seed=46 ... Completed in 162.4s. Test acc: 0.4550
+
+  [4/13] P3-B, seed=42 ... Completed in 195.0s. Test acc: 0.4675
+
+  [5/13] P3-B, seed=43 ... Completed in 159.2s. Test acc: 0.4450
+
+  '
 metrics:
-  p3_a_params: 3200
-  p3_b_params: 3200
-  p3_c_params: 1600
-  self_test_passed: 1
-notes: Bugs fixed, self-test passes, full run launched in background.
+  csv_rows_total: 29
+  p3b_test_acc_mean: 0.445
+  p3c_test_acc_mean: 0.44
+  remaining_runs_estimated: 6
+  unique_runs_estimated: 14
+notes: Script running in background; deduplication needed after completion.
 status: ok
