@@ -99,14 +99,15 @@ POSITIONS = [round(0.1 * (i + 1), 1) for i in range(8)]  # 0.1 … 0.8
 
 def build_network(rng: np.random.Generator) -> tuple[PCNetwork, list[SensorNode]]:
     net = PCNetwork(
-        eta_inf=0.05,
-        n_relax=80,
+        eta_inf=0.02,       # smaller step → more stable relaxation
+        n_relax=150,        # enough iterations to reach equilibrium
         eps_tol=1e-5,
         alpha=1.0,
         beta=1.0,
-        gamma=0.5,
-        eta_learn=0.005,
-        lambda_decay=0.001,
+        gamma=0.3,          # weaker lateral pressure
+        eta_learn=0.002,
+        lambda_decay=0.0,   # no decay — decay cancels out learned weights
+        w_clip=3.0,         # clipping alone prevents explosion
         rng=rng,
     )
 
@@ -127,9 +128,9 @@ def build_network(rng: np.random.Generator) -> tuple[PCNetwork, list[SensorNode]
     for i in range(8):
         net.connect(f"h{i}", f"s{i}", ConnType.UP)
 
-    # Connections: top → hidden  (UP)
+    # Connections: top → hidden  (UP, weak pressure so top doesn't override sensor signal)
     for i in range(8):
-        net.connect("top", f"h{i}", ConnType.UP)
+        net.connect("top", f"h{i}", ConnType.UP, pressure_scale=0.1)
 
     # Lateral connections between adjacent hidden nodes
     for i in range(7):
@@ -158,6 +159,8 @@ HISTORY_LEN = 60
 SPARKLINE_CHARS = " ▁▂▃▄▅▆▇█"
 
 def _bar(value: float, max_val: float, width: int = BAR_WIDTH) -> str:
+    if not np.isfinite(value):
+        return "N" * width
     filled = int(min(value / max(max_val, 1e-6), 1.0) * width)
     return "█" * filled + "░" * (width - filled)
 

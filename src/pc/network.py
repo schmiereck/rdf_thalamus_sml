@@ -41,7 +41,7 @@ class PCNetwork:
         beta: float = 1.0,    # weight on UP back-pressure
         gamma: float = 1.0,   # weight on LATERAL back-pressure
         eta_learn: float = 0.001,
-        lambda_decay: float = 0.001,
+        lambda_decay: float = 0.0,
         w_clip: float = 5.0,
         rng: np.random.Generator | None = None,
     ) -> None:
@@ -77,6 +77,7 @@ class PCNetwork:
         conn_type: ConnType = ConnType.UP,
         eta_learn: float | None = None,
         lambda_decay: float | None = None,
+        pressure_scale: float = 1.0,
         conn_id: str | None = None,
     ) -> PCConnection:
         """
@@ -96,6 +97,7 @@ class PCNetwork:
             eta_learn=eta_learn if eta_learn is not None else self.eta_learn,
             lambda_decay=lambda_decay if lambda_decay is not None else self.lambda_decay,
             w_clip=self.w_clip,
+            pressure_scale=pressure_scale,
             rng=self._rng,
         )
         self._connections.append(conn)

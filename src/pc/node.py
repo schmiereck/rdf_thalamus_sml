@@ -115,13 +115,19 @@ class PCNode:
         μ ← μ + η_inf · (−α·ε  +  accumulated pressure from connections)
 
         Clamped nodes (sensors) ignore this update.
+        NaN/Inf guard: if the update produces non-finite values, reset to zero.
         """
         if self._clamped:
             self._pressure = np.zeros(self.dim)
             return
 
         dmu = -alpha * self.epsilon + self._pressure
-        self.mu = self.mu + eta_inf * dmu
+        new_mu = self.mu + eta_inf * dmu
+        if not np.all(np.isfinite(new_mu)):
+            # Numerical explosion — reset this node's state
+            self.mu = np.zeros(self.dim)
+        else:
+            self.mu = new_mu
         self._pressure = np.zeros(self.dim)
 
     # ------------------------------------------------------------------

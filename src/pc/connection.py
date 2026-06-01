@@ -43,6 +43,7 @@ class PCConnection:
         eta_learn: float = 0.001,
         lambda_decay: float = 0.001,
         w_clip: float = 5.0,
+        pressure_scale: float = 1.0,
         rng: np.random.Generator | None = None,
     ) -> None:
         self.id = conn_id
@@ -52,6 +53,7 @@ class PCConnection:
         self.eta_learn = eta_learn
         self.lambda_decay = lambda_decay
         self.w_clip = w_clip
+        self.pressure_scale = pressure_scale  # per-connection relaxation strength multiplier
 
         # Xavier initialisation
         rng = rng or np.random.default_rng()
@@ -78,7 +80,7 @@ class PCConnection:
         beta  — weight for UP connections
         gamma — weight for LATERAL connections
         """
-        scale = beta if self.conn_type == ConnType.UP else gamma
+        scale = (beta if self.conn_type == ConnType.UP else gamma) * self.pressure_scale
         pressure = scale * (self.W @ self.target.epsilon)   # [dim_source]
         self.source.add_pressure(pressure)
 
@@ -89,7 +91,8 @@ class PCConnection:
     def learn(self) -> None:
         """ΔW = η · f(μ_source) ⊗ ε_target  (outer product, local rule)"""
         dW = np.outer(self.source.activation, self.target.epsilon)  # [dim_source × dim_target]
-        self.W += self.eta_learn * dW
+        if np.all(np.isfinite(dW)):
+            self.W += self.eta_learn * dW
         if self.lambda_decay > 0.0:
             self.W *= (1.0 - self.lambda_decay)
         if self.w_clip > 0.0:
