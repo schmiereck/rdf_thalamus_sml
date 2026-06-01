@@ -305,7 +305,6 @@ def main() -> None:
     # Configuration
     # ---------------------------------------------------------------
     N_INPUTS          = 8     # sensor positions (also sets PatternGenerator width)
-    N_FRAMES          = 8     # frames per sequence
     TOTAL_STEPS       = 1500  # training steps
     REPEATS_PER_SEQ   = 3     # how often each generated sequence is repeated
     N_EVAL_PATTERNS   = 6     # fixed per-pattern eval set size (train + novel each)
@@ -317,18 +316,18 @@ def main() -> None:
     net, sensors = build_network(rng, n_inputs=N_INPUTS)
 
     # Training generator: bias toward simple patterns
-    train_gen = PatternGenerator(n_inputs=N_INPUTS, n_frames=N_FRAMES, seed=0, bias_simple=True)
+    train_gen = PatternGenerator(n_inputs=N_INPUTS, seed=0, bias_simple=True)
     # Novel generator: uniform distribution (tests broad generalisation)
-    novel_gen = PatternGenerator(n_inputs=N_INPUTS, n_frames=N_FRAMES, seed=9999)
+    novel_gen = PatternGenerator(n_inputs=N_INPUTS, seed=9999)
 
     # Fixed eval sets sampled once before training (separate generator instances
     # with offset seeds so they don't overlap with the training stream)
     train_eval_patterns = sample_named_patterns(
-        PatternGenerator(n_inputs=N_INPUTS, n_frames=N_FRAMES, seed=1, bias_simple=True),
+        PatternGenerator(n_inputs=N_INPUTS, seed=1, bias_simple=True),
         n_sequences=N_EVAL_PATTERNS,
     )
     novel_eval_patterns = sample_named_patterns(
-        PatternGenerator(n_inputs=N_INPUTS, n_frames=N_FRAMES, seed=10000),
+        PatternGenerator(n_inputs=N_INPUTS, seed=10000),
         n_sequences=N_EVAL_PATTERNS,
     )
 

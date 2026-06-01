@@ -8,11 +8,20 @@ by randomly combining:
   - Blob shape: point, flat block, Gaussian soft edge
   - Blob size: 1–5 pixels
   - Intensity envelope: constant, fade-out, fade-in, fade-out-in
-  - Speed: 1 pixel/frame (normal) or 0.5 pixel/frame (slow, stays 2 frames)
+  - Speed: 1 pixel/frame (normal) or 0.5 pixel/frame (slow)
+
+Frame count is computed dynamically per sequence so that one sequence equals
+exactly one complete motion cycle.  Repeating the same sequence is therefore
+seamless: blobs return to their start position after every cycle.
+
+  LTR / RTL : blobs start at the entry edge (left for LTR, right for RTL) and
+              traverse the full array.  n_frames = ceil(n_inputs / pxspeed).
+  Bounce    : blobs start at the left edge and make one full back-and-forth.
+              n_frames = round(2 * (n_inputs - 1) / pxspeed).
 
 Usage
 -----
-    gen = PatternGenerator(n_inputs=8, n_frames=8, seed=42)
+    gen = PatternGenerator(n_inputs=16, seed=42)
 
     # One random sequence (list of frames):
     frames, description = gen.random_sequence()
@@ -35,7 +44,7 @@ Usage
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Iterator
 
 import numpy as np
@@ -55,13 +64,10 @@ def _flat_blob(center: float, size: int, n: int) -> np.ndarray:
     lo = center - half
     hi = center + half
     for i in range(n):
-        # full coverage
         if lo <= i <= hi:
             frame[i] = 1.0
-        # left edge anti-alias
         elif lo - 1 < i < lo:
             frame[i] = i - (lo - 1)
-        # right edge anti-alias
         elif hi < i < hi + 1:
             frame[i] = (hi + 1) - i
     return frame
@@ -109,17 +115,15 @@ def _apply_envelope(frames: list[np.ndarray], envelope: str, rng: np.random.Gene
 # Motion trajectory helpers
 # ---------------------------------------------------------------------------
 
-def _ltr_positions(start: float, n_frames: int, speed: float = 1.0) -> list[float]:
-    """Left-to-right: start → start + (n_frames-1)*speed, wraps."""
+def _ltr_positions(start: float, n_frames: int, speed: float) -> list[float]:
     return [start + i * speed for i in range(n_frames)]
 
 
-def _rtl_positions(start: float, n_frames: int, speed: float = 1.0) -> list[float]:
-    """Right-to-left: start → start - (n_frames-1)*speed."""
+def _rtl_positions(start: float, n_frames: int, speed: float) -> list[float]:
     return [start - i * speed for i in range(n_frames)]
 
 
-def _bounce_positions(start: float, n_frames: int, n_inputs: int, speed: float = 1.0) -> list[float]:
+def _bounce_positions(start: float, n_frames: int, n_inputs: int, speed: float) -> list[float]:
     """Bounce back and forth within [0, n_inputs-1]."""
     positions = []
     pos = start
@@ -143,7 +147,7 @@ def _bounce_positions(start: float, n_frames: int, n_inputs: int, speed: float =
 DIRECTIONS    = ["ltr", "rtl", "bounce"]
 BLOB_SHAPES   = ["point", "flat", "gauss"]
 ENVELOPES     = ["constant", "fade_out", "fade_in", "fade_out_in", "random_start_fade_out"]
-SPEED_OPTIONS = [1, 2]   # 1 = normal (1 px/frame), 2 = slow (stays 2 frames)
+SPEED_OPTIONS = [1, 2]   # 1 = normal (1 px/frame), 2 = slow (0.5 px/frame)
 
 
 @dataclass
@@ -155,31 +159,33 @@ class SequenceSpec:
     direction:  str
     envelope:   str
     speed:      int
+    n_frames:   int       # actual frame count for this sequence
     starts:     list[float]
 
     def __str__(self) -> str:
         blobs_str = f"{self.n_blobs}×{self.blob_shape}{self.blob_size}"
         return (
             f"{blobs_str} {self.direction} env={self.envelope} "
-            f"speed={self.speed} starts={[round(s,1) for s in self.starts]}"
+            f"speed={self.speed} frames={self.n_frames}"
         )
 
 
 class PatternGenerator:
     """
-    Generates 1-D motion sequences for a PC sensor array.
+    Generates seamlessly-loopable 1-D motion sequences for a PC sensor array.
+
+    The frame count per sequence is computed dynamically so that each sequence
+    covers exactly one complete motion cycle.  Repeating a sequence is therefore
+    seamless: every blob returns to its start position after every cycle.
 
     Parameters
     ----------
     n_inputs : int
-        Number of sensor positions (e.g. 8).
-    n_frames : int
-        Frames per sequence (e.g. 8 or 16).
+        Number of sensor positions (e.g. 8 or 16).
     seed : int | None
         RNG seed for reproducibility.  None = non-deterministic.
     max_blob_fill : float
         Safety threshold: total blob pixels / n_inputs.
-        If a candidate configuration would exceed this, reduce n_blobs.
         Default 0.65 keeps blobs from merging.
     bias_simple : bool
         When True, use weighted sampling to prefer simpler patterns:
@@ -190,13 +196,11 @@ class PatternGenerator:
     def __init__(
         self,
         n_inputs: int = 8,
-        n_frames: int = 8,
         seed: int | None = None,
         max_blob_fill: float = 0.65,
         bias_simple: bool = False,
     ) -> None:
         self.n_inputs      = n_inputs
-        self.n_frames      = n_frames
         self.max_blob_fill = max_blob_fill
         self.bias_simple   = bias_simple
         self._rng          = np.random.default_rng(seed)
@@ -210,9 +214,9 @@ class PatternGenerator:
         rng = self._rng
         bs  = self.bias_simple
 
-        direction = str(rng.choice(DIRECTIONS))  # directions stay uniform
+        direction = str(rng.choice(DIRECTIONS))
 
-        # blob_shape: point > flat > gauss  (sharper preferred)
+        # blob_shape: point > flat > gauss  (sharper preferred when bias_simple)
         shape_p = np.array([0.50, 0.30, 0.20]) if bs else None
         blob_shape = str(rng.choice(BLOB_SHAPES, p=shape_p))
 
@@ -224,34 +228,26 @@ class PatternGenerator:
         speed_p = np.array([0.70, 0.30]) if bs else None
         speed = int(rng.choice(SPEED_OPTIONS, p=speed_p))
 
-        # Blob size depends on shape
         if blob_shape == "point":
             blob_size = 1
         elif blob_shape == "flat":
             if bs:
-                # sizes 1–5, inverse-linear weights: [5,4,3,2,1] → smaller preferred
-                w = np.array([5.0, 4.0, 3.0, 2.0, 1.0])
-                w /= w.sum()
+                w = np.array([5.0, 4.0, 3.0, 2.0, 1.0]); w /= w.sum()
                 blob_size = int(rng.choice([1, 2, 3, 4, 5], p=w))
             else:
-                blob_size = int(rng.integers(1, 6))   # 1–5
+                blob_size = int(rng.integers(1, 6))
         else:  # gauss
             if bs:
-                # sizes 3–5, prefer smaller sigma: weights [3,2,1]
-                w = np.array([3.0, 2.0, 1.0])
-                w /= w.sum()
+                w = np.array([3.0, 2.0, 1.0]); w /= w.sum()
                 blob_size = int(rng.choice([3, 4, 5], p=w))
             else:
-                blob_size = int(rng.integers(3, 6))   # 3–5
+                blob_size = int(rng.integers(3, 6))
 
-        # How many blobs can we fit?
         max_blobs = self._max_blobs(blob_size)
         cap = min(4, max_blobs + 1)
         if bs and cap > 2:
-            # n_blobs: fewer preferred — geometric-ish weights
             options = list(range(1, cap))
-            w = np.array([1.0 / k for k in options], dtype=float)
-            w /= w.sum()
+            w = np.array([1.0 / k for k in options], dtype=float); w /= w.sum()
             n_blobs = int(rng.choice(options, p=w))
         else:
             n_blobs = int(rng.integers(1, cap))
@@ -275,22 +271,33 @@ class PatternGenerator:
         speed:              int   = 1,
     ) -> tuple[list[list[float]], SequenceSpec]:
         """
-        Build a deterministic sequence from explicit parameters.
+        Build a loopable sequence from explicit parameters.
+
+        Frame count is computed so that blobs complete exactly one full cycle
+        and return to their start position, making repeats seamless.
 
         Returns
         -------
         frames : list of n_frames lists of n_inputs floats (values in [0, 1])
         spec   : SequenceSpec describing what was generated
         """
-        rng        = self._rng
-        n          = self.n_inputs
-        n_frames   = self.n_frames if speed == 1 else self.n_frames * 2
-        pxspeed    = 1.0 if speed == 1 else 0.5   # pixels per frame
+        rng     = self._rng
+        n       = self.n_inputs
+        pxspeed = 1.0 if speed == 1 else 0.5
 
-        # Place blob start positions with minimum spacing
-        starts = self._place_starts(n_blobs, blob_size, n)
+        # Compute n_frames for exactly one complete cycle
+        if direction in ("ltr", "rtl"):
+            # blobs traverse the full array width once
+            n_frames = math.ceil(n / pxspeed)
+        else:  # bounce
+            # one full back-and-forth: left→right→left
+            n_frames = round(2 * (n - 1) / pxspeed)
 
-        # Compute per-blob trajectory (sequence of center positions)
+        # Place blob start positions at the entry edge (no random jitter,
+        # ensures all blobs return to their starts after n_frames)
+        starts = self._place_starts_at_edge(n_blobs, blob_size, n, direction)
+
+        # Compute per-blob trajectory
         trajectories: list[list[float]] = []
         for s in starts:
             if direction == "ltr":
@@ -302,7 +309,7 @@ class PatternGenerator:
             trajectories.append(traj)
 
         # Render frames
-        sigma = blob_size / 2.5   # Gaussian sigma
+        sigma = blob_size / 2.5
         raw_frames: list[np.ndarray] = []
         for fi in range(n_frames):
             frame = np.zeros(n)
@@ -317,11 +324,8 @@ class PatternGenerator:
                 frame = np.clip(frame + blob, 0.0, 1.0)
             raw_frames.append(frame)
 
-        # Apply intensity envelope
         enveloped = _apply_envelope(raw_frames, intensity_envelope, rng)
-
-        # Truncate to n_frames if slow doubled the length
-        frames_out = [f.tolist() for f in enveloped[:self.n_frames]]
+        frames_out = [f.tolist() for f in enveloped]
 
         spec = SequenceSpec(
             n_blobs=n_blobs,
@@ -330,6 +334,7 @@ class PatternGenerator:
             direction=direction,
             envelope=intensity_envelope,
             speed=speed,
+            n_frames=n_frames,
             starts=[round(float(s), 2) for s in starts],
         )
         return frames_out, spec
@@ -357,40 +362,29 @@ class PatternGenerator:
     # ------------------------------------------------------------------
 
     def _max_blobs(self, blob_size: int) -> int:
-        """Maximum blobs that still fit with at least 1-pixel gap between them."""
-        min_spacing = blob_size + 1   # blob width + 1 gap pixel
+        min_spacing = blob_size + 1
         return max(1, self.n_inputs // min_spacing)
 
-    def _place_starts(self, n_blobs: int, blob_size: int, n: int) -> list[float]:
+    def _place_starts_at_edge(
+        self, n_blobs: int, blob_size: int, n: int, direction: str
+    ) -> list[float]:
         """
-        Place n_blobs start positions with minimum spacing = blob_size + 1.
-        Uses random jitter within the available slots.
+        Place n_blobs at the entry edge with minimum spacing = blob_size + 1.
+        LTR and bounce start at the left edge; RTL starts at the right edge.
         Falls back to fewer blobs if the array is too small.
         """
-        rng = self._rng
-        min_gap = blob_size + 1   # minimum distance between blob centres
+        half    = (blob_size - 1) / 2.0
+        min_gap = blob_size + 1
 
         # Reduce n_blobs until they all fit
         while n_blobs > 1 and (n_blobs - 1) * min_gap + blob_size > n:
             n_blobs -= 1
 
-        if n_blobs == 1:
-            half = (blob_size - 1) / 2.0
-            lo   = half
-            hi   = n - 1 - half
-            start = float(rng.uniform(lo, max(lo, hi)))
-            return [start]
+        if direction == "rtl":
+            # Pack from right edge inward
+            starts = [n - 1 - half - k * min_gap for k in range(n_blobs)]
+        else:
+            # LTR and bounce: pack from left edge
+            starts = [half + k * min_gap for k in range(n_blobs)]
 
-        # Distribute evenly with random jitter
-        half    = (blob_size - 1) / 2.0
-        lo      = half
-        hi      = n - 1 - half
-        spacing = (hi - lo) / (n_blobs - 1)
-        jitter  = max(0.0, (spacing - min_gap) / 2.0)
-
-        starts = []
-        for k in range(n_blobs):
-            base  = lo + k * spacing
-            delta = float(rng.uniform(-jitter, jitter))
-            starts.append(base + delta)
         return starts
