@@ -162,10 +162,46 @@ def render(
 
 
 # ---------------------------------------------------------------------------
-# Per-distribution error measurement  (no learning)
+# Per-pattern error measurement  (no learning)
 # ---------------------------------------------------------------------------
 
-def measure_generated_errors(
+def sample_named_patterns(
+    gen: PatternGenerator,
+    n_sequences: int,
+) -> list[tuple[str, list[list[float]]]]:
+    """
+    Draw n_sequences from gen and return [(description, frames), ...].
+    Uses a fresh copy of the generator state so the main training stream
+    is not disturbed — caller should pass a generator with a fixed seed.
+    """
+    return [(str(spec), frames) for frames, spec in gen.stream(max_sequences=n_sequences)]
+
+
+def measure_per_pattern_errors(
+    net: PCNetwork,
+    sensors: list[SensorNode],
+    named_patterns: list[tuple[str, list[list[float]]]],
+    n_passes: int = 3,
+) -> list[tuple[str, dict[str, float]]]:
+    """Run each named pattern n_passes times (no learning). Returns sorted results."""
+    results = []
+    for name, frames in named_patterns:
+        s_errs, st_errs = [], []
+        for _ in range(n_passes):
+            for frame in frames:
+                set_frame(sensors, frame)
+                info = net.step(learn=False)
+                s_errs.append(info["sensor_error"])
+                st_errs.append(info["state_error"])
+        results.append((name, {
+            "sensor_error": float(np.mean(s_errs)),
+            "state_error":  float(np.mean(st_errs)),
+        }))
+    results.sort(key=lambda x: x[1]["sensor_error"])
+    return results
+
+
+def measure_distribution_errors(
     net: PCNetwork,
     sensors: list[SensorNode],
     gen: PatternGenerator,
@@ -195,6 +231,8 @@ def print_summary(
     state_history: list[float],
     net: PCNetwork,
     sensors: list[SensorNode],
+    train_eval_patterns: list[tuple[str, list[list[float]]]],
+    novel_eval_patterns: list[tuple[str, list[list[float]]]],
     train_gen: PatternGenerator,
     novel_gen: PatternGenerator,
 ) -> None:
@@ -211,11 +249,25 @@ def print_summary(
     print(f"  {'sensor_error':20s}  {np.mean(first_s):8.4f}  {np.mean(last_s):8.4f}  {np.mean(first_s)-np.mean(last_s):+8.4f}")
     print(f"  {'state_error':20s}  {np.mean(first_st):8.4f}  {np.mean(last_st):8.4f}  {np.mean(first_st)-np.mean(last_st):+8.4f}")
 
+    # Per-pattern breakdown
+    print(f"\n{'='*60}")
+    print(f"  Per-pattern errors  (fixed eval set, no learning, 3 passes)")
+    print(f"{'='*60}")
+    col = 40
+    print(f"  {'Pattern':<{col}s}  {'sensor':>8s}  {'state':>8s}  type")
+    for name, r in measure_per_pattern_errors(net, sensors, train_eval_patterns):
+        print(f"  {name:<{col}s}  {r['sensor_error']:8.4f}  {r['state_error']:8.4f}  [train]")
+
+    print(f"\n  {'Pattern':<{col}s}  {'sensor':>8s}  {'state':>8s}  type")
+    for name, r in measure_per_pattern_errors(net, sensors, novel_eval_patterns):
+        print(f"  {name:<{col}s}  {r['sensor_error']:8.4f}  {r['state_error']:8.4f}  [novel]")
+
+    # Distribution-level generalisation
     print(f"\n{'='*60}")
     print(f"  Generalisation  (20 random sequences each, no learning)")
     print(f"{'='*60}")
-    tr = measure_generated_errors(net, sensors, train_gen, n_sequences=20)
-    nv = measure_generated_errors(net, sensors, novel_gen, n_sequences=20)
+    tr = measure_distribution_errors(net, sensors, train_gen, n_sequences=20)
+    nv = measure_distribution_errors(net, sensors, novel_gen, n_sequences=20)
     print(f"  {'':28s}  {'sensor':>8s}  {'state':>8s}")
     print(f"  {'train distribution':28s}  {tr['sensor_error']:8.4f}  {tr['state_error']:8.4f}")
     print(f"  {'novel distribution':28s}  {nv['sensor_error']:8.4f}  {nv['state_error']:8.4f}")
@@ -232,10 +284,19 @@ def main() -> None:
     rng = np.random.default_rng(42)
     net, sensors = build_network(rng)
 
-    # Training generator: seed 0
+    # Training generator: seed 0  (infinite stream during training)
     train_gen = PatternGenerator(n_inputs=8, n_frames=8, seed=0)
     # Novel generator: different seed → different random parameters
     novel_gen = PatternGenerator(n_inputs=8, n_frames=8, seed=9999)
+
+    # Fixed eval sets sampled once before training (separate generator instances
+    # with offset seeds so they don't overlap with the training stream)
+    train_eval_patterns = sample_named_patterns(
+        PatternGenerator(n_inputs=8, n_frames=8, seed=1), n_sequences=6
+    )
+    novel_eval_patterns = sample_named_patterns(
+        PatternGenerator(n_inputs=8, n_frames=8, seed=10000), n_sequences=6
+    )
 
     total_steps = 1500
     repeats_per_seq = 3
@@ -283,7 +344,11 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\n\nStopped early.")
 
-    print_summary(step, sensor_history, state_history, net, sensors, train_gen, novel_gen)
+    print_summary(
+        step, sensor_history, state_history, net, sensors,
+        train_eval_patterns, novel_eval_patterns,
+        train_gen, novel_gen,
+    )
 
 
 if __name__ == "__main__":
