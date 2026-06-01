@@ -176,11 +176,7 @@ def sample_named_patterns(
     gen: PatternGenerator,
     n_sequences: int,
 ) -> list[tuple[str, list[list[float]]]]:
-    """
-    Draw n_sequences from gen and return [(description, frames), ...].
-    Uses a fresh copy of the generator state so the main training stream
-    is not disturbed — caller should pass a generator with a fixed seed.
-    """
+    """Draw n_sequences from gen and return [(description, frames), ...]."""
     return [(str(spec), frames) for frames, spec in gen.stream(max_sequences=n_sequences)]
 
 
@@ -208,26 +204,6 @@ def measure_per_pattern_errors(
     return results
 
 
-def measure_distribution_errors(
-    net: PCNetwork,
-    sensors: list[SensorNode],
-    gen: PatternGenerator,
-    n_sequences: int = 20,
-) -> dict[str, float]:
-    """Evaluate n_sequences random sequences (no learning). Returns mean errors."""
-    s_errs, st_errs = [], []
-    for frames, _ in gen.stream(max_sequences=n_sequences):
-        for frame in frames:
-            set_frame(sensors, frame)
-            info = net.step(learn=False)
-            s_errs.append(info["sensor_error"])
-            st_errs.append(info["state_error"])
-    return {
-        "sensor_error": float(np.mean(s_errs)),
-        "state_error":  float(np.mean(st_errs)),
-    }
-
-
 # ---------------------------------------------------------------------------
 # Summary printing
 # ---------------------------------------------------------------------------
@@ -238,11 +214,8 @@ def print_summary(
     state_history: list[float],
     net: PCNetwork,
     sensors: list[SensorNode],
-    train_eval_patterns: list[tuple[str, list[list[float]]]],
-    novel_eval_patterns: list[tuple[str, list[list[float]]]],
-    train_gen: PatternGenerator,
-    novel_gen: PatternGenerator,
-    n_gen_patterns: int = 20,
+    train_patterns: list[tuple[str, list[list[float]]]],
+    novel_patterns: list[tuple[str, list[list[float]]]],
 ) -> None:
     n = len(sensor_history)
     q = max(1, n // 10)
@@ -257,37 +230,20 @@ def print_summary(
     print(f"  {'sensor_error':20s}  {np.mean(first_s):8.4f}  {np.mean(last_s):8.4f}  {np.mean(first_s)-np.mean(last_s):+8.4f}")
     print(f"  {'state_error':20s}  {np.mean(first_st):8.4f}  {np.mean(last_st):8.4f}  {np.mean(first_st)-np.mean(last_st):+8.4f}")
 
-    # Per-pattern breakdown
-    print(f"\n{'='*60}")
-    print(f"  Per-pattern errors  (fixed eval set, no learning, 3 passes)")
-    print(f"{'='*60}")
     col = 40
+    print(f"\n{'='*60}")
+    print(f"  Per-pattern errors  ({len(train_patterns)} train / {len(novel_patterns)} novel, no learning, 3 passes)")
+    print(f"{'='*60}")
     print(f"  {'Pattern':<{col}s}  {'sensor':>8s}  {'state':>8s}  type")
-    for name, r in measure_per_pattern_errors(net, sensors, train_eval_patterns):
+    for name, r in measure_per_pattern_errors(net, sensors, train_patterns):
         print(f"  {name:<{col}s}  {r['sensor_error']:8.4f}  {r['state_error']:8.4f}  [train]")
 
     print(f"\n  {'Pattern':<{col}s}  {'sensor':>8s}  {'state':>8s}  type")
-    for name, r in measure_per_pattern_errors(net, sensors, novel_eval_patterns):
-        print(f"  {name:<{col}s}  {r['sensor_error']:8.4f}  {r['state_error']:8.4f}  [novel]")
-
-    # Generalisation: fresh random sequences, per-pattern + distribution summary
-    print(f"\n{'='*60}")
-    print(f"  Generalisation  ({n_gen_patterns} random sequences each, no learning)")
-    print(f"{'='*60}")
-    gen_train_patterns = sample_named_patterns(train_gen, n_sequences=n_gen_patterns)
-    gen_novel_patterns = sample_named_patterns(novel_gen, n_sequences=n_gen_patterns)
-
-    print(f"  {'Pattern':<{col}s}  {'sensor':>8s}  {'state':>8s}  dist")
-    train_results = measure_per_pattern_errors(net, sensors, gen_train_patterns)
-    for name, r in train_results:
-        print(f"  {name:<{col}s}  {r['sensor_error']:8.4f}  {r['state_error']:8.4f}  [train]")
-
-    print()
-    novel_results = measure_per_pattern_errors(net, sensors, gen_novel_patterns)
+    novel_results = measure_per_pattern_errors(net, sensors, novel_patterns)
     for name, r in novel_results:
         print(f"  {name:<{col}s}  {r['sensor_error']:8.4f}  {r['state_error']:8.4f}  [novel]")
 
-    tr_mean = float(np.mean([r["sensor_error"] for _, r in train_results]))
+    tr_mean = float(np.mean([r["sensor_error"] for _, r in measure_per_pattern_errors(net, sensors, train_patterns)]))
     nv_mean = float(np.mean([r["sensor_error"] for _, r in novel_results]))
     gap = nv_mean - tr_mean
     print(f"\n  {'train mean':28s}  {tr_mean:8.4f}")
@@ -304,81 +260,72 @@ def main() -> None:
     # ---------------------------------------------------------------
     # Configuration
     # ---------------------------------------------------------------
-    N_INPUTS          = 8     # sensor positions (also sets PatternGenerator width)
-    TOTAL_STEPS       = 1500  # training steps
-    REPEATS_PER_SEQ   = 3     # how often each generated sequence is repeated
-    N_EVAL_PATTERNS   = 6     # fixed per-pattern eval set size (train + novel each)
-    N_GEN_PATTERNS    = 20    # sequences per distribution in Generalisation section
-    DELAY             = 0.0   # seconds between steps (0 = as fast as possible)
+    N_INPUTS          = 8    # sensor positions (also sets PatternGenerator width)
+    N_TRAIN_PATTERNS  = 10   # how many different random patterns to train on
+    N_NOVEL_PATTERNS  = 10   # how many different random patterns for evaluation only
+    REPEATS_PER_SEQ   = 3    # how often each pattern is repeated per training epoch
+    N_EPOCHS          = 50   # how many full passes through all training patterns
+    DELAY             = 0.0  # seconds between steps (0 = as fast as possible)
     # ---------------------------------------------------------------
 
     rng = np.random.default_rng(42)
     net, sensors = build_network(rng, n_inputs=N_INPUTS)
 
-    # Training generator: bias toward simple patterns
-    train_gen = PatternGenerator(n_inputs=N_INPUTS, seed=0, bias_simple=True)
-    # Novel generator: uniform distribution (tests broad generalisation)
-    novel_gen = PatternGenerator(n_inputs=N_INPUTS, seed=9999)
+    # Sample fixed pattern sets once — these never change during training
+    train_patterns = sample_named_patterns(
+        PatternGenerator(n_inputs=N_INPUTS, seed=0, bias_simple=True),
+        n_sequences=N_TRAIN_PATTERNS,
+    )
+    # Novel patterns come from a different seed — the network never trains on these
+    novel_patterns = sample_named_patterns(
+        PatternGenerator(n_inputs=N_INPUTS, seed=9999),
+        n_sequences=N_NOVEL_PATTERNS,
+    )
 
-    # Fixed eval sets sampled once before training (separate generator instances
-    # with offset seeds so they don't overlap with the training stream)
-    train_eval_patterns = sample_named_patterns(
-        PatternGenerator(n_inputs=N_INPUTS, seed=1, bias_simple=True),
-        n_sequences=N_EVAL_PATTERNS,
-    )
-    novel_eval_patterns = sample_named_patterns(
-        PatternGenerator(n_inputs=N_INPUTS, seed=10000),
-        n_sequences=N_EVAL_PATTERNS,
-    )
+    total_steps = sum(len(frames) for _, frames in train_patterns) * REPEATS_PER_SEQ * N_EPOCHS
 
     sensor_history: list[float] = []
     state_history:  list[float] = []
     max_err = 5.0
 
     print(net.summary())
-    print(f"\nTraining for {TOTAL_STEPS} steps  (generated patterns)\n")
+    print(f"\nTraining on {N_TRAIN_PATTERNS} patterns × {REPEATS_PER_SEQ} repeats × {N_EPOCHS} epochs"
+          f"  ≈ {total_steps} steps\n")
     print("Press Ctrl+C to stop early.\n")
 
     prev_lines = 0
     step = 0
 
     try:
-        for frames, spec in train_gen.stream(repeats_per_sequence=REPEATS_PER_SEQ):
-            for frame_idx, frame_values in enumerate(frames):
-                if step >= TOTAL_STEPS:
-                    break
+        for epoch in range(N_EPOCHS):
+            for name, frames in train_patterns:
+                spec_label = name  # already a string description
+                for _ in range(REPEATS_PER_SEQ):
+                    for frame_idx, frame_values in enumerate(frames):
+                        set_frame(sensors, frame_values)
+                        info = net.step(learn=True)
 
-                set_frame(sensors, frame_values)
-                info = net.step(learn=True)
+                        s_err  = info["sensor_error"]
+                        st_err = info["state_error"]
+                        sensor_history.append(s_err)
+                        state_history.append(st_err)
+                        max_err = max(max_err * 0.99, s_err, st_err, 0.1)
 
-                s_err  = info["sensor_error"]
-                st_err = info["state_error"]
-                sensor_history.append(s_err)
-                state_history.append(st_err)
-                max_err = max(max_err * 0.99, s_err, st_err, 0.1)
+                        prev_lines = render(
+                            step + 1, total_steps, spec_label, frame_idx, frame_values,
+                            s_err, st_err, sensor_history, state_history,
+                            max_err, prev_lines,
+                        )
+                        step += 1
 
-                prev_lines = render(
-                    step + 1, TOTAL_STEPS, spec, frame_idx, frame_values,
-                    s_err, st_err, sensor_history, state_history,
-                    max_err, prev_lines,
-                )
-                step += 1
-
-                if DELAY > 0:
-                    time.sleep(DELAY)
-
-            if step >= TOTAL_STEPS:
-                break
+                        if DELAY > 0:
+                            time.sleep(DELAY)
 
     except KeyboardInterrupt:
         print("\n\nStopped early.")
 
-    print_summary(
-        step, sensor_history, state_history, net, sensors,
-        train_eval_patterns, novel_eval_patterns,
-        train_gen, novel_gen,
-        n_gen_patterns=N_GEN_PATTERNS,
-    )
+    print_summary(step, sensor_history, state_history, net, sensors,
+                  train_patterns, novel_patterns)
 
 
 if __name__ == "__main__":
