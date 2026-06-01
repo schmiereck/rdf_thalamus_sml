@@ -24,13 +24,18 @@ from pc import PCNode, SensorNode, PCNetwork
 from pc.connection import ConnType
 from pc.pattern_generator import PatternGenerator, SequenceSpec
 
-POSITIONS = [round(0.1 * (i + 1), 1) for i in range(8)]  # 0.1 … 0.8
+def _positions(n: int) -> list[float]:
+    """Evenly spaced sensor positions in (0, 1], length n."""
+    step = 1.0 / n
+    return [round(step * (i + 1), 4) for i in range(n)]
+
+POSITIONS = _positions(8)  # default; overridden in set_frame via sensor list length
 
 # ---------------------------------------------------------------------------
 # Network construction
 # ---------------------------------------------------------------------------
 
-def build_network(rng: np.random.Generator) -> tuple[PCNetwork, list[SensorNode]]:
+def build_network(rng: np.random.Generator, n_inputs: int = 8) -> tuple[PCNetwork, list[SensorNode]]:
     net = PCNetwork(
         eta_inf=0.02,
         n_relax=150,
@@ -45,22 +50,22 @@ def build_network(rng: np.random.Generator) -> tuple[PCNetwork, list[SensorNode]
     )
 
     sensors: list[SensorNode] = []
-    for i in range(8):
+    for i in range(n_inputs):
         s = net.add(SensorNode(f"s{i}", dim=2))
         sensors.append(s)
 
-    for i in range(8):
+    for i in range(n_inputs):
         net.add(PCNode(f"h{i}", dim=8, activation="tanh", rng=rng))
 
-    net.add(PCNode("top", dim=16, activation="tanh", rng=rng))
+    net.add(PCNode("top", dim=n_inputs * 2, activation="tanh", rng=rng))
 
-    for i in range(8):
+    for i in range(n_inputs):
         net.connect(f"h{i}", f"s{i}", ConnType.UP)
 
-    for i in range(8):
+    for i in range(n_inputs):
         net.connect("top", f"h{i}", ConnType.UP, pressure_scale=0.1)
 
-    for i in range(7):
+    for i in range(n_inputs - 1):
         net.connect(f"h{i}", f"h{i+1}", ConnType.LATERAL)
         net.connect(f"h{i+1}", f"h{i}", ConnType.LATERAL)
 
@@ -72,9 +77,10 @@ def build_network(rng: np.random.Generator) -> tuple[PCNetwork, list[SensorNode]
 # ---------------------------------------------------------------------------
 
 def set_frame(sensors: list[SensorNode], values: list[float]) -> None:
-    """Push one frame of 8 [position, value] vectors into the sensor nodes."""
+    """Push one frame of n [position, value] vectors into the sensor nodes."""
+    pos = _positions(len(sensors))
     for i, (s, v) in enumerate(zip(sensors, values)):
-        s.set_input(np.array([POSITIONS[i], float(v)]))
+        s.set_input(np.array([pos[i], float(v)]))
 
 
 # ---------------------------------------------------------------------------
@@ -129,10 +135,11 @@ def render(
         ("█" if v >= 0.9 else ("▓" if v >= 0.6 else ("░" if v >= 0.2 else "·")))
         for v in frame_values
     )
-    pos_str = "  ".join(f"{POSITIONS[i]:.1f}" for i in range(8))
+    n = len(frame_values)
+    pos_str = "  ".join(f"{p:.2f}" for p in _positions(n))
 
     lines = []
-    lines.append(f"Step {step:5d}/{total_steps}  pattern: {str(spec):<40s}  frame {frame_idx+1}/8")
+    lines.append(f"Step {step:5d}/{total_steps}  pattern: {str(spec):<40s}  frame {frame_idx+1}/{n}")
     lines.append(f"  Input:  [{dot_str}]   (█=1.0  ▓=0.6+  ░=0.2+  ·=0)")
     lines.append(f"  Pos:    [{pos_str}]")
     lines.append("")
@@ -235,6 +242,7 @@ def print_summary(
     novel_eval_patterns: list[tuple[str, list[list[float]]]],
     train_gen: PatternGenerator,
     novel_gen: PatternGenerator,
+    n_gen_patterns: int = 20,
 ) -> None:
     n = len(sensor_history)
     q = max(1, n // 10)
@@ -264,10 +272,10 @@ def print_summary(
 
     # Generalisation: fresh random sequences, per-pattern + distribution summary
     print(f"\n{'='*60}")
-    print(f"  Generalisation  (20 random sequences each, no learning)")
+    print(f"  Generalisation  ({n_gen_patterns} random sequences each, no learning)")
     print(f"{'='*60}")
-    gen_train_patterns = sample_named_patterns(train_gen, n_sequences=20)
-    gen_novel_patterns = sample_named_patterns(novel_gen, n_sequences=20)
+    gen_train_patterns = sample_named_patterns(train_gen, n_sequences=n_gen_patterns)
+    gen_novel_patterns = sample_named_patterns(novel_gen, n_sequences=n_gen_patterns)
 
     print(f"  {'Pattern':<{col}s}  {'sensor':>8s}  {'state':>8s}  dist")
     train_results = measure_per_pattern_errors(net, sensors, gen_train_patterns)
@@ -293,42 +301,52 @@ def print_summary(
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    rng = np.random.default_rng(42)
-    net, sensors = build_network(rng)
+    # ---------------------------------------------------------------
+    # Configuration
+    # ---------------------------------------------------------------
+    N_INPUTS          = 8     # sensor positions (also sets PatternGenerator width)
+    N_FRAMES          = 8     # frames per sequence
+    TOTAL_STEPS       = 1500  # training steps
+    REPEATS_PER_SEQ   = 3     # how often each generated sequence is repeated
+    N_EVAL_PATTERNS   = 6     # fixed per-pattern eval set size (train + novel each)
+    N_GEN_PATTERNS    = 20    # sequences per distribution in Generalisation section
+    DELAY             = 0.0   # seconds between steps (0 = as fast as possible)
+    # ---------------------------------------------------------------
 
-    # Training generator: seed 0, bias toward simple patterns
-    train_gen = PatternGenerator(n_inputs=8, n_frames=8, seed=0, bias_simple=True)
-    # Novel generator: different seed, uniform distribution (tests broad generalisation)
-    novel_gen = PatternGenerator(n_inputs=8, n_frames=8, seed=9999)
+    rng = np.random.default_rng(42)
+    net, sensors = build_network(rng, n_inputs=N_INPUTS)
+
+    # Training generator: bias toward simple patterns
+    train_gen = PatternGenerator(n_inputs=N_INPUTS, n_frames=N_FRAMES, seed=0, bias_simple=True)
+    # Novel generator: uniform distribution (tests broad generalisation)
+    novel_gen = PatternGenerator(n_inputs=N_INPUTS, n_frames=N_FRAMES, seed=9999)
 
     # Fixed eval sets sampled once before training (separate generator instances
     # with offset seeds so they don't overlap with the training stream)
     train_eval_patterns = sample_named_patterns(
-        PatternGenerator(n_inputs=8, n_frames=8, seed=1, bias_simple=True), n_sequences=6
+        PatternGenerator(n_inputs=N_INPUTS, n_frames=N_FRAMES, seed=1, bias_simple=True),
+        n_sequences=N_EVAL_PATTERNS,
     )
     novel_eval_patterns = sample_named_patterns(
-        PatternGenerator(n_inputs=8, n_frames=8, seed=10000), n_sequences=6
+        PatternGenerator(n_inputs=N_INPUTS, n_frames=N_FRAMES, seed=10000),
+        n_sequences=N_EVAL_PATTERNS,
     )
-
-    total_steps = 1500
-    repeats_per_seq = 3
-    delay = 0.0
 
     sensor_history: list[float] = []
     state_history:  list[float] = []
     max_err = 5.0
 
     print(net.summary())
-    print(f"\nTraining for {total_steps} steps  (generated patterns)\n")
+    print(f"\nTraining for {TOTAL_STEPS} steps  (generated patterns)\n")
     print("Press Ctrl+C to stop early.\n")
 
     prev_lines = 0
     step = 0
 
     try:
-        for frames, spec in train_gen.stream(repeats_per_sequence=repeats_per_seq):
+        for frames, spec in train_gen.stream(repeats_per_sequence=REPEATS_PER_SEQ):
             for frame_idx, frame_values in enumerate(frames):
-                if step >= total_steps:
+                if step >= TOTAL_STEPS:
                     break
 
                 set_frame(sensors, frame_values)
@@ -341,16 +359,16 @@ def main() -> None:
                 max_err = max(max_err * 0.99, s_err, st_err, 0.1)
 
                 prev_lines = render(
-                    step + 1, total_steps, spec, frame_idx, frame_values,
+                    step + 1, TOTAL_STEPS, spec, frame_idx, frame_values,
                     s_err, st_err, sensor_history, state_history,
                     max_err, prev_lines,
                 )
                 step += 1
 
-                if delay > 0:
-                    time.sleep(delay)
+                if DELAY > 0:
+                    time.sleep(DELAY)
 
-            if step >= total_steps:
+            if step >= TOTAL_STEPS:
                 break
 
     except KeyboardInterrupt:
@@ -360,6 +378,7 @@ def main() -> None:
         step, sensor_history, state_history, net, sensors,
         train_eval_patterns, novel_eval_patterns,
         train_gen, novel_gen,
+        n_gen_patterns=N_GEN_PATTERNS,
     )
 
 
