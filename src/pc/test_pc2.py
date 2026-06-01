@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 from pc import PCNode, SensorNode, PCNetwork
 from pc.connection import ConnType
+from pc.pattern_generator import PatternGenerator, SequenceSpec
 
 # ---------------------------------------------------------------------------
 # Movement patterns  (8 positions × N frames)
@@ -259,7 +260,7 @@ def _clear_lines(n: int) -> None:
 def render(
     step: int,
     total_steps: int,
-    pattern_name: str,
+    pattern_name: str | SequenceSpec,
     frame_idx: int,
     frame_values: list[float],
     sensor_err: float,
@@ -312,16 +313,36 @@ def render(
 # Per-pattern error measurement  (no learning, no state reset)
 # ---------------------------------------------------------------------------
 
-def measure_pattern_errors(
+def measure_generated_errors(
+    net: PCNetwork,
+    sensors: list[SensorNode],
+    gen: PatternGenerator,
+    n_sequences: int = 20,
+) -> dict[str, float]:
+    """
+    Evaluate n_sequences random sequences (no learning).
+    Returns mean sensor_error and state_error.
+    """
+    s_errs, st_errs = [], []
+    for frames, _ in gen.stream(max_sequences=n_sequences):
+        for frame in frames:
+            set_frame(sensors, frame)
+            info = net.step(learn=False)
+            s_errs.append(info["sensor_error"])
+            st_errs.append(info["state_error"])
+    return {
+        "sensor_error": float(np.mean(s_errs)),
+        "state_error":  float(np.mean(st_errs)),
+    }
+
+
+def measure_named_errors(
     net: PCNetwork,
     sensors: list[SensorNode],
     patterns: dict[str, list[list[float]]],
     n_passes: int = 3,
 ) -> dict[str, dict[str, float]]:
-    """
-    Run each pattern n_passes times (no learning), collect mean sensor/state error.
-    Returns {pattern_name: {sensor_error, state_error}}.
-    """
+    """Run each named pattern n_passes times (no learning)."""
     results = {}
     for name, frames in patterns.items():
         s_errs, st_errs = [], []
@@ -348,43 +369,48 @@ def print_summary(
     state_history: list[float],
     net: PCNetwork,
     sensors: list[SensorNode],
+    train_gen: PatternGenerator,
+    novel_gen: PatternGenerator,
 ) -> None:
     n = len(sensor_history)
-    first_q  = sensor_history[:max(1, n // 10)]
-    last_q   = sensor_history[-(max(1, n // 10)):]
-    first_st = state_history[:max(1, n // 10)]
-    last_st  = state_history[-(max(1, n // 10)):]
+    q = max(1, n // 10)
+    first_s, last_s   = sensor_history[:q], sensor_history[-q:]
+    first_st, last_st = state_history[:q],  state_history[-q:]
 
-    print(f"\n{'='*56}")
+    print(f"\n{'='*60}")
     print(f"  Training summary")
-    print(f"{'='*56}")
+    print(f"{'='*60}")
     print(f"  Steps completed    : {step}")
     print(f"  {'':20s}  {'start':>8s}  {'end':>8s}  {'Δ':>8s}")
-    print(f"  {'sensor_error':20s}  {np.mean(first_q):8.4f}  {np.mean(last_q):8.4f}  {np.mean(first_q)-np.mean(last_q):+8.4f}")
+    print(f"  {'sensor_error':20s}  {np.mean(first_s):8.4f}  {np.mean(last_s):8.4f}  {np.mean(first_s)-np.mean(last_s):+8.4f}")
     print(f"  {'state_error':20s}  {np.mean(first_st):8.4f}  {np.mean(last_st):8.4f}  {np.mean(first_st)-np.mean(last_st):+8.4f}")
 
-    print(f"\n{'='*56}")
-    print(f"  Per-pattern errors after training  (no learning, 3 passes)")
-    print(f"{'='*56}")
-    print(f"  {'Pattern':<26s}  {'sensor_err':>10s}  {'state_err':>10s}  type")
+    # Per-category breakdown on fixed named patterns
+    print(f"\n{'='*60}")
+    print(f"  Per-pattern errors  (fixed patterns, no learning, 3 passes)")
+    print(f"{'='*60}")
+    print(f"  {'Pattern':<28s}  {'sensor':>8s}  {'state':>8s}  type")
+    train_r = measure_named_errors(net, sensors, TRAIN_PATTERNS)
+    for name, r in sorted(train_r.items(), key=lambda x: x[1]["sensor_error"]):
+        print(f"  {name:<28s}  {r['sensor_error']:8.4f}  {r['state_error']:8.4f}  [train]")
 
-    train_results = measure_pattern_errors(net, sensors, TRAIN_PATTERNS)
-    for name, r in sorted(train_results.items(), key=lambda x: x[1]["sensor_error"]):
-        print(f"  {name:<26s}  {r['sensor_error']:10.4f}  {r['state_error']:10.4f}  [train]")
+    print(f"\n  {'Pattern':<28s}  {'sensor':>8s}  {'state':>8s}  type")
+    novel_r = measure_named_errors(net, sensors, NOVEL_PATTERNS)
+    for name, r in sorted(novel_r.items(), key=lambda x: x[1]["sensor_error"]):
+        print(f"  {name:<28s}  {r['sensor_error']:8.4f}  {r['state_error']:8.4f}  [novel]")
 
-    print(f"\n  --- Novel patterns (not seen during training) ---")
-    novel_results = measure_pattern_errors(net, sensors, NOVEL_PATTERNS)
-    for name, r in sorted(novel_results.items(), key=lambda x: x[1]["sensor_error"]):
-        print(f"  {name:<26s}  {r['sensor_error']:10.4f}  {r['state_error']:10.4f}  [novel]")
-
-    train_mean  = np.mean([r["sensor_error"] for r in train_results.values()])
-    novel_mean  = np.mean([r["sensor_error"] for r in novel_results.values()])
-    print(f"\n  Mean sensor_error  train : {train_mean:.4f}")
-    print(f"  Mean sensor_error  novel : {novel_mean:.4f}")
-    gap = novel_mean - train_mean
-    label = "worse" if gap > 0 else "better"
-    print(f"  Novel vs train gap       : {gap:+.4f}  ({label} on novel)")
-    print(f"{'='*56}\n")
+    # Generalisation: generated random sequences
+    print(f"\n{'='*60}")
+    print(f"  Generalisation  (20 random sequences each, no learning)")
+    print(f"{'='*60}")
+    tr = measure_generated_errors(net, sensors, train_gen, n_sequences=10)
+    nv = measure_generated_errors(net, sensors, novel_gen, n_sequences=10)
+    print(f"  {'':28s}  {'sensor':>8s}  {'state':>8s}")
+    print(f"  {'train distribution':28s}  {tr['sensor_error']:8.4f}  {tr['state_error']:8.4f}")
+    print(f"  {'novel distribution':28s}  {nv['sensor_error']:8.4f}  {nv['state_error']:8.4f}")
+    gap = nv["sensor_error"] - tr["sensor_error"]
+    print(f"  Novel−train gap  : {gap:+.4f}  ({'worse' if gap>0 else 'better'} on novel)")
+    print(f"{'='*60}\n")
 
 
 # ---------------------------------------------------------------------------
@@ -395,8 +421,13 @@ def main() -> None:
     rng = np.random.default_rng(42)
     net, sensors = build_network(rng)
 
-    pattern_names = list(TRAIN_PATTERNS.keys())
+    # Training generator: all pattern types, seeds 0–999
+    train_gen = PatternGenerator(n_inputs=8, n_frames=8, seed=0)
+    # Novel generator: different seed → different random parameters
+    novel_gen = PatternGenerator(n_inputs=8, n_frames=8, seed=9999)
+
     total_steps = 8000
+    repeats_per_seq = 3
     delay = 0.0
 
     sensor_history: list[float] = []
@@ -404,46 +435,44 @@ def main() -> None:
     max_err = 5.0
 
     print(net.summary())
-    print(f"\nTraining for {total_steps} steps  ({len(TRAIN_PATTERNS)} patterns)\n")
+    print(f"\nTraining for {total_steps} steps  (generated patterns)\n")
     print("Press Ctrl+C to stop early.\n")
 
     prev_lines = 0
     step = 0
 
     try:
-        while step < total_steps:
-            name = random.choice(pattern_names)
-            frames = TRAIN_PATTERNS[name]
-            repeats = random.randint(3, 4)
+        for frames, spec in train_gen.stream(repeats_per_sequence=repeats_per_seq):
+            for frame_idx, frame_values in enumerate(frames):
+                if step >= total_steps:
+                    break
 
-            for _ in range(repeats):
-                for frame_idx, frame_values in enumerate(frames):
-                    if step >= total_steps:
-                        break
+                set_frame(sensors, frame_values)
+                info = net.step(learn=True)
 
-                    set_frame(sensors, frame_values)
-                    info = net.step(learn=True)
+                s_err  = info["sensor_error"]
+                st_err = info["state_error"]
+                sensor_history.append(s_err)
+                state_history.append(st_err)
+                max_err = max(max_err * 0.99, s_err, st_err, 0.1)
 
-                    s_err  = info["sensor_error"]
-                    st_err = info["state_error"]
-                    sensor_history.append(s_err)
-                    state_history.append(st_err)
-                    max_err = max(max_err * 0.99, s_err, st_err, 0.1)
+                prev_lines = render(
+                    step + 1, total_steps, str(spec), frame_idx, frame_values,
+                    s_err, st_err, sensor_history, state_history,
+                    max_err, prev_lines,
+                )
+                step += 1
 
-                    prev_lines = render(
-                        step + 1, total_steps, name, frame_idx, frame_values,
-                        s_err, st_err, sensor_history, state_history,
-                        max_err, prev_lines,
-                    )
-                    step += 1
+                if delay > 0:
+                    time.sleep(delay)
 
-                    if delay > 0:
-                        time.sleep(delay)
+            if step >= total_steps:
+                break
 
     except KeyboardInterrupt:
         print("\n\nStopped early.")
 
-    print_summary(step, sensor_history, state_history, net, sensors)
+    print_summary(step, sensor_history, state_history, net, sensors, train_gen, novel_gen)
 
 
 if __name__ == "__main__":
