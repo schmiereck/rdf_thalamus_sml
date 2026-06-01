@@ -29,7 +29,7 @@ from pc.connection import ConnType
 # ---------------------------------------------------------------------------
 
 PATTERNS: dict[str, list[list[int]]] = {
-    "left→right": [
+    "one-dot left→right": [
         [1, 0, 0, 0, 0, 0, 0, 0],
         [0, 1, 0, 0, 0, 0, 0, 0],
         [0, 0, 1, 0, 0, 0, 0, 0],
@@ -39,7 +39,7 @@ PATTERNS: dict[str, list[list[int]]] = {
         [0, 0, 0, 0, 0, 0, 1, 0],
         [0, 0, 0, 0, 0, 0, 0, 1],
     ],
-    "right→left": [
+    "one-dot right→left": [
         [0, 0, 0, 0, 0, 0, 0, 1],
         [0, 0, 0, 0, 0, 0, 1, 0],
         [0, 0, 0, 0, 0, 1, 0, 0],
@@ -49,7 +49,7 @@ PATTERNS: dict[str, list[list[int]]] = {
         [0, 1, 0, 0, 0, 0, 0, 0],
         [1, 0, 0, 0, 0, 0, 0, 0],
     ],
-    "bounce":  [
+    "one-dot left bounce middle":  [
         [1, 0, 0, 0, 0, 0, 0, 0],
         [0, 1, 0, 0, 0, 0, 0, 0],
         [0, 0, 1, 0, 0, 0, 0, 0],
@@ -59,7 +59,17 @@ PATTERNS: dict[str, list[list[int]]] = {
         [0, 0, 1, 0, 0, 0, 0, 0],
         [0, 1, 0, 0, 0, 0, 0, 0],
     ],
-    "two-dots": [
+    "one-dot right bounce middle":  [
+        [0, 0, 0, 0, 0, 0, 0, 1],
+        [0, 0, 0, 0, 0, 0, 1, 0],
+        [0, 0, 0, 0, 0, 1, 0, 0],
+        [0, 0, 0, 0, 1, 0, 0, 0],
+        [0, 0, 0, 1, 0, 0, 0, 0],
+        [0, 0, 0, 0, 1, 0, 0, 0],
+        [0, 0, 0, 0, 0, 1, 0, 0],
+        [0, 0, 0, 0, 0, 0, 1, 0],
+    ],
+    "two-dots 4 left-right": [
         [1, 0, 0, 0, 1, 0, 0, 0],
         [0, 1, 0, 0, 0, 1, 0, 0],
         [0, 0, 1, 0, 0, 0, 1, 0],
@@ -68,6 +78,16 @@ PATTERNS: dict[str, list[list[int]]] = {
         [0, 1, 0, 0, 0, 1, 0, 0],
         [0, 0, 1, 0, 0, 0, 1, 0],
         [0, 0, 0, 1, 0, 0, 0, 1],
+    ],
+    "two-dots 4 right-left": [
+        [0, 0, 0, 1, 0, 0, 0, 1],
+        [0, 0, 1, 0, 0, 0, 1, 0],
+        [0, 1, 0, 0, 0, 1, 0, 0],
+        [1, 0, 0, 0, 1, 0, 0, 0],
+        [0, 0, 0, 1, 0, 0, 0, 1],
+        [0, 0, 1, 0, 0, 0, 1, 0],
+        [0, 1, 0, 0, 0, 1, 0, 0],
+        [1, 0, 0, 0, 1, 0, 0, 0],
     ],
 }
 
@@ -220,7 +240,7 @@ def main() -> None:
     net, sensors = build_network(rng)
 
     pattern_names = list(PATTERNS.keys())
-    total_steps = 800   # adjust for longer training
+    total_steps = 8000  # adjust for longer training
     delay = 0.0         # set > 0 (e.g. 0.05) to slow down for watching
 
     sensor_history: list[float] = []
