@@ -262,16 +262,28 @@ def print_summary(
     for name, r in measure_per_pattern_errors(net, sensors, novel_eval_patterns):
         print(f"  {name:<{col}s}  {r['sensor_error']:8.4f}  {r['state_error']:8.4f}  [novel]")
 
-    # Distribution-level generalisation
+    # Generalisation: fresh random sequences, per-pattern + distribution summary
     print(f"\n{'='*60}")
     print(f"  Generalisation  (20 random sequences each, no learning)")
     print(f"{'='*60}")
-    tr = measure_distribution_errors(net, sensors, train_gen, n_sequences=20)
-    nv = measure_distribution_errors(net, sensors, novel_gen, n_sequences=20)
-    print(f"  {'':28s}  {'sensor':>8s}  {'state':>8s}")
-    print(f"  {'train distribution':28s}  {tr['sensor_error']:8.4f}  {tr['state_error']:8.4f}")
-    print(f"  {'novel distribution':28s}  {nv['sensor_error']:8.4f}  {nv['state_error']:8.4f}")
-    gap = nv["sensor_error"] - tr["sensor_error"]
+    gen_train_patterns = sample_named_patterns(train_gen, n_sequences=20)
+    gen_novel_patterns = sample_named_patterns(novel_gen, n_sequences=20)
+
+    print(f"  {'Pattern':<{col}s}  {'sensor':>8s}  {'state':>8s}  dist")
+    train_results = measure_per_pattern_errors(net, sensors, gen_train_patterns)
+    for name, r in train_results:
+        print(f"  {name:<{col}s}  {r['sensor_error']:8.4f}  {r['state_error']:8.4f}  [train]")
+
+    print()
+    novel_results = measure_per_pattern_errors(net, sensors, gen_novel_patterns)
+    for name, r in novel_results:
+        print(f"  {name:<{col}s}  {r['sensor_error']:8.4f}  {r['state_error']:8.4f}  [novel]")
+
+    tr_mean = float(np.mean([r["sensor_error"] for _, r in train_results]))
+    nv_mean = float(np.mean([r["sensor_error"] for _, r in novel_results]))
+    gap = nv_mean - tr_mean
+    print(f"\n  {'train mean':28s}  {tr_mean:8.4f}")
+    print(f"  {'novel mean':28s}  {nv_mean:8.4f}")
     print(f"  Novel−train gap  : {gap:+.4f}  ({'worse' if gap>0 else 'better'} on novel)")
     print(f"{'='*60}\n")
 
@@ -284,15 +296,15 @@ def main() -> None:
     rng = np.random.default_rng(42)
     net, sensors = build_network(rng)
 
-    # Training generator: seed 0  (infinite stream during training)
-    train_gen = PatternGenerator(n_inputs=8, n_frames=8, seed=0)
-    # Novel generator: different seed → different random parameters
+    # Training generator: seed 0, bias toward simple patterns
+    train_gen = PatternGenerator(n_inputs=8, n_frames=8, seed=0, bias_simple=True)
+    # Novel generator: different seed, uniform distribution (tests broad generalisation)
     novel_gen = PatternGenerator(n_inputs=8, n_frames=8, seed=9999)
 
     # Fixed eval sets sampled once before training (separate generator instances
     # with offset seeds so they don't overlap with the training stream)
     train_eval_patterns = sample_named_patterns(
-        PatternGenerator(n_inputs=8, n_frames=8, seed=1), n_sequences=6
+        PatternGenerator(n_inputs=8, n_frames=8, seed=1, bias_simple=True), n_sequences=6
     )
     novel_eval_patterns = sample_named_patterns(
         PatternGenerator(n_inputs=8, n_frames=8, seed=10000), n_sequences=6

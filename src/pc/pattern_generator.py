@@ -181,6 +181,10 @@ class PatternGenerator:
         Safety threshold: total blob pixels / n_inputs.
         If a candidate configuration would exceed this, reduce n_blobs.
         Default 0.65 keeps blobs from merging.
+    bias_simple : bool
+        When True, use weighted sampling to prefer simpler patterns:
+        fewer blobs, sharper shapes, smaller sizes, stronger intensity,
+        and normal speed over slow.  Default False = uniform sampling.
     """
 
     def __init__(
@@ -189,10 +193,12 @@ class PatternGenerator:
         n_frames: int = 8,
         seed: int | None = None,
         max_blob_fill: float = 0.65,
+        bias_simple: bool = False,
     ) -> None:
         self.n_inputs      = n_inputs
         self.n_frames      = n_frames
         self.max_blob_fill = max_blob_fill
+        self.bias_simple   = bias_simple
         self._rng          = np.random.default_rng(seed)
 
     # ------------------------------------------------------------------
@@ -202,23 +208,53 @@ class PatternGenerator:
     def random_sequence(self) -> tuple[list[list[float]], SequenceSpec]:
         """Return (frames, spec) with fully random parameters."""
         rng = self._rng
+        bs  = self.bias_simple
 
-        direction  = str(rng.choice(DIRECTIONS))
-        blob_shape = str(rng.choice(BLOB_SHAPES))
-        envelope   = str(rng.choice(ENVELOPES))
-        speed      = int(rng.choice(SPEED_OPTIONS))
+        direction = str(rng.choice(DIRECTIONS))  # directions stay uniform
+
+        # blob_shape: point > flat > gauss  (sharper preferred)
+        shape_p = np.array([0.50, 0.30, 0.20]) if bs else None
+        blob_shape = str(rng.choice(BLOB_SHAPES, p=shape_p))
+
+        # envelope: constant/fade_in preferred (stronger average intensity)
+        env_p = np.array([0.40, 0.20, 0.20, 0.10, 0.10]) if bs else None
+        envelope = str(rng.choice(ENVELOPES, p=env_p))
+
+        # speed: normal (1px/frame) preferred over slow
+        speed_p = np.array([0.70, 0.30]) if bs else None
+        speed = int(rng.choice(SPEED_OPTIONS, p=speed_p))
 
         # Blob size depends on shape
         if blob_shape == "point":
             blob_size = 1
         elif blob_shape == "flat":
-            blob_size = int(rng.integers(1, 6))   # 1–5
+            if bs:
+                # sizes 1–5, inverse-linear weights: [5,4,3,2,1] → smaller preferred
+                w = np.array([5.0, 4.0, 3.0, 2.0, 1.0])
+                w /= w.sum()
+                blob_size = int(rng.choice([1, 2, 3, 4, 5], p=w))
+            else:
+                blob_size = int(rng.integers(1, 6))   # 1–5
         else:  # gauss
-            blob_size = int(rng.integers(3, 6))   # 3–5
+            if bs:
+                # sizes 3–5, prefer smaller sigma: weights [3,2,1]
+                w = np.array([3.0, 2.0, 1.0])
+                w /= w.sum()
+                blob_size = int(rng.choice([3, 4, 5], p=w))
+            else:
+                blob_size = int(rng.integers(3, 6))   # 3–5
 
         # How many blobs can we fit?
         max_blobs = self._max_blobs(blob_size)
-        n_blobs = int(rng.integers(1, min(4, max_blobs + 1)))
+        cap = min(4, max_blobs + 1)
+        if bs and cap > 2:
+            # n_blobs: fewer preferred — geometric-ish weights
+            options = list(range(1, cap))
+            w = np.array([1.0 / k for k in options], dtype=float)
+            w /= w.sum()
+            n_blobs = int(rng.choice(options, p=w))
+        else:
+            n_blobs = int(rng.integers(1, cap))
 
         return self.build_sequence(
             n_blobs=n_blobs,
