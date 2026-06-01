@@ -162,12 +162,18 @@ def _bar(value: float, max_val: float, width: int = BAR_WIDTH) -> str:
 def _sparkline(values: list[float]) -> str:
     if not values:
         return ""
-    lo, hi = min(values), max(values)
+    finite = [v for v in values if np.isfinite(v)]
+    if not finite:
+        return "?" * len(values)
+    lo, hi = min(finite), max(finite)
     span = hi - lo or 1e-6
     chars = []
     for v in values:
-        idx = int((v - lo) / span * (len(SPARKLINE_CHARS) - 1))
-        chars.append(SPARKLINE_CHARS[idx])
+        if not np.isfinite(v):
+            chars.append("?")
+        else:
+            idx = int((v - lo) / span * (len(SPARKLINE_CHARS) - 1))
+            chars.append(SPARKLINE_CHARS[idx])
     return "".join(chars)
 
 
