@@ -287,8 +287,9 @@ class PatternGenerator:
 
         # Compute n_frames for exactly one complete cycle
         if direction in ("ltr", "rtl"):
-            # blobs traverse the full array width once
-            n_frames = math.ceil(n / pxspeed)
+            # Toroidal traversal: blobs wrap around, period = n / pxspeed
+            # (always an integer for our speed options)
+            n_frames = int(n / pxspeed)
         else:  # bounce
             # one full back-and-forth: left→right→left
             n_frames = round(2 * (n - 1) / pxspeed)
@@ -309,19 +310,25 @@ class PatternGenerator:
             trajectories.append(traj)
 
         # Render frames
+        # LTR/RTL use toroidal rendering: each blob is also drawn as a ghost at
+        # center ± n so that blobs wrap around the edges continuously instead of
+        # disappearing and reappearing all at once when the sequence restarts.
         sigma = blob_size / 2.5
+        toroidal = direction in ("ltr", "rtl")
         raw_frames: list[np.ndarray] = []
         for fi in range(n_frames):
             frame = np.zeros(n)
             for traj in trajectories:
                 center = traj[fi]
-                if blob_shape == "point" or blob_size == 1:
-                    blob = _flat_blob(center, 1, n)
-                elif blob_shape == "flat":
-                    blob = _flat_blob(center, blob_size, n)
-                else:  # gauss
-                    blob = _gauss_blob(center, sigma, n)
-                frame = np.clip(frame + blob, 0.0, 1.0)
+                draw_at = [center, center - n, center + n] if toroidal else [center]
+                for c in draw_at:
+                    if blob_shape == "point" or blob_size == 1:
+                        blob = _flat_blob(c, 1, n)
+                    elif blob_shape == "flat":
+                        blob = _flat_blob(c, blob_size, n)
+                    else:  # gauss
+                        blob = _gauss_blob(c, sigma, n)
+                    frame = np.clip(frame + blob, 0.0, 1.0)
             raw_frames.append(frame)
 
         enveloped = _apply_envelope(raw_frames, intensity_envelope, rng)
