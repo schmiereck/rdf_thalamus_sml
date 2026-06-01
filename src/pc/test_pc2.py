@@ -201,7 +201,7 @@ def render(
         _clear_lines(prev_lines)
 
     dot_str = "".join("█" if v else "·" for v in frame_values)
-    pos_str = "  ".join(f"{POSITIONS[i]:.1f}" if frame_values[i] else "   " for i in range(8))
+    pos_str = "  ".join(f"{POSITIONS[i]:.1f}" for i in range(8))  # always shown
 
     lines = []
     lines.append(f"Step {step:5d}/{total_steps}  pattern: {pattern_name:<12s}  frame {frame_idx+1}/8")
