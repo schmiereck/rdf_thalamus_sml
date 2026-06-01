@@ -65,13 +65,11 @@ Für jede Verbindung `c: source → target` vom Typ `UP` oder `LATERAL`:
 predict_c = W_c · activation(μ_source)
 ```
 
-Der Zielknoten aggregiert alle eingehenden Vorhersagen:
+Der Zielknoten aggregiert alle eingehenden Vorhersagen als **Mittelwert**:
 
 ```
-π_target = Σ_c predict_c     (Summe über alle eingehenden Verbindungen)
+π_target = (1/N) · Σ_c predict_c     (N = Anzahl eingehender Verbindungen)
 ```
-
-*Normierung optional (z.B. Mittelwert statt Summe wenn viele Eingänge).*
 
 ### Phase 2: Error
 
@@ -204,8 +202,7 @@ Jeder a1-Knoten empfängt: Fehler von i1 (UP), Vorhersage von b1 (DOWN), Kontext
  Input_0  Input_1  Input_2
 ```
 
-Alle `bX`-Knoten teilen optional eine gemeinsame Gewichtsmatrix `W_ba`
-(Weight-Sharing analog zu P3-C im bestehenden Projekt).
+Kein Weight-Sharing — jeder Knoten hat eigene Gewichtsmatrizen.
 
 ---
 
@@ -219,13 +216,13 @@ Alle `bX`-Knoten teilen optional eine gemeinsame Gewichtsmatrix `W_ba`
 
 ---
 
-## 8. Offene Design-Entscheidungen
+## 8. Design-Entscheidungen
 
-| Frage | Optionen |
-|-------|----------|
-| Vorhersage-Aggregation bei mehreren Eingängen | Summe / Mittelwert / lernbare Gewichtung |
-| Weight-Sharing zwischen gleichartigen Knoten | Global (ein `W` für alle) / Per-Layer / Keine |
-| Aktivierungsfunktion | `tanh` (beschränkt, biologisch motiviert) / `relu` / `identity` |
-| Lernregel | Lokales Hebbian (`ε·μ^T`) / Adam mit lokalem Gradienten |
-| Sensor-Knoten | State fixiert auf Input (kein μ-Update) oder mit kleinem Fehler-Druck |
-| Laterale Reichweite | Nur direkter Nachbar / k-Nachbarn / Alle im Layer |
+| Frage | Entscheidung | Begründung |
+|-------|-------------|------------|
+| Vorhersage-Aggregation | **Mittelwert** | Stabil bei variabler Verbindungsanzahl, keine Skalierungsprobleme |
+| Weight-Sharing | **Nein** — jeder Knoten hat eigene `W_c` | Maximale Flexibilität des Graphen |
+| Lernregel | **Lokales Hebbian** `ΔW_c = η · ε_target · μ_source^T` | PC-konform, kein globales Backprop, biologisch plausibel |
+| Aktivierungsfunktion | **tanh** | Beschränkt auf [-1,1], biologisch motiviert, kompatibel mit Xavier-Init |
+| Sensor-Knoten | State fixiert auf Input (kein μ-Update) | Sensor ist Ground Truth, kein Fehler-Druck nötig |
+| Laterale Reichweite | Nur direkter Nachbar (k=1) | Einfachster Einstieg; k erweiterbar |
