@@ -166,6 +166,54 @@ def world_com(frame: list[float]) -> float | None:
     return float((np.arange(arr.size) * arr).sum() / total)
 
 
+def retinal_com(values: list[float] | np.ndarray) -> float | None:
+    """Intensity-weighted centre of mass of a retinal image, in pixel units.
+
+    Returns None if the image is essentially empty (no object visible).
+    """
+    arr = np.asarray(values, dtype=float)
+    arr = np.clip(arr, 0.0, None)   # ignore negative activations
+    total = arr.sum()
+    if total < 1e-4:
+        return None
+    return float((np.arange(arr.size) * arr).sum() / total)
+
+
+def compute_action_pred_com(
+    visual_sensors: list[SensorNode],
+    n_inputs: int,
+    target_frac: float = 0.5,
+) -> float:
+    """
+    Predictive-COM action signal.
+
+    After phase_predict(), each sensor s has s.pi[1] = the network's top-down
+    prediction of the value at that retinal position, derived from the previous
+    frame's hidden state via the learned recurrent connections.
+
+    We compute the centre of mass of this *predicted* retinal image and drive
+    the fovea toward it:
+
+        v_target = GAIN · (com_pred − target_pixel)
+
+    where target_pixel = target_frac · n_inputs  (default: centre of retina).
+
+    This is fundamentally different from the gradient approach: we are using
+    the prediction as a STEERING TARGET rather than differentiating through it.
+    If the recurrent connections have learned that the object moves rightward,
+    com_pred will already be shifted right, and the fovea will follow.
+
+    Returns the raw displacement (com_pred − target_pixel); the caller
+    multiplies by a gain.  Returns 0.0 if the prediction is empty.
+    """
+    pi = np.array([s.pi[1] for s in visual_sensors])
+    com = retinal_com(pi)
+    if com is None:
+        return 0.0
+    target_px = target_frac * n_inputs
+    return float(com - target_px)
+
+
 def compute_action_gradient(
     visual_sensors: list[SensorNode],
     image: list[float],
@@ -469,8 +517,12 @@ def main() -> None:
     LATERAL_STEPS     = 1    # lateral neighbours per side
     RECURRENT         = True # learned recurrent self-connection per hidden node
                              #   (temporal enrichment: combine previous + new state)
-    ANTICIPATORY      = True # use spatial gradient of network's top-down PREDICTION
-                             #   rather than the raw image (closes temporal→action loop)
+    ACTION_MODE       = "pred_com"   # "gradient" — reactive/anticipatory gradient
+                                     # "pred_com" — steer fovea toward COM of π (NEW)
+    PRED_COM_TARGET   = 0.5          # desired retinal fraction for the predicted COM
+                                     #   (0.5 = centre; try 0.35 to match oracle target)
+    PRED_COM_GAIN     = 1.5          # velocity per pixel of predicted displacement
+                                     #   v = PRED_COM_GAIN · (com_pred − target_px)
     TAU_BASE          = 0.8  # per-layer leaky persistence scale (0 = no memory)
                              #   τ_k = TAU_BASE·(1−2^(1−k)): L1 fast, deeper slower
     N_TRAIN_PATTERNS  = 10   # how many different patterns to train on
@@ -545,8 +597,9 @@ def main() -> None:
     print(f"Phase 1: {N_EPOCHS_PASSIVE} epochs (passive, φ=0, learn to predict)")
     print(f"Phase 1.5: {N_EPOCHS_ORACLE} epochs (oracle pursuit, φ tracks object COM "
           f"@ {ORACLE_TARGET:.0%} retina)")
-    act_mode = "anticipatory ∂π/∂φ" if ANTICIPATORY else "reactive ∂img/∂φ"
-    print(f"Phase 2: {N_EPOCHS_ACTIVE} epochs  (active, fovea = -gain·∂E/∂φ  [{act_mode}])")
+    act_mode_str = {"pred_com": f"pred-COM (gain={PRED_COM_GAIN}, target={PRED_COM_TARGET:.0%})",
+                    "gradient": "reactive gradient ∂E/∂φ"}.get(ACTION_MODE, ACTION_MODE)
+    print(f"Phase 2: {N_EPOCHS_ACTIVE} epochs  (active, [{act_mode_str}])")
     print(f"Total  : ≈{total_steps} steps\n")
     print("Press Ctrl+C to stop early.\n")
 
@@ -577,16 +630,19 @@ def main() -> None:
                         set_frame(visual_sensors, shifted)
                         motor_sensor.set_input(np.array([v / MAX_V]))  # efference copy, [-1, 1]
 
-                        # Capture the action signal from the temporal prediction
-                        # error (pre-relaxation): the carried-over hidden state
-                        # predicts the new frame, so the residual is the slip.
-                        action_grad = 0.0
+                        # Before the full PC step: compute the action signal from
+                        # the pre-relaxation state (phase_predict+error).
+                        # "gradient" mode: reactive ∂E/∂φ  (standard active inference)
+                        # "pred_com"  mode: steer toward predicted retinal COM of π
                         if action_enabled:
                             net.phase_predict()
                             net.phase_error()
-                            action_grad = compute_action_gradient(
-                                visual_sensors, shifted, anticipatory=ANTICIPATORY
-                            )
+                            if ACTION_MODE == "pred_com":
+                                _disp = compute_action_pred_com(
+                                    visual_sensors, N_INPUTS, PRED_COM_TARGET
+                                )
+                            else:
+                                _disp = -compute_action_gradient(visual_sensors, shifted)
 
                         # Full PC step (predict/error/relax/learn) — clean diagnostics
                         info = net.step(learn=True)
@@ -614,14 +670,18 @@ def main() -> None:
                         )
                         step += 1
 
-                        # Phase 1: gentle random drift so the motor learns the
-                        # efference-copy → retinal-shift correlation before Phase 2.
-                        # Phase 1.5: oracle pursuit — move the fovea so the object's
-                        #   centre of mass sits at ORACLE_TARGET on the retina, giving
-                        #   the recurrent connections genuine object dynamics to learn.
-                        # Phase 2: descend the visual-error gradient + centering spring.
+                        # Phase 1:   gentle random drift (motor learns efference copy).
+                        # Phase 1.5: oracle pursuit (fovea tracks object COM exactly).
+                        # Phase 2:   network-driven steering.
                         if action_enabled:
-                            v_target = -ACTION_GAIN * action_grad - SPRING_K * phi
+                            if ACTION_MODE == "pred_com":
+                                # steer toward predicted COM; centering spring fallback
+                                # when prediction is flat (nothing predicted)
+                                v_target = (PRED_COM_GAIN * _disp
+                                            - SPRING_K * phi)
+                            else:
+                                # reactive gradient descent + centering spring
+                                v_target = _disp * ACTION_GAIN - SPRING_K * phi
                             v = float(np.clip(
                                 (1.0 - ACTION_SMOOTH) * v_target + ACTION_SMOOTH * v,
                                 -MAX_V, MAX_V,

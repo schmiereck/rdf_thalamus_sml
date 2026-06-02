@@ -45,6 +45,8 @@ from pc.test_pc_act1 import (
     build_network,
     apply_fovea_shift,
     compute_action_gradient,
+    compute_action_pred_com,
+    world_com,
     set_frame,
 )
 
@@ -64,7 +66,10 @@ class RunConfig:
     lateral_steps: int = 1
     recurrent: bool = False
     tau_base: float = 0.0
-    anticipatory: bool = False   # use gradient of top-down prediction (True) vs raw image
+    anticipatory: bool = False      # use gradient of top-down prediction (True) vs raw image
+    action_mode: str = "gradient"   # "gradient" or "pred_com"
+    pred_com_target: float = 0.5    # desired retinal fraction for pred-COM steering
+    pred_com_gain: float = 1.5      # v = pred_com_gain · (com_pred − target_px)
     # network dynamics
     eta_inf: float = 0.05
     n_relax: int = 40
@@ -86,18 +91,6 @@ class RunConfig:
     # reproducibility
     seed: int = 42
 
-
-# ---------------------------------------------------------------------------
-# Tracking helpers
-# ---------------------------------------------------------------------------
-
-def world_com(frame: list[float]) -> float | None:
-    """Intensity-weighted centre of mass of a world frame, or None if empty."""
-    arr = np.asarray(frame, dtype=float)
-    total = arr.sum()
-    if total < 1e-6:
-        return None
-    return float((np.arange(arr.size) * arr).sum() / total)
 
 
 # ---------------------------------------------------------------------------
@@ -158,19 +151,26 @@ def run_one(cfg: RunConfig) -> dict:
                     set_frame(visual_sensors, shifted)
                     motor_sensor.set_input(np.array([v / cfg.max_v]))
 
-                    action_grad = 0.0
                     if action_enabled:
                         net.phase_predict()
                         net.phase_error()
-                        action_grad = compute_action_gradient(
-                        visual_sensors, shifted, anticipatory=cfg.anticipatory
-                    )
+                        if cfg.action_mode == "pred_com":
+                            _disp = compute_action_pred_com(
+                                visual_sensors, n, cfg.pred_com_target
+                            )
+                        else:
+                            _disp = -compute_action_gradient(
+                                visual_sensors, shifted, anticipatory=cfg.anticipatory
+                            )
 
                     net.step(learn=True)
                     net.commit_step()
 
                     if action_enabled:
-                        v_target = -cfg.action_gain * action_grad - cfg.spring_k * phi
+                        if cfg.action_mode == "pred_com":
+                            v_target = cfg.pred_com_gain * _disp - cfg.spring_k * phi
+                        else:
+                            v_target = cfg.action_gain * _disp - cfg.spring_k * phi
                         v = float(np.clip(
                             (1.0 - cfg.action_smooth) * v_target + cfg.action_smooth * v,
                             -cfg.max_v, cfg.max_v,
@@ -204,9 +204,12 @@ def run_one(cfg: RunConfig) -> dict:
 
             net.phase_predict()
             net.phase_error()
-            action_grad = compute_action_gradient(
-                visual_sensors, shifted, anticipatory=cfg.anticipatory
-            )
+            if cfg.action_mode == "pred_com":
+                _disp = compute_action_pred_com(visual_sensors, n, cfg.pred_com_target)
+            else:
+                _disp = -compute_action_gradient(
+                    visual_sensors, shifted, anticipatory=cfg.anticipatory
+                )
 
             info = net.step(learn=False)
             net.commit_step()
@@ -215,7 +218,7 @@ def run_one(cfg: RunConfig) -> dict:
             st_errs.append(info["state_error"])
             m_errs.append(m_err)
 
-            # tracking bookkeeping (object centre of mass in the world)
+            # tracking bookkeeping
             com = world_com(world_frame)
             if com is not None:
                 retinal = com - phi
@@ -229,7 +232,10 @@ def run_one(cfg: RunConfig) -> dict:
                 prev_com = None
 
             # apply action
-            v_target = -cfg.action_gain * action_grad - cfg.spring_k * phi
+            if cfg.action_mode == "pred_com":
+                v_target = cfg.pred_com_gain * _disp - cfg.spring_k * phi
+            else:
+                v_target = cfg.action_gain * _disp - cfg.spring_k * phi
             v = float(np.clip(
                 (1.0 - cfg.action_smooth) * v_target + cfg.action_smooth * v,
                 -cfg.max_v, cfg.max_v,
@@ -330,6 +336,52 @@ def build_anticipatory_sweep() -> list[RunConfig]:
                 configs.append(RunConfig(
                     name=f"{label} {mode_name} s{seed}",
                     seed=seed, anticipatory=ant, **kw, **base,
+                ))
+    return configs
+
+
+def build_pred_com_sweep() -> list[RunConfig]:
+    """
+    Pred-COM sweep: does steering toward the *predicted* retinal COM outperform
+    the reactive gradient?
+
+    Crosses:
+      oracle on/off   (2 options — without oracle the prediction is flat)
+      action_mode     ("gradient" vs "pred_com")
+      pred_com_gain   (1.0, 1.5, 2.0  — only for pred_com mode)
+      3 seeds
+
+    Best temporal config: rec + tau0.8, L4, base_dim=8, action_gain=1.0.
+    Total: 3×2×3 seeds + 1×2×3 seeds = 30 configs
+    """
+    seeds = [42, 123, 777]
+    arch = dict(recurrent=True, tau_base=0.8, n_layers=4,
+                base_dim=8, lateral_steps=0,
+                n_train_patterns=8, repeats_per_seq=2)
+    budget_no_oracle = dict(n_epochs_passive=5, n_epochs_oracle=0, n_epochs_active=12)
+    budget_oracle    = dict(n_epochs_passive=2, n_epochs_oracle=5, n_epochs_active=12)
+
+    configs: list[RunConfig] = []
+
+    for oracle, budget, o_label in [
+        (False, budget_no_oracle, "no-oracle"),
+        (True,  budget_oracle,    "oracle"),
+    ]:
+        # gradient baseline (action_gain=1.0)
+        for seed in seeds:
+            configs.append(RunConfig(
+                name=f"{o_label} gradient s{seed}",
+                seed=seed, action_mode="gradient", action_gain=1.0,
+                **arch, **budget,
+            ))
+        # pred-com at 3 gain levels
+        for gain in [1.0, 1.5, 2.0]:
+            for seed in seeds:
+                configs.append(RunConfig(
+                    name=f"{o_label} pred-com g{gain} s{seed}",
+                    seed=seed, action_mode="pred_com", pred_com_gain=gain,
+                    action_gain=1.0,   # unused for pred_com but needed by RunConfig
+                    **arch, **budget,
                 ))
     return configs
 
@@ -569,11 +621,16 @@ def main() -> None:
     ap.add_argument("--temporal",     action="store_true", help="temporal-hierarchy sweep (3-seed average)")
     ap.add_argument("--anticipatory", action="store_true", help="reactive vs anticipatory sweep (3-seed average)")
     ap.add_argument("--oracle",       action="store_true", help="oracle-pursuit vs none × reactive/anticipatory (3-seed average)")
+    ap.add_argument("--pred-com",     action="store_true", dest="pred_com",
+                    help="pred-COM vs gradient × oracle/no-oracle × gain sweep (3-seed average)")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) - 1),
                     help="parallel worker processes")
     args = ap.parse_args()
 
-    if args.oracle:
+    if args.pred_com:
+        configs = build_pred_com_sweep()
+        mode = "pred-com"
+    elif args.oracle:
         configs = build_oracle_sweep()
         mode = "oracle"
     elif args.anticipatory:
@@ -604,7 +661,7 @@ def main() -> None:
                 results.append(r)
                 _progress(r, len(results), len(configs))
 
-    if args.focused or args.temporal or args.anticipatory or args.oracle:
+    if args.focused or args.temporal or args.anticipatory or args.oracle or args.pred_com:
         print_focused_table(results)
     else:
         print_table(results)
