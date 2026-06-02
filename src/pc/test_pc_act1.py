@@ -216,38 +216,37 @@ def compute_action_pred_com(
 
 def compute_action_velocity_com(
     image: list[float],
-    prev_com: float | None,
+    prev_com_world: float | None,
+    phi: float,
     n_inputs: int,
     target_frac: float = 0.5,
     lookahead: float = 1.0,
 ) -> tuple[float, float | None]:
     """
-    Velocity-extrapolation (smooth-pursuit) action signal.
+    Velocity-extrapolation (smooth-pursuit) action signal — in WORLD coordinates.
 
-    Computes the retinal centre of mass of the current image, estimates
-    the retinal velocity (com_t − com_{t-1}), and extrapolates ahead:
+    Key insight: retinal velocity = world velocity − eye velocity.  Tracking
+    retinal velocity directly creates a positive-feedback loop (the eye chases
+    its own motion).  Instead we convert to world coordinates first:
 
-        predicted_com = com_t + lookahead · velocity
+        com_world  = com_retinal + phi
+        v_world    = com_world_t − com_world_{t-1}   # pure object velocity
+        predicted  = com_world_t + lookahead · v_world
 
-    The fovea is then steered toward this predicted position:
+    Displacement to target (in retinal pixels):
+        displacement = predicted − (phi + target_px)
+                     = com_retinal + lookahead · v_world − target_px
 
-        displacement = predicted_com − target_pixel
-
-    This is kinematic extrapolation — no network state is involved, so it is
-    purely "optical flow" pursuit.  Combined with the PC network's learned
-    temporal representation the error signal keeps the prediction anchored.
-
-    Returns (displacement, com_t).  displacement=0 when no object is visible.
-    On the very first frame (prev_com=None) there is no velocity estimate so
-    displacement reduces to a simple proportional signal toward the current COM.
+    Returns (displacement, com_world_t).  displacement=0 when no object visible.
     """
-    com = retinal_com(image)
-    if com is None:
+    com_retinal = retinal_com(image)
+    if com_retinal is None:
         return 0.0, None
+    com_world = com_retinal + phi
     target_px = target_frac * n_inputs
-    velocity = (com - prev_com) if prev_com is not None else 0.0
-    predicted = com + lookahead * velocity
-    return float(predicted - target_px), com
+    v_world = (com_world - prev_com_world) if prev_com_world is not None else 0.0
+    displacement = com_retinal + lookahead * v_world - target_px
+    return float(displacement), com_world
 
 
 def compute_action_gradient(
@@ -678,7 +677,7 @@ def main() -> None:
                         if action_enabled:
                             if ACTION_MODE == "vel_com":
                                 _disp, prev_retinal_com = compute_action_velocity_com(
-                                    shifted, prev_retinal_com, N_INPUTS,
+                                    shifted, prev_retinal_com, phi, N_INPUTS,
                                     PRED_COM_TARGET, VEL_COM_LOOKAHEAD,
                                 )
                             else:
@@ -736,8 +735,9 @@ def main() -> None:
                             if com is not None:
                                 target_phi = com - ORACLE_TARGET * N_INPUTS
                                 v = float(np.clip(target_phi - phi, -MAX_V, MAX_V))
-                                # keep vel_com warm during oracle phase
-                                prev_retinal_com = retinal_com(shifted)
+                                # warm vel_com buffer: store world COM
+                                rc = retinal_com(shifted)
+                                prev_retinal_com = (rc + phi) if rc is not None else None
                             else:
                                 v = 0.0
                                 prev_retinal_com = None
@@ -746,7 +746,8 @@ def main() -> None:
                                 rng.normal(0.0, PASSIVE_DRIFT),
                                 -MAX_V, MAX_V,
                             ))
-                            prev_retinal_com = retinal_com(shifted)
+                            rc = retinal_com(shifted)
+                            prev_retinal_com = (rc + phi) if rc is not None else None
                         phi = float(np.clip(phi + v, PHI_MIN, PHI_MAX))
 
                         if DELAY > 0:

@@ -160,7 +160,7 @@ def run_one(cfg: RunConfig) -> dict:
                     if action_enabled:
                         if cfg.action_mode == "vel_com":
                             _disp, prev_rcom = compute_action_velocity_com(
-                                shifted, prev_rcom, n,
+                                shifted, prev_rcom, phi, n,
                                 cfg.pred_com_target, cfg.vel_com_lookahead,
                             )
                         else:
@@ -194,7 +194,8 @@ def run_one(cfg: RunConfig) -> dict:
                         if com is not None:
                             target_phi = com - cfg.oracle_target * n
                             v = float(np.clip(target_phi - phi, -cfg.max_v, cfg.max_v))
-                            prev_rcom = retinal_com(shifted)
+                            rc = retinal_com(shifted)
+                            prev_rcom = (rc + phi) if rc is not None else None
                         else:
                             v = 0.0
                             prev_rcom = None
@@ -202,7 +203,8 @@ def run_one(cfg: RunConfig) -> dict:
                         v = float(np.clip(
                             rng.normal(0.0, cfg.passive_drift), -cfg.max_v, cfg.max_v
                         ))
-                        prev_rcom = retinal_com(shifted)
+                        rc = retinal_com(shifted)
+                        prev_rcom = (rc + phi) if rc is not None else None
                     phi = float(np.clip(phi + v, phi_min, phi_max))
 
     # ---- Evaluation (action on, learning off): tracking + errors ----
@@ -222,7 +224,7 @@ def run_one(cfg: RunConfig) -> dict:
 
             if cfg.action_mode == "vel_com":
                 _disp, prev_rcom_eval = compute_action_velocity_com(
-                    shifted, prev_rcom_eval, n,
+                    shifted, prev_rcom_eval, phi, n,
                     cfg.pred_com_target, cfg.vel_com_lookahead,
                 )
             else:
