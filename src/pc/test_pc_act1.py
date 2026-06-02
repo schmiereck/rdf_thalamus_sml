@@ -214,6 +214,42 @@ def compute_action_pred_com(
     return float(com - target_px)
 
 
+def compute_action_velocity_com(
+    image: list[float],
+    prev_com: float | None,
+    n_inputs: int,
+    target_frac: float = 0.5,
+    lookahead: float = 1.0,
+) -> tuple[float, float | None]:
+    """
+    Velocity-extrapolation (smooth-pursuit) action signal.
+
+    Computes the retinal centre of mass of the current image, estimates
+    the retinal velocity (com_t − com_{t-1}), and extrapolates ahead:
+
+        predicted_com = com_t + lookahead · velocity
+
+    The fovea is then steered toward this predicted position:
+
+        displacement = predicted_com − target_pixel
+
+    This is kinematic extrapolation — no network state is involved, so it is
+    purely "optical flow" pursuit.  Combined with the PC network's learned
+    temporal representation the error signal keeps the prediction anchored.
+
+    Returns (displacement, com_t).  displacement=0 when no object is visible.
+    On the very first frame (prev_com=None) there is no velocity estimate so
+    displacement reduces to a simple proportional signal toward the current COM.
+    """
+    com = retinal_com(image)
+    if com is None:
+        return 0.0, None
+    target_px = target_frac * n_inputs
+    velocity = (com - prev_com) if prev_com is not None else 0.0
+    predicted = com + lookahead * velocity
+    return float(predicted - target_px), com
+
+
 def compute_action_gradient(
     visual_sensors: list[SensorNode],
     image: list[float],
@@ -517,12 +553,13 @@ def main() -> None:
     LATERAL_STEPS     = 1    # lateral neighbours per side
     RECURRENT         = True # learned recurrent self-connection per hidden node
                              #   (temporal enrichment: combine previous + new state)
-    ACTION_MODE       = "pred_com"   # "gradient" — reactive/anticipatory gradient
-                                     # "pred_com" — steer fovea toward COM of π (NEW)
-    PRED_COM_TARGET   = 0.5          # desired retinal fraction for the predicted COM
-                                     #   (0.5 = centre; try 0.35 to match oracle target)
-    PRED_COM_GAIN     = 1.5          # velocity per pixel of predicted displacement
-                                     #   v = PRED_COM_GAIN · (com_pred − target_px)
+    ACTION_MODE       = "vel_com"    # "gradient"  — reactive ∂E/∂φ
+                                     # "pred_com"  — steer toward COM of network π
+                                     # "vel_com"   — smooth-pursuit: extrapolate COM velocity
+    PRED_COM_TARGET   = 0.5          # desired retinal fraction (pred_com and vel_com)
+    PRED_COM_GAIN     = 1.5          # v = PRED_COM_GAIN · displacement  (pred_com)
+    VEL_COM_GAIN      = 1.2          # v = VEL_COM_GAIN · displacement   (vel_com)
+    VEL_COM_LOOKAHEAD = 1.0          # frames to extrapolate ahead (1.0 = one step)
     TAU_BASE          = 0.8  # per-layer leaky persistence scale (0 = no memory)
                              #   τ_k = TAU_BASE·(1−2^(1−k)): L1 fast, deeper slower
     N_TRAIN_PATTERNS  = 10   # how many different patterns to train on
@@ -597,8 +634,11 @@ def main() -> None:
     print(f"Phase 1: {N_EPOCHS_PASSIVE} epochs (passive, φ=0, learn to predict)")
     print(f"Phase 1.5: {N_EPOCHS_ORACLE} epochs (oracle pursuit, φ tracks object COM "
           f"@ {ORACLE_TARGET:.0%} retina)")
-    act_mode_str = {"pred_com": f"pred-COM (gain={PRED_COM_GAIN}, target={PRED_COM_TARGET:.0%})",
-                    "gradient": "reactive gradient ∂E/∂φ"}.get(ACTION_MODE, ACTION_MODE)
+    act_mode_str = {
+        "gradient": "reactive gradient ∂E/∂φ",
+        "pred_com": f"pred-COM (gain={PRED_COM_GAIN}, target={PRED_COM_TARGET:.0%})",
+        "vel_com":  f"vel-COM smooth-pursuit (gain={VEL_COM_GAIN}, lookahead={VEL_COM_LOOKAHEAD})",
+    }.get(ACTION_MODE, ACTION_MODE)
     print(f"Phase 2: {N_EPOCHS_ACTIVE} epochs  (active, [{act_mode_str}])")
     print(f"Total  : ≈{total_steps} steps\n")
     print("Press Ctrl+C to stop early.\n")
@@ -611,6 +651,7 @@ def main() -> None:
     passive_steps = 0
     phi = 0.0
     v   = 0.0
+    prev_retinal_com: float | None = None   # for vel_com smooth pursuit
 
     try:
         for epoch in range(N_EPOCHS_PASSIVE + N_EPOCHS_ORACLE + N_EPOCHS_ACTIVE):
@@ -618,6 +659,7 @@ def main() -> None:
             action_enabled = (epoch >= active_start_epoch)
             phi = 0.0
             v   = 0.0
+            prev_retinal_com = None   # reset at epoch boundary
 
             if epoch == active_start_epoch:
                 passive_steps = step
@@ -630,19 +672,24 @@ def main() -> None:
                         set_frame(visual_sensors, shifted)
                         motor_sensor.set_input(np.array([v / MAX_V]))  # efference copy, [-1, 1]
 
-                        # Before the full PC step: compute the action signal from
-                        # the pre-relaxation state (phase_predict+error).
-                        # "gradient" mode: reactive ∂E/∂φ  (standard active inference)
-                        # "pred_com"  mode: steer toward predicted retinal COM of π
+                        # Pre-relaxation action signal (needs phase_predict+error first).
+                        # vel_com only needs the current image — no phase call needed.
+                        _disp = 0.0
                         if action_enabled:
-                            net.phase_predict()
-                            net.phase_error()
-                            if ACTION_MODE == "pred_com":
-                                _disp = compute_action_pred_com(
-                                    visual_sensors, N_INPUTS, PRED_COM_TARGET
+                            if ACTION_MODE == "vel_com":
+                                _disp, prev_retinal_com = compute_action_velocity_com(
+                                    shifted, prev_retinal_com, N_INPUTS,
+                                    PRED_COM_TARGET, VEL_COM_LOOKAHEAD,
                                 )
                             else:
-                                _disp = -compute_action_gradient(visual_sensors, shifted)
+                                net.phase_predict()
+                                net.phase_error()
+                                if ACTION_MODE == "pred_com":
+                                    _disp = compute_action_pred_com(
+                                        visual_sensors, N_INPUTS, PRED_COM_TARGET
+                                    )
+                                else:
+                                    _disp = -compute_action_gradient(visual_sensors, shifted)
 
                         # Full PC step (predict/error/relax/learn) — clean diagnostics
                         info = net.step(learn=True)
@@ -674,13 +721,11 @@ def main() -> None:
                         # Phase 1.5: oracle pursuit (fovea tracks object COM exactly).
                         # Phase 2:   network-driven steering.
                         if action_enabled:
-                            if ACTION_MODE == "pred_com":
-                                # steer toward predicted COM; centering spring fallback
-                                # when prediction is flat (nothing predicted)
-                                v_target = (PRED_COM_GAIN * _disp
-                                            - SPRING_K * phi)
+                            if ACTION_MODE == "vel_com":
+                                v_target = VEL_COM_GAIN * _disp - SPRING_K * phi
+                            elif ACTION_MODE == "pred_com":
+                                v_target = PRED_COM_GAIN * _disp - SPRING_K * phi
                             else:
-                                # reactive gradient descent + centering spring
                                 v_target = _disp * ACTION_GAIN - SPRING_K * phi
                             v = float(np.clip(
                                 (1.0 - ACTION_SMOOTH) * v_target + ACTION_SMOOTH * v,
@@ -691,13 +736,17 @@ def main() -> None:
                             if com is not None:
                                 target_phi = com - ORACLE_TARGET * N_INPUTS
                                 v = float(np.clip(target_phi - phi, -MAX_V, MAX_V))
+                                # keep vel_com warm during oracle phase
+                                prev_retinal_com = retinal_com(shifted)
                             else:
                                 v = 0.0
+                                prev_retinal_com = None
                         else:
                             v = float(np.clip(
                                 rng.normal(0.0, PASSIVE_DRIFT),
                                 -MAX_V, MAX_V,
                             ))
+                            prev_retinal_com = retinal_com(shifted)
                         phi = float(np.clip(phi + v, PHI_MIN, PHI_MAX))
 
                         if DELAY > 0:

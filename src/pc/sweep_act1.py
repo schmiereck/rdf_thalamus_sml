@@ -46,6 +46,8 @@ from pc.test_pc_act1 import (
     apply_fovea_shift,
     compute_action_gradient,
     compute_action_pred_com,
+    compute_action_velocity_com,
+    retinal_com,
     world_com,
     set_frame,
 )
@@ -67,9 +69,11 @@ class RunConfig:
     recurrent: bool = False
     tau_base: float = 0.0
     anticipatory: bool = False      # use gradient of top-down prediction (True) vs raw image
-    action_mode: str = "gradient"   # "gradient" or "pred_com"
-    pred_com_target: float = 0.5    # desired retinal fraction for pred-COM steering
-    pred_com_gain: float = 1.5      # v = pred_com_gain · (com_pred − target_px)
+    action_mode: str = "gradient"    # "gradient", "pred_com", or "vel_com"
+    pred_com_target: float = 0.5    # desired retinal fraction (pred_com / vel_com)
+    pred_com_gain: float = 1.5      # v = pred_com_gain · displacement  (pred_com)
+    vel_com_gain: float = 1.2       # v = vel_com_gain · displacement   (vel_com)
+    vel_com_lookahead: float = 1.0  # extrapolation horizon in frames   (vel_com)
     # network dynamics
     eta_inf: float = 0.05
     n_relax: int = 40
@@ -144,6 +148,7 @@ def run_one(cfg: RunConfig) -> dict:
         action_enabled = epoch >= active_start
         phi = 0.0
         v = 0.0
+        prev_rcom: float | None = None
         for _name, world_frames in train_patterns:
             for _ in range(cfg.repeats_per_seq):
                 for world_frame in world_frames:
@@ -151,23 +156,32 @@ def run_one(cfg: RunConfig) -> dict:
                     set_frame(visual_sensors, shifted)
                     motor_sensor.set_input(np.array([v / cfg.max_v]))
 
+                    _disp = 0.0
                     if action_enabled:
-                        net.phase_predict()
-                        net.phase_error()
-                        if cfg.action_mode == "pred_com":
-                            _disp = compute_action_pred_com(
-                                visual_sensors, n, cfg.pred_com_target
+                        if cfg.action_mode == "vel_com":
+                            _disp, prev_rcom = compute_action_velocity_com(
+                                shifted, prev_rcom, n,
+                                cfg.pred_com_target, cfg.vel_com_lookahead,
                             )
                         else:
-                            _disp = -compute_action_gradient(
-                                visual_sensors, shifted, anticipatory=cfg.anticipatory
-                            )
+                            net.phase_predict()
+                            net.phase_error()
+                            if cfg.action_mode == "pred_com":
+                                _disp = compute_action_pred_com(
+                                    visual_sensors, n, cfg.pred_com_target
+                                )
+                            else:
+                                _disp = -compute_action_gradient(
+                                    visual_sensors, shifted, anticipatory=cfg.anticipatory
+                                )
 
                     net.step(learn=True)
                     net.commit_step()
 
                     if action_enabled:
-                        if cfg.action_mode == "pred_com":
+                        if cfg.action_mode == "vel_com":
+                            v_target = cfg.vel_com_gain * _disp - cfg.spring_k * phi
+                        elif cfg.action_mode == "pred_com":
                             v_target = cfg.pred_com_gain * _disp - cfg.spring_k * phi
                         else:
                             v_target = cfg.action_gain * _disp - cfg.spring_k * phi
@@ -180,12 +194,15 @@ def run_one(cfg: RunConfig) -> dict:
                         if com is not None:
                             target_phi = com - cfg.oracle_target * n
                             v = float(np.clip(target_phi - phi, -cfg.max_v, cfg.max_v))
+                            prev_rcom = retinal_com(shifted)
                         else:
                             v = 0.0
+                            prev_rcom = None
                     else:
                         v = float(np.clip(
                             rng.normal(0.0, cfg.passive_drift), -cfg.max_v, cfg.max_v
                         ))
+                        prev_rcom = retinal_com(shifted)
                     phi = float(np.clip(phi + v, phi_min, phi_max))
 
     # ---- Evaluation (action on, learning off): tracking + errors ----
@@ -197,19 +214,26 @@ def run_one(cfg: RunConfig) -> dict:
         v = 0.0
         prev_retinal = None
         prev_com = None
+        prev_rcom_eval: float | None = None
         for world_frame in world_frames:
             shifted = apply_fovea_shift(world_frame, phi, n)
             set_frame(visual_sensors, shifted)
             motor_sensor.set_input(np.array([v / cfg.max_v]))
 
-            net.phase_predict()
-            net.phase_error()
-            if cfg.action_mode == "pred_com":
-                _disp = compute_action_pred_com(visual_sensors, n, cfg.pred_com_target)
-            else:
-                _disp = -compute_action_gradient(
-                    visual_sensors, shifted, anticipatory=cfg.anticipatory
+            if cfg.action_mode == "vel_com":
+                _disp, prev_rcom_eval = compute_action_velocity_com(
+                    shifted, prev_rcom_eval, n,
+                    cfg.pred_com_target, cfg.vel_com_lookahead,
                 )
+            else:
+                net.phase_predict()
+                net.phase_error()
+                if cfg.action_mode == "pred_com":
+                    _disp = compute_action_pred_com(visual_sensors, n, cfg.pred_com_target)
+                else:
+                    _disp = -compute_action_gradient(
+                        visual_sensors, shifted, anticipatory=cfg.anticipatory
+                    )
 
             info = net.step(learn=False)
             net.commit_step()
@@ -232,7 +256,9 @@ def run_one(cfg: RunConfig) -> dict:
                 prev_com = None
 
             # apply action
-            if cfg.action_mode == "pred_com":
+            if cfg.action_mode == "vel_com":
+                v_target = cfg.vel_com_gain * _disp - cfg.spring_k * phi
+            elif cfg.action_mode == "pred_com":
                 v_target = cfg.pred_com_gain * _disp - cfg.spring_k * phi
             else:
                 v_target = cfg.action_gain * _disp - cfg.spring_k * phi
@@ -337,6 +363,51 @@ def build_anticipatory_sweep() -> list[RunConfig]:
                     name=f"{label} {mode_name} s{seed}",
                     seed=seed, anticipatory=ant, **kw, **base,
                 ))
+    return configs
+
+
+def build_vel_com_sweep() -> list[RunConfig]:
+    """
+    Velocity-COM (smooth-pursuit) sweep.
+
+    Crosses: oracle on/off  ×  action_mode (gradient, vel_com)  ×  gain  ×  3 seeds.
+    Best temporal arch: rec + tau0.8, L4, base_dim=8.
+
+    vel_com is purely kinematic (no network π) — it extrapolates the retinal
+    object velocity to steer ahead.  Oracle training should help even here
+    because it gives the network consistent motion to learn, improving the
+    PC prediction errors during active phase.
+    """
+    seeds = [42, 123, 777]
+    arch = dict(recurrent=True, tau_base=0.8, n_layers=4,
+                base_dim=8, lateral_steps=0,
+                n_train_patterns=8, repeats_per_seq=2)
+    budget_no_oracle = dict(n_epochs_passive=5, n_epochs_oracle=0, n_epochs_active=12)
+    budget_oracle    = dict(n_epochs_passive=2, n_epochs_oracle=5, n_epochs_active=12)
+
+    configs: list[RunConfig] = []
+    for oracle, budget, o_label in [
+        (False, budget_no_oracle, "no-oracle"),
+        (True,  budget_oracle,    "oracle"),
+    ]:
+        # gradient baseline
+        for seed in seeds:
+            configs.append(RunConfig(
+                name=f"{o_label} gradient s{seed}",
+                seed=seed, action_mode="gradient", action_gain=1.0,
+                **arch, **budget,
+            ))
+        # vel_com at 3 gain levels  ×  2 lookahead values
+        for gain in [0.8, 1.2, 1.8]:
+            for la in [1.0, 2.0]:
+                for seed in seeds:
+                    configs.append(RunConfig(
+                        name=f"{o_label} vel-com g{gain} la{la} s{seed}",
+                        seed=seed, action_mode="vel_com",
+                        vel_com_gain=gain, vel_com_lookahead=la,
+                        action_gain=1.0,
+                        **arch, **budget,
+                    ))
     return configs
 
 
@@ -623,11 +694,16 @@ def main() -> None:
     ap.add_argument("--oracle",       action="store_true", help="oracle-pursuit vs none × reactive/anticipatory (3-seed average)")
     ap.add_argument("--pred-com",     action="store_true", dest="pred_com",
                     help="pred-COM vs gradient × oracle/no-oracle × gain sweep (3-seed average)")
+    ap.add_argument("--vel-com",      action="store_true", dest="vel_com",
+                    help="vel-COM smooth-pursuit × oracle/no-oracle × gain × lookahead sweep")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) - 1),
                     help="parallel worker processes")
     args = ap.parse_args()
 
-    if args.pred_com:
+    if args.vel_com:
+        configs = build_vel_com_sweep()
+        mode = "vel-com"
+    elif args.pred_com:
         configs = build_pred_com_sweep()
         mode = "pred-com"
     elif args.oracle:
@@ -661,7 +737,7 @@ def main() -> None:
                 results.append(r)
                 _progress(r, len(results), len(configs))
 
-    if args.focused or args.temporal or args.anticipatory or args.oracle or args.pred_com:
+    if args.focused or args.temporal or args.anticipatory or args.oracle or args.pred_com or args.vel_com:
         print_focused_table(results)
     else:
         print_table(results)
