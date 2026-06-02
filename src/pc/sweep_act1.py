@@ -76,10 +76,12 @@ class RunConfig:
     action_smooth: float = 0.2
     spring_k: float = 0.05
     passive_drift: float = 0.3
+    oracle_target: float = 0.35   # retinal fraction the oracle pursuit holds the COM at
     # training budget
     n_train_patterns: int = 8
     repeats_per_seq: int = 2
     n_epochs_passive: int = 5
+    n_epochs_oracle: int = 0      # Phase 1.5 oracle-pursuit epochs (0 = disabled)
     n_epochs_active: int = 12
     # reproducibility
     seed: int = 42
@@ -142,8 +144,11 @@ def run_one(cfg: RunConfig) -> dict:
     phi = 0.0
     v = 0.0
     diverged = False
-    for epoch in range(cfg.n_epochs_passive + cfg.n_epochs_active):
-        action_enabled = epoch >= cfg.n_epochs_passive
+    oracle_start = cfg.n_epochs_passive
+    active_start = cfg.n_epochs_passive + cfg.n_epochs_oracle
+    for epoch in range(active_start + cfg.n_epochs_active):
+        oracle_enabled = oracle_start <= epoch < active_start
+        action_enabled = epoch >= active_start
         phi = 0.0
         v = 0.0
         for _name, world_frames in train_patterns:
@@ -170,6 +175,13 @@ def run_one(cfg: RunConfig) -> dict:
                             (1.0 - cfg.action_smooth) * v_target + cfg.action_smooth * v,
                             -cfg.max_v, cfg.max_v,
                         ))
+                    elif oracle_enabled:
+                        com = world_com(world_frame)
+                        if com is not None:
+                            target_phi = com - cfg.oracle_target * n
+                            v = float(np.clip(target_phi - phi, -cfg.max_v, cfg.max_v))
+                        else:
+                            v = 0.0
                     else:
                         v = float(np.clip(
                             rng.normal(0.0, cfg.passive_drift), -cfg.max_v, cfg.max_v
@@ -318,6 +330,38 @@ def build_anticipatory_sweep() -> list[RunConfig]:
                 configs.append(RunConfig(
                     name=f"{label} {mode_name} s{seed}",
                     seed=seed, anticipatory=ant, **kw, **base,
+                ))
+    return configs
+
+
+def build_oracle_sweep() -> list[RunConfig]:
+    """
+    Does an oracle-pursuit phase (Phase 1.5) — where the fovea perfectly tracks
+    the object so the recurrent connections learn real object dynamics — unlock
+    anticipatory steering?
+
+    Crosses: oracle on/off  ×  reactive/anticipatory  ×  3 seeds = 12 configs.
+    Built on the best temporal config (rec + tau0.8 L4, base_dim=8, gain=1.0).
+    The oracle epochs replace some passive epochs to keep the budget comparable.
+    """
+    seeds = [42, 123, 777]
+    arch = dict(recurrent=True, tau_base=0.8, n_layers=4,
+                base_dim=8, lateral_steps=0, action_gain=1.0,
+                n_train_patterns=8, repeats_per_seq=2)
+
+    combos = [
+        ("no-oracle",  dict(n_epochs_passive=5, n_epochs_oracle=0,  n_epochs_active=12)),
+        ("oracle",     dict(n_epochs_passive=2, n_epochs_oracle=5,  n_epochs_active=12)),
+    ]
+    modes = [("reactive", False), ("anticipatory", True)]
+
+    configs: list[RunConfig] = []
+    for olabel, okw in combos:
+        for mode_name, ant in modes:
+            for seed in seeds:
+                configs.append(RunConfig(
+                    name=f"{olabel} {mode_name} s{seed}",
+                    seed=seed, anticipatory=ant, **okw, **arch,
                 ))
     return configs
 
@@ -524,11 +568,15 @@ def main() -> None:
     ap.add_argument("--focused",      action="store_true", help="targeted follow-up sweep (3-seed average)")
     ap.add_argument("--temporal",     action="store_true", help="temporal-hierarchy sweep (3-seed average)")
     ap.add_argument("--anticipatory", action="store_true", help="reactive vs anticipatory sweep (3-seed average)")
+    ap.add_argument("--oracle",       action="store_true", help="oracle-pursuit vs none × reactive/anticipatory (3-seed average)")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) - 1),
                     help="parallel worker processes")
     args = ap.parse_args()
 
-    if args.anticipatory:
+    if args.oracle:
+        configs = build_oracle_sweep()
+        mode = "oracle"
+    elif args.anticipatory:
         configs = build_anticipatory_sweep()
         mode = "anticipatory"
     elif args.temporal:
@@ -556,7 +604,7 @@ def main() -> None:
                 results.append(r)
                 _progress(r, len(results), len(configs))
 
-    if args.focused or args.temporal or args.anticipatory:
+    if args.focused or args.temporal or args.anticipatory or args.oracle:
         print_focused_table(results)
     else:
         print_table(results)

@@ -157,6 +157,15 @@ def apply_fovea_shift(world_frame: list[float], phi: float, n_inputs: int) -> li
     return result
 
 
+def world_com(frame: list[float]) -> float | None:
+    """Intensity-weighted centre of mass of a world frame, or None if empty."""
+    arr = np.asarray(frame, dtype=float)
+    total = arr.sum()
+    if total < 1e-6:
+        return None
+    return float((np.arange(arr.size) * arr).sum() / total)
+
+
 def compute_action_gradient(
     visual_sensors: list[SensorNode],
     image: list[float],
@@ -257,6 +266,7 @@ def render(
     phi: float,
     v: float,
     action_enabled: bool,
+    oracle_enabled: bool,
     sensor_history: list[float],
     state_history: list[float],
     max_err: float,
@@ -268,7 +278,9 @@ def render(
 
     n = len(frame_values)
     world_len = len(world_frame)
-    phase_str = "Phase 2 [ACTIVE]" if action_enabled else "Phase 1 [passive]"
+    phase_str = ("Phase 2 [ACTIVE]" if action_enabled
+                 else "Phase 1.5 [ORACLE]" if oracle_enabled
+                 else "Phase 1 [passive]")
 
     # Display: show [N zeros][world N px][N zeros] = 3N px strip
     # The fovea window of N_inputs can slide across this entire strip.
@@ -464,9 +476,13 @@ def main() -> None:
     N_TRAIN_PATTERNS  = 10   # how many different patterns to train on
     N_NOVEL_PATTERNS  = 10   # how many different patterns for evaluation only
     REPEATS_PER_SEQ   = 3    # repeats of each pattern per epoch
-    N_EPOCHS_PASSIVE  = 12   # Phase 1: no action, learn to predict motion
+    N_EPOCHS_PASSIVE  = 8    # Phase 1: no action, learn to predict motion
                              #   (motor_error is trivially 0 here: v=0, nothing to predict)
-    N_EPOCHS_ACTIVE   = 38   # Phase 2: action enabled (visual-error gradient)
+    N_EPOCHS_ORACLE   = 8    # Phase 1.5: oracle pursuit — fovea perfectly tracks the
+                             #   object's centre of mass so the recurrent connections
+                             #   learn real object dynamics (and the motor learns the
+                             #   efference-copy → retinal-shift mapping under motion)
+    N_EPOCHS_ACTIVE   = 34   # Phase 2: action enabled (visual-error gradient)
     MAX_V             = 2.0  # max eye velocity in pixels/step
     ACTION_GAIN       = 0.7  # gradient → velocity gain (v = -gain · ∂E/∂φ);
                              #   higher = tighter tracking, less lag (risk: oscillation)
@@ -475,6 +491,9 @@ def main() -> None:
                              #   (v_spring = -SPRING_K * phi, like eye muscle at rest)
     PASSIVE_DRIFT     = 0.3  # std of Gaussian velocity noise in Phase 1 (pixels/step)
                              #   gives the motor something to learn before Phase 2 starts
+    ORACLE_TARGET     = 0.35 # oracle pursuit keeps the object's centre of mass at this
+                             #   fraction of the retina (0.5 = centred; <0.5 = left-biased,
+                             #   matching where the active controller naturally settles)
     DELAY             = 0.0  # seconds between steps
 
     # Fovea range: the sensor window can slide from -N_INPUTS (fully left of world)
@@ -508,7 +527,7 @@ def main() -> None:
     total_steps = (
         sum(len(frames) for _, frames in train_patterns)
         * REPEATS_PER_SEQ
-        * (N_EPOCHS_PASSIVE + N_EPOCHS_ACTIVE)
+        * (N_EPOCHS_PASSIVE + N_EPOCHS_ORACLE + N_EPOCHS_ACTIVE)
     )
 
     sensor_history: list[float] = []
@@ -524,10 +543,15 @@ def main() -> None:
           + " → ".join(str(BASE_DIM + (k-1)*DIM_GROWTH) for k in range(1, N_LAYERS + 1)))
     print(f"\nWorld:   {N_INPUTS}px  |  Sensor window: {N_INPUTS}px  |  φ ∈ [{PHI_MIN:.0f}, {PHI_MAX:.0f}]")
     print(f"Phase 1: {N_EPOCHS_PASSIVE} epochs (passive, φ=0, learn to predict)")
+    print(f"Phase 1.5: {N_EPOCHS_ORACLE} epochs (oracle pursuit, φ tracks object COM "
+          f"@ {ORACLE_TARGET:.0%} retina)")
     act_mode = "anticipatory ∂π/∂φ" if ANTICIPATORY else "reactive ∂img/∂φ"
     print(f"Phase 2: {N_EPOCHS_ACTIVE} epochs  (active, fovea = -gain·∂E/∂φ  [{act_mode}])")
     print(f"Total  : ≈{total_steps} steps\n")
     print("Press Ctrl+C to stop early.\n")
+
+    oracle_start_epoch = N_EPOCHS_PASSIVE
+    active_start_epoch = N_EPOCHS_PASSIVE + N_EPOCHS_ORACLE
 
     prev_lines = 0
     step = 0
@@ -536,12 +560,13 @@ def main() -> None:
     v   = 0.0
 
     try:
-        for epoch in range(N_EPOCHS_PASSIVE + N_EPOCHS_ACTIVE):
-            action_enabled = (epoch >= N_EPOCHS_PASSIVE)
+        for epoch in range(N_EPOCHS_PASSIVE + N_EPOCHS_ORACLE + N_EPOCHS_ACTIVE):
+            oracle_enabled = (oracle_start_epoch <= epoch < active_start_epoch)
+            action_enabled = (epoch >= active_start_epoch)
             phi = 0.0
             v   = 0.0
 
-            if epoch == N_EPOCHS_PASSIVE:
+            if epoch == active_start_epoch:
                 passive_steps = step
 
             for name, world_frames in train_patterns:
@@ -584,12 +609,16 @@ def main() -> None:
                         prev_lines = render(
                             step + 1, total_steps, name, frame_idx, shifted,
                             world_frame, s_err, st_err, m_err, phi, v, action_enabled,
+                            oracle_enabled,
                             sensor_history, state_history, max_err, prev_lines, N_INPUTS,
                         )
                         step += 1
 
                         # Phase 1: gentle random drift so the motor learns the
                         # efference-copy → retinal-shift correlation before Phase 2.
+                        # Phase 1.5: oracle pursuit — move the fovea so the object's
+                        #   centre of mass sits at ORACLE_TARGET on the retina, giving
+                        #   the recurrent connections genuine object dynamics to learn.
                         # Phase 2: descend the visual-error gradient + centering spring.
                         if action_enabled:
                             v_target = -ACTION_GAIN * action_grad - SPRING_K * phi
@@ -597,6 +626,13 @@ def main() -> None:
                                 (1.0 - ACTION_SMOOTH) * v_target + ACTION_SMOOTH * v,
                                 -MAX_V, MAX_V,
                             ))
+                        elif oracle_enabled:
+                            com = world_com(world_frame)
+                            if com is not None:
+                                target_phi = com - ORACLE_TARGET * N_INPUTS
+                                v = float(np.clip(target_phi - phi, -MAX_V, MAX_V))
+                            else:
+                                v = 0.0
                         else:
                             v = float(np.clip(
                                 rng.normal(0.0, PASSIVE_DRIFT),
