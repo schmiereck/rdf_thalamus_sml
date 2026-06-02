@@ -112,13 +112,17 @@ def build_network(
 # Fovea helpers
 # ---------------------------------------------------------------------------
 
-def apply_fovea_shift(world_frame: list[float], phi: float, n: int) -> list[float]:
-    """Circular shift of world_frame by phi (integer pixels)."""
-    offset = round(phi) % n
-    if offset == 0:
-        return world_frame
-    arr = np.array(world_frame)
-    return np.roll(arr, -offset).tolist()
+def apply_fovea_shift(world_frame: list[float], phi: float, n_inputs: int) -> list[float]:
+    """Extract n_inputs-wide window from world_frame starting at pixel round(phi).
+    Pixels outside world bounds are filled with 0.
+    """
+    offset = round(phi)
+    world_len = len(world_frame)
+    result = []
+    for i in range(n_inputs):
+        wi = offset + i
+        result.append(float(world_frame[wi]) if 0 <= wi < world_len else 0.0)
+    return result
 
 
 def compute_action_gradient(
@@ -209,6 +213,7 @@ def render(
     pattern_name: str,
     frame_idx: int,
     frame_values: list[float],
+    world_frame: list[float],
     sensor_err: float,
     state_err: float,
     motor_err: float,
@@ -219,26 +224,51 @@ def render(
     state_history: list[float],
     max_err: float,
     prev_lines: int,
+    n_inputs: int,
 ) -> int:
     if prev_lines > 0:
         _clear_lines(prev_lines)
 
     n = len(frame_values)
+    world_len = len(world_frame)
+    phase_str = "Phase 2 [ACTIVE]" if action_enabled else "Phase 1 [passive]"
+
+    # World strip: show full world with fovea window markers
+    win_start = round(phi)
+    win_end = win_start + n_inputs - 1
+    world_chars = []
+    for i, val in enumerate(world_frame):
+        ch = "█" if val >= 0.9 else ("▓" if val >= 0.6 else ("░" if val >= 0.2 else "·"))
+        world_chars.append(ch)
+    # Build display: left pad | world with [..] markers | right pad
+    left_pad = "·" * n_inputs
+    right_pad = "·" * n_inputs
+    world_str = "".join(world_chars)
+    # Mark window boundaries inside the world strip
+    w_disp = list(world_str)
+    if 0 <= win_start < world_len:
+        w_disp[win_start] = "[" if w_disp[win_start] == "·" else w_disp[win_start]
+    if 0 <= win_end < world_len:
+        w_disp[win_end] = "]" if w_disp[win_end] == "·" else w_disp[win_end]
+    world_display = left_pad + "".join(w_disp) + right_pad
+
+    # Sensor window display
     dot_str = "".join(
         ("█" if val >= 0.9 else ("▓" if val >= 0.6 else ("░" if val >= 0.2 else "·")))
         for val in frame_values
     )
-    pos_str = "  ".join(f"{p:.2f}" for p in _positions(n))
-    phase_str = "Phase 2 [ACTIVE]" if action_enabled else "Phase 1 [passive]"
+    # Fovea marker: pad with spaces to align sensor window under world strip
+    fovea_offset = n_inputs + win_start  # offset in world_display
+    fovea_marker = " " * fovea_offset + "[" + dot_str + "]"
 
     lines = []
     lines.append(
         f"Step {step:5d}/{total_steps}  {phase_str}  "
-        f"pattern: {pattern_name:<36s}  frame {frame_idx+1}/{n}"
+        f"pattern: {pattern_name:<36s}  frame {frame_idx+1}"
     )
-    lines.append(f"  Input:  [{dot_str}]   (█=1.0  ▓=0.6+  ░=0.2+  ·=0)")
-    lines.append(f"  Pos:    [{pos_str}]")
-    lines.append(f"  Fovea:  φ={phi:5.1f}  v={v:+.2f}")
+    lines.append(f"  World:  {world_display}")
+    lines.append(f"  Fovea:  {fovea_marker}")
+    lines.append(f"  φ={phi:5.1f}  v={v:+.2f}   (world={world_len}px  window={n_inputs}px)")
     lines.append("")
 
     s_delta = st_delta = m_delta = ""
@@ -286,12 +316,15 @@ def measure_per_pattern_errors(
     n_passes: int = 3,
 ) -> list[tuple[str, dict[str, float]]]:
     """Run each named pattern n_passes times (no action, no learning)."""
+    # For evaluation use the center of the world as the sensor window
+    phi_eval = max(0, (len(named_patterns[0][1][0]) - n_inputs) // 2) if named_patterns else 0
     results = []
     for name, frames in named_patterns:
         s_errs, st_errs, m_errs = [], [], []
         for _ in range(n_passes):
             for frame in frames:
-                set_frame(visual_sensors, frame)
+                win = apply_fovea_shift(frame, phi_eval, n_inputs)
+                set_frame(visual_sensors, win)
                 motor_sensor.set_input(np.array([0.0]))
                 info = net.step(learn=False)
                 m_err = float(np.sum(net.node("motor").epsilon ** 2))
@@ -381,7 +414,8 @@ def main() -> None:
     # ---------------------------------------------------------------
     # Configuration
     # ---------------------------------------------------------------
-    N_INPUTS          = 16   # visual sensor positions
+    N_INPUTS          = 16   # visual sensor window width (pixels visible at once)
+    WORLD_MULT        = 3    # world is WORLD_MULT × N_INPUTS wide
     N_LAYERS          = 3    # hidden pyramid layers (depth)
     BASE_DIM          = 4    # state dim at layer 1
     DIM_GROWTH        = 2    # dim increment per layer
@@ -397,6 +431,9 @@ def main() -> None:
                              #   higher = tighter tracking, less lag (risk: oscillation)
     ACTION_SMOOTH     = 0.2  # velocity momentum (0 = none, blends previous v)
     DELAY             = 0.0  # seconds between steps
+
+    WORLD_WIDTH = N_INPUTS * WORLD_MULT   # e.g. 48 pixels
+    PHI_MAX     = float(WORLD_WIDTH - N_INPUTS)   # fovea can shift 0..PHI_MAX
     # ---------------------------------------------------------------
 
     rng = np.random.default_rng(42)
@@ -409,13 +446,13 @@ def main() -> None:
         lateral_steps=LATERAL_STEPS,
     )
 
-    # Sample fixed pattern sets once
+    # Sample fixed pattern sets once — generated in the wider world space
     train_patterns = sample_named_patterns(
-        PatternGenerator(n_inputs=N_INPUTS, seed=0, bias_simple=True),
+        PatternGenerator(n_inputs=WORLD_WIDTH, seed=0, bias_simple=True),
         n_sequences=N_TRAIN_PATTERNS,
     )
     novel_patterns = sample_named_patterns(
-        PatternGenerator(n_inputs=N_INPUTS, seed=9999),
+        PatternGenerator(n_inputs=WORLD_WIDTH, seed=9999),
         n_sequences=N_NOVEL_PATTERNS,
     )
 
@@ -436,7 +473,8 @@ def main() -> None:
           + " (top)")
     print(f"Dims:    2 → "
           + " → ".join(str(BASE_DIM + (k-1)*DIM_GROWTH) for k in range(1, N_LAYERS + 1)))
-    print(f"\nPhase 1: {N_EPOCHS_PASSIVE} epochs (passive, φ=0, learn to predict)")
+    print(f"\nWorld:   {WORLD_WIDTH}px  |  Sensor window: {N_INPUTS}px  |  φ ∈ [0, {PHI_MAX:.0f}]")
+    print(f"Phase 1: {N_EPOCHS_PASSIVE} epochs (passive, φ=0, learn to predict)")
     print(f"Phase 2: {N_EPOCHS_ACTIVE} epochs  (active, fovea = -gain·∂E/∂φ)")
     print(f"Total  : ≈{total_steps} steps\n")
     print("Press Ctrl+C to stop early.\n")
@@ -459,7 +497,7 @@ def main() -> None:
             for name, world_frames in train_patterns:
                 for _ in range(REPEATS_PER_SEQ):
                     for frame_idx, world_frame in enumerate(world_frames):
-                        # Apply fovea shift and feed sensors
+                        # Extract sensor window from wider world (zero-padded at edges)
                         shifted = apply_fovea_shift(world_frame, phi, N_INPUTS)
                         set_frame(visual_sensors, shifted)
                         motor_sensor.set_input(np.array([v / MAX_V]))  # efference copy, [-1, 1]
@@ -492,19 +530,20 @@ def main() -> None:
 
                         prev_lines = render(
                             step + 1, total_steps, name, frame_idx, shifted,
-                            s_err, st_err, m_err, phi, v, action_enabled,
-                            sensor_history, state_history, max_err, prev_lines,
+                            world_frame, s_err, st_err, m_err, phi, v, action_enabled,
+                            sensor_history, state_history, max_err, prev_lines, N_INPUTS,
                         )
                         step += 1
 
                         # Apply the action: descend the visual-error gradient.
+                        # phi is absolute world position, bounded to [0, PHI_MAX].
                         if action_enabled:
                             v_target = -ACTION_GAIN * action_grad
                             v = float(np.clip(
                                 (1.0 - ACTION_SMOOTH) * v_target + ACTION_SMOOTH * v,
                                 -MAX_V, MAX_V,
                             ))
-                            phi = (phi + v) % N_INPUTS
+                            phi = float(np.clip(phi + v, 0.0, PHI_MAX))
 
                         if DELAY > 0:
                             time.sleep(DELAY)
