@@ -160,26 +160,31 @@ def apply_fovea_shift(world_frame: list[float], phi: float, n_inputs: int) -> li
 def compute_action_gradient(
     visual_sensors: list[SensorNode],
     image: list[float],
+    anticipatory: bool = True,
 ) -> float:
     """
     Active-inference action signal:  ∂E/∂φ  for  E = ½ Σ (value error)².
 
-    Must be called *after* phase_predict + phase_error but *before* relaxation,
-    so that the sensor value-channel error is the network's temporal prediction
-    error (the carried-over hidden state predicts the new frame → the residual
-    is the retinal slip).
+    Must be called *after* phase_predict + phase_error but *before* relaxation.
+    The sensor value-channel error  ε = μ − π  is the network's temporal
+    prediction error: the carried-over hidden state predicts the new frame and
+    the residual encodes the retinal slip.
 
-    Moving the eye right by δφ slides the retinal image left, so
-        ∂image[i]/∂φ ≈ image[i+1] - image[i]   (circular forward difference).
-    Hence
-        ∂E/∂φ = Σ_i e_i · (image[i+1] - image[i]).
+    anticipatory=True  (default):
+        Use the spatial gradient of the PREDICTION (s.pi[1]) rather than the
+        raw image.  This closes the loop between the temporal hierarchy and the
+        fovea: the recurrent/leaky hidden state predicts where the object will
+        be, and we move toward that prediction.
+            ∂E/∂φ = Σ_i ε_i · ∂π_i/∂φ
 
-    Gradient descent on the eye position then drives:  v = -gain · ∂E/∂φ,
-    which (verified by sign analysis) makes the eye follow the object's motion.
+    anticipatory=False  (reactive, original behaviour):
+        Use the spatial gradient of the current retinal image.
+            ∂E/∂φ = Σ_i ε_i · ∂img_i/∂φ
     """
-    e = np.array([s.epsilon[1] for s in visual_sensors])   # value-channel error
-    img = np.array(image)
-    grad = (np.roll(img, -1) - np.roll(img, 1)) * 0.5     # centred spatial gradient
+    e    = np.array([s.epsilon[1] for s in visual_sensors])  # value-channel error
+    base = np.array([s.pi[1]      for s in visual_sensors]) if anticipatory \
+           else np.array(image)
+    grad = (np.roll(base, -1) - np.roll(base, 1)) * 0.5     # centred spatial gradient
     return float(np.sum(e * grad))
 
 
@@ -452,6 +457,8 @@ def main() -> None:
     LATERAL_STEPS     = 1    # lateral neighbours per side
     RECURRENT         = True # learned recurrent self-connection per hidden node
                              #   (temporal enrichment: combine previous + new state)
+    ANTICIPATORY      = True # use spatial gradient of network's top-down PREDICTION
+                             #   rather than the raw image (closes temporal→action loop)
     TAU_BASE          = 0.8  # per-layer leaky persistence scale (0 = no memory)
                              #   τ_k = TAU_BASE·(1−2^(1−k)): L1 fast, deeper slower
     N_TRAIN_PATTERNS  = 10   # how many different patterns to train on
@@ -517,7 +524,8 @@ def main() -> None:
           + " → ".join(str(BASE_DIM + (k-1)*DIM_GROWTH) for k in range(1, N_LAYERS + 1)))
     print(f"\nWorld:   {N_INPUTS}px  |  Sensor window: {N_INPUTS}px  |  φ ∈ [{PHI_MIN:.0f}, {PHI_MAX:.0f}]")
     print(f"Phase 1: {N_EPOCHS_PASSIVE} epochs (passive, φ=0, learn to predict)")
-    print(f"Phase 2: {N_EPOCHS_ACTIVE} epochs  (active, fovea = -gain·∂E/∂φ)")
+    act_mode = "anticipatory ∂π/∂φ" if ANTICIPATORY else "reactive ∂img/∂φ"
+    print(f"Phase 2: {N_EPOCHS_ACTIVE} epochs  (active, fovea = -gain·∂E/∂φ  [{act_mode}])")
     print(f"Total  : ≈{total_steps} steps\n")
     print("Press Ctrl+C to stop early.\n")
 
@@ -551,7 +559,9 @@ def main() -> None:
                         if action_enabled:
                             net.phase_predict()
                             net.phase_error()
-                            action_grad = compute_action_gradient(visual_sensors, shifted)
+                            action_grad = compute_action_gradient(
+                                visual_sensors, shifted, anticipatory=ANTICIPATORY
+                            )
 
                         # Full PC step (predict/error/relax/learn) — clean diagnostics
                         info = net.step(learn=True)

@@ -64,6 +64,7 @@ class RunConfig:
     lateral_steps: int = 1
     recurrent: bool = False
     tau_base: float = 0.0
+    anticipatory: bool = False   # use gradient of top-down prediction (True) vs raw image
     # network dynamics
     eta_inf: float = 0.05
     n_relax: int = 40
@@ -156,7 +157,9 @@ def run_one(cfg: RunConfig) -> dict:
                     if action_enabled:
                         net.phase_predict()
                         net.phase_error()
-                        action_grad = compute_action_gradient(visual_sensors, shifted)
+                        action_grad = compute_action_gradient(
+                        visual_sensors, shifted, anticipatory=cfg.anticipatory
+                    )
 
                     net.step(learn=True)
                     net.commit_step()
@@ -189,7 +192,9 @@ def run_one(cfg: RunConfig) -> dict:
 
             net.phase_predict()
             net.phase_error()
-            action_grad = compute_action_gradient(visual_sensors, shifted)
+            action_grad = compute_action_gradient(
+                visual_sensors, shifted, anticipatory=cfg.anticipatory
+            )
 
             info = net.step(learn=False)
             net.commit_step()
@@ -281,6 +286,39 @@ def build_temporal_sweep() -> list[RunConfig]:
     for label, kw in combos:
         for seed in seeds:
             configs.append(RunConfig(name=f"{label} s{seed}", seed=seed, **kw, **base))
+    return configs
+
+
+def build_anticipatory_sweep() -> list[RunConfig]:
+    """
+    Compare reactive vs anticipatory steering, crossed with temporal hierarchy.
+    Best config from temporal sweep: rec + tau0.8 L4.
+    Sweeps 4 combos × 2 modes × 3 seeds = 24 configs.
+    """
+    seeds = [42, 123, 777]
+    base = dict(base_dim=8, lateral_steps=0, action_gain=1.0,
+                n_epochs_passive=5, n_epochs_active=12,
+                n_train_patterns=8, repeats_per_seq=2)
+
+    combos = [
+        ("static",          dict(recurrent=False, tau_base=0.0)),
+        ("rec+tau0.8",      dict(recurrent=True,  tau_base=0.8)),
+        ("rec+tau0.8 L4",   dict(recurrent=True,  tau_base=0.8, n_layers=4)),
+        ("rec+tau0.8 L4 g1.3", dict(recurrent=True, tau_base=0.8, n_layers=4, action_gain=1.3)),
+    ]
+    modes = [
+        ("reactive",     False),
+        ("anticipatory", True),
+    ]
+
+    configs: list[RunConfig] = []
+    for label, kw in combos:
+        for mode_name, ant in modes:
+            for seed in seeds:
+                configs.append(RunConfig(
+                    name=f"{label} {mode_name} s{seed}",
+                    seed=seed, anticipatory=ant, **kw, **base,
+                ))
     return configs
 
 
@@ -482,14 +520,18 @@ def print_table(results: list[dict]) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--quick",   action="store_true", help="smaller/faster sweep")
-    ap.add_argument("--focused", action="store_true", help="targeted follow-up sweep (3-seed average)")
-    ap.add_argument("--temporal", action="store_true", help="temporal-hierarchy sweep (3-seed average)")
+    ap.add_argument("--quick",        action="store_true", help="smaller/faster sweep")
+    ap.add_argument("--focused",      action="store_true", help="targeted follow-up sweep (3-seed average)")
+    ap.add_argument("--temporal",     action="store_true", help="temporal-hierarchy sweep (3-seed average)")
+    ap.add_argument("--anticipatory", action="store_true", help="reactive vs anticipatory sweep (3-seed average)")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) - 1),
                     help="parallel worker processes")
     args = ap.parse_args()
 
-    if args.temporal:
+    if args.anticipatory:
+        configs = build_anticipatory_sweep()
+        mode = "anticipatory"
+    elif args.temporal:
         configs = build_temporal_sweep()
         mode = "temporal"
     elif args.focused:
@@ -514,7 +556,7 @@ def main() -> None:
                 results.append(r)
                 _progress(r, len(results), len(configs))
 
-    if args.focused or args.temporal:
+    if args.focused or args.temporal or args.anticipatory:
         print_focused_table(results)
     else:
         print_table(results)
