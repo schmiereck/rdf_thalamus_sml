@@ -45,8 +45,8 @@ def build_network(
     Returns (net, visual_sensors, motor_sensor).
     """
     net = PCNetwork(
-        eta_inf=0.02,
-        n_relax=150,
+        eta_inf=0.05,
+        n_relax=40,
         eps_tol=1e-5,
         alpha=1.0,
         beta=1.0,
@@ -121,9 +121,30 @@ def apply_fovea_shift(world_frame: list[float], phi: float, n: int) -> list[floa
     return np.roll(arr, -offset).tolist()
 
 
-def read_predicted_velocity(net: PCNetwork) -> float:
-    """Read the network's prediction for the motor sensor (node.pi[0])."""
-    return float(net.node("motor").pi[0])
+def compute_action_gradient(
+    visual_sensors: list[SensorNode],
+    image: list[float],
+) -> float:
+    """
+    Active-inference action signal:  ∂E/∂φ  for  E = ½ Σ (value error)².
+
+    Must be called *after* phase_predict + phase_error but *before* relaxation,
+    so that the sensor value-channel error is the network's temporal prediction
+    error (the carried-over hidden state predicts the new frame → the residual
+    is the retinal slip).
+
+    Moving the eye right by δφ slides the retinal image left, so
+        ∂image[i]/∂φ ≈ image[i+1] - image[i]   (circular forward difference).
+    Hence
+        ∂E/∂φ = Σ_i e_i · (image[i+1] - image[i]).
+
+    Gradient descent on the eye position then drives:  v = -gain · ∂E/∂φ,
+    which (verified by sign analysis) makes the eye follow the object's motion.
+    """
+    e = np.array([s.epsilon[1] for s in visual_sensors])   # value-channel error
+    img = np.array(image)
+    grad = np.roll(img, -1) - img                          # spatial gradient
+    return float(np.sum(e * grad))
 
 
 # ---------------------------------------------------------------------------
@@ -273,10 +294,10 @@ def measure_per_pattern_errors(
                 set_frame(visual_sensors, frame)
                 motor_sensor.set_input(np.array([0.0]))
                 info = net.step(learn=False)
-                s_errs.append(info["sensor_error"])
+                m_err = float(np.sum(net.node("motor").epsilon ** 2))
+                s_errs.append(info["sensor_error"] - m_err)   # visual only
                 st_errs.append(info["state_error"])
-                # motor error: error on the motor sensor specifically
-                m_errs.append(float(np.sum(net.node("motor").epsilon ** 2)))
+                m_errs.append(m_err)
         results.append((name, {
             "sensor_error": float(np.mean(s_errs)),
             "state_error":  float(np.mean(st_errs)),
@@ -368,10 +389,12 @@ def main() -> None:
     N_TRAIN_PATTERNS  = 10   # how many different patterns to train on
     N_NOVEL_PATTERNS  = 10   # how many different patterns for evaluation only
     REPEATS_PER_SEQ   = 3    # repeats of each pattern per epoch
-    N_EPOCHS_PASSIVE  = 30   # Phase 1: no action, learn motion
-    N_EPOCHS_ACTIVE   = 20   # Phase 2: action enabled
+    N_EPOCHS_PASSIVE  = 30   # Phase 1: no action, learn to predict motion
+    N_EPOCHS_ACTIVE   = 20   # Phase 2: action enabled (visual-error gradient)
     MAX_V             = 2.0  # max eye velocity in pixels/step
-    ETA_ACTION        = 0.5  # how strongly predicted v is applied
+    ACTION_GAIN       = 0.7  # gradient → velocity gain (v = -gain · ∂E/∂φ);
+                             #   higher = tighter tracking, less lag (risk: oscillation)
+    ACTION_SMOOTH     = 0.2  # velocity momentum (0 = none, blends previous v)
     DELAY             = 0.0  # seconds between steps
     # ---------------------------------------------------------------
 
@@ -412,8 +435,8 @@ def main() -> None:
           + " (top)")
     print(f"Dims:    2 → "
           + " → ".join(str(BASE_DIM + (k-1)*DIM_GROWTH) for k in range(1, N_LAYERS + 1)))
-    print(f"\nPhase 1: {N_EPOCHS_PASSIVE} epochs (passive, φ=0)")
-    print(f"Phase 2: {N_EPOCHS_ACTIVE} epochs  (active, fovea tracks)")
+    print(f"\nPhase 1: {N_EPOCHS_PASSIVE} epochs (passive, φ=0, learn to predict)")
+    print(f"Phase 2: {N_EPOCHS_ACTIVE} epochs  (active, fovea = -gain·∂E/∂φ)")
     print(f"Total  : ≈{total_steps} steps\n")
     print("Press Ctrl+C to stop early.\n")
 
@@ -438,13 +461,28 @@ def main() -> None:
                         # Apply fovea shift and feed sensors
                         shifted = apply_fovea_shift(world_frame, phi, N_INPUTS)
                         set_frame(visual_sensors, shifted)
-                        motor_sensor.set_input(np.array([v / MAX_V]))  # normalise to [-1, 1]
+                        motor_sensor.set_input(np.array([v / MAX_V]))  # efference copy, [-1, 1]
 
+                        # Capture the action signal from the temporal prediction
+                        # error (pre-relaxation): the carried-over hidden state
+                        # predicts the new frame, so the residual is the slip.
+                        action_grad = 0.0
+                        if action_enabled:
+                            net.phase_predict()
+                            net.phase_error()
+                            action_grad = compute_action_gradient(visual_sensors, shifted)
+
+                        # Full PC step (predict/error/relax/learn) — clean diagnostics
                         info = net.step(learn=True)
 
-                        s_err  = info["sensor_error"]
-                        st_err = info["state_error"]
                         m_err  = float(np.sum(net.node("motor").epsilon ** 2))
+                        s_err  = info["sensor_error"] - m_err   # visual only
+                        st_err = info["state_error"]
+
+                        # Guard against transient non-finite values in the history
+                        s_err  = s_err  if np.isfinite(s_err)  else max_err
+                        st_err = st_err if np.isfinite(st_err) else max_err
+                        m_err  = m_err  if np.isfinite(m_err)  else max_err
 
                         sensor_history.append(s_err)
                         state_history.append(st_err)
@@ -458,13 +496,11 @@ def main() -> None:
                         )
                         step += 1
 
-                        # Update fovea after the PC step
+                        # Apply the action: descend the visual-error gradient.
                         if action_enabled:
-                            predicted_v_norm = read_predicted_velocity(net)
-                            # Denormalise and blend
-                            predicted_v = predicted_v_norm * MAX_V
+                            v_target = -ACTION_GAIN * action_grad
                             v = float(np.clip(
-                                ETA_ACTION * predicted_v + (1.0 - ETA_ACTION) * v,
+                                (1.0 - ACTION_SMOOTH) * v_target + ACTION_SMOOTH * v,
                                 -MAX_V, MAX_V,
                             ))
                             phi = (phi + v) % N_INPUTS
