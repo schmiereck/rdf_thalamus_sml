@@ -554,6 +554,9 @@ def main() -> None:
                              #   (v_spring = -SPRING_K * phi, like eye muscle at rest)
     PASSIVE_DRIFT     = 0.3  # std of Gaussian velocity noise in Phase 1 (pixels/step)
                              #   gives the motor something to learn before Phase 2 starts
+    PASSIVE_SPRING_K  = 0.30 # centering spring during Phase 1 — stronger than the
+                             #   active spring because it must counteract the random
+                             #   walk and keep the fovea inside the world region
     ORACLE_TARGET     = 0.35 # oracle pursuit keeps the object's centre of mass at this
                              #   fraction of the retina (0.5 = centred; <0.5 = left-biased,
                              #   matching where the active controller naturally settles)
@@ -715,8 +718,11 @@ def main() -> None:
                                 v = 0.0
                                 prev_retinal_com = None
                         else:
+                            # Passive drift + centering spring so the random walk
+                            # stays bounded around φ=0 instead of wandering out of
+                            # the world region.
                             v = float(np.clip(
-                                rng.normal(0.0, PASSIVE_DRIFT),
+                                rng.normal(0.0, PASSIVE_DRIFT) - PASSIVE_SPRING_K * phi,
                                 -MAX_V, MAX_V,
                             ))
                             rc = retinal_com(shifted)
