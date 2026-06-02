@@ -255,6 +255,35 @@ def run_one(cfg: RunConfig) -> dict:
 # Sweep definitions
 # ---------------------------------------------------------------------------
 
+def build_temporal_sweep() -> list[RunConfig]:
+    """
+    Temporal-hierarchy sweep: does learned recurrence + per-layer leaky memory
+    improve tracking?  Built on the best static config from sweep 2
+    (base_dim=8, lateral=0, action_gain=1.0), averaged over 3 seeds.
+    """
+    seeds = [42, 123, 777]
+    base = dict(base_dim=8, lateral_steps=0, action_gain=1.0,
+                n_epochs_passive=5, n_epochs_active=12,
+                n_train_patterns=8, repeats_per_seq=2)
+
+    combos = [
+        ("static (no memory)",  dict(recurrent=False, tau_base=0.0)),
+        ("rec only",            dict(recurrent=True,  tau_base=0.0)),
+        ("tau0.5 only",         dict(recurrent=False, tau_base=0.5)),
+        ("tau0.8 only",         dict(recurrent=False, tau_base=0.8)),
+        ("rec + tau0.5",        dict(recurrent=True,  tau_base=0.5)),
+        ("rec + tau0.8",        dict(recurrent=True,  tau_base=0.8)),
+        ("rec + tau0.95",       dict(recurrent=True,  tau_base=0.95)),
+        ("rec + tau0.8 L4",     dict(recurrent=True,  tau_base=0.8, n_layers=4)),
+    ]
+
+    configs: list[RunConfig] = []
+    for label, kw in combos:
+        for seed in seeds:
+            configs.append(RunConfig(name=f"{label} s{seed}", seed=seed, **kw, **base))
+    return configs
+
+
 def build_focused_sweep() -> list[RunConfig]:
     """
     Targeted follow-up sweep based on sweep 1 findings:
@@ -455,11 +484,15 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--quick",   action="store_true", help="smaller/faster sweep")
     ap.add_argument("--focused", action="store_true", help="targeted follow-up sweep (3-seed average)")
+    ap.add_argument("--temporal", action="store_true", help="temporal-hierarchy sweep (3-seed average)")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) - 1),
                     help="parallel worker processes")
     args = ap.parse_args()
 
-    if args.focused:
+    if args.temporal:
+        configs = build_temporal_sweep()
+        mode = "temporal"
+    elif args.focused:
         configs = build_focused_sweep()
         mode = "focused"
     else:
@@ -481,7 +514,7 @@ def main() -> None:
                 results.append(r)
                 _progress(r, len(results), len(configs))
 
-    if args.focused:
+    if args.focused or args.temporal:
         print_focused_table(results)
     else:
         print_table(results)
