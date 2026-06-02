@@ -528,9 +528,10 @@ def main() -> None:
     BASE_DIM          = 4    # state dim at layer 1
     DIM_GROWTH        = 2    # dim increment per layer
     LATERAL_STEPS     = 1    # lateral neighbours per side
-    ACTION_MODE       = "vel_com"    # "gradient"  — reactive ∂E/∂φ
-                                     # "pred_com"  — steer toward COM of network π
+    ACTION_MODE       = "gradient"   # "gradient"  — reactive ∂E/∂φ (uses the network)
+                                     # "pred_com"  — steer toward COM of network π (uses the network)
                                      # "vel_com"   — smooth-pursuit: extrapolate COM velocity
+                                     #               (kinematic centroid trick — bypasses the network)
     PRED_COM_TARGET   = 0.5          # desired retinal fraction (pred_com and vel_com)
     PRED_COM_GAIN     = 1.5          # v = PRED_COM_GAIN · displacement  (pred_com)
     VEL_COM_GAIN      = 1.2          # v = VEL_COM_GAIN · displacement   (vel_com)
