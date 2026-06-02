@@ -151,7 +151,7 @@ def compute_action_gradient(
     """
     e = np.array([s.epsilon[1] for s in visual_sensors])   # value-channel error
     img = np.array(image)
-    grad = np.roll(img, -1) - img                          # spatial gradient
+    grad = (np.roll(img, -1) - np.roll(img, 1)) * 0.5     # centred spatial gradient
     return float(np.sum(e * grad))
 
 
@@ -433,6 +433,8 @@ def main() -> None:
     ACTION_SMOOTH     = 0.2  # velocity momentum (0 = none, blends previous v)
     SPRING_K          = 0.05 # centering spring: pulls fovea toward φ=0 each step
                              #   (v_spring = -SPRING_K * phi, like eye muscle at rest)
+    PASSIVE_DRIFT     = 0.3  # std of Gaussian velocity noise in Phase 1 (pixels/step)
+                             #   gives the motor something to learn before Phase 2 starts
     DELAY             = 0.0  # seconds between steps
 
     # Fovea range: the sensor window can slide from -N_INPUTS (fully left of world)
@@ -540,17 +542,21 @@ def main() -> None:
                         )
                         step += 1
 
-                        # Apply the action: descend the visual-error gradient.
-                        # phi is fovea offset (bounded to [PHI_MIN, PHI_MAX]).
-                        # A centering spring (v_spring = -SPRING_K * phi) pulls the
-                        # fovea back to phi=0 unless the motor actively counteracts it.
+                        # Phase 1: gentle random drift so the motor learns the
+                        # efference-copy → retinal-shift correlation before Phase 2.
+                        # Phase 2: descend the visual-error gradient + centering spring.
                         if action_enabled:
                             v_target = -ACTION_GAIN * action_grad - SPRING_K * phi
                             v = float(np.clip(
                                 (1.0 - ACTION_SMOOTH) * v_target + ACTION_SMOOTH * v,
                                 -MAX_V, MAX_V,
                             ))
-                            phi = float(np.clip(phi + v, PHI_MIN, PHI_MAX))
+                        else:
+                            v = float(np.clip(
+                                rng.normal(0.0, PASSIVE_DRIFT),
+                                -MAX_V, MAX_V,
+                            ))
+                        phi = float(np.clip(phi + v, PHI_MIN, PHI_MAX))
 
                         if DELAY > 0:
                             time.sleep(DELAY)
