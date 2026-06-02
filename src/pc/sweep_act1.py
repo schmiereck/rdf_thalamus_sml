@@ -249,7 +249,118 @@ def run_one(cfg: RunConfig) -> dict:
 # Sweep definitions
 # ---------------------------------------------------------------------------
 
-def build_sweep(quick: bool) -> list[RunConfig]:
+def build_focused_sweep() -> list[RunConfig]:
+    """
+    Targeted follow-up sweep based on sweep 1 findings:
+      - base_dim=8 and lateral=0 were the strongest 'real' improvements
+      - action_gain=1.0 was the single biggest tracking lever
+    We now cross these factors and probe action_gain further (1.0–1.6),
+    averaging each config over 3 different random seeds to reduce noise.
+    """
+    seeds = [42, 123, 777]
+    base = dict(n_epochs_passive=5, n_epochs_active=12,
+                n_train_patterns=8, repeats_per_seq=2)
+
+    combos = [
+        # name-suffix          kwargs
+        ("baseline L3",        dict()),
+        ("d8 lat0",            dict(base_dim=8, lateral_steps=0)),
+        ("d8 lat0 g1.0",       dict(base_dim=8, lateral_steps=0, action_gain=1.0)),
+        ("d8 lat0 g1.3",       dict(base_dim=8, lateral_steps=0, action_gain=1.3)),
+        ("d8 lat0 g1.6",       dict(base_dim=8, lateral_steps=0, action_gain=1.6)),
+        ("d8 lat0 g1.0 L2",    dict(base_dim=8, lateral_steps=0, action_gain=1.0, n_layers=2)),
+        ("d8 lat0 g1.0 L4",    dict(base_dim=8, lateral_steps=0, action_gain=1.0, n_layers=4)),
+        ("d6 lat0 g1.0",       dict(base_dim=6, lateral_steps=0, action_gain=1.0)),
+        ("d8 lat0 g1.0 sp.02", dict(base_dim=8, lateral_steps=0, action_gain=1.0, spring_k=0.02)),
+        ("d8 lat0 g1.0 sp.10", dict(base_dim=8, lateral_steps=0, action_gain=1.0, spring_k=0.10)),
+    ]
+
+    configs: list[RunConfig] = []
+    for label, kw in combos:
+        for seed in seeds:
+            configs.append(RunConfig(
+                name=f"{label} s{seed}",
+                seed=seed,
+                **kw,
+                **base,
+            ))
+    return configs
+
+
+def aggregate_focused(results: list[dict]) -> list[dict]:
+    """Average metrics across seeds for configs sharing the same base name."""
+    from collections import defaultdict
+    import re
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for r in results:
+        # strip trailing " sNNN"
+        base_name = re.sub(r" s\d+$", "", r["name"])
+        groups[base_name].append(r)
+
+    aggregated = []
+    for base_name, rs in groups.items():
+        valid = [r for r in rs if not r["diverged"] and np.isfinite(r["tracking_eff"])]
+        if not valid:
+            valid = rs  # keep diverged entries so table isn't empty
+        def _m(key):
+            vals = [r[key] for r in valid if np.isfinite(r[key])]
+            return float(np.mean(vals)) if vals else float("nan")
+        def _s(key):
+            vals = [r[key] for r in valid if np.isfinite(r[key])]
+            return float(np.std(vals)) if len(vals) > 1 else 0.0
+        aggregated.append({
+            "name": base_name,
+            "tracking_eff": _m("tracking_eff"),
+            "tracking_std": _s("tracking_eff"),
+            "slip_tracked": _m("slip_tracked"),
+            "slip_frozen":  _m("slip_frozen"),
+            "sensor_err":   _m("sensor_err"),
+            "state_err":    _m("state_err"),
+            "motor_err":    _m("motor_err"),
+            "n_params":     int(np.mean([r["n_params"] for r in rs])),
+            "diverged":     any(r["diverged"] for r in rs),
+            "seconds":      sum(r["seconds"] for r in rs),
+            "n_seeds":      len(rs),
+        })
+    return sorted(aggregated,
+                  key=lambda r: (r["diverged"],
+                                 -(r["tracking_eff"] if np.isfinite(r["tracking_eff"]) else -9)))
+
+
+def print_focused_table(results: list[dict]) -> None:
+    agg = aggregate_focused(results)
+    print(f"\n{'='*102}")
+    print("  Focused sweep — averaged over 3 seeds, ranked by tracking efficiency")
+    print(f"{'='*102}")
+    print(f"  {'config':<26s} {'track_eff':>9s} {'±std':>5s} {'slip↓':>7s} "
+          f"{'sensor':>8s} {'state':>8s} {'params':>7s} {'total_s':>7s}")
+    print(f"  {'-'*96}")
+
+    def _fmt(x, w=8):
+        if not np.isfinite(x):   return f"{'nan':>{w}s}"
+        if abs(x) >= 1e4:        return f"{'OVF':>{w}s}"
+        return f"{x:{w}.3f}"
+
+    for r in agg:
+        flag = "  ⚠DIV" if r["diverged"] else ""
+        te = r["tracking_eff"]
+        te_s = f"{te:9.3f}" if np.isfinite(te) else f"{'n/a':>9s}"
+        std_s = f"{r['tracking_std']:5.3f}"
+        print(f"  {r['name']:<26s} {te_s} {std_s} {_fmt(r['slip_tracked'],7)} "
+              f"{_fmt(r['sensor_err'])} {_fmt(r['state_err'])} "
+              f"{r['n_params']:7d} {r['seconds']:7.0f}{flag}")
+    print(f"{'='*102}")
+
+    valid = [r for r in agg if not r["diverged"] and np.isfinite(r["tracking_eff"])]
+    if valid:
+        best = valid[0]
+        print(f"\n  Best: {best['name']}  "
+              f"efficiency={best['tracking_eff']:.3f} ±{best['tracking_std']:.3f}, "
+              f"sensor_err={best['sensor_err']:.3f}")
+    print()
+
+
+
     """One-factor-at-a-time sweep around a sensible baseline."""
     base = dict(
         n_epochs_passive=3 if quick else 5,
@@ -346,14 +457,19 @@ def print_table(results: list[dict]) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--quick", action="store_true", help="smaller/faster sweep")
+    ap.add_argument("--quick",   action="store_true", help="smaller/faster sweep")
+    ap.add_argument("--focused", action="store_true", help="targeted follow-up sweep (3-seed average)")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) - 1),
                     help="parallel worker processes")
     args = ap.parse_args()
 
-    configs = build_sweep(args.quick)
-    print(f"Running {len(configs)} configurations on {args.jobs} worker(s)"
-          f"{' [quick]' if args.quick else ''} ...\n")
+    if args.focused:
+        configs = build_focused_sweep()
+        mode = "focused"
+    else:
+        configs = build_sweep(args.quick)
+        mode = "quick" if args.quick else "full"
+    print(f"Running {len(configs)} configurations on {args.jobs} worker(s) [{mode}] ...\n")
 
     results: list[dict] = []
     if args.jobs <= 1:
@@ -369,7 +485,10 @@ def main() -> None:
                 results.append(r)
                 _progress(r, len(results), len(configs))
 
-    print_table(results)
+    if args.focused:
+        print_focused_table(results)
+    else:
+        print_table(results)
 
 
 def _progress(r: dict, done: int, total: int) -> None:
