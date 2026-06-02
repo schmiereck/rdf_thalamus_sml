@@ -244,19 +244,23 @@ def render(
     # phi>0 → window sees right portion of world + zeros on right.
     pad = n_inputs
     padded = [0.0] * pad + list(world_frame) + [0.0] * pad  # length = 3*n_inputs
-    win_start_disp = pad + round(phi)   # window start in padded coords
-    win_end_disp   = win_start_disp + n_inputs - 1
+    win_start_disp = pad + round(phi)        # window start in padded coords
+    win_end_disp   = win_start_disp + n_inputs - 1  # last visible pixel (inclusive)
 
     def _ch(val: float) -> str:
         return "█" if val >= 0.9 else ("▓" if val >= 0.6 else ("░" if val >= 0.2 else "·"))
 
     disp_chars = [_ch(v) for v in padded]
-    # Bracket markers — only if inside the padded strip
-    if 0 <= win_start_disp < len(disp_chars):
-        disp_chars[win_start_disp] = "["
-    if 0 <= win_end_disp < len(disp_chars):
-        disp_chars[win_end_disp] = "]"
-    world_display = "".join(disp_chars)
+    # Insert bracket markers *around* the window (not overwriting content).
+    # Build the string with brackets between pixels so all N pixels stay visible.
+    out = []
+    for i, ch in enumerate(disp_chars):
+        if i == win_start_disp:
+            out.append("[")
+        out.append(ch)
+        if i == win_end_disp:
+            out.append("]")
+    world_display = "".join(out)
 
     # Sensor window content
     dot_str = "".join(_ch(val) for val in frame_values)
