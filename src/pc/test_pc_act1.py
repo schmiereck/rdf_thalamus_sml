@@ -42,20 +42,11 @@ def build_network(
     n_relax: int = 40,
     eta_learn: float = 0.002,
     gamma: float = 0.3,
-    recurrent: bool = False,
-    tau_base: float = 0.0,
 ) -> tuple[PCNetwork, list[SensorNode], SensorNode]:
     """
     Build a pyramidal PC network with a motor sensor.
 
-    Temporal hierarchy (optional):
-      recurrent=True  adds a learned recurrent self-connection to every hidden
-                      node, so it combines its own previous-frame state with the
-                      new bottom-up input ("temporal enrichment").
-      tau_base>0      sets a per-layer leaky persistence so deeper layers evolve
-                      on slower timescales:  τ_k = tau_base · (1 − 2^(1−k)),
-                      i.e. layer 1 stays fast (τ=0) while deeper layers retain
-                      progressively more of their previous state.
+    Temporal memory is handled by each PCNode's internal V forward model.
 
     Returns (net, visual_sensors, motor_sensor).
     """
@@ -85,13 +76,9 @@ def build_network(
     layer_widths = [max(1, n_inputs // (2 ** k)) for k in range(1, n_layers + 1)]
     layer_dims   = [base_dim + (k - 1) * dim_growth for k in range(1, n_layers + 1)]
 
-    # Per-layer leaky time constant: layer 1 fast (τ=0), deeper layers slower.
-    layer_taus = [tau_base * (1.0 - 2.0 ** (1 - k)) for k in range(1, n_layers + 1)]
-
     for k, (width, dim) in enumerate(zip(layer_widths, layer_dims), start=1):
-        tau = layer_taus[k - 1]
         for j in range(width):
-            net.add(PCNode(f"h{k}_{j}", dim=dim, activation="tanh", tau=tau, rng=rng))
+            net.add(PCNode(f"h{k}_{j}", dim=dim, activation="tanh", rng=rng))
 
     # UP connections: each hidden node ← 2 adjacent nodes in the layer below
     # Layer 1 ← sensors
@@ -118,15 +105,6 @@ def build_network(
                 if j + d < width:
                     net.connect(f"h{k}_{j}",   f"h{k}_{j+d}", ConnType.LATERAL)
                     net.connect(f"h{k}_{j+d}", f"h{k}_{j}",   ConnType.LATERAL)
-
-    # Recurrent self-connections: each hidden node combines its previous-frame
-    # state with the new input (learned temporal enrichment).
-    if recurrent:
-        for k in range(1, n_layers + 1):
-            for j in range(layer_widths[k - 1]):
-                nid = f"h{k}_{j}"
-                net.connect(nid, nid, ConnType.RECURRENT,
-                            conn_id=f"{nid}~rec", use_prev=True)
 
     # Motor connections: top layer → motor sensor
     width_top = layer_widths[-1]
@@ -550,8 +528,6 @@ def main() -> None:
     BASE_DIM          = 4    # state dim at layer 1
     DIM_GROWTH        = 2    # dim increment per layer
     LATERAL_STEPS     = 1    # lateral neighbours per side
-    RECURRENT         = True # learned recurrent self-connection per hidden node
-                             #   (temporal enrichment: combine previous + new state)
     ACTION_MODE       = "vel_com"    # "gradient"  — reactive ∂E/∂φ
                                      # "pred_com"  — steer toward COM of network π
                                      # "vel_com"   — smooth-pursuit: extrapolate COM velocity
@@ -559,16 +535,14 @@ def main() -> None:
     PRED_COM_GAIN     = 1.5          # v = PRED_COM_GAIN · displacement  (pred_com)
     VEL_COM_GAIN      = 1.2          # v = VEL_COM_GAIN · displacement   (vel_com)
     VEL_COM_LOOKAHEAD = 1.0          # frames to extrapolate ahead (1.0 = one step)
-    TAU_BASE          = 0.8  # per-layer leaky persistence scale (0 = no memory)
-                             #   τ_k = TAU_BASE·(1−2^(1−k)): L1 fast, deeper slower
     N_TRAIN_PATTERNS  = 10   # how many different patterns to train on
     N_NOVEL_PATTERNS  = 10   # how many different patterns for evaluation only
     REPEATS_PER_SEQ   = 3    # repeats of each pattern per epoch
     N_EPOCHS_PASSIVE  = 8    # Phase 1: no action, learn to predict motion
                              #   (motor_error is trivially 0 here: v=0, nothing to predict)
     N_EPOCHS_ORACLE   = 8    # Phase 1.5: oracle pursuit — fovea perfectly tracks the
-                             #   object's centre of mass so the recurrent connections
-                             #   learn real object dynamics (and the motor learns the
+                             #   object's centre of mass so the V forward model learns
+                             #   real object dynamics (and the motor learns the
                              #   efference-copy → retinal-shift mapping under motion)
     N_EPOCHS_ACTIVE   = 34   # Phase 2: action enabled (visual-error gradient)
     MAX_V             = 2.0  # max eye velocity in pixels/step
@@ -598,8 +572,6 @@ def main() -> None:
         base_dim=BASE_DIM,
         dim_growth=DIM_GROWTH,
         lateral_steps=LATERAL_STEPS,
-        recurrent=RECURRENT,
-        tau_base=TAU_BASE,
     )
 
     # Sample fixed pattern sets once — patterns are N_INPUTS wide (world size)

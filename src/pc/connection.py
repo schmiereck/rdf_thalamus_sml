@@ -12,7 +12,7 @@ from .node import PCNode
 class ConnType(Enum):
     UP = auto()         # source is deeper (abstract), target is shallower (sensor-side)
     LATERAL = auto()    # source and target are in the same layer
-    RECURRENT = auto()  # temporal self-connection: reads source's previous-frame state
+    RECURRENT = auto()  # kept for backwards compatibility; treated like LATERAL
 
 
 class PCConnection:
@@ -27,12 +27,12 @@ class PCConnection:
 
     Error back-pressure (Phase 3):
         pressure = W · ε_target         shape [dim_source]
-        scaled by beta (UP) or gamma (LATERAL)
+        scaled by beta (UP) or gamma (LATERAL/RECURRENT)
         pushed to source.add_pressure(pressure)
 
     Learning (Phase 4, local Hebbian):
         ΔW = η_learn · f(μ_source) ⊗ ε_target
-        W  ← W - ΔW   (with optional L2 weight decay)
+        W  ← W + ΔW   (with optional L2 weight decay)
     """
 
     def __init__(
@@ -45,7 +45,6 @@ class PCConnection:
         lambda_decay: float = 0.001,
         w_clip: float = 5.0,
         pressure_scale: float = 1.0,
-        use_prev: bool = False,
         rng: np.random.Generator | None = None,
     ) -> None:
         self.id = conn_id
@@ -55,13 +54,8 @@ class PCConnection:
         self.eta_learn = eta_learn
         self.lambda_decay = lambda_decay
         self.w_clip = w_clip
-        self.pressure_scale = pressure_scale  # per-connection relaxation strength multiplier
-        # If True, read the source's PREVIOUS-frame activation (temporal memory).
-        # The past is immutable, so such connections only predict and learn —
-        # they push no relaxation back-pressure onto the (frozen) source buffer.
-        self.use_prev = use_prev or (conn_type == ConnType.RECURRENT)
+        self.pressure_scale = pressure_scale
 
-        # Xavier initialisation
         rng = rng or np.random.default_rng()
         limit = np.sqrt(6.0 / (source.dim + target.dim))
         self.W: np.ndarray = rng.uniform(-limit, limit, (source.dim, target.dim))
@@ -70,13 +64,9 @@ class PCConnection:
     # Phase 1: push prediction to target
     # ------------------------------------------------------------------
 
-    def _source_activation(self) -> np.ndarray:
-        """Source activation, reading the previous frame if this is a memory link."""
-        return self.source.prev_activation if self.use_prev else self.source.activation
-
     def predict(self) -> None:
         """Compute prediction and push to target node."""
-        pred = self.W.T @ self._source_activation()   # [dim_target]
+        pred = self.W.T @ self.source.activation   # [dim_target]
         self.target.receive_prediction(pred)
 
     # ------------------------------------------------------------------
@@ -84,15 +74,7 @@ class PCConnection:
     # ------------------------------------------------------------------
 
     def propagate_error(self, beta: float = 1.0, gamma: float = 1.0) -> None:
-        """
-        Back-propagate target error to source as state pressure.
-
-        beta  — weight for UP connections
-        gamma — weight for LATERAL connections
-        """
-        # Memory links read a frozen past buffer — there is nothing to push back to.
-        if self.use_prev:
-            return
+        """Back-propagate target error to source as state pressure."""
         scale = (beta if self.conn_type == ConnType.UP else gamma) * self.pressure_scale
         pressure = scale * (self.W @ self.target.epsilon)   # [dim_source]
         self.source.add_pressure(pressure)
@@ -103,7 +85,7 @@ class PCConnection:
 
     def learn(self) -> None:
         """ΔW = η · f(μ_source) ⊗ ε_target  (outer product, local rule)"""
-        dW = np.outer(self._source_activation(), self.target.epsilon)  # [dim_source × dim_target]
+        dW = np.outer(self.source.activation, self.target.epsilon)  # [dim_source × dim_target]
         if np.all(np.isfinite(dW)):
             self.W += self.eta_learn * dW
         if self.lambda_decay > 0.0:

@@ -1,4 +1,27 @@
-"""PCNode — single node in a Predictive Coding graph."""
+"""PCNode — single node in a Predictive Coding graph.
+
+Each hidden node carries two learned weight sets (per predictive-coding.md):
+
+  W  (hierarchical, in PCConnection) — top-down generative prediction
+  V  (temporal, in PCNode)           — forward model: μ_t → predicted μ_{t+1}
+
+Temporal lifecycle
+------------------
+Phase 1  (new frame arrives):
+    mu ← predicted_next_mu          # warm-start from the node's own forward model
+    receive / finalize hierarchical prediction π from connected nodes
+
+Phase 2  compute ε = μ − π
+
+Phase 3  relax: update μ using error pressure from all connections
+
+Phase 4  learn hierarchical W (in PCConnection)
+         learn temporal V:
+             predicted_next_mu = f(V @ f(μ))     # forward-model output
+             ΔV = η_V · (μ_target − predicted_next_mu) ⊗ f'(V @ f(μ)) ⊗ f(μ)
+         The target for the forward model is the ACTUAL next-step μ, which is
+         stored by commit_step() and used the following frame.
+"""
 
 from __future__ import annotations
 
@@ -22,18 +45,25 @@ _ACTIVATIONS = {
 
 class PCNode:
     """
-    A single Predictive Coding node.
+    A single Predictive Coding node with a built-in temporal forward model.
 
-    Internal vectors (all shape [dim]):
-        μ  (state)      — current representation
-        π  (prediction) — aggregated prediction received from connected nodes
-        ε  (error)      — μ - π
+    Internal vectors (shape [dim]):
+        μ  (mu)       — current state / representation
+        π  (pi)       — aggregated top-down prediction received from connections
+        ε  (epsilon)  — prediction error  ε = μ − π
+
+    Temporal forward model (shape [dim × dim]):
+        V             — temporal weight matrix: maps f(μ_t) → predicted μ_{t+1}
+        predicted_next_mu — output of forward model at step t, used to warm-start
+                            μ at step t+1 (before hierarchical relaxation)
 
     Lifecycle per time step (called by PCNetwork):
-        Phase 1  receive_prediction(p) / finalize_prediction()
+        Phase 1  load_predicted_state()            ← warm-start μ from V's prediction
+                 receive_prediction(p) / finalize_prediction()
         Phase 2  compute_error()
-        Phase 3  add_pressure(dp) / update_state(eta_inf)   [repeated n_relax times]
-        Phase 4  (learning happens in PCConnection, not here)
+        Phase 3  add_pressure(dp) / update_state(eta, alpha)   [n_relax times]
+        Phase 4  learn_temporal(eta_V, w_clip_V)   ← update V toward actual next μ
+        commit_step()                               ← snapshot μ; run forward model
     """
 
     def __init__(
@@ -41,7 +71,8 @@ class PCNode:
         node_id: str,
         dim: int,
         activation: str = "tanh",
-        tau: float = 0.0,
+        eta_temporal: float = 0.002,   # learning rate for V
+        w_clip_V: float = 3.0,         # weight clip for V
         rng: np.random.Generator | None = None,
     ) -> None:
         if activation not in _ACTIVATIONS:
@@ -49,19 +80,29 @@ class PCNode:
 
         self.id = node_id
         self.dim = dim
-        self.tau = tau                                       # leaky persistence (0=fast, →1=slow)
+        self.eta_temporal = eta_temporal
+        self.w_clip_V = w_clip_V
         self._act, self._act_deriv = _ACTIVATIONS[activation]
 
         rng = rng or np.random.default_rng()
-        self.mu: np.ndarray = rng.normal(0.0, 0.01, dim)   # state μ
-        self.pi: np.ndarray = np.zeros(dim)                 # prediction π
-        self.epsilon: np.ndarray = np.zeros(dim)            # error ε
-        self.prev_mu: np.ndarray = np.zeros(dim)            # state μ at the previous frame
+        self.mu: np.ndarray = rng.normal(0.0, 0.01, dim)
+        self.pi: np.ndarray = np.zeros(dim)
+        self.epsilon: np.ndarray = np.zeros(dim)
 
-        # Accumulators reset each phase
+        # Forward model  V: [dim × dim]
+        # Initialised small so it starts nearly as an identity map.
+        limit = np.sqrt(6.0 / (dim + dim))
+        self.V: np.ndarray = rng.uniform(-limit * 0.1, limit * 0.1, (dim, dim))
+
+        # Temporal buffers
+        self._prev_mu: np.ndarray = np.zeros(dim)       # μ from end of previous step
+        self._predicted_next_mu: np.ndarray = np.zeros(dim)  # V's prediction for next step
+        self._prev_f_mu: np.ndarray = np.zeros(dim)    # f(μ_prev) saved for V learning
+
+        # Phase accumulators
         self._pred_sum: np.ndarray = np.zeros(dim)
         self._pred_count: int = 0
-        self._pressure: np.ndarray = np.zeros(dim)          # dμ from connections
+        self._pressure: np.ndarray = np.zeros(dim)
 
         self._clamped: bool = False
 
@@ -76,25 +117,40 @@ class PCNode:
 
     @property
     def activation_deriv(self) -> np.ndarray:
-        """f'(μ) — used for precise error back-pressure."""
         return self._act_deriv(self.mu)
 
     @property
+    def prev_mu(self) -> np.ndarray:
+        """μ at the end of the previous frame (read-only view)."""
+        return self._prev_mu
+
+    @property
     def prev_activation(self) -> np.ndarray:
-        """f(μ_prev) — the node's activation at the previous frame (temporal memory)."""
-        return self._act(self.prev_mu)
+        """f(μ_prev) — kept for any external RECURRENT connections that still use it."""
+        return self._act(self._prev_mu)
 
     # ------------------------------------------------------------------
-    # Phase 1: Predict
+    # Phase 1: load warm-start + receive hierarchical prediction
     # ------------------------------------------------------------------
+
+    def load_predicted_state(self) -> None:
+        """
+        Phase 1, first action: initialise μ from the forward model's prediction
+        of this frame, computed at the end of the previous frame.
+
+        Clamped nodes (sensors) are driven by external input — skip.
+        """
+        if self._clamped:
+            return
+        self.mu = self._predicted_next_mu.copy()
 
     def receive_prediction(self, pred: np.ndarray) -> None:
-        """Called by each incoming connection with its prediction contribution."""
+        """Called by each incoming connection with its top-down prediction."""
         self._pred_sum += pred
         self._pred_count += 1
 
     def finalize_prediction(self) -> None:
-        """Compute mean prediction; call once after all connections have pushed."""
+        """Average all received predictions into π."""
         if self._pred_count > 0:
             self.pi = self._pred_sum / self._pred_count
         else:
@@ -107,7 +163,7 @@ class PCNode:
     # ------------------------------------------------------------------
 
     def compute_error(self) -> None:
-        """ε = μ - π"""
+        """ε = μ − π"""
         self.epsilon = self.mu - self.pi
 
     # ------------------------------------------------------------------
@@ -115,58 +171,86 @@ class PCNode:
     # ------------------------------------------------------------------
 
     def add_pressure(self, dp: np.ndarray) -> None:
-        """Called by each outgoing connection with its error back-pressure."""
         self._pressure += dp
 
     def update_state(self, eta_inf: float, alpha: float) -> None:
         """
-        μ ← μ + η_inf · (−α·ε  +  accumulated pressure from connections)
-
-        Clamped nodes (sensors) ignore this update.
-        NaN/Inf guard: if the update produces non-finite values, reset to zero.
+        μ ← μ + η_inf · (−α·ε + accumulated connection pressure)
+        Clamped nodes ignore this update.
         """
         if self._clamped:
             self._pressure = np.zeros(self.dim)
             return
-
         dmu = -alpha * self.epsilon + self._pressure
         new_mu = self.mu + eta_inf * dmu
         if not np.all(np.isfinite(new_mu)):
-            # Numerical explosion — reset this node's state
             self.mu = np.zeros(self.dim)
         else:
             self.mu = new_mu
         self._pressure = np.zeros(self.dim)
 
     # ------------------------------------------------------------------
-    # Temporal memory: commit one frame
+    # Phase 4 (temporal): learn V and compute next prediction
+    # ------------------------------------------------------------------
+
+    def learn_temporal(self) -> None:
+        """
+        Update the temporal weight matrix V.
+
+        The forward model predicts: predicted_next = f(V @ f(μ_prev))
+        The target is the ACTUAL μ at the current step (which IS the next step
+        relative to the previous frame where the prediction was made).
+
+        Error:  δ = μ_current − predicted_next_mu_from_prev
+        ΔV    = η_V · δ · f'(pre) ⊗ f(μ_prev)^T
+        where pre = V @ f(μ_prev)  (saved during commit_step).
+
+        Clamped nodes have no V to learn.
+        """
+        if self._clamped:
+            return
+        # delta: how far off the forward model was
+        delta = self.mu - self._predicted_next_mu   # shape [dim]
+        # gradient through the activation in the forward model
+        pre = self.V @ self._prev_f_mu              # shape [dim]
+        grad_act = self._act_deriv(pre)             # shape [dim]
+        # outer product update
+        dV = np.outer(delta * grad_act, self._prev_f_mu)
+        if np.all(np.isfinite(dV)):
+            self.V += self.eta_temporal * dV
+        if self.w_clip_V > 0.0:
+            np.clip(self.V, -self.w_clip_V, self.w_clip_V, out=self.V)
+
+    # ------------------------------------------------------------------
+    # commit_step: snapshot μ and run forward model for next frame
     # ------------------------------------------------------------------
 
     def commit_step(self) -> None:
         """
-        End-of-frame bookkeeping for temporal hierarchy:
+        End-of-frame bookkeeping:
 
-          1. Leaky persistence — deeper layers (higher τ) keep more of their
-             previous state, so they evolve on a slower timescale:
-                 μ ← (1 − τ) · μ_relaxed  +  τ · μ_prev
-          2. Snapshot — store the (blended) μ as prev_mu for the next frame,
-             so recurrent self-connections can read it as temporal context.
+        1. Save μ_relaxed as prev_mu (target for V learning next frame).
+        2. Run the forward model: predicted_next_mu = f(V @ f(μ))
+           This prediction warm-starts μ at the top of the NEXT frame,
+           giving the node a head-start before hierarchical relaxation.
 
-        Clamped nodes (sensors) carry no memory; they are skipped.
+        Clamped nodes (sensors) just snapshot their current value.
         """
         if self._clamped:
-            self.prev_mu = self.mu.copy()
+            self._prev_mu = self.mu.copy()
             return
-        if self.tau > 0.0:
-            self.mu = (1.0 - self.tau) * self.mu + self.tau * self.prev_mu
-        self.prev_mu = self.mu.copy()
+        # Save for V's learning target next frame
+        self._prev_f_mu = self._act(self.mu).copy()   # f(μ_t)
+        self._prev_mu = self.mu.copy()                 # μ_t (for external access)
+        # Forward model: predict μ_{t+1}
+        pre = self.V @ self._prev_f_mu                 # [dim]
+        self._predicted_next_mu = self._act(pre)       # f(V @ f(μ_t))
 
     # ------------------------------------------------------------------
     # Sensor clamping
     # ------------------------------------------------------------------
 
     def clamp(self, value: np.ndarray) -> None:
-        """Fix state to an external input value (sensor node behaviour)."""
         assert value.shape == (self.dim,), f"Expected shape ({self.dim},), got {value.shape}"
         self.mu = value.copy()
         self._clamped = True
@@ -183,12 +267,14 @@ class PCNode:
     # ------------------------------------------------------------------
 
     def reset(self, rng: np.random.Generator | None = None) -> None:
-        """Re-initialise state to near-zero; keep weights (in connections)."""
+        """Re-initialise state to near-zero; keep weights."""
         rng = rng or np.random.default_rng()
         self.mu = rng.normal(0.0, 0.01, self.dim)
         self.pi = np.zeros(self.dim)
         self.epsilon = np.zeros(self.dim)
-        self.prev_mu = np.zeros(self.dim)
+        self._prev_mu = np.zeros(self.dim)
+        self._predicted_next_mu = np.zeros(self.dim)
+        self._prev_f_mu = np.zeros(self.dim)
         self._pred_sum = np.zeros(self.dim)
         self._pred_count = 0
         self._pressure = np.zeros(self.dim)
@@ -201,7 +287,8 @@ class PCNode:
 
 class SensorNode(PCNode):
     """
-    Convenience subclass: always clamped.  Call set_input() each time step.
+    Convenience subclass: always clamped, no temporal forward model.
+    Call set_input() each time step.
     """
 
     def __init__(self, node_id: str, dim: int) -> None:

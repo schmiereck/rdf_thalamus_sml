@@ -66,8 +66,6 @@ class RunConfig:
     base_dim: int = 4
     dim_growth: int = 2
     lateral_steps: int = 1
-    recurrent: bool = False
-    tau_base: float = 0.0
     anticipatory: bool = False      # use gradient of top-down prediction (True) vs raw image
     action_mode: str = "gradient"    # "gradient", "pred_com", or "vel_com"
     pred_com_target: float = 0.5    # desired retinal fraction (pred_com / vel_com)
@@ -116,8 +114,6 @@ def run_one(cfg: RunConfig) -> dict:
         n_relax=cfg.n_relax,
         eta_learn=cfg.eta_learn,
         gamma=cfg.gamma,
-        recurrent=cfg.recurrent,
-        tau_base=cfg.tau_base,
     )
 
     phi_min, phi_max = -float(cfg.n_inputs), float(cfg.n_inputs)
@@ -318,14 +314,8 @@ def build_temporal_sweep() -> list[RunConfig]:
                 n_train_patterns=8, repeats_per_seq=2)
 
     combos = [
-        ("static (no memory)",  dict(recurrent=False, tau_base=0.0)),
-        ("rec only",            dict(recurrent=True,  tau_base=0.0)),
-        ("tau0.5 only",         dict(recurrent=False, tau_base=0.5)),
-        ("tau0.8 only",         dict(recurrent=False, tau_base=0.8)),
-        ("rec + tau0.5",        dict(recurrent=True,  tau_base=0.5)),
-        ("rec + tau0.8",        dict(recurrent=True,  tau_base=0.8)),
-        ("rec + tau0.95",       dict(recurrent=True,  tau_base=0.95)),
-        ("rec + tau0.8 L4",     dict(recurrent=True,  tau_base=0.8, n_layers=4)),
+        ("V-model",    dict()),
+        ("V-model L4", dict(n_layers=4)),
     ]
 
     configs: list[RunConfig] = []
@@ -347,10 +337,9 @@ def build_anticipatory_sweep() -> list[RunConfig]:
                 n_train_patterns=8, repeats_per_seq=2)
 
     combos = [
-        ("static",             dict(recurrent=False, tau_base=0.0, action_gain=1.0)),
-        ("rec+tau0.8",         dict(recurrent=True,  tau_base=0.8, action_gain=1.0)),
-        ("rec+tau0.8 L4",      dict(recurrent=True,  tau_base=0.8, n_layers=4, action_gain=1.0)),
-        ("rec+tau0.8 L4 g1.3", dict(recurrent=True,  tau_base=0.8, n_layers=4, action_gain=1.3)),
+        ("V-model g1.0",   dict(action_gain=1.0)),
+        ("V-model L4 g1.0",dict(n_layers=4, action_gain=1.0)),
+        ("V-model L4 g1.3",dict(n_layers=4, action_gain=1.3)),
     ]
     modes = [
         ("reactive",     False),
@@ -381,8 +370,7 @@ def build_vel_com_sweep() -> list[RunConfig]:
     PC prediction errors during active phase.
     """
     seeds = [42, 123, 777]
-    arch = dict(recurrent=True, tau_base=0.8, n_layers=4,
-                base_dim=8, lateral_steps=0,
+    arch = dict(n_layers=4, base_dim=8, lateral_steps=0,
                 n_train_patterns=8, repeats_per_seq=2)
     budget_no_oracle = dict(n_epochs_passive=5, n_epochs_oracle=0, n_epochs_active=12)
     budget_oracle    = dict(n_epochs_passive=2, n_epochs_oracle=5, n_epochs_active=12)
@@ -428,8 +416,7 @@ def build_pred_com_sweep() -> list[RunConfig]:
     Total: 3×2×3 seeds + 1×2×3 seeds = 30 configs
     """
     seeds = [42, 123, 777]
-    arch = dict(recurrent=True, tau_base=0.8, n_layers=4,
-                base_dim=8, lateral_steps=0,
+    arch = dict(n_layers=4, base_dim=8, lateral_steps=0,
                 n_train_patterns=8, repeats_per_seq=2)
     budget_no_oracle = dict(n_epochs_passive=5, n_epochs_oracle=0, n_epochs_active=12)
     budget_oracle    = dict(n_epochs_passive=2, n_epochs_oracle=5, n_epochs_active=12)
@@ -470,8 +457,7 @@ def build_oracle_sweep() -> list[RunConfig]:
     The oracle epochs replace some passive epochs to keep the budget comparable.
     """
     seeds = [42, 123, 777]
-    arch = dict(recurrent=True, tau_base=0.8, n_layers=4,
-                base_dim=8, lateral_steps=0, action_gain=1.0,
+    arch = dict(n_layers=4, base_dim=8, lateral_steps=0, action_gain=1.0,
                 n_train_patterns=8, repeats_per_seq=2)
 
     combos = [
