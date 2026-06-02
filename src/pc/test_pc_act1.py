@@ -114,7 +114,11 @@ def build_network(
 
 def apply_fovea_shift(world_frame: list[float], phi: float, n_inputs: int) -> list[float]:
     """Extract n_inputs-wide window from world_frame starting at pixel round(phi).
-    Pixels outside world bounds are filled with 0.
+
+    phi=0 means the sensor window is exactly aligned with the world (full view).
+    Negative phi shifts the window left (world content enters from right side, zeros on left).
+    Positive phi shifts the window right (world content exits to left, zeros on right).
+    Pixels outside world bounds are zero-padded.
     """
     offset = round(phi)
     world_len = len(world_frame)
@@ -233,42 +237,37 @@ def render(
     world_len = len(world_frame)
     phase_str = "Phase 2 [ACTIVE]" if action_enabled else "Phase 1 [passive]"
 
-    # World strip: show full world with fovea window markers
-    win_start = round(phi)
-    win_end = win_start + n_inputs - 1
-    world_chars = []
-    for i, val in enumerate(world_frame):
-        ch = "█" if val >= 0.9 else ("▓" if val >= 0.6 else ("░" if val >= 0.2 else "·"))
-        world_chars.append(ch)
-    # Build display: left pad | world with [..] markers | right pad
-    left_pad = "·" * n_inputs
-    right_pad = "·" * n_inputs
-    world_str = "".join(world_chars)
-    # Mark window boundaries inside the world strip
-    w_disp = list(world_str)
-    if 0 <= win_start < world_len:
-        w_disp[win_start] = "[" if w_disp[win_start] == "·" else w_disp[win_start]
-    if 0 <= win_end < world_len:
-        w_disp[win_end] = "]" if w_disp[win_end] == "·" else w_disp[win_end]
-    world_display = left_pad + "".join(w_disp) + right_pad
+    # Display: show [N zeros][world N px][N zeros] = 3N px strip
+    # The fovea window of N_inputs can slide across this entire strip.
+    # phi=0 → window aligned with world center segment.
+    # phi<0 → window sees zeros on left + left portion of world.
+    # phi>0 → window sees right portion of world + zeros on right.
+    pad = n_inputs
+    padded = [0.0] * pad + list(world_frame) + [0.0] * pad  # length = 3*n_inputs
+    win_start_disp = pad + round(phi)   # window start in padded coords
+    win_end_disp   = win_start_disp + n_inputs - 1
 
-    # Sensor window display
-    dot_str = "".join(
-        ("█" if val >= 0.9 else ("▓" if val >= 0.6 else ("░" if val >= 0.2 else "·")))
-        for val in frame_values
-    )
-    # Fovea marker: pad with spaces to align sensor window under world strip
-    fovea_offset = n_inputs + win_start  # offset in world_display
-    fovea_marker = " " * fovea_offset + "[" + dot_str + "]"
+    def _ch(val: float) -> str:
+        return "█" if val >= 0.9 else ("▓" if val >= 0.6 else ("░" if val >= 0.2 else "·"))
+
+    disp_chars = [_ch(v) for v in padded]
+    # Bracket markers — only if inside the padded strip
+    if 0 <= win_start_disp < len(disp_chars):
+        disp_chars[win_start_disp] = "["
+    if 0 <= win_end_disp < len(disp_chars):
+        disp_chars[win_end_disp] = "]"
+    world_display = "".join(disp_chars)
+
+    # Sensor window content
+    dot_str = "".join(_ch(val) for val in frame_values)
 
     lines = []
     lines.append(
         f"Step {step:5d}/{total_steps}  {phase_str}  "
         f"pattern: {pattern_name:<36s}  frame {frame_idx+1}"
     )
-    lines.append(f"  World:  {world_display}")
-    lines.append(f"  Fovea:  {fovea_marker}")
-    lines.append(f"  φ={phi:5.1f}  v={v:+.2f}   (world={world_len}px  window={n_inputs}px)")
+    lines.append(f"  World:  {world_display}   (φ={phi:+.1f}  v={v:+.2f})")
+    lines.append(f"  Sensor: {' ' * win_start_disp}[{dot_str}]")
     lines.append("")
 
     s_delta = st_delta = m_delta = ""
@@ -316,14 +315,13 @@ def measure_per_pattern_errors(
     n_passes: int = 3,
 ) -> list[tuple[str, dict[str, float]]]:
     """Run each named pattern n_passes times (no action, no learning)."""
-    # For evaluation use the center of the world as the sensor window
-    phi_eval = max(0, (len(named_patterns[0][1][0]) - n_inputs) // 2) if named_patterns else 0
     results = []
     for name, frames in named_patterns:
         s_errs, st_errs, m_errs = [], [], []
         for _ in range(n_passes):
             for frame in frames:
-                win = apply_fovea_shift(frame, phi_eval, n_inputs)
+                # phi=0: sensor window aligned with world (full view, no offset)
+                win = apply_fovea_shift(frame, 0, n_inputs)
                 set_frame(visual_sensors, win)
                 motor_sensor.set_input(np.array([0.0]))
                 info = net.step(learn=False)
@@ -414,8 +412,7 @@ def main() -> None:
     # ---------------------------------------------------------------
     # Configuration
     # ---------------------------------------------------------------
-    N_INPUTS          = 16   # visual sensor window width (pixels visible at once)
-    WORLD_MULT        = 3    # world is WORLD_MULT × N_INPUTS wide
+    N_INPUTS          = 16   # visual sensor window width = world width (pixels)
     N_LAYERS          = 3    # hidden pyramid layers (depth)
     BASE_DIM          = 4    # state dim at layer 1
     DIM_GROWTH        = 2    # dim increment per layer
@@ -432,8 +429,10 @@ def main() -> None:
     ACTION_SMOOTH     = 0.2  # velocity momentum (0 = none, blends previous v)
     DELAY             = 0.0  # seconds between steps
 
-    WORLD_WIDTH = N_INPUTS * WORLD_MULT   # e.g. 48 pixels
-    PHI_MAX     = float(WORLD_WIDTH - N_INPUTS)   # fovea can shift 0..PHI_MAX
+    # Fovea range: the sensor window can slide from -N_INPUTS (fully left of world)
+    # to +N_INPUTS (fully right of world).  phi=0 = world fully in view.
+    PHI_MIN = float(-N_INPUTS)
+    PHI_MAX = float(N_INPUTS)
     # ---------------------------------------------------------------
 
     rng = np.random.default_rng(42)
@@ -446,13 +445,13 @@ def main() -> None:
         lateral_steps=LATERAL_STEPS,
     )
 
-    # Sample fixed pattern sets once — generated in the wider world space
+    # Sample fixed pattern sets once — patterns are N_INPUTS wide (world size)
     train_patterns = sample_named_patterns(
-        PatternGenerator(n_inputs=WORLD_WIDTH, seed=0, bias_simple=True),
+        PatternGenerator(n_inputs=N_INPUTS, seed=0, bias_simple=True),
         n_sequences=N_TRAIN_PATTERNS,
     )
     novel_patterns = sample_named_patterns(
-        PatternGenerator(n_inputs=WORLD_WIDTH, seed=9999),
+        PatternGenerator(n_inputs=N_INPUTS, seed=9999),
         n_sequences=N_NOVEL_PATTERNS,
     )
 
@@ -473,7 +472,7 @@ def main() -> None:
           + " (top)")
     print(f"Dims:    2 → "
           + " → ".join(str(BASE_DIM + (k-1)*DIM_GROWTH) for k in range(1, N_LAYERS + 1)))
-    print(f"\nWorld:   {WORLD_WIDTH}px  |  Sensor window: {N_INPUTS}px  |  φ ∈ [0, {PHI_MAX:.0f}]")
+    print(f"\nWorld:   {N_INPUTS}px  |  Sensor window: {N_INPUTS}px  |  φ ∈ [{PHI_MIN:.0f}, {PHI_MAX:.0f}]")
     print(f"Phase 1: {N_EPOCHS_PASSIVE} epochs (passive, φ=0, learn to predict)")
     print(f"Phase 2: {N_EPOCHS_ACTIVE} epochs  (active, fovea = -gain·∂E/∂φ)")
     print(f"Total  : ≈{total_steps} steps\n")
@@ -536,14 +535,14 @@ def main() -> None:
                         step += 1
 
                         # Apply the action: descend the visual-error gradient.
-                        # phi is absolute world position, bounded to [0, PHI_MAX].
+                        # phi is fovea offset (bounded to [PHI_MIN, PHI_MAX]).
                         if action_enabled:
                             v_target = -ACTION_GAIN * action_grad
                             v = float(np.clip(
                                 (1.0 - ACTION_SMOOTH) * v_target + ACTION_SMOOTH * v,
                                 -MAX_V, MAX_V,
                             ))
-                            phi = float(np.clip(phi + v, 0.0, PHI_MAX))
+                            phi = float(np.clip(phi + v, PHI_MIN, PHI_MAX))
 
                         if DELAY > 0:
                             time.sleep(DELAY)
