@@ -431,6 +431,8 @@ def main() -> None:
     ACTION_GAIN       = 0.7  # gradient → velocity gain (v = -gain · ∂E/∂φ);
                              #   higher = tighter tracking, less lag (risk: oscillation)
     ACTION_SMOOTH     = 0.2  # velocity momentum (0 = none, blends previous v)
+    SPRING_K          = 0.05 # centering spring: pulls fovea toward φ=0 each step
+                             #   (v_spring = -SPRING_K * phi, like eye muscle at rest)
     DELAY             = 0.0  # seconds between steps
 
     # Fovea range: the sensor window can slide from -N_INPUTS (fully left of world)
@@ -540,8 +542,10 @@ def main() -> None:
 
                         # Apply the action: descend the visual-error gradient.
                         # phi is fovea offset (bounded to [PHI_MIN, PHI_MAX]).
+                        # A centering spring (v_spring = -SPRING_K * phi) pulls the
+                        # fovea back to phi=0 unless the motor actively counteracts it.
                         if action_enabled:
-                            v_target = -ACTION_GAIN * action_grad
+                            v_target = -ACTION_GAIN * action_grad - SPRING_K * phi
                             v = float(np.clip(
                                 (1.0 - ACTION_SMOOTH) * v_target + ACTION_SMOOTH * v,
                                 -MAX_V, MAX_V,
