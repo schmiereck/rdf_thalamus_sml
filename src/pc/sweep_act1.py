@@ -360,7 +360,11 @@ def print_focused_table(results: list[dict]) -> None:
     print()
 
 
+# ---------------------------------------------------------------------------
+# Pretty printing
+# ---------------------------------------------------------------------------
 
+def build_sweep(quick: bool) -> list[RunConfig]:
     """One-factor-at-a-time sweep around a sensible baseline."""
     base = dict(
         n_epochs_passive=3 if quick else 5,
@@ -370,45 +374,31 @@ def print_focused_table(results: list[dict]) -> None:
     )
     configs: list[RunConfig] = []
 
-    # Baseline
     configs.append(RunConfig(name="baseline (L3 d4+2 lat1)", **base))
 
-    # --- Depth sweep (primary interest) ---
     configs.append(RunConfig(name="depth: L2",  n_layers=2, **base))
     configs.append(RunConfig(name="depth: L4",  n_layers=4, **base))
 
-    # --- State dimension sweep ---
-    configs.append(RunConfig(name="dim: base6",       base_dim=6, **base))
-    configs.append(RunConfig(name="dim: base8",       base_dim=8, **base))
-    configs.append(RunConfig(name="dim: growth0",     dim_growth=0, **base))
-    configs.append(RunConfig(name="dim: growth4",     dim_growth=4, **base))
+    configs.append(RunConfig(name="dim: base6",   base_dim=6,   **base))
+    configs.append(RunConfig(name="dim: base8",   base_dim=8,   **base))
+    configs.append(RunConfig(name="dim: growth0", dim_growth=0, **base))
+    configs.append(RunConfig(name="dim: growth4", dim_growth=4, **base))
 
-    # --- Lateral connectivity ---
     configs.append(RunConfig(name="lateral: 0", lateral_steps=0, **base))
     configs.append(RunConfig(name="lateral: 2", lateral_steps=2, **base))
 
     if not quick:
-        # --- Dynamics ---
-        configs.append(RunConfig(name="relax: 20",     n_relax=20, **base))
-        configs.append(RunConfig(name="relax: 80",     n_relax=80, **base))
+        configs.append(RunConfig(name="relax: 20",      n_relax=20,      **base))
+        configs.append(RunConfig(name="relax: 80",      n_relax=80,      **base))
         configs.append(RunConfig(name="eta_learn:.004", eta_learn=0.004, **base))
-        configs.append(RunConfig(name="eta_inf:.10",    eta_inf=0.10, **base))
-
-        # --- Action / fovea ---
-        configs.append(RunConfig(name="gain: 1.0",     action_gain=1.0, **base))
-        configs.append(RunConfig(name="spring: 0.10",  spring_k=0.10, **base))
-        configs.append(RunConfig(name="spring: 0.02",  spring_k=0.02, **base))
-
-        # --- A couple of promising combos ---
+        configs.append(RunConfig(name="eta_inf:.10",    eta_inf=0.10,    **base))
+        configs.append(RunConfig(name="gain: 1.0",      action_gain=1.0, **base))
+        configs.append(RunConfig(name="spring: 0.10",   spring_k=0.10,   **base))
+        configs.append(RunConfig(name="spring: 0.02",   spring_k=0.02,   **base))
         configs.append(RunConfig(name="combo L4 d6 lat2",
                                  n_layers=4, base_dim=6, lateral_steps=2, **base))
-
     return configs
 
-
-# ---------------------------------------------------------------------------
-# Pretty printing
-# ---------------------------------------------------------------------------
 
 def print_table(results: list[dict]) -> None:
     results = sorted(
