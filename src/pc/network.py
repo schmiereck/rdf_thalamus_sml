@@ -78,12 +78,15 @@ class PCNetwork:
         eta_learn: float | None = None,
         lambda_decay: float | None = None,
         pressure_scale: float = 1.0,
+        use_prev: bool = False,
         conn_id: str | None = None,
     ) -> PCConnection:
         """
         Create a connection source → target and register it.
 
         source and target must already be added via add().
+        use_prev=True (or ConnType.RECURRENT) reads the source's previous-frame
+        state, giving the node a learned temporal memory.
         Returns the PCConnection for optional inspection.
         """
         src = self._nodes[source_id]
@@ -98,6 +101,7 @@ class PCNetwork:
             lambda_decay=lambda_decay if lambda_decay is not None else self.lambda_decay,
             w_clip=self.w_clip,
             pressure_scale=pressure_scale,
+            use_prev=use_prev,
             rng=self._rng,
         )
         self._connections.append(conn)
@@ -163,6 +167,16 @@ class PCNetwork:
 
     def phase_learn(self) -> None:
         self._phase_learn()
+
+    def commit_step(self) -> None:
+        """
+        Advance the temporal memory by one frame: apply each node's leaky
+        persistence and snapshot its state into prev_mu.  Call once per frame,
+        after step()/phase_relax(), so recurrent connections see the just-
+        finished frame as their 'previous' context on the next frame.
+        """
+        for node in self._nodes.values():
+            node.commit_step()
 
     # ------------------------------------------------------------------
     # Internal phase implementations

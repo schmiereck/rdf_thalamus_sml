@@ -62,6 +62,8 @@ class RunConfig:
     base_dim: int = 4
     dim_growth: int = 2
     lateral_steps: int = 1
+    recurrent: bool = False
+    tau_base: float = 0.0
     # network dynamics
     eta_inf: float = 0.05
     n_relax: int = 40
@@ -114,6 +116,8 @@ def run_one(cfg: RunConfig) -> dict:
         n_relax=cfg.n_relax,
         eta_learn=cfg.eta_learn,
         gamma=cfg.gamma,
+        recurrent=cfg.recurrent,
+        tau_base=cfg.tau_base,
     )
 
     phi_min, phi_max = -float(cfg.n_inputs), float(cfg.n_inputs)
@@ -155,6 +159,7 @@ def run_one(cfg: RunConfig) -> dict:
                         action_grad = compute_action_gradient(visual_sensors, shifted)
 
                     net.step(learn=True)
+                    net.commit_step()
 
                     if action_enabled:
                         v_target = -cfg.action_gain * action_grad - cfg.spring_k * phi
@@ -187,6 +192,7 @@ def run_one(cfg: RunConfig) -> dict:
             action_grad = compute_action_gradient(visual_sensors, shifted)
 
             info = net.step(learn=False)
+            net.commit_step()
             m_err = float(np.sum(net.node("motor").epsilon ** 2))
             s_errs.append(info["sensor_error"] - m_err)
             st_errs.append(info["state_error"])

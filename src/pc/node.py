@@ -41,6 +41,7 @@ class PCNode:
         node_id: str,
         dim: int,
         activation: str = "tanh",
+        tau: float = 0.0,
         rng: np.random.Generator | None = None,
     ) -> None:
         if activation not in _ACTIVATIONS:
@@ -48,12 +49,14 @@ class PCNode:
 
         self.id = node_id
         self.dim = dim
+        self.tau = tau                                       # leaky persistence (0=fast, →1=slow)
         self._act, self._act_deriv = _ACTIVATIONS[activation]
 
         rng = rng or np.random.default_rng()
         self.mu: np.ndarray = rng.normal(0.0, 0.01, dim)   # state μ
         self.pi: np.ndarray = np.zeros(dim)                 # prediction π
         self.epsilon: np.ndarray = np.zeros(dim)            # error ε
+        self.prev_mu: np.ndarray = np.zeros(dim)            # state μ at the previous frame
 
         # Accumulators reset each phase
         self._pred_sum: np.ndarray = np.zeros(dim)
@@ -75,6 +78,11 @@ class PCNode:
     def activation_deriv(self) -> np.ndarray:
         """f'(μ) — used for precise error back-pressure."""
         return self._act_deriv(self.mu)
+
+    @property
+    def prev_activation(self) -> np.ndarray:
+        """f(μ_prev) — the node's activation at the previous frame (temporal memory)."""
+        return self._act(self.prev_mu)
 
     # ------------------------------------------------------------------
     # Phase 1: Predict
@@ -131,6 +139,29 @@ class PCNode:
         self._pressure = np.zeros(self.dim)
 
     # ------------------------------------------------------------------
+    # Temporal memory: commit one frame
+    # ------------------------------------------------------------------
+
+    def commit_step(self) -> None:
+        """
+        End-of-frame bookkeeping for temporal hierarchy:
+
+          1. Leaky persistence — deeper layers (higher τ) keep more of their
+             previous state, so they evolve on a slower timescale:
+                 μ ← (1 − τ) · μ_relaxed  +  τ · μ_prev
+          2. Snapshot — store the (blended) μ as prev_mu for the next frame,
+             so recurrent self-connections can read it as temporal context.
+
+        Clamped nodes (sensors) carry no memory; they are skipped.
+        """
+        if self._clamped:
+            self.prev_mu = self.mu.copy()
+            return
+        if self.tau > 0.0:
+            self.mu = (1.0 - self.tau) * self.mu + self.tau * self.prev_mu
+        self.prev_mu = self.mu.copy()
+
+    # ------------------------------------------------------------------
     # Sensor clamping
     # ------------------------------------------------------------------
 
@@ -157,6 +188,7 @@ class PCNode:
         self.mu = rng.normal(0.0, 0.01, self.dim)
         self.pi = np.zeros(self.dim)
         self.epsilon = np.zeros(self.dim)
+        self.prev_mu = np.zeros(self.dim)
         self._pred_sum = np.zeros(self.dim)
         self._pred_count = 0
         self._pressure = np.zeros(self.dim)
