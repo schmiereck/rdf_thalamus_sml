@@ -389,8 +389,9 @@ def main() -> None:
     N_TRAIN_PATTERNS  = 10   # how many different patterns to train on
     N_NOVEL_PATTERNS  = 10   # how many different patterns for evaluation only
     REPEATS_PER_SEQ   = 3    # repeats of each pattern per epoch
-    N_EPOCHS_PASSIVE  = 30   # Phase 1: no action, learn to predict motion
-    N_EPOCHS_ACTIVE   = 20   # Phase 2: action enabled (visual-error gradient)
+    N_EPOCHS_PASSIVE  = 12   # Phase 1: no action, learn to predict motion
+                             #   (motor_error is trivially 0 here: v=0, nothing to predict)
+    N_EPOCHS_ACTIVE   = 38   # Phase 2: action enabled (visual-error gradient)
     MAX_V             = 2.0  # max eye velocity in pixels/step
     ACTION_GAIN       = 0.7  # gradient → velocity gain (v = -gain · ∂E/∂φ);
                              #   higher = tighter tracking, less lag (risk: oscillation)
