@@ -296,15 +296,15 @@ def build_anticipatory_sweep() -> list[RunConfig]:
     Sweeps 4 combos × 2 modes × 3 seeds = 24 configs.
     """
     seeds = [42, 123, 777]
-    base = dict(base_dim=8, lateral_steps=0, action_gain=1.0,
+    base = dict(base_dim=8, lateral_steps=0,
                 n_epochs_passive=5, n_epochs_active=12,
                 n_train_patterns=8, repeats_per_seq=2)
 
     combos = [
-        ("static",          dict(recurrent=False, tau_base=0.0)),
-        ("rec+tau0.8",      dict(recurrent=True,  tau_base=0.8)),
-        ("rec+tau0.8 L4",   dict(recurrent=True,  tau_base=0.8, n_layers=4)),
-        ("rec+tau0.8 L4 g1.3", dict(recurrent=True, tau_base=0.8, n_layers=4, action_gain=1.3)),
+        ("static",             dict(recurrent=False, tau_base=0.0, action_gain=1.0)),
+        ("rec+tau0.8",         dict(recurrent=True,  tau_base=0.8, action_gain=1.0)),
+        ("rec+tau0.8 L4",      dict(recurrent=True,  tau_base=0.8, n_layers=4, action_gain=1.0)),
+        ("rec+tau0.8 L4 g1.3", dict(recurrent=True,  tau_base=0.8, n_layers=4, action_gain=1.3)),
     ]
     modes = [
         ("reactive",     False),
