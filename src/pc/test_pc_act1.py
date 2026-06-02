@@ -38,6 +38,10 @@ def build_network(
     base_dim: int = 4,
     dim_growth: int = 2,
     lateral_steps: int = 1,
+    eta_inf: float = 0.05,
+    n_relax: int = 40,
+    eta_learn: float = 0.002,
+    gamma: float = 0.3,
 ) -> tuple[PCNetwork, list[SensorNode], SensorNode]:
     """
     Build a pyramidal PC network with a motor sensor.
@@ -45,13 +49,13 @@ def build_network(
     Returns (net, visual_sensors, motor_sensor).
     """
     net = PCNetwork(
-        eta_inf=0.05,
-        n_relax=40,
+        eta_inf=eta_inf,
+        n_relax=n_relax,
         eps_tol=1e-5,
         alpha=1.0,
         beta=1.0,
-        gamma=0.3,
-        eta_learn=0.002,
+        gamma=gamma,
+        eta_learn=eta_learn,
         lambda_decay=0.0,
         w_clip=3.0,
         rng=rng,
