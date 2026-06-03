@@ -700,7 +700,7 @@ def main() -> None:
     # ---- Pointer (Phase 1): a movable 2-px effector with physical mass ----
     POINTER_WIDTH       = 2      # pointer blob width in pixels
     POINTER_MASS        = 1.0    # inertia: a = F / mass
-    POINTER_DAMPING     = 0.15   # velocity damping per step (friction)
+    POINTER_DAMPING     = 0.05   # velocity damping per step (low friction = more momentum)
     POINTER_ACTION_GAIN = 1.5    # gradient → force gain (F = -gain · ∂E/∂p)
     POINTER_SPRING_K    = 0.02   # weak spring pulling the pointer toward gaze centre
     POINTER_DRIFT       = 0.3    # std of force noise before the pointer action is on
@@ -779,6 +779,8 @@ def main() -> None:
     pointer_history: list[float] = []        # retinal pointer position over time
     ptr_f_action = 0.0   # last pointer steering force (network/drift)
     ptr_f_spring = 0.0   # last pointer spring force (toward gaze centre)
+    ptr_net_steps   = 0  # steps where |f_act| > |f_spr| (active phase)
+    ptr_total_steps = 0  # total active steps with pointer
 
     try:
         for epoch in range(N_EPOCHS_PASSIVE + N_EPOCHS_ORACLE + N_EPOCHS_ACTIVE):
@@ -910,6 +912,10 @@ def main() -> None:
                             f_action = rng.normal(0.0, POINTER_DRIFT)
                         accel = (f_action + f_spring) / POINTER_MASS
                         ptr_f_action, ptr_f_spring = f_action, f_spring   # for next render
+                        if action_enabled:
+                            ptr_total_steps += 1
+                            if abs(f_action) > abs(f_spring):
+                                ptr_net_steps += 1
                         vp = float(np.clip((vp + accel) * (1.0 - POINTER_DAMPING),
                                            -MAX_VP, MAX_VP))
                         p = float(np.clip(p + vp, P_MIN, P_MAX))
@@ -920,6 +926,15 @@ def main() -> None:
 
     except KeyboardInterrupt:
         print("\n\nStopped early.")
+
+    if ptr_total_steps > 0:
+        net_pct = 100.0 * ptr_net_steps / ptr_total_steps
+        print(
+            f"\n  Pointer force dominance (active phase): "
+            f"→net {ptr_net_steps}/{ptr_total_steps} steps  ({net_pct:.1f}%)"
+            f"   →spring {ptr_total_steps - ptr_net_steps}/{ptr_total_steps} steps"
+            f"  ({100 - net_pct:.1f}%)"
+        )
 
     print_summary(
         step, sensor_history, state_history, motor_history,
