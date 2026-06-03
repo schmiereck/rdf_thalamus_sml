@@ -556,6 +556,7 @@ def build_architecture_sweep() -> list[RunConfig]:
     return configs
 
 
+def aggregate_focused(results: list[dict]) -> list[dict]:
     """Average metrics across seeds for configs sharing the same base name."""
     from collections import defaultdict
     import re
