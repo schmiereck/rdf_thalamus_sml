@@ -1,0 +1,802 @@
+"""
+sweep_act2.py — Architecture sweep with BOUNCING-ONLY training patterns.
+
+Same as sweep_act1.py but the PatternGenerator is constrained to produce
+only bouncing-direction sequences, 1 or 2 objects, blob sizes 1–3 pixels.
+This isolates the cleaner bounce dynamics that showed stronger tracking signal.
+
+Trains many network configurations headless (no terminal animation) and ranks
+them by how well the eye learns to TRACK a moving object — the strongest
+behavioural signal we have — alongside the raw prediction errors.
+
+Tracking metric (efficiency)
+----------------------------
+For each frame we compute the object's centre of mass in world coordinates
+(com).  Its retinal position is  com - phi.  Perfect tracking keeps the object
+at a fixed retinal location, i.e.  Δ(com - phi) ≈ 0.  With a frozen eye the
+retinal slip would equal the object's own world velocity Δcom.  Hence
+
+    tracking_efficiency = 1 - mean|Δ(com - phi)| / mean|Δcom|
+
+      1.0  perfect pursuit (object pinned on the retina)
+      0.0  eye stationary (no better than staring straight ahead)
+     <0    eye actively makes things worse
+
+Only frames where the object is visible *and* moving contribute, and the
+metric is measured in a dedicated evaluation pass (action on, learning off).
+
+Usage
+-----
+    python sweep_act1.py                 # run the default sweep
+    python sweep_act1.py --quick         # smaller/faster sweep
+    python sweep_act1.py --jobs 4        # parallel workers
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import dataclass, field, asdict
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+import numpy as np
+from pc.pattern_generator import PatternGenerator
+from pc.test_pc_act1 import (
+    build_network,
+    apply_fovea_shift,
+    compute_action_gradient,
+    compute_action_pred_com,
+    compute_action_velocity_com,
+    retinal_com,
+    world_com,
+    set_frame,
+)
+
+
+# ---------------------------------------------------------------------------
+# Configuration of a single run
+# ---------------------------------------------------------------------------
+
+@dataclass
+class RunConfig:
+    name: str
+    # architecture
+    n_inputs: int = 16
+    n_layers: int = 3
+    base_dim: int = 4
+    dim_growth: int = 2
+    lateral_steps: int = 1
+    anticipatory: bool = False      # use gradient of top-down prediction (True) vs raw image
+    action_mode: str = "gradient"    # "gradient", "pred_com", or "vel_com"
+    pred_com_target: float = 0.5    # desired retinal fraction (pred_com / vel_com)
+    pred_com_gain: float = 1.5      # v = pred_com_gain · displacement  (pred_com)
+    vel_com_gain: float = 1.2       # v = vel_com_gain · displacement   (vel_com)
+    vel_com_lookahead: float = 1.0  # extrapolation horizon in frames   (vel_com)
+    # network dynamics
+    eta_inf: float = 0.05
+    n_relax: int = 40
+    eta_learn: float = 0.002
+    gamma: float = 0.3
+    # action / fovea
+    max_v: float = 2.0
+    action_gain: float = 0.7
+    action_smooth: float = 0.2
+    spring_k: float = 0.05
+    passive_drift: float = 0.3
+    oracle_target: float = 0.35   # retinal fraction the oracle pursuit holds the COM at
+    # training budget
+    n_train_patterns: int = 8
+    repeats_per_seq: int = 2
+    n_epochs_passive: int = 5
+    n_epochs_oracle: int = 0      # Phase 1.5 oracle-pursuit epochs (0 = disabled)
+    n_epochs_active: int = 12
+    # reproducibility
+    seed: int = 42
+
+
+
+# ---------------------------------------------------------------------------
+# One headless train + eval run
+# ---------------------------------------------------------------------------
+
+def run_one(cfg: RunConfig) -> dict:
+    t0 = time.time()
+    rng = np.random.default_rng(cfg.seed)
+
+    net, visual_sensors, motor_sensor = build_network(
+        rng,
+        n_inputs=cfg.n_inputs,
+        n_layers=cfg.n_layers,
+        base_dim=cfg.base_dim,
+        dim_growth=cfg.dim_growth,
+        lateral_steps=cfg.lateral_steps,
+        eta_inf=cfg.eta_inf,
+        n_relax=cfg.n_relax,
+        eta_learn=cfg.eta_learn,
+        gamma=cfg.gamma,
+    )
+
+    phi_min, phi_max = -float(cfg.n_inputs), float(cfg.n_inputs)
+    n = cfg.n_inputs
+
+    # Fixed pattern sets — bouncing only, 1–2 objects, sizes 1–3 pixels
+    def _bounce_patterns(seed: int, count: int) -> list[tuple[str, list]]:
+        gen = PatternGenerator(n_inputs=n, seed=seed)
+        rng_pat = np.random.default_rng(seed)
+        patterns = []
+        while len(patterns) < count:
+            n_blobs = int(rng_pat.integers(1, 3))      # 1 or 2
+            blob_size = int(rng_pat.integers(1, 4))    # 1, 2, or 3
+            blob_shape = "flat" if blob_size > 1 else "point"
+            frames, spec = gen.build_sequence(
+                n_blobs=n_blobs,
+                blob_size=blob_size,
+                blob_shape=blob_shape,
+                direction="bounce",
+                intensity_envelope="constant",
+                speed=1,
+            )
+            patterns.append((str(spec), frames))
+        return patterns
+
+    train_patterns = _bounce_patterns(cfg.seed, cfg.n_train_patterns)
+    eval_patterns  = _bounce_patterns(cfg.seed + 7777, 6)
+
+    # ---- Training ----
+    phi = 0.0
+    v = 0.0
+    diverged = False
+    oracle_start = cfg.n_epochs_passive
+    active_start = cfg.n_epochs_passive + cfg.n_epochs_oracle
+    for epoch in range(active_start + cfg.n_epochs_active):
+        oracle_enabled = oracle_start <= epoch < active_start
+        action_enabled = epoch >= active_start
+        phi = 0.0
+        v = 0.0
+        prev_rcom: float | None = None
+        for _name, world_frames in train_patterns:
+            for _ in range(cfg.repeats_per_seq):
+                for world_frame in world_frames:
+                    shifted = apply_fovea_shift(world_frame, phi, n)
+                    set_frame(visual_sensors, shifted)
+                    motor_sensor.set_input(np.array([v / cfg.max_v]))
+
+                    _disp = 0.0
+                    if action_enabled:
+                        if cfg.action_mode == "vel_com":
+                            _disp, prev_rcom = compute_action_velocity_com(
+                                shifted, prev_rcom, phi, n,
+                                cfg.pred_com_target, cfg.vel_com_lookahead,
+                            )
+                        else:
+                            net.phase_predict()
+                            net.phase_error()
+                            if cfg.action_mode == "pred_com":
+                                _disp = compute_action_pred_com(
+                                    visual_sensors, n, cfg.pred_com_target
+                                )
+                            else:
+                                _disp = -compute_action_gradient(
+                                    visual_sensors, shifted, anticipatory=cfg.anticipatory
+                                )
+
+                    net.step(learn=True)
+                    net.commit_step()
+
+                    if action_enabled:
+                        if cfg.action_mode == "vel_com":
+                            v_target = cfg.vel_com_gain * _disp - cfg.spring_k * phi
+                        elif cfg.action_mode == "pred_com":
+                            v_target = cfg.pred_com_gain * _disp - cfg.spring_k * phi
+                        else:
+                            v_target = cfg.action_gain * _disp - cfg.spring_k * phi
+                        v = float(np.clip(
+                            (1.0 - cfg.action_smooth) * v_target + cfg.action_smooth * v,
+                            -cfg.max_v, cfg.max_v,
+                        ))
+                    elif oracle_enabled:
+                        com = world_com(world_frame)
+                        if com is not None:
+                            target_phi = com - cfg.oracle_target * n
+                            v = float(np.clip(target_phi - phi, -cfg.max_v, cfg.max_v))
+                            rc = retinal_com(shifted)
+                            prev_rcom = (rc + phi) if rc is not None else None
+                        else:
+                            v = 0.0
+                            prev_rcom = None
+                    else:
+                        v = float(np.clip(
+                            rng.normal(0.0, cfg.passive_drift), -cfg.max_v, cfg.max_v
+                        ))
+                        rc = retinal_com(shifted)
+                        prev_rcom = (rc + phi) if rc is not None else None
+                    phi = float(np.clip(phi + v, phi_min, phi_max))
+
+    # ---- Evaluation (action on, learning off): tracking + errors ----
+    s_errs, st_errs, m_errs = [], [], []
+    slip_tracked, slip_frozen = [], []
+
+    for _name, world_frames in eval_patterns:
+        phi = 0.0
+        v = 0.0
+        prev_retinal = None
+        prev_com = None
+        prev_rcom_eval: float | None = None
+        for world_frame in world_frames:
+            shifted = apply_fovea_shift(world_frame, phi, n)
+            set_frame(visual_sensors, shifted)
+            motor_sensor.set_input(np.array([v / cfg.max_v]))
+
+            if cfg.action_mode == "vel_com":
+                _disp, prev_rcom_eval = compute_action_velocity_com(
+                    shifted, prev_rcom_eval, phi, n,
+                    cfg.pred_com_target, cfg.vel_com_lookahead,
+                )
+            else:
+                net.phase_predict()
+                net.phase_error()
+                if cfg.action_mode == "pred_com":
+                    _disp = compute_action_pred_com(visual_sensors, n, cfg.pred_com_target)
+                else:
+                    _disp = -compute_action_gradient(
+                        visual_sensors, shifted, anticipatory=cfg.anticipatory
+                    )
+
+            info = net.step(learn=False)
+            net.commit_step()
+            m_err = float(np.sum(net.node("motor").epsilon ** 2))
+            s_errs.append(info["sensor_error"] - m_err)
+            st_errs.append(info["state_error"])
+            m_errs.append(m_err)
+
+            # tracking bookkeeping
+            com = world_com(world_frame)
+            if com is not None:
+                retinal = com - phi
+                if prev_retinal is not None and prev_com is not None:
+                    slip_tracked.append(abs(retinal - prev_retinal))
+                    slip_frozen.append(abs(com - prev_com))
+                prev_retinal = retinal
+                prev_com = com
+            else:
+                prev_retinal = None
+                prev_com = None
+
+            # apply action
+            if cfg.action_mode == "vel_com":
+                v_target = cfg.vel_com_gain * _disp - cfg.spring_k * phi
+            elif cfg.action_mode == "pred_com":
+                v_target = cfg.pred_com_gain * _disp - cfg.spring_k * phi
+            else:
+                v_target = cfg.action_gain * _disp - cfg.spring_k * phi
+            v = float(np.clip(
+                (1.0 - cfg.action_smooth) * v_target + cfg.action_smooth * v,
+                -cfg.max_v, cfg.max_v,
+            ))
+            phi = float(np.clip(phi + v, phi_min, phi_max))
+
+    def _safe_mean(xs):
+        xs = [x for x in xs if np.isfinite(x)]
+        return float(np.mean(xs)) if xs else float("nan")
+
+    mean_slip_tracked = _safe_mean(slip_tracked)
+    mean_slip_frozen = _safe_mean(slip_frozen)
+    if mean_slip_frozen and mean_slip_frozen > 1e-6 and np.isfinite(mean_slip_tracked):
+        tracking_eff = 1.0 - mean_slip_tracked / mean_slip_frozen
+    else:
+        tracking_eff = float("nan")
+
+    sensor_err = _safe_mean(s_errs)
+    state_err = _safe_mean(st_errs)
+    if (not np.isfinite(sensor_err) or sensor_err > 1e6
+            or not np.isfinite(state_err) or state_err > 1e6):
+        diverged = True
+
+    return {
+        "name": cfg.name,
+        "tracking_eff": tracking_eff,
+        "slip_tracked": mean_slip_tracked,
+        "slip_frozen": mean_slip_frozen,
+        "sensor_err": sensor_err,
+        "state_err": state_err,
+        "motor_err": _safe_mean(m_errs),
+        "n_params": net.total_parameters(),
+        "diverged": diverged,
+        "seconds": time.time() - t0,
+        "config": asdict(cfg),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Sweep definitions
+# ---------------------------------------------------------------------------
+
+def build_temporal_sweep() -> list[RunConfig]:
+    """
+    Temporal-hierarchy sweep: does learned recurrence + per-layer leaky memory
+    improve tracking?  Built on the best static config from sweep 2
+    (base_dim=8, lateral=0, action_gain=1.0), averaged over 3 seeds.
+    """
+    seeds = [42, 123, 777]
+    base = dict(base_dim=8, lateral_steps=0, action_gain=1.0,
+                n_epochs_passive=5, n_epochs_active=12,
+                n_train_patterns=8, repeats_per_seq=2)
+
+    combos = [
+        ("V-model",    dict()),
+        ("V-model L4", dict(n_layers=4)),
+    ]
+
+    configs: list[RunConfig] = []
+    for label, kw in combos:
+        for seed in seeds:
+            configs.append(RunConfig(name=f"{label} s{seed}", seed=seed, **kw, **base))
+    return configs
+
+
+def build_anticipatory_sweep() -> list[RunConfig]:
+    """
+    Compare reactive vs anticipatory steering, crossed with temporal hierarchy.
+    Best config from temporal sweep: rec + tau0.8 L4.
+    Sweeps 4 combos × 2 modes × 3 seeds = 24 configs.
+    """
+    seeds = [42, 123, 777]
+    base = dict(base_dim=8, lateral_steps=0,
+                n_epochs_passive=5, n_epochs_active=12,
+                n_train_patterns=8, repeats_per_seq=2)
+
+    combos = [
+        ("V-model g1.0",   dict(action_gain=1.0)),
+        ("V-model L4 g1.0",dict(n_layers=4, action_gain=1.0)),
+        ("V-model L4 g1.3",dict(n_layers=4, action_gain=1.3)),
+    ]
+    modes = [
+        ("reactive",     False),
+        ("anticipatory", True),
+    ]
+
+    configs: list[RunConfig] = []
+    for label, kw in combos:
+        for mode_name, ant in modes:
+            for seed in seeds:
+                configs.append(RunConfig(
+                    name=f"{label} {mode_name} s{seed}",
+                    seed=seed, anticipatory=ant, **kw, **base,
+                ))
+    return configs
+
+
+def build_vel_com_sweep() -> list[RunConfig]:
+    """
+    Velocity-COM (smooth-pursuit) sweep.
+
+    Crosses: oracle on/off  ×  action_mode (gradient, vel_com)  ×  gain  ×  3 seeds.
+    Best temporal arch: rec + tau0.8, L4, base_dim=8.
+
+    vel_com is purely kinematic (no network π) — it extrapolates the retinal
+    object velocity to steer ahead.  Oracle training should help even here
+    because it gives the network consistent motion to learn, improving the
+    PC prediction errors during active phase.
+    """
+    seeds = [42, 123, 777]
+    arch = dict(n_layers=4, base_dim=8, lateral_steps=0,
+                n_train_patterns=8, repeats_per_seq=2)
+    budget_no_oracle = dict(n_epochs_passive=5, n_epochs_oracle=0, n_epochs_active=12)
+    budget_oracle    = dict(n_epochs_passive=2, n_epochs_oracle=5, n_epochs_active=12)
+
+    configs: list[RunConfig] = []
+    for oracle, budget, o_label in [
+        (False, budget_no_oracle, "no-oracle"),
+        (True,  budget_oracle,    "oracle"),
+    ]:
+        # gradient baseline
+        for seed in seeds:
+            configs.append(RunConfig(
+                name=f"{o_label} gradient s{seed}",
+                seed=seed, action_mode="gradient", action_gain=1.0,
+                **arch, **budget,
+            ))
+        # vel_com at 3 gain levels  ×  2 lookahead values
+        for gain in [0.8, 1.2, 1.8]:
+            for la in [1.0, 2.0]:
+                for seed in seeds:
+                    configs.append(RunConfig(
+                        name=f"{o_label} vel-com g{gain} la{la} s{seed}",
+                        seed=seed, action_mode="vel_com",
+                        vel_com_gain=gain, vel_com_lookahead=la,
+                        action_gain=1.0,
+                        **arch, **budget,
+                    ))
+    return configs
+
+
+def build_pred_com_sweep() -> list[RunConfig]:
+    """
+    Pred-COM sweep: does steering toward the *predicted* retinal COM outperform
+    the reactive gradient?
+
+    Crosses:
+      oracle on/off   (2 options — without oracle the prediction is flat)
+      action_mode     ("gradient" vs "pred_com")
+      pred_com_gain   (1.0, 1.5, 2.0  — only for pred_com mode)
+      3 seeds
+
+    Best temporal config: rec + tau0.8, L4, base_dim=8, action_gain=1.0.
+    Total: 3×2×3 seeds + 1×2×3 seeds = 30 configs
+    """
+    seeds = [42, 123, 777]
+    arch = dict(n_layers=4, base_dim=8, lateral_steps=0,
+                n_train_patterns=8, repeats_per_seq=2)
+    budget_no_oracle = dict(n_epochs_passive=5, n_epochs_oracle=0, n_epochs_active=12)
+    budget_oracle    = dict(n_epochs_passive=2, n_epochs_oracle=5, n_epochs_active=12)
+
+    configs: list[RunConfig] = []
+
+    for oracle, budget, o_label in [
+        (False, budget_no_oracle, "no-oracle"),
+        (True,  budget_oracle,    "oracle"),
+    ]:
+        # gradient baseline (action_gain=1.0)
+        for seed in seeds:
+            configs.append(RunConfig(
+                name=f"{o_label} gradient s{seed}",
+                seed=seed, action_mode="gradient", action_gain=1.0,
+                **arch, **budget,
+            ))
+        # pred-com at 3 gain levels
+        for gain in [1.0, 1.5, 2.0]:
+            for seed in seeds:
+                configs.append(RunConfig(
+                    name=f"{o_label} pred-com g{gain} s{seed}",
+                    seed=seed, action_mode="pred_com", pred_com_gain=gain,
+                    action_gain=1.0,   # unused for pred_com but needed by RunConfig
+                    **arch, **budget,
+                ))
+    return configs
+
+
+def build_oracle_sweep() -> list[RunConfig]:
+    """
+    Does an oracle-pursuit phase (Phase 1.5) — where the fovea perfectly tracks
+    the object so the recurrent connections learn real object dynamics — unlock
+    anticipatory steering?
+
+    Crosses: oracle on/off  ×  reactive/anticipatory  ×  3 seeds = 12 configs.
+    Built on the best temporal config (rec + tau0.8 L4, base_dim=8, gain=1.0).
+    The oracle epochs replace some passive epochs to keep the budget comparable.
+    """
+    seeds = [42, 123, 777]
+    arch = dict(n_layers=4, base_dim=8, lateral_steps=0, action_gain=1.0,
+                n_train_patterns=8, repeats_per_seq=2)
+
+    combos = [
+        ("no-oracle",  dict(n_epochs_passive=5, n_epochs_oracle=0,  n_epochs_active=12)),
+        ("oracle",     dict(n_epochs_passive=2, n_epochs_oracle=5,  n_epochs_active=12)),
+    ]
+    modes = [("reactive", False), ("anticipatory", True)]
+
+    configs: list[RunConfig] = []
+    for olabel, okw in combos:
+        for mode_name, ant in modes:
+            for seed in seeds:
+                configs.append(RunConfig(
+                    name=f"{olabel} {mode_name} s{seed}",
+                    seed=seed, anticipatory=ant, **okw, **arch,
+                ))
+    return configs
+
+
+def build_focused_sweep() -> list[RunConfig]:
+    """
+    Targeted follow-up sweep based on sweep 1 findings:
+      - base_dim=8 and lateral=0 were the strongest 'real' improvements
+      - action_gain=1.0 was the single biggest tracking lever
+    We now cross these factors and probe action_gain further (1.0–1.6),
+    averaging each config over 3 different random seeds to reduce noise.
+    """
+    seeds = [42, 123, 777]
+    base = dict(n_epochs_passive=5, n_epochs_active=12,
+                n_train_patterns=8, repeats_per_seq=2)
+
+    combos = [
+        # name-suffix          kwargs
+        ("baseline L3",        dict()),
+        ("d8 lat0",            dict(base_dim=8, lateral_steps=0)),
+        ("d8 lat0 g1.0",       dict(base_dim=8, lateral_steps=0, action_gain=1.0)),
+        ("d8 lat0 g1.3",       dict(base_dim=8, lateral_steps=0, action_gain=1.3)),
+        ("d8 lat0 g1.6",       dict(base_dim=8, lateral_steps=0, action_gain=1.6)),
+        ("d8 lat0 g1.0 L2",    dict(base_dim=8, lateral_steps=0, action_gain=1.0, n_layers=2)),
+        ("d8 lat0 g1.0 L4",    dict(base_dim=8, lateral_steps=0, action_gain=1.0, n_layers=4)),
+        ("d6 lat0 g1.0",       dict(base_dim=6, lateral_steps=0, action_gain=1.0)),
+        ("d8 lat0 g1.0 sp.02", dict(base_dim=8, lateral_steps=0, action_gain=1.0, spring_k=0.02)),
+        ("d8 lat0 g1.0 sp.10", dict(base_dim=8, lateral_steps=0, action_gain=1.0, spring_k=0.10)),
+    ]
+
+    configs: list[RunConfig] = []
+    for label, kw in combos:
+        for seed in seeds:
+            configs.append(RunConfig(
+                name=f"{label} s{seed}",
+                seed=seed,
+                **kw,
+                **base,
+            ))
+    return configs
+
+
+def build_architecture_sweep() -> list[RunConfig]:
+    """
+    Architecture sweep with REAL network-driven action (gradient mode).
+
+    Now that the PCNode carries a working temporal forward model V, this sweep
+    compares the architectural factors that actually matter, all steered by the
+    network's own visual-error gradient (∂E/∂φ) — no kinematic vel_com fake.
+
+    Crosses:
+        n_layers      : 2, 3, 4         (pyramid depth)
+        base_dim      : 4, 8, 16        (state width at layer 1)
+        lateral_steps : 0, 1            (within-layer coupling)
+        oracle        : off / on        (Phase 1.5 pursuit pre-training)
+      × 3 seeds  →  3·3·2·2 · 3 = 108 configs
+
+    Metric: tracking_eff (how much the gradient action reduces object slip vs a
+    frozen fovea).  A positive value means the network's action genuinely tracks.
+    """
+    seeds = [42, 123, 777]
+    base = dict(action_mode="gradient", action_gain=1.0,
+                n_train_patterns=8, repeats_per_seq=2)
+    budget_no_oracle = dict(n_epochs_passive=5, n_epochs_oracle=0, n_epochs_active=12)
+    budget_oracle    = dict(n_epochs_passive=2, n_epochs_oracle=5, n_epochs_active=12)
+
+    configs: list[RunConfig] = []
+    for n_layers in [2, 3, 4]:
+        for base_dim in [4, 8, 16]:
+            for lateral_steps in [0, 1]:
+                for o_label, budget in [("no-oracle", budget_no_oracle),
+                                        ("oracle", budget_oracle)]:
+                    arch = dict(n_layers=n_layers, base_dim=base_dim,
+                                lateral_steps=lateral_steps)
+                    label = f"L{n_layers} d{base_dim} lat{lateral_steps} {o_label}"
+                    for seed in seeds:
+                        configs.append(RunConfig(
+                            name=f"{label} s{seed}",
+                            seed=seed, **arch, **budget, **base,
+                        ))
+    return configs
+
+
+def aggregate_focused(results: list[dict]) -> list[dict]:
+    """Average metrics across seeds for configs sharing the same base name."""
+    from collections import defaultdict
+    import re
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for r in results:
+        # strip trailing " sNNN"
+        base_name = re.sub(r" s\d+$", "", r["name"])
+        groups[base_name].append(r)
+
+    aggregated = []
+    for base_name, rs in groups.items():
+        valid = [r for r in rs if not r["diverged"] and np.isfinite(r["tracking_eff"])]
+        if not valid:
+            valid = rs  # keep diverged entries so table isn't empty
+        def _m(key):
+            vals = [r[key] for r in valid if np.isfinite(r[key])]
+            return float(np.mean(vals)) if vals else float("nan")
+        def _s(key):
+            vals = [r[key] for r in valid if np.isfinite(r[key])]
+            return float(np.std(vals)) if len(vals) > 1 else 0.0
+        aggregated.append({
+            "name": base_name,
+            "tracking_eff": _m("tracking_eff"),
+            "tracking_std": _s("tracking_eff"),
+            "slip_tracked": _m("slip_tracked"),
+            "slip_frozen":  _m("slip_frozen"),
+            "sensor_err":   _m("sensor_err"),
+            "state_err":    _m("state_err"),
+            "motor_err":    _m("motor_err"),
+            "n_params":     int(np.mean([r["n_params"] for r in rs])),
+            "diverged":     any(r["diverged"] for r in rs),
+            "seconds":      sum(r["seconds"] for r in rs),
+            "n_seeds":      len(rs),
+        })
+    return sorted(aggregated,
+                  key=lambda r: (r["diverged"],
+                                 -(r["tracking_eff"] if np.isfinite(r["tracking_eff"]) else -9)))
+
+
+def print_focused_table(results: list[dict]) -> None:
+    agg = aggregate_focused(results)
+    print(f"\n{'='*102}")
+    print("  Focused sweep — averaged over 3 seeds, ranked by tracking efficiency")
+    print(f"{'='*102}")
+    print(f"  {'config':<26s} {'track_eff':>9s} {'±std':>5s} {'slip↓':>7s} "
+          f"{'sensor':>8s} {'state':>8s} {'params':>7s} {'total_s':>7s}")
+    print(f"  {'-'*96}")
+
+    def _fmt(x, w=8):
+        if not np.isfinite(x):   return f"{'nan':>{w}s}"
+        if abs(x) >= 1e4:        return f"{'OVF':>{w}s}"
+        return f"{x:{w}.3f}"
+
+    for r in agg:
+        flag = "  ⚠DIV" if r["diverged"] else ""
+        te = r["tracking_eff"]
+        te_s = f"{te:9.3f}" if np.isfinite(te) else f"{'n/a':>9s}"
+        std_s = f"{r['tracking_std']:5.3f}"
+        print(f"  {r['name']:<26s} {te_s} {std_s} {_fmt(r['slip_tracked'],7)} "
+              f"{_fmt(r['sensor_err'])} {_fmt(r['state_err'])} "
+              f"{r['n_params']:7d} {r['seconds']:7.0f}{flag}")
+    print(f"{'='*102}")
+
+    valid = [r for r in agg if not r["diverged"] and np.isfinite(r["tracking_eff"])]
+    if valid:
+        best = valid[0]
+        print(f"\n  Best: {best['name']}  "
+              f"efficiency={best['tracking_eff']:.3f} ±{best['tracking_std']:.3f}, "
+              f"sensor_err={best['sensor_err']:.3f}")
+    print()
+
+
+# ---------------------------------------------------------------------------
+# Pretty printing
+# ---------------------------------------------------------------------------
+
+def build_sweep(quick: bool) -> list[RunConfig]:
+    """One-factor-at-a-time sweep around a sensible baseline."""
+    base = dict(
+        n_epochs_passive=3 if quick else 5,
+        n_epochs_active=6 if quick else 12,
+        n_train_patterns=6 if quick else 8,
+        repeats_per_seq=2,
+    )
+    configs: list[RunConfig] = []
+
+    configs.append(RunConfig(name="baseline (L3 d4+2 lat1)", **base))
+
+    configs.append(RunConfig(name="depth: L2",  n_layers=2, **base))
+    configs.append(RunConfig(name="depth: L4",  n_layers=4, **base))
+
+    configs.append(RunConfig(name="dim: base6",   base_dim=6,   **base))
+    configs.append(RunConfig(name="dim: base8",   base_dim=8,   **base))
+    configs.append(RunConfig(name="dim: growth0", dim_growth=0, **base))
+    configs.append(RunConfig(name="dim: growth4", dim_growth=4, **base))
+
+    configs.append(RunConfig(name="lateral: 0", lateral_steps=0, **base))
+    configs.append(RunConfig(name="lateral: 2", lateral_steps=2, **base))
+
+    if not quick:
+        configs.append(RunConfig(name="relax: 20",      n_relax=20,      **base))
+        configs.append(RunConfig(name="relax: 80",      n_relax=80,      **base))
+        configs.append(RunConfig(name="eta_learn:.004", eta_learn=0.004, **base))
+        configs.append(RunConfig(name="eta_inf:.10",    eta_inf=0.10,    **base))
+        configs.append(RunConfig(name="gain: 1.0",      action_gain=1.0, **base))
+        configs.append(RunConfig(name="spring: 0.10",   spring_k=0.10,   **base))
+        configs.append(RunConfig(name="spring: 0.02",   spring_k=0.02,   **base))
+        configs.append(RunConfig(name="combo L4 d6 lat2",
+                                 n_layers=4, base_dim=6, lateral_steps=2, **base))
+    return configs
+
+
+def print_table(results: list[dict]) -> None:
+    results = sorted(
+        results,
+        key=lambda r: (r["diverged"], -(r["tracking_eff"] if np.isfinite(r["tracking_eff"]) else -9)),
+    )
+    print(f"\n{'='*92}")
+    print("  Sweep results — ranked by tracking efficiency (higher = eye follows object better)")
+    print(f"{'='*92}")
+    print(f"  {'config':<26s} {'track_eff':>9s} {'slip↓':>7s} {'sensor':>8s} "
+          f"{'state':>8s} {'motor':>8s} {'params':>7s} {'sec':>5s}")
+    print(f"  {'-'*88}")
+    def _fmt(x: float, w: int = 8) -> str:
+        if not np.isfinite(x):
+            return f"{'nan':>{w}s}"
+        if abs(x) >= 1e4:
+            return f"{'OVF':>{w}s}"
+        return f"{x:{w}.3f}"
+
+    for r in results:
+        flag = "  ⚠DIV" if r["diverged"] else ""
+        te = r["tracking_eff"]
+        te_s = f"{te:9.3f}" if np.isfinite(te) else f"{'n/a':>9s}"
+        print(f"  {r['name']:<26s} {te_s} {_fmt(r['slip_tracked'], 7)} "
+              f"{_fmt(r['sensor_err'])} {_fmt(r['state_err'])} {_fmt(r['motor_err'])} "
+              f"{r['n_params']:7d} {r['seconds']:5.0f}{flag}")
+    print(f"{'='*92}")
+
+    finite = [r for r in results if np.isfinite(r["tracking_eff"]) and not r["diverged"]]
+    if finite:
+        best = finite[0]
+        print(f"\n  Best tracking: {best['name']}  "
+              f"(efficiency={best['tracking_eff']:.3f}, "
+              f"slip={best['slip_tracked']:.3f} vs frozen {best['slip_frozen']:.3f})")
+        c = best["config"]
+        print(f"    L{c['n_layers']}  base_dim={c['base_dim']}  growth={c['dim_growth']}  "
+              f"lateral={c['lateral_steps']}  relax={c['n_relax']}  "
+              f"eta_inf={c['eta_inf']}  eta_learn={c['eta_learn']}  "
+              f"gain={c['action_gain']}  spring={c['spring_k']}")
+    print()
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--quick",        action="store_true", help="smaller/faster sweep")
+    ap.add_argument("--focused",      action="store_true", help="targeted follow-up sweep (3-seed average)")
+    ap.add_argument("--temporal",     action="store_true", help="temporal-hierarchy sweep (3-seed average)")
+    ap.add_argument("--anticipatory", action="store_true", help="reactive vs anticipatory sweep (3-seed average)")
+    ap.add_argument("--oracle",       action="store_true", help="oracle-pursuit vs none × reactive/anticipatory (3-seed average)")
+    ap.add_argument("--pred-com",     action="store_true", dest="pred_com",
+                    help="pred-COM vs gradient × oracle/no-oracle × gain sweep (3-seed average)")
+    ap.add_argument("--vel-com",      action="store_true", dest="vel_com",
+                    help="vel-COM smooth-pursuit × oracle/no-oracle × gain × lookahead sweep")
+    ap.add_argument("--architecture", action="store_true", dest="architecture",
+                    help="architecture sweep (depth × width × lateral × oracle), real gradient action")
+    ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) - 1),
+                    help="parallel worker processes")
+    args = ap.parse_args()
+
+    if args.architecture:
+        configs = build_architecture_sweep()
+        mode = "architecture"
+    elif args.vel_com:
+        configs = build_vel_com_sweep()
+        mode = "vel-com"
+    elif args.pred_com:
+        configs = build_pred_com_sweep()
+        mode = "pred-com"
+    elif args.oracle:
+        configs = build_oracle_sweep()
+        mode = "oracle"
+    elif args.anticipatory:
+        configs = build_anticipatory_sweep()
+        mode = "anticipatory"
+    elif args.temporal:
+        configs = build_temporal_sweep()
+        mode = "temporal"
+    elif args.focused:
+        configs = build_focused_sweep()
+        mode = "focused"
+    else:
+        configs = build_sweep(args.quick)
+        mode = "quick" if args.quick else "full"
+    print(f"Running {len(configs)} configurations on {args.jobs} worker(s) [{mode}] ...\n")
+
+    results: list[dict] = []
+    if args.jobs <= 1:
+        for cfg in configs:
+            r = run_one(cfg)
+            results.append(r)
+            _progress(r, len(results), len(configs))
+    else:
+        with ProcessPoolExecutor(max_workers=args.jobs) as ex:
+            futs = {ex.submit(run_one, cfg): cfg for cfg in configs}
+            for fut in as_completed(futs):
+                r = fut.result()
+                results.append(r)
+                _progress(r, len(results), len(configs))
+
+    if (args.focused or args.temporal or args.anticipatory or args.oracle
+            or args.pred_com or args.vel_com or args.architecture):
+        print_focused_table(results)
+    else:
+        print_table(results)
+
+
+def _progress(r: dict, done: int, total: int) -> None:
+    te = r["tracking_eff"]
+    te_s = f"{te:.3f}" if np.isfinite(te) else "n/a"
+    print(f"  [{done:2d}/{total}] {r['name']:<26s} "
+          f"track_eff={te_s:>7s}  sensor={r['sensor_err']:7.3f}  ({r['seconds']:.0f}s)")
+
+
+if __name__ == "__main__":
+    main()
