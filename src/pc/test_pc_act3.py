@@ -464,8 +464,10 @@ def render(
         # Show which force dominates: action (network/drift) vs spring (to centre).
         arrow = "→net" if abs(f_action) > abs(f_spring) else "→spring"
         lines.append(f"  Ptr world:  {ptr_world_display}   (p={p:+.1f}  vp={vp:+.2f})")
-        lines.append(f"  Ptr sensor: {' ' * win_start_disp}[{ptr_sensor_display}]"
-                     f"   f_act={f_action:+.3f}  f_spr={f_spring:+.3f}  [{arrow}]")
+        lines.append(f"  Ptr sensor: {' ' * win_start_disp}[{ptr_sensor_display}]")
+        # Force readout on its own line with a fixed prefix, so the columns do
+        # NOT slide with the fovea window — values stay readable frame to frame.
+        lines.append(f"  Ptr force:  f_act={f_action:+.3f}  f_spr={f_spring:+.3f}  [{arrow}]")
     lines.append("")
 
     s_delta = st_delta = m_delta = ""
@@ -511,8 +513,8 @@ def sample_bounce_patterns(
 ) -> list[tuple[str, list[list[float]]]]:
     """
     Bounce-only pattern set: only bouncing-direction sequences, 1 or 2 objects,
-    blob sizes 1–3 pixels, normal (1 px/frame) or slow (0.5 px/frame) speed.
-    Returns [(description, frames), ...].
+    blob sizes 1–3 pixels, three speeds: normal (1.0), slow (0.5), very slow
+    (0.25 px/frame).  Returns [(description, frames), ...].
     """
     gen = PatternGenerator(n_inputs=n_inputs, seed=seed)
     rng = np.random.default_rng(seed)
@@ -520,7 +522,8 @@ def sample_bounce_patterns(
     while len(patterns) < n_sequences:
         n_blobs = int(rng.integers(1, 3))      # 1 or 2
         blob_size = int(rng.integers(1, 4))    # 1, 2, or 3
-        speed = int(rng.choice([1, 2], p=[0.7, 0.3]))  # 1 = normal, 2 = slow (0.5 px/frame)
+        # 1 = normal (1.0), 2 = slow (0.5), 3 = very slow (0.25 px/frame)
+        speed = int(rng.choice([1, 2, 3], p=[0.5, 0.3, 0.2]))
         blob_shape = "flat" if blob_size > 1 else "point"
         frames, spec = gen.build_sequence(
             n_blobs=n_blobs,
@@ -699,7 +702,7 @@ def main() -> None:
     POINTER_MASS        = 1.0    # inertia: a = F / mass
     POINTER_DAMPING     = 0.15   # velocity damping per step (friction)
     POINTER_ACTION_GAIN = 1.5    # gradient → force gain (F = -gain · ∂E/∂p)
-    POINTER_SPRING_K    = 0.04   # weak spring pulling the pointer toward gaze centre
+    POINTER_SPRING_K    = 0.02   # weak spring pulling the pointer toward gaze centre
     POINTER_DRIFT       = 0.3    # std of force noise before the pointer action is on
     MAX_VP              = 2.0    # max pointer velocity in pixels/step
 

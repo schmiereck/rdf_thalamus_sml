@@ -283,7 +283,7 @@ class PatternGenerator:
         """
         rng     = self._rng
         n       = self.n_inputs
-        pxspeed = 1.0 if speed == 1 else 0.5
+        pxspeed = {1: 1.0, 2: 0.5, 3: 0.25}.get(speed, 0.5)
 
         # Compute n_frames for exactly one complete cycle
         if direction in ("ltr", "rtl"):
