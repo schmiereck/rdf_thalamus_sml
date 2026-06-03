@@ -515,7 +515,47 @@ def build_focused_sweep() -> list[RunConfig]:
     return configs
 
 
-def aggregate_focused(results: list[dict]) -> list[dict]:
+def build_architecture_sweep() -> list[RunConfig]:
+    """
+    Architecture sweep with REAL network-driven action (gradient mode).
+
+    Now that the PCNode carries a working temporal forward model V, this sweep
+    compares the architectural factors that actually matter, all steered by the
+    network's own visual-error gradient (∂E/∂φ) — no kinematic vel_com fake.
+
+    Crosses:
+        n_layers      : 2, 3, 4         (pyramid depth)
+        base_dim      : 4, 8, 16        (state width at layer 1)
+        lateral_steps : 0, 1            (within-layer coupling)
+        oracle        : off / on        (Phase 1.5 pursuit pre-training)
+      × 3 seeds  →  3·3·2·2 · 3 = 108 configs
+
+    Metric: tracking_eff (how much the gradient action reduces object slip vs a
+    frozen fovea).  A positive value means the network's action genuinely tracks.
+    """
+    seeds = [42, 123, 777]
+    base = dict(action_mode="gradient", action_gain=1.0,
+                n_train_patterns=8, repeats_per_seq=2)
+    budget_no_oracle = dict(n_epochs_passive=5, n_epochs_oracle=0, n_epochs_active=12)
+    budget_oracle    = dict(n_epochs_passive=2, n_epochs_oracle=5, n_epochs_active=12)
+
+    configs: list[RunConfig] = []
+    for n_layers in [2, 3, 4]:
+        for base_dim in [4, 8, 16]:
+            for lateral_steps in [0, 1]:
+                for o_label, budget in [("no-oracle", budget_no_oracle),
+                                        ("oracle", budget_oracle)]:
+                    arch = dict(n_layers=n_layers, base_dim=base_dim,
+                                lateral_steps=lateral_steps)
+                    label = f"L{n_layers} d{base_dim} lat{lateral_steps} {o_label}"
+                    for seed in seeds:
+                        configs.append(RunConfig(
+                            name=f"{label} s{seed}",
+                            seed=seed, **arch, **budget, **base,
+                        ))
+    return configs
+
+
     """Average metrics across seeds for configs sharing the same base name."""
     from collections import defaultdict
     import re
@@ -684,11 +724,16 @@ def main() -> None:
                     help="pred-COM vs gradient × oracle/no-oracle × gain sweep (3-seed average)")
     ap.add_argument("--vel-com",      action="store_true", dest="vel_com",
                     help="vel-COM smooth-pursuit × oracle/no-oracle × gain × lookahead sweep")
+    ap.add_argument("--architecture", action="store_true", dest="architecture",
+                    help="architecture sweep (depth × width × lateral × oracle), real gradient action")
     ap.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) - 1),
                     help="parallel worker processes")
     args = ap.parse_args()
 
-    if args.vel_com:
+    if args.architecture:
+        configs = build_architecture_sweep()
+        mode = "architecture"
+    elif args.vel_com:
         configs = build_vel_com_sweep()
         mode = "vel-com"
     elif args.pred_com:
@@ -725,7 +770,8 @@ def main() -> None:
                 results.append(r)
                 _progress(r, len(results), len(configs))
 
-    if args.focused or args.temporal or args.anticipatory or args.oracle or args.pred_com or args.vel_com:
+    if (args.focused or args.temporal or args.anticipatory or args.oracle
+            or args.pred_com or args.vel_com or args.architecture):
         print_focused_table(results)
     else:
         print_table(results)
