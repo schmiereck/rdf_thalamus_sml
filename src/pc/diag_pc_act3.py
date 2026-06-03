@@ -17,14 +17,20 @@ Metriken pro Bedingung:
 Eine positive pointer_eff und hohe corr(p,com) beweisen echtes Folge-Verhalten.
 Wenn FULL ≈ SPRING bei pointer_eff: das Netz trägt nichts bei — nur die Feder.
 
-Run:  python src/pc/diag_pc_act3.py
+Run:  python src/pc/diag_pc_act3.py          # quick budget (~5 min)
+      python src/pc/diag_pc_act3.py --full   # full budget matching test_pc_act3
 """
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+_parser = argparse.ArgumentParser(add_help=False)
+_parser.add_argument("--full", action="store_true")
+_args, _ = _parser.parse_known_args()
 
 import numpy as np
 from pc.test_pc_act3 import (
@@ -37,21 +43,30 @@ from pc.test_pc_act3 import (
     world_com,
 )
 
-# ---- Training config (matches test_pc_act3.py defaults) ----
+# ---- Training config ----
 N_INPUTS          = 16
 N_LAYERS          = 3
 BASE_DIM          = 4
 DIM_GROWTH        = 2
 LATERAL_STEPS     = 0
 ETA_LEARN         = 0.004
-# Lighter budget than test_pc_act3 so the diagnostic finishes quickly while
-# still giving a directional answer (raise these for a more thorough check).
-N_TRAIN_PATTERNS  = 6
-REPEATS_PER_SEQ   = 2
-N_EPOCHS_PASSIVE  = 3
-N_EPOCHS_ORACLE   = 4
-N_EPOCHS_ACTIVE   = 12
-N_RELAX           = 25
+
+if _args.full:
+    # Full budget — matches test_pc_act3.py defaults exactly
+    N_TRAIN_PATTERNS  = 10
+    REPEATS_PER_SEQ   = 3
+    N_EPOCHS_PASSIVE  = 8
+    N_EPOCHS_ORACLE   = 8
+    N_EPOCHS_ACTIVE   = 34
+    N_RELAX           = 40
+else:
+    # Quick budget — finishes in ~5 min, directional answer
+    N_TRAIN_PATTERNS  = 6
+    REPEATS_PER_SEQ   = 2
+    N_EPOCHS_PASSIVE  = 3
+    N_EPOCHS_ORACLE   = 4
+    N_EPOCHS_ACTIVE   = 12
+    N_RELAX           = 25
 ORACLE_TARGET     = 0.35
 MAX_V             = 2.0
 MAX_VP            = 2.0
