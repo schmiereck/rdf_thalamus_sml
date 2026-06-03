@@ -828,12 +828,13 @@ def main() -> None:
                                     )
                                 else:
                                     _disp = -compute_action_gradient(object_sensors, shifted)
-                                # Pointer active inference: descend the pointer-row error.
-                                # Moving the pointer right shifts its retinal image right,
-                                # so ∂E/∂p = Σ ε·grad and the corrective signal is its
-                                # negative — mirroring the fovea convention.
+                                # Pointer active inference: driven by the OBJECT sensor
+                                # gradient (same error as the fovea action), not the
+                                # pointer sensor gradient.  The pointer sensor gradient
+                                # is self-referential — it only continues the pointer's
+                                # own predicted trajectory and is unrelated to the object.
                                 _pdisp = -compute_action_gradient(
-                                    pointer_sensors, ptr_shifted, anticipatory=False
+                                    object_sensors, shifted, anticipatory=True
                                 )
 
                         # Full PC step (predict/error/relax/learn) — clean diagnostics
