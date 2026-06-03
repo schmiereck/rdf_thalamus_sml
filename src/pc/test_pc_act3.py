@@ -705,6 +705,10 @@ def main() -> None:
     POINTER_SPRING_K    = 0.02   # weak spring pulling the pointer toward gaze centre
     POINTER_DRIFT       = 0.3    # std of force noise before the pointer action is on
     MAX_VP              = 2.0    # max pointer velocity in pixels/step
+    # "self"   = pure active inference, pointer descends its own prediction error
+    #            (network decides; object-following is emergent, not imposed).
+    # "object" = taught: pointer reuses the object gradient (shares fovea's goal).
+    POINTER_DRIVE       = "self"
 
     # Fovea range: the sensor window can slide from -N_INPUTS (fully left of world)
     # to +N_INPUTS (fully right of world).  phi=0 = world fully in view.
@@ -783,6 +787,7 @@ def main() -> None:
     ptr_total_steps = 0  # total active steps with pointer
     ptr_toward_obj  = 0  # steps where f_act points toward the object COM
     ptr_abs_vp_sum  = 0.0  # accumulated |vp| during active phase
+    ptr_descent_ok  = 0  # (a)-test: steps where the action reduces pointer-row error
 
     try:
         for epoch in range(N_EPOCHS_PASSIVE + N_EPOCHS_ORACLE + N_EPOCHS_ACTIVE):
@@ -828,14 +833,39 @@ def main() -> None:
                                     )
                                 else:
                                     _disp = -compute_action_gradient(object_sensors, shifted)
-                                # Pointer active inference: driven by the OBJECT sensor
-                                # gradient (same error as the fovea action), not the
-                                # pointer sensor gradient.  The pointer sensor gradient
-                                # is self-referential — it only continues the pointer's
-                                # own predicted trajectory and is unrelated to the object.
-                                _pdisp = -compute_action_gradient(
-                                    object_sensors, shifted, anticipatory=True
-                                )
+                                # Pointer active inference.  Two modes:
+                                #   "self"   — architecturally pure: descend the pointer
+                                #              row's OWN prediction error.  The network
+                                #              alone decides where the pointer goes; any
+                                #              object-following (or fleeing) is emergent.
+                                #   "object" — taught/biased: reuse the object gradient so
+                                #              the pointer shares the fovea's goal.
+                                if POINTER_DRIVE == "object":
+                                    _pdisp = -compute_action_gradient(
+                                        object_sensors, shifted, anticipatory=True
+                                    )
+                                else:
+                                    _pdisp = -compute_action_gradient(
+                                        pointer_sensors, ptr_shifted, anticipatory=False
+                                    )
+
+                                # (a) architectural correctness: does moving the pointer
+                                # in the action direction actually REDUCE the pointer-row
+                                # value-channel prediction error?  Finite difference against
+                                # the predictions pi just computed — object-independent.
+                                pi_val = np.array([s.pi[1] for s in pointer_sensors])
+                                e_cur = float(np.sum(
+                                    (np.array(ptr_shifted) - pi_val) ** 2))
+                                p_pert = float(np.clip(
+                                    p + 0.5 * np.sign(_pdisp), P_MIN, P_MAX))
+                                pert_world = render_pointer_row(
+                                    p_pert, N_INPUTS, POINTER_WIDTH)
+                                pert_shifted = apply_fovea_shift(
+                                    pert_world, phi, N_INPUTS)
+                                e_new = float(np.sum(
+                                    (np.array(pert_shifted) - pi_val) ** 2))
+                                if e_new < e_cur:
+                                    ptr_descent_ok += 1
 
                         # Full PC step (predict/error/relax/learn) — clean diagnostics
                         info = net.step(learn=True)
@@ -954,6 +984,12 @@ def main() -> None:
         )
         print(f"  mean |vp| (active)         : {mean_vp:.3f} px/step"
               f"   [near 0 = pointer barely moves]")
+        descent_pct = 100.0 * ptr_descent_ok / ptr_total_steps
+        print(
+            f"  (a) action REDUCES ptr-error: {ptr_descent_ok}/{ptr_total_steps} steps"
+            f"  ({descent_pct:.1f}%)"
+            f"   [>50% = active inference works as designed]"
+        )
 
     print_summary(
         step, sensor_history, state_history, motor_history,
