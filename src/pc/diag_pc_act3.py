@@ -44,11 +44,14 @@ BASE_DIM          = 4
 DIM_GROWTH        = 2
 LATERAL_STEPS     = 0
 ETA_LEARN         = 0.004
-N_TRAIN_PATTERNS  = 10
-REPEATS_PER_SEQ   = 3
-N_EPOCHS_PASSIVE  = 8
-N_EPOCHS_ORACLE   = 8
-N_EPOCHS_ACTIVE   = 34
+# Lighter budget than test_pc_act3 so the diagnostic finishes quickly while
+# still giving a directional answer (raise these for a more thorough check).
+N_TRAIN_PATTERNS  = 6
+REPEATS_PER_SEQ   = 2
+N_EPOCHS_PASSIVE  = 3
+N_EPOCHS_ORACLE   = 4
+N_EPOCHS_ACTIVE   = 12
+N_RELAX           = 25
 ORACLE_TARGET     = 0.35
 MAX_V             = 2.0
 MAX_VP            = 2.0
@@ -84,6 +87,7 @@ def train(rng: np.random.Generator, train_patterns: list):
     net, obj, ptr, motor = build_network(
         rng, n_inputs=N_INPUTS, n_layers=N_LAYERS, base_dim=BASE_DIM,
         dim_growth=DIM_GROWTH, lateral_steps=LATERAL_STEPS, eta_learn=ETA_LEARN,
+        n_relax=N_RELAX,
     )
     phi, v, p, vp = 0.0, 0.0, (N_INPUTS - 1) / 2.0, 0.0
     prev_rcom = None
