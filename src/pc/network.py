@@ -45,7 +45,7 @@ class PCNetwork:
         beta: float = 1.0,
         gamma: float = 1.0,
         eta_learn: float = 0.001,
-        eta_temporal: float | None = None,  # defaults to eta_learn if None
+        eta_temporal: float = 0.1,   # learning rate for V forward model (sweep optimum)
         lambda_decay: float = 0.0,
         w_clip: float = 5.0,
         rng: np.random.Generator | None = None,
@@ -57,7 +57,7 @@ class PCNetwork:
         self.beta = beta
         self.gamma = gamma
         self.eta_learn = eta_learn
-        self.eta_temporal = eta_temporal if eta_temporal is not None else eta_learn
+        self.eta_temporal = eta_temporal
         self.lambda_decay = lambda_decay
         self.w_clip = w_clip
         self._rng = rng or np.random.default_rng()

@@ -71,7 +71,7 @@ class PCNode:
         node_id: str,
         dim: int,
         activation: str = "tanh",
-        eta_temporal: float = 0.05,    # learning rate for V  (sweep: higher = better anticipation)
+        eta_temporal: float = 0.1,     # learning rate for V  (sweep optimum; diverges >~2.0)
         w_clip_V: float = 3.0,         # weight clip for V
         rng: np.random.Generator | None = None,
     ) -> None:

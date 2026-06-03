@@ -43,7 +43,7 @@ def build_net(rng: np.random.Generator) -> tuple[PCNetwork, SensorNode]:
         beta=1.0,
         gamma=1.0,
         eta_learn=0.01,
-        eta_temporal=0.01,
+        eta_temporal=0.1,
         lambda_decay=0.0,
         w_clip=5.0,
         rng=rng,
