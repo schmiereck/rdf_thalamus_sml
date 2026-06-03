@@ -580,9 +580,10 @@ def main() -> None:
                              #   efference-copy → retinal-shift mapping under motion)
     N_EPOCHS_ACTIVE   = 34   # Phase 2: action enabled (visual-error gradient)
     MAX_V             = 2.0  # max eye velocity in pixels/step
-    ACTION_GAIN       = 1.2  # gradient → velocity gain (v = -gain · ∂E/∂φ);
+    ACTION_GAIN       = 1.5  # gradient → velocity gain (v = -gain · ∂E/∂φ);
                              #   higher = tighter tracking, less lag (risk: oscillation).
-                             #   sweep_act2: tracking saturates at ~1.2 (g1.2→0.334, g1.5→0.327)
+                             #   sweep_act2 focused (3 seeds): g1.5 eta.004 = best (0.287),
+                             #   g1.2 close behind (0.266); no overshooting observed at 1.5
     ETA_LEARN         = 0.004 # hierarchical W learning rate; sweep_act2: 0.004 halves the
                              #   sensor error vs 0.002 with no tracking cost (clear win)
     ACTION_SMOOTH     = 0.2  # velocity momentum (0 = none, blends previous v)
