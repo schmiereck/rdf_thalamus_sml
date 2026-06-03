@@ -492,28 +492,31 @@ def build_oracle_sweep() -> list[RunConfig]:
 
 def build_focused_sweep() -> list[RunConfig]:
     """
-    Targeted follow-up sweep based on sweep 1 findings:
-      - base_dim=8 and lateral=0 were the strongest 'real' improvements
-      - action_gain=1.0 was the single biggest tracking lever
-    We now cross these factors and probe action_gain further (1.0–1.6),
-    averaging each config over 3 different random seeds to reduce noise.
+    Targeted follow-up sweep based on the bounce-only sweep_act2 findings:
+      - action_gain=1.0  was the single biggest tracking lever (+34%)
+      - lateral_steps=0  was the second (+19%)
+      - eta_learn=0.004  was the third (+12%)
+    None of those three has yet been tested *together*, so we cross them and
+    push action_gain higher (1.0 → 1.2 → 1.5) to find where pursuit saturates
+    or overshoots.  Each config is averaged over 3 seeds to beat the noise.
     """
     seeds = [42, 123, 777]
     base = dict(n_epochs_passive=5, n_epochs_active=12,
-                n_train_patterns=8, repeats_per_seq=2)
+                n_train_patterns=8, repeats_per_seq=2,
+                lateral_steps=0)          # lateral=0 is fixed-in for all (proven win)
 
     combos = [
-        # name-suffix          kwargs
-        ("baseline L3",        dict()),
-        ("d8 lat0",            dict(base_dim=8, lateral_steps=0)),
-        ("d8 lat0 g1.0",       dict(base_dim=8, lateral_steps=0, action_gain=1.0)),
-        ("d8 lat0 g1.3",       dict(base_dim=8, lateral_steps=0, action_gain=1.3)),
-        ("d8 lat0 g1.6",       dict(base_dim=8, lateral_steps=0, action_gain=1.6)),
-        ("d8 lat0 g1.0 L2",    dict(base_dim=8, lateral_steps=0, action_gain=1.0, n_layers=2)),
-        ("d8 lat0 g1.0 L4",    dict(base_dim=8, lateral_steps=0, action_gain=1.0, n_layers=4)),
-        ("d6 lat0 g1.0",       dict(base_dim=6, lateral_steps=0, action_gain=1.0)),
-        ("d8 lat0 g1.0 sp.02", dict(base_dim=8, lateral_steps=0, action_gain=1.0, spring_k=0.02)),
-        ("d8 lat0 g1.0 sp.10", dict(base_dim=8, lateral_steps=0, action_gain=1.0, spring_k=0.10)),
+        # name-suffix          kwargs (lateral=0 already in base)
+        ("baseline L3",         dict()),                                  # reference: lat0 only
+        ("g1.0",                dict(action_gain=1.0)),
+        ("g1.2",                dict(action_gain=1.2)),
+        ("g1.5",                dict(action_gain=1.5)),
+        ("g1.0 eta.004",        dict(action_gain=1.0, eta_learn=0.004)),  # the combined winner
+        ("g1.2 eta.004",        dict(action_gain=1.2, eta_learn=0.004)),
+        ("g1.5 eta.004",        dict(action_gain=1.5, eta_learn=0.004)),
+        ("g1.0 eta.004 d8",     dict(action_gain=1.0, eta_learn=0.004, base_dim=8)),
+        ("g1.2 eta.004 d8",     dict(action_gain=1.2, eta_learn=0.004, base_dim=8)),
+        ("g1.0 eta.004 sp.02",  dict(action_gain=1.0, eta_learn=0.004, spring_k=0.02)),
     ]
 
     configs: list[RunConfig] = []
