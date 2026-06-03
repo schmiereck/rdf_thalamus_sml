@@ -71,7 +71,7 @@ class PCNode:
         node_id: str,
         dim: int,
         activation: str = "tanh",
-        eta_temporal: float = 0.002,   # learning rate for V
+        eta_temporal: float = 0.05,    # learning rate for V  (sweep: higher = better anticipation)
         w_clip_V: float = 3.0,         # weight clip for V
         rng: np.random.Generator | None = None,
     ) -> None:
@@ -215,11 +215,8 @@ class PCNode:
             return
         # delta: how far off the forward model was
         delta = self.mu - self._predicted_next_mu   # shape [dim]
-        # gradient through the activation in the forward model
-        pre = self.V @ self._prev_f_mu              # shape [dim]
-        grad_act = self._act_deriv(pre)             # shape [dim]
-        # outer product update
-        dV = np.outer(delta * grad_act, self._prev_f_mu)
+        # "single" mode: predicted = V @ f(mu_prev), gradient is just the outer product
+        dV = np.outer(delta, self._prev_f_mu)
         if np.all(np.isfinite(dV)):
             self.V += self.eta_temporal * dV
         if self.w_clip_V > 0.0:
@@ -247,8 +244,8 @@ class PCNode:
         self._prev_f_mu = self._act(self.mu).copy()   # f(μ_t)
         self._prev_mu = self.mu.copy()                 # μ_t (for external access)
         # Forward model: predict μ_{t+1}
-        pre = self.V @ self._prev_f_mu                 # [dim]
-        self._predicted_next_mu = self._act(pre)       # f(V @ f(μ_t))
+        # "single" mode: V @ f(μ) — one activation, no double squashing.
+        self._predicted_next_mu = self.V @ self._prev_f_mu   # V @ f(μ_t)
 
     # ------------------------------------------------------------------
     # Sensor clamping
