@@ -90,9 +90,13 @@ class PCNode:
         self.epsilon: np.ndarray = np.zeros(dim)
 
         # Forward model  V: [dim × dim]
-        # Initialised small so it starts nearly as an identity map.
-        limit = np.sqrt(6.0 / (dim + dim))
-        self.V: np.ndarray = rng.uniform(-limit * 0.1, limit * 0.1, (dim, dim))
+        # Initialised as near-identity so the forward model starts as a
+        # persistence prior:  predicted_next ≈ f(I · f(μ)) ≈ μ  (for |μ|<1).
+        # This is the correct inductive bias before any dynamics are learned
+        # ("next state ≈ current state"); V then learns DEVIATIONS from it,
+        # i.e. real motion dynamics.  A near-zero V would instead reset μ to 0
+        # at the start of every frame.
+        self.V: np.ndarray = np.eye(dim) + rng.normal(0.0, 0.01, (dim, dim))
 
         # Temporal buffers
         self._prev_mu: np.ndarray = np.zeros(dim)       # μ from end of previous step
