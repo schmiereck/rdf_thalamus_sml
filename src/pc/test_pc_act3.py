@@ -101,11 +101,14 @@ def build_network(
     # to its two diagonal pointer neighbours (j and j+1).  Reciprocal LATERAL
     # connections let each row predict the other; the pointer-row prediction
     # error then drives the pointer's active inference.
+    # pressure_scale=0.1: weak cross-row back-pressure keeps state_error bounded;
+    # the rows have very different content so full-strength coupling explodes state_error.
+    HEX_PS = 0.1
     for j in range(n_inputs):
         for jp in (j, j + 1):
             if 0 <= jp < n_inputs:
-                net.connect(f"so{j}", f"sp{jp}", ConnType.LATERAL)
-                net.connect(f"sp{jp}", f"so{j}", ConnType.LATERAL)
+                net.connect(f"so{j}", f"sp{jp}", ConnType.LATERAL, pressure_scale=HEX_PS)
+                net.connect(f"sp{jp}", f"so{j}", ConnType.LATERAL, pressure_scale=HEX_PS)
 
     # Motor sensor: efference copy of both effector velocities.
     motor_sensor = net.add(SensorNode("motor", dim=2))
