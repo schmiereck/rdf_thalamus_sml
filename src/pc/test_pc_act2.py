@@ -428,7 +428,8 @@ def sample_bounce_patterns(
 ) -> list[tuple[str, list[list[float]]]]:
     """
     Bounce-only pattern set: only bouncing-direction sequences, 1 or 2 objects,
-    blob sizes 1–3 pixels.  Returns [(description, frames), ...].
+    blob sizes 1–3 pixels, normal (1 px/frame) or slow (0.5 px/frame) speed.
+    Returns [(description, frames), ...].
     """
     gen = PatternGenerator(n_inputs=n_inputs, seed=seed)
     rng = np.random.default_rng(seed)
@@ -436,6 +437,7 @@ def sample_bounce_patterns(
     while len(patterns) < n_sequences:
         n_blobs = int(rng.integers(1, 3))      # 1 or 2
         blob_size = int(rng.integers(1, 4))    # 1, 2, or 3
+        speed = int(rng.choice([1, 2], p=[0.7, 0.3]))  # 1 = normal, 2 = slow (0.5 px/frame)
         blob_shape = "flat" if blob_size > 1 else "point"
         frames, spec = gen.build_sequence(
             n_blobs=n_blobs,
@@ -443,7 +445,7 @@ def sample_bounce_patterns(
             blob_shape=blob_shape,
             direction="bounce",
             intensity_envelope="constant",
-            speed=1,
+            speed=speed,
         )
         patterns.append((str(spec), frames))
     return patterns

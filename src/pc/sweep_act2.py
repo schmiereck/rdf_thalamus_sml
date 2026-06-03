@@ -131,6 +131,7 @@ def run_one(cfg: RunConfig) -> dict:
         while len(patterns) < count:
             n_blobs = int(rng_pat.integers(1, 3))      # 1 or 2
             blob_size = int(rng_pat.integers(1, 4))    # 1, 2, or 3
+            speed = int(rng_pat.choice([1, 2], p=[0.7, 0.3]))  # 1 = normal, 2 = slow
             blob_shape = "flat" if blob_size > 1 else "point"
             frames, spec = gen.build_sequence(
                 n_blobs=n_blobs,
@@ -138,7 +139,7 @@ def run_one(cfg: RunConfig) -> dict:
                 blob_shape=blob_shape,
                 direction="bounce",
                 intensity_envelope="constant",
-                speed=1,
+                speed=speed,
             )
             patterns.append((str(spec), frames))
         return patterns
