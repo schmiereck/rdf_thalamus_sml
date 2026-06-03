@@ -560,7 +560,7 @@ def main() -> None:
     N_LAYERS          = 3    # hidden pyramid layers (depth)
     BASE_DIM          = 4    # state dim at layer 1
     DIM_GROWTH        = 2    # dim increment per layer
-    LATERAL_STEPS     = 1    # lateral neighbours per side
+    LATERAL_STEPS     = 0    # lateral neighbours per side (sweep_act2: lat0 = +19% tracking)
     ACTION_MODE       = "gradient"   # "gradient"  — reactive ∂E/∂φ (uses the network)
                                      # "pred_com"  — steer toward COM of network π (uses the network)
                                      # "vel_com"   — smooth-pursuit: extrapolate COM velocity
@@ -580,8 +580,11 @@ def main() -> None:
                              #   efference-copy → retinal-shift mapping under motion)
     N_EPOCHS_ACTIVE   = 34   # Phase 2: action enabled (visual-error gradient)
     MAX_V             = 2.0  # max eye velocity in pixels/step
-    ACTION_GAIN       = 0.7  # gradient → velocity gain (v = -gain · ∂E/∂φ);
-                             #   higher = tighter tracking, less lag (risk: oscillation)
+    ACTION_GAIN       = 1.2  # gradient → velocity gain (v = -gain · ∂E/∂φ);
+                             #   higher = tighter tracking, less lag (risk: oscillation).
+                             #   sweep_act2: tracking saturates at ~1.2 (g1.2→0.334, g1.5→0.327)
+    ETA_LEARN         = 0.004 # hierarchical W learning rate; sweep_act2: 0.004 halves the
+                             #   sensor error vs 0.002 with no tracking cost (clear win)
     ACTION_SMOOTH     = 0.2  # velocity momentum (0 = none, blends previous v)
     SPRING_K          = 0.05 # centering spring: pulls fovea toward φ=0 each step
                              #   (v_spring = -SPRING_K * phi, like eye muscle at rest)
@@ -609,6 +612,7 @@ def main() -> None:
         base_dim=BASE_DIM,
         dim_growth=DIM_GROWTH,
         lateral_steps=LATERAL_STEPS,
+        eta_learn=ETA_LEARN,
     )
 
     # Sample fixed pattern sets once — patterns are N_INPUTS wide (world size)
