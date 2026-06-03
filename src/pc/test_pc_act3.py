@@ -781,6 +781,8 @@ def main() -> None:
     ptr_f_spring = 0.0   # last pointer spring force (toward gaze centre)
     ptr_net_steps   = 0  # steps where |f_act| > |f_spr| (active phase)
     ptr_total_steps = 0  # total active steps with pointer
+    ptr_toward_obj  = 0  # steps where f_act points toward the object COM
+    ptr_abs_vp_sum  = 0.0  # accumulated |vp| during active phase
 
     try:
         for epoch in range(N_EPOCHS_PASSIVE + N_EPOCHS_ORACLE + N_EPOCHS_ACTIVE):
@@ -916,9 +918,16 @@ def main() -> None:
                             ptr_total_steps += 1
                             if abs(f_action) > abs(f_spring):
                                 ptr_net_steps += 1
+                            # Does f_act push toward the object? (world coords)
+                            com = world_com(world_frame)
+                            if com is not None and abs(com - p) > 0.3:
+                                if np.sign(f_action) == np.sign(com - p):
+                                    ptr_toward_obj += 1
                         vp = float(np.clip((vp + accel) * (1.0 - POINTER_DAMPING),
                                            -MAX_VP, MAX_VP))
                         p = float(np.clip(p + vp, P_MIN, P_MAX))
+                        if action_enabled:
+                            ptr_abs_vp_sum += abs(vp)
                         pointer_history.append(p - phi)   # retinal pointer position
 
                         if DELAY > 0:
@@ -929,12 +938,21 @@ def main() -> None:
 
     if ptr_total_steps > 0:
         net_pct = 100.0 * ptr_net_steps / ptr_total_steps
+        toward_pct = 100.0 * ptr_toward_obj / ptr_total_steps
+        mean_vp = ptr_abs_vp_sum / ptr_total_steps
         print(
             f"\n  Pointer force dominance (active phase): "
             f"→net {ptr_net_steps}/{ptr_total_steps} steps  ({net_pct:.1f}%)"
             f"   →spring {ptr_total_steps - ptr_net_steps}/{ptr_total_steps} steps"
             f"  ({100 - net_pct:.1f}%)"
         )
+        print(
+            f"  f_act points TOWARD object : {ptr_toward_obj}/{ptr_total_steps} steps"
+            f"  ({toward_pct:.1f}%)   "
+            f"[>50% = correct sign, ~50% = random, <50% = WRONG sign]"
+        )
+        print(f"  mean |vp| (active)         : {mean_vp:.3f} px/step"
+              f"   [near 0 = pointer barely moves]")
 
     print_summary(
         step, sensor_history, state_history, motor_history,
