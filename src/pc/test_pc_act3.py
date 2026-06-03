@@ -398,6 +398,8 @@ def render(
     ptr_shifted: list[float] | None = None,
     p: float = 0.0,
     vp: float = 0.0,
+    f_action: float = 0.0,
+    f_spring: float = 0.0,
 ) -> int:
     if prev_lines > 0:
         _clear_lines(prev_lines)
@@ -459,8 +461,11 @@ def render(
     lines.append(f"  Obj world:  {world_display}   (φ={phi:+.1f}  v={v:+.2f})")
     lines.append(f"  Obj sensor: {' ' * win_start_disp}[{dot_str}]")
     if ptr_world_display is not None:
+        # Show which force dominates: action (network/drift) vs spring (to centre).
+        arrow = "→net" if abs(f_action) > abs(f_spring) else "→spring"
         lines.append(f"  Ptr world:  {ptr_world_display}   (p={p:+.1f}  vp={vp:+.2f})")
-        lines.append(f"  Ptr sensor: {' ' * win_start_disp}[{ptr_sensor_display}]")
+        lines.append(f"  Ptr sensor: {' ' * win_start_disp}[{ptr_sensor_display}]"
+                     f"   f_act={f_action:+.3f}  f_spr={f_spring:+.3f}  [{arrow}]")
     lines.append("")
 
     s_delta = st_delta = m_delta = ""
@@ -769,6 +774,8 @@ def main() -> None:
     vp  = 0.0                    # pointer velocity
     prev_retinal_com: float | None = None   # for vel_com smooth pursuit
     pointer_history: list[float] = []        # retinal pointer position over time
+    ptr_f_action = 0.0   # last pointer steering force (network/drift)
+    ptr_f_spring = 0.0   # last pointer spring force (toward gaze centre)
 
     try:
         for epoch in range(N_EPOCHS_PASSIVE + N_EPOCHS_ORACLE + N_EPOCHS_ACTIVE):
@@ -846,6 +853,7 @@ def main() -> None:
                             oracle_enabled,
                             sensor_history, state_history, max_err, prev_lines, N_INPUTS,
                             ptr_world=ptr_world, ptr_shifted=ptr_shifted, p=p, vp=vp,
+                            f_action=ptr_f_action, f_spring=ptr_f_spring,
                         )
                         step += 1
 
@@ -898,6 +906,7 @@ def main() -> None:
                         else:
                             f_action = rng.normal(0.0, POINTER_DRIFT)
                         accel = (f_action + f_spring) / POINTER_MASS
+                        ptr_f_action, ptr_f_spring = f_action, f_spring   # for next render
                         vp = float(np.clip((vp + accel) * (1.0 - POINTER_DAMPING),
                                            -MAX_VP, MAX_VP))
                         p = float(np.clip(p + vp, P_MIN, P_MAX))
