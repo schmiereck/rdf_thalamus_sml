@@ -821,7 +821,8 @@ def main() -> None:
     MAX_V             = 2.0
     SPRING_K          = 0.05
     PASSIVE_DRIFT     = 0.8    # wider drift so the fovea wanders across the world
-    PASSIVE_SPRING_K  = 0.01   # weak centering: allow exploration of the full world
+    PASSIVE_SPRING_K  = 0.01   # weak centering toward PHI_MID
+    PASSIVE_TRACK_K   = 0.06   # weak pull of fovea toward object (passive tracking)
     ORACLE_TARGET     = 0.35
     # Fovea window (N_INPUTS wide) slides over the WORLD_W-wide world.  phi is the
     # window's left-edge offset in world coords; allow the window CENTRE
@@ -1153,9 +1154,14 @@ def main() -> None:
                     target_phi = com - ORACLE_TARGET * N_INPUTS
                     v = float(np.clip(target_phi - phi, -MAX_V, MAX_V))
                 else:
+                    # Passive fovea: random drift + weak centering + weak pull
+                    # toward the object so the network reliably sees it while
+                    # still exploring the full world width.
+                    obj_phi = world.world_com() - N_INPUTS / 2.0  # ideal phi to centre object
                     v = float(np.clip(
                         rng.normal(0.0, PASSIVE_DRIFT)
-                        - PASSIVE_SPRING_K * (phi - PHI_MID),
+                        - PASSIVE_SPRING_K * (phi - PHI_MID)
+                        + PASSIVE_TRACK_K * (obj_phi - phi),
                         -MAX_V, MAX_V,
                     ))
                 phi = float(np.clip(phi + v, PHI_MIN, PHI_MAX))
