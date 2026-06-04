@@ -616,7 +616,7 @@ def render(
         return "".join(chars)
 
     win_start_disp = pad + phi_r
-    arrow = "→net" if abs(f_action) > abs(f_spring) else "→spring"
+    arrow = "→net   " if abs(f_action) > abs(f_spring) else "→spring"
     tap_str = f"  TAP!" if tapped else ""
 
     lines = []
