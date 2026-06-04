@@ -6,6 +6,7 @@ import numpy as np
 
 from .node import PCNode, SensorNode
 from .connection import PCConnection, ConnType
+from .module import PCModule
 
 
 class PCNetwork:
@@ -64,6 +65,7 @@ class PCNetwork:
 
         self._nodes: dict[str, PCNode] = {}
         self._connections: list[PCConnection] = []
+        self._modules: dict[str, PCModule] = {}
 
         # Global neuromodulator ("dopamine"): scales every learning update in the
         # next learn phase.  1.0 = neutral ("weiter so", no influence).  Set via
@@ -124,6 +126,42 @@ class PCNetwork:
 
     def node(self, node_id: str) -> PCNode:
         return self._nodes[node_id]
+
+    # ------------------------------------------------------------------
+    # Module support (organisational layer — no mechanical changes)
+    # ------------------------------------------------------------------
+
+    def add_module(self, module: PCModule) -> PCModule:
+        """Register a module with the network (for summary / introspection)."""
+        self._modules[module.name] = module
+        return module
+
+    def wire_modules(
+        self,
+        src: PCModule,
+        src_port: str,
+        dst: PCModule,
+        dst_port: str,
+        conn_type: ConnType = ConnType.UP,
+        **conn_kwargs,
+    ) -> list[PCConnection]:
+        """Create one connection per (src_port[i], dst_port[i]) node pair.
+
+        Both ports must have the same length.  conn_id is auto-generated from
+        the module/port names.  All extra kwargs are forwarded to connect().
+        """
+        src_ids = src.out_ports[src_port]
+        dst_ids = dst.in_ports[dst_port]
+        if len(src_ids) != len(dst_ids):
+            raise ValueError(
+                f"Port length mismatch: {src.name}.{src_port} ({len(src_ids)}) "
+                f"!= {dst.name}.{dst_port} ({len(dst_ids)})"
+            )
+        conns = []
+        for i, (s, t) in enumerate(zip(src_ids, dst_ids)):
+            cid = f"{src.name}.{src_port}[{i}]->{dst.name}.{dst_port}[{i}]"
+            conns.append(self.connect(s, t, conn_type, conn_id=cid, **conn_kwargs))
+        return conns
 
     # ------------------------------------------------------------------
     # Full time step
@@ -302,6 +340,12 @@ class PCNetwork:
         lines.append("  Connections:")
         for c in self._connections:
             lines.append(f"    {c}")
+        if self._modules:
+            lines.append("  Modules:")
+            for m in self._modules.values():
+                in_p  = ", ".join(f"{k}[{len(v)}]" for k, v in m.in_ports.items())
+                out_p = ", ".join(f"{k}[{len(v)}]" for k, v in m.out_ports.items())
+                lines.append(f"    {m.name:20s}  in: {in_p}  |  out: {out_p}")
         return "\n".join(lines)
 
     def __repr__(self) -> str:
