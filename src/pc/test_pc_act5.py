@@ -1143,13 +1143,23 @@ def main() -> None:
                     total_active_steps += 1
 
                 # ---- Fovea update ----
-                if control_enabled:
-                    v_target = _disp * ACTION_GAIN - SPRING_K * phi
+                # The fovea always keeps the OBJECT in view (consistent across
+                # passive, oracle and pursuit) — the only thing that differs
+                # between training phases is how the POINTER is driven.  Only in
+                # the final ACTIVE phase is the fovea self-driven by the
+                # prediction-error gradient (true active inference).
+                if action_enabled:
+                    # Active inference: fovea driven by its own error gradient,
+                    # softly centred on the world middle (PHI_MID, not 0).
+                    v_target = _disp * ACTION_GAIN - SPRING_K * (phi - PHI_MID)
                     v = float(np.clip(
                         (1.0 - ACTION_SMOOTH) * v_target + ACTION_SMOOTH * v,
                         -MAX_V, MAX_V,
                     ))
-                elif oracle_enabled:
+                elif oracle_enabled or pursuit_enabled:
+                    # Reliable object tracking — same goal as the passive fovea,
+                    # so PURSUIT trains the pointer-follows-object mapping with
+                    # the object centred, NOT the opposite (fovea-on-pointer).
                     com = world.world_com()
                     target_phi = com - ORACLE_TARGET * N_INPUTS
                     v = float(np.clip(target_phi - phi, -MAX_V, MAX_V))
