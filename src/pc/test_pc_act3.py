@@ -845,7 +845,14 @@ def main() -> None:
                                         object_sensors, shifted, anticipatory=True
                                     )
                                 else:
-                                    _pdisp = -compute_action_gradient(
+                                    # "self" mode: pure active inference on the pointer
+                                    # row's own prediction error.
+                                    # Sign convention: moving p RIGHT shifts the pointer
+                                    # blob RIGHT in the sensor array (+∂img/∂p).  This is
+                                    # the OPPOSITE of the fovea, where moving φ right
+                                    # shifts the retinal image LEFT.  So the corrective
+                                    # signal here is +gradient (no negation).
+                                    _pdisp = +compute_action_gradient(
                                         pointer_sensors, ptr_shifted, anticipatory=False
                                     )
 
