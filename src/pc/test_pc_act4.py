@@ -773,6 +773,16 @@ def main() -> None:
     REWARD_MODE     = "off"
     REWARD_GAIN     = 1.0    # neuromod = 1 + REWARD_GAIN · reward
     REWARD_STRENGTH = 1.0    # scales the raw reward before clipping to [-1, 1]
+    # Baseline subtraction turns the raw reward into a Reward-Prediction-Error
+    # (RPE) — what biological dopamine actually encodes.  A reward that is
+    # almost always positive (like "distance") amplifies learning every step
+    # but never discriminates good vs. bad.  Subtracting a running EMA baseline
+    # centres the signal on 0, so neuromod>1 only when "better than usual" and
+    # <1 when "worse than usual" — creating the contrast needed to shape action.
+    #   "none" = raw reward (default)
+    #   "ema"  = reward - running_mean(reward)   [recommended for shaping]
+    REWARD_BASELINE = "none"
+    REWARD_BASE_DECAY = 0.99   # EMA decay for the baseline (closer to 1 = slower)
 
     # Fovea range: the sensor window can slide from -N_INPUTS (fully left of world)
     # to +N_INPUTS (fully right of world).  phi=0 = world fully in view.
@@ -855,6 +865,9 @@ def main() -> None:
     ptr_abs_vp_sum  = 0.0  # accumulated |vp| during active phase
     reward_sum      = 0.0  # accumulated raw reward during active phase
     reward_steps    = 0    # active steps where a reward was actually sent
+    reward_baseline = 0.0  # running EMA baseline for RPE
+    reward_pos      = 0    # steps where the modulated signal was > 0 (reinforce)
+    reward_neg      = 0    # steps where the modulated signal was < 0 (punish)
     ptr_descent_ok  = 0  # (a)-test: steps where the action reduces pointer-row error
 
     try:
@@ -949,10 +962,21 @@ def main() -> None:
                             com = world_com(world_frame)
                             if com is not None:
                                 # +1 on the object, -1 a half-world away, 0 = neutral.
-                                reward = 1.0 - 2.0 * abs(p - com) / N_INPUTS
-                                net.set_reward(reward * REWARD_STRENGTH)
-                                reward_sum   += reward * REWARD_STRENGTH
+                                reward = (1.0 - 2.0 * abs(p - com) / N_INPUTS) * REWARD_STRENGTH
+                                # Optional baseline subtraction -> reward-prediction-error.
+                                if REWARD_BASELINE == "ema":
+                                    signal = reward - reward_baseline
+                                    reward_baseline = (REWARD_BASE_DECAY * reward_baseline
+                                                       + (1 - REWARD_BASE_DECAY) * reward)
+                                else:
+                                    signal = reward
+                                net.set_reward(signal)
+                                reward_sum   += reward          # track raw reward
                                 reward_steps += 1
+                                if signal > 0:
+                                    reward_pos += 1
+                                elif signal < 0:
+                                    reward_neg += 1
 
                         # Full PC step (predict/error/relax/learn) — clean diagnostics
                         info = net.step(learn=True)
@@ -1082,11 +1106,18 @@ def main() -> None:
         mean_r = reward_sum / reward_steps
         # Count positive/negative steps from the clipped [-1,1] scale
         print(
-            f"\n  Reward stats  (mode={REWARD_MODE!r}, gain={REWARD_GAIN}):"
+            f"\n  Reward stats  (mode={REWARD_MODE!r}, baseline={REWARD_BASELINE!r}, "
+            f"gain={REWARD_GAIN}):"
         )
         print(
-            f"    mean reward  : {mean_r:+.3f}  over {reward_steps} steps"
+            f"    mean raw reward : {mean_r:+.3f}  over {reward_steps} steps"
             f"   [+1=always on obj, 0=random, -1=always far away]"
+        )
+        pos_pct = 100.0 * reward_pos / reward_steps
+        neg_pct = 100.0 * reward_neg / reward_steps
+        print(
+            f"    modulator sign  : reinforce {pos_pct:.1f}%  |  punish {neg_pct:.1f}%"
+            f"   [near 50/50 = discriminative; ~100/0 = no contrast]"
         )
 
     print_summary(
