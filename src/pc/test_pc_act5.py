@@ -876,6 +876,12 @@ def main() -> None:
     REWARD_BASELINE   = "ema"     # "none" or "ema" (RPE = reward - running mean)
     REWARD_BASE_DECAY = 0.99
     SUCCESS_BONUS     = 1.5       # extra reward when object is at target & resting
+    # After a successful hit, freeze the network for this many steps: sensors
+    # hold their last values, learning is off, reward = 0, actions = 0.
+    # Hypothesis: the FLASH spike is a sudden prediction-error burst that the
+    # network may experience as aversive rather than rewarding.  Complete
+    # silence lets the success settle without a disturbing signal.
+    SUCCESS_FREEZE    = 3
 
     # ---- Learning ---------------------------------------------------------
     ETA_LEARN = 0.004
@@ -936,6 +942,7 @@ def main() -> None:
 
     # Statistics
     success_count       = 0
+    freeze_countdown    = 0   # steps remaining in post-success silence
     total_active_steps  = 0
     pursuit_toward_obj  = 0   # pursuit phase: pointer-action points at object
     pursuit_total_steps = 0
@@ -984,6 +991,30 @@ def main() -> None:
             tap_gate = 0.0
 
             for frame_idx in range(EPISODE_LEN):
+                # ---- Post-success freeze ----
+                # After a hit the network sits in silence for SUCCESS_FREEZE
+                # steps: sensors hold their last values, learning is disabled,
+                # actions and reward are zero.  This prevents the FLASH
+                # prediction-error spike from being experienced as aversive.
+                frozen = freeze_countdown > 0
+                if frozen:
+                    freeze_countdown -= 1
+                    # Still advance physics and display so the world keeps moving.
+                    phys = world.step(0.0, p)
+                    step += 1
+                    if action_enabled:
+                        total_active_steps += 1
+                    prev_lines = render(
+                        step, total_steps, ep, world,
+                        phi, v, p, vp, 0.0, False, phys["kicked"],
+                        N_INPUTS, action_enabled, oracle_enabled, pursuit_enabled,
+                        0.0, 0.0, 0.0,
+                        sensor_history, state_history, max_err,
+                        prev_lines,
+                        f_action=0.0, f_spring=0.0,
+                    )
+                    continue
+
                 # ---- Build world frames ----
                 obj_world    = world.render_obj_channel()
                 target_world = world.render_target_channel()
@@ -1077,6 +1108,8 @@ def main() -> None:
                             tap_toward_target += 1
                 if action_enabled and phys["success"]:
                     success_count += 1
+                    if SUCCESS_FREEZE > 0:
+                        freeze_countdown = SUCCESS_FREEZE
 
                 # ---- Reward ----
                 # Pursuit phase: reward = pointer-near-object (re-learn following).
