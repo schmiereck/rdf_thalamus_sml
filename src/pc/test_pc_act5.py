@@ -507,14 +507,40 @@ def render(
         return "".join(out)
 
     phi_r = round(phi)
-    obj_disp = _pad_display(obj_world,    phi_r)
-    tgt_disp = _pad_display(target_world, phi_r)
-    ptr_disp = _pad_display(ptr_world,    phi_r)
 
-    # Sensor window string
-    def _sensor_str(frame: list[float]) -> str:
-        shifted = apply_fovea_shift(frame, phi, n_inputs)
-        return "".join(_ch(v) for v in shifted)
+    # Object world: object as block chars, with the fixed target overlaid as a
+    # caret "‸" wherever there is no object pixel — both channels on one row.
+    def _pad_obj_display(obj_f: list[float], tgt_f: list[float], bracket_at: int) -> str:
+        obj_p = [0.0] * pad + list(obj_f) + [0.0] * pad
+        tgt_p = [0.0] * pad + list(tgt_f) + [0.0] * pad
+        win_s = pad + bracket_at
+        win_e = win_s + n_inputs - 1
+        out = []
+        for i, ov in enumerate(obj_p):
+            if i == win_s:
+                out.append("[")
+            ch = _ch(ov)
+            if ch == "·" and tgt_p[i] >= 0.5:
+                ch = "‸"            # target marker shows through empty pixels
+            out.append(ch)
+            if i == win_e:
+                out.append("]")
+        return "".join(out)
+
+    obj_disp = _pad_obj_display(obj_world, target_world, phi_r)
+    ptr_disp = _pad_display(ptr_world, phi_r)
+
+    # Sensor window string (object channel + target overlaid as "‸")
+    def _obj_sensor_str() -> str:
+        obj_sh = apply_fovea_shift(obj_world,    phi, n_inputs)
+        tgt_sh = apply_fovea_shift(target_world, phi, n_inputs)
+        chars = []
+        for ov, tv in zip(obj_sh, tgt_sh):
+            ch = _ch(ov)
+            if ch == "·" and tv >= 0.5:
+                ch = "‸"
+            chars.append(ch)
+        return "".join(chars)
 
     win_start_disp = pad + phi_r
     arrow = "→net" if abs(f_action) > abs(f_spring) else "→spring"
@@ -526,11 +552,9 @@ def render(
         f"ep={episode}  obj={world.obj_pos:+.1f}  vel={world.obj_vel:+.2f}"
         f"  tgt={world.target_pos:.0f}{flash_str}"
     )
-    lines.append(f"  Obj world:  {obj_disp}   (φ={phi:+.1f}  v={v:+.2f})")
-    lines.append(f"  Obj sensor: {' ' * win_start_disp}[{_sensor_str(obj_world)}]"
-                 f"  [tgt {_sensor_str(target_world)}]")
+    lines.append(f"  Obj world:  {obj_disp}   (φ={phi:+.1f}  v={v:+.2f})  ‸=target")
+    lines.append(f"  Obj sensor: {' ' * win_start_disp}[{_obj_sensor_str()}]")
     lines.append(f"  Ptr world:  {ptr_disp}   (p={p:+.1f}  vp={vp:+.2f})")
-    lines.append(f"  Ptr sensor: {' ' * win_start_disp}[{_sensor_str(ptr_world)}]")
     lines.append(
         f"  Ptr force:  f_act={f_action:+.3f}  f_spr={f_spring:+.3f}  [{arrow}]"
         f"  tap={tap_gate:.2f}{tap_str}"
