@@ -135,8 +135,8 @@ class PhysicsWorld1D:
     # ------------------------------------------------------------------
 
     def render_obj_channel(self) -> list[float]:
-        """1-pixel blob at object position."""
-        return _flat_blob(self.obj_pos, self.n, width=1)
+        """2-pixel blob at object position (best-behaving width in act4)."""
+        return _flat_blob(self.obj_pos, self.n, width=2)
 
     def render_target_channel(self) -> list[float]:
         """2-pixel marker at target position (always visible)."""
@@ -469,6 +469,7 @@ def render(
     n_inputs: int,
     action_enabled: bool,
     oracle_enabled: bool,
+    pursuit_enabled: bool,
     sensor_err: float,
     state_err: float,
     motor_err: float,
@@ -483,6 +484,7 @@ def render(
         _clear_lines(prev_lines)
 
     phase_str = ("Phase 2 [ACTIVE]" if action_enabled
+                 else "Phase 1.75 [PURSUIT]" if pursuit_enabled
                  else "Phase 1.5 [ORACLE]" if oracle_enabled
                  else "Phase 1 [passive]")
     flash_str = " [FLASH!]" if world.flash_timer > 0 else ""
@@ -509,10 +511,15 @@ def render(
     phi_r = round(phi)
 
     # Object world: object as block chars, with the fixed target overlaid as a
-    # caret "‸" wherever there is no object pixel — both channels on one row.
-    def _pad_obj_display(obj_f: list[float], tgt_f: list[float], bracket_at: int) -> str:
+    # caret "‸" wherever there is no object pixel.  When the pointer TAPS, its
+    # contact pixel is flashed into this row as "✸" so the interaction is visible.
+    tap_world = render_pointer_row(p, n_inputs) if tapped else [0.0] * n_inputs
+
+    def _pad_obj_display(obj_f: list[float], tgt_f: list[float],
+                         tap_f: list[float], bracket_at: int) -> str:
         obj_p = [0.0] * pad + list(obj_f) + [0.0] * pad
         tgt_p = [0.0] * pad + list(tgt_f) + [0.0] * pad
+        tap_p = [0.0] * pad + list(tap_f) + [0.0] * pad
         win_s = pad + bracket_at
         win_e = win_s + n_inputs - 1
         out = []
@@ -520,14 +527,16 @@ def render(
             if i == win_s:
                 out.append("[")
             ch = _ch(ov)
-            if ch == "·" and tgt_p[i] >= 0.5:
+            if tap_p[i] >= 0.5:
+                ch = "✸"            # pointer tap contact flash (overlays everything)
+            elif ch == "·" and tgt_p[i] >= 0.5:
                 ch = "‸"            # target marker shows through empty pixels
             out.append(ch)
             if i == win_e:
                 out.append("]")
         return "".join(out)
 
-    obj_disp = _pad_obj_display(obj_world, target_world, phi_r)
+    obj_disp = _pad_obj_display(obj_world, target_world, tap_world, phi_r)
     ptr_disp = _pad_display(ptr_world, phi_r)
 
     # Sensor window string (object channel + target overlaid as "‸")
@@ -595,6 +604,8 @@ def print_summary(
     ptr_toward_obj: int,
     ptr_total_steps: int,
     ptr_descent_ok: int,
+    pursuit_toward_obj: int = 0,
+    pursuit_total_steps: int = 0,
 ) -> None:
     n = len(sensor_history)
     q = max(1, n // 10)
@@ -615,6 +626,17 @@ def print_summary(
         if first and last:
             print(f"  {label:20s}  {np.mean(first):8.4f}  {np.mean(last):8.4f}"
                   f"  {np.mean(first)-np.mean(last):+8.4f}")
+
+    if pursuit_total_steps > 0:
+        pursuit_pct = 100.0 * pursuit_toward_obj / pursuit_total_steps
+        print(f"\n{'='*64}")
+        print(f"  Pursuit-phase (object-following) statistics")
+        print(f"{'='*64}")
+        print(
+            f"  ptr-action→object  : {pursuit_toward_obj}/{pursuit_total_steps}"
+            f"  ({pursuit_pct:.1f}%)"
+            f"   [>50% = following re-learned]"
+        )
 
     if total_active_steps > 0:
         print(f"\n{'='*64}")
@@ -670,9 +692,13 @@ def main() -> None:
 
     # ---- Training schedule ------------------------------------------------
     EPISODE_LEN          = 80    # steps per episode (world resets each episode)
-    N_EPISODES_PASSIVE   = 120   # Phase 1: passive learning (no action)
-    N_EPISODES_ORACLE    = 60    # Phase 1.5: oracle fovea tracking
-    N_EPISODES_ACTIVE    = 250   # Phase 2: full active control + reward
+    N_EPISODES_PASSIVE   = 120   # Phase 1:    passive learning (no action)
+    N_EPISODES_ORACLE    = 60    # Phase 1.5:  oracle fovea tracking
+    N_EPISODES_PURSUIT   = 200   # Phase 1.75: pointer learns to FOLLOW the object
+                                 #   (reward = pointer-near-object, no tap). This
+                                 #   re-establishes the act4 object-following basis
+                                 #   before the harder push-to-target task.
+    N_EPISODES_ACTIVE    = 250   # Phase 2:    full active control + push-to-target
 
     # ---- Fovea ------------------------------------------------------------
     ACTION_MODE       = "gradient"
@@ -734,7 +760,8 @@ def main() -> None:
 
     world = PhysicsWorld1D(n=N_INPUTS, seed=0)
 
-    total_episodes = N_EPISODES_PASSIVE + N_EPISODES_ORACLE + N_EPISODES_ACTIVE
+    total_episodes = (N_EPISODES_PASSIVE + N_EPISODES_ORACLE
+                      + N_EPISODES_PURSUIT + N_EPISODES_ACTIVE)
     total_steps    = total_episodes * EPISODE_LEN
 
     sensor_history: list[float] = []
@@ -747,14 +774,16 @@ def main() -> None:
     print(f"World:    {N_INPUTS}px  |  target at pixel {world.target_pos:.0f}")
     print(f"Physics:  friction={world.obj_friction}  tap_impulse={world.tap_impulse}"
           f"  tap_range={world.tap_range}")
-    print(f"Phase 1:  {N_EPISODES_PASSIVE} episodes × {EPISODE_LEN} steps (passive)")
-    print(f"Phase 1.5:{N_EPISODES_ORACLE} episodes × {EPISODE_LEN} steps (oracle fovea)")
-    print(f"Phase 2:  {N_EPISODES_ACTIVE} episodes × {EPISODE_LEN} steps (active + reward)")
+    print(f"Phase 1:   {N_EPISODES_PASSIVE} episodes × {EPISODE_LEN} steps (passive)")
+    print(f"Phase 1.5: {N_EPISODES_ORACLE} episodes × {EPISODE_LEN} steps (oracle fovea)")
+    print(f"Phase 1.75:{N_EPISODES_PURSUIT} episodes × {EPISODE_LEN} steps (pursuit: pointer follows object)")
+    print(f"Phase 2:   {N_EPISODES_ACTIVE} episodes × {EPISODE_LEN} steps (active push-to-target)")
     print(f"Total:    ≈{total_steps} steps\n")
     print("Press Ctrl+C to stop early.\n")
 
-    oracle_start_ep = N_EPISODES_PASSIVE
-    active_start_ep = N_EPISODES_PASSIVE + N_EPISODES_ORACLE
+    oracle_start_ep  = N_EPISODES_PASSIVE
+    pursuit_start_ep = N_EPISODES_PASSIVE + N_EPISODES_ORACLE
+    active_start_ep  = N_EPISODES_PASSIVE + N_EPISODES_ORACLE + N_EPISODES_PURSUIT
 
     prev_lines    = 0
     step          = 0
@@ -770,6 +799,8 @@ def main() -> None:
     # Statistics
     success_count       = 0
     total_active_steps  = 0
+    pursuit_toward_obj  = 0   # pursuit phase: pointer-action points at object
+    pursuit_total_steps = 0
     tap_count           = 0
     reward_sum          = 0.0
     reward_steps        = 0
@@ -782,11 +813,15 @@ def main() -> None:
 
     try:
         for ep in range(total_episodes):
-            oracle_enabled = oracle_start_ep <= ep < active_start_ep
-            action_enabled = ep >= active_start_ep
+            oracle_enabled  = oracle_start_ep <= ep < pursuit_start_ep
+            pursuit_enabled = pursuit_start_ep <= ep < active_start_ep
+            action_enabled  = ep >= active_start_ep
+            # In both pursuit and active phases the NETWORK drives fovea+pointer.
+            control_enabled = pursuit_enabled or action_enabled
 
             if ep == active_start_ep:
                 passive_steps = step
+                reward_baseline = 0.0   # reset RPE baseline: reward target changed
 
             # Reset world and effectors at episode start
             world.reset()
@@ -816,7 +851,7 @@ def main() -> None:
                 # ---- Action signals (require phase_predict + phase_error first) ----
                 _disp  = 0.0
                 _pdisp = 0.0
-                if action_enabled:
+                if control_enabled:
                     net.phase_predict()
                     net.phase_error()
 
@@ -833,9 +868,14 @@ def main() -> None:
                             object_sensors, obj_shifted, anticipatory=True, channel=1
                         )
 
-                    # Tap gate from PremotorModule prediction
-                    pm_node  = net.node("pm_0")
-                    tap_gate = float(np.clip((np.tanh(pm_node.pi[0]) + 1.0) / 2.0, 0.0, 1.0))
+                    # Tap gate from PremotorModule — only in the active push-to-target
+                    # phase.  During pursuit the pointer just learns to follow, no tap.
+                    if action_enabled:
+                        pm_node  = net.node("pm_0")
+                        tap_gate = float(np.clip(
+                            (np.tanh(pm_node.pi[0]) + 1.0) / 2.0, 0.0, 1.0))
+                    else:
+                        tap_gate = 0.0
 
                     # (a) test: does pointer action direction reduce pointer-row error?
                     pi_val = np.array([s.pi[1] for s in pointer_sensors])
@@ -848,14 +888,15 @@ def main() -> None:
                         ptr_descent_ok += 1
                     ptr_total_steps += 1
 
-                    # Does f_act point toward object?
+                    # Does the pointer action point toward the object?
                     obj_com = world.world_com()
                     if abs(obj_com - p) > 0.3:
                         if np.sign(_pdisp) == np.sign(obj_com - p):
                             ptr_toward_obj += 1
-
-                elif TAP_PASSIVE:
-                    tap_gate = 0.0   # no tap in passive/oracle unless flag set
+                            if pursuit_enabled:
+                                pursuit_toward_obj += 1
+                        if pursuit_enabled:
+                            pursuit_total_steps += 1
                 else:
                     tap_gate = 0.0
 
@@ -866,15 +907,25 @@ def main() -> None:
                 if action_enabled and phys["success"]:
                     success_count += 1
 
-                # ---- Reward (active phase only) ----
-                if action_enabled:
-                    raw_reward = float(np.clip(
-                        (1.0 - abs(world.obj_pos - world.target_pos) / (N_INPUTS / 2))
-                        * REWARD_STRENGTH,
-                        -1.0, 1.0,
-                    ))
-                    if phys["success"]:
-                        raw_reward = min(1.0, raw_reward + SUCCESS_BONUS / (SUCCESS_BONUS + 1.0))
+                # ---- Reward ----
+                # Pursuit phase: reward = pointer-near-object (re-learn following).
+                # Active phase : reward = object-near-target  (+ success bonus).
+                if control_enabled:
+                    if pursuit_enabled:
+                        raw_reward = float(np.clip(
+                            (1.0 - abs(p - world.obj_pos) / (N_INPUTS / 2))
+                            * REWARD_STRENGTH,
+                            -1.0, 1.0,
+                        ))
+                    else:
+                        raw_reward = float(np.clip(
+                            (1.0 - abs(world.obj_pos - world.target_pos) / (N_INPUTS / 2))
+                            * REWARD_STRENGTH,
+                            -1.0, 1.0,
+                        ))
+                        if phys["success"]:
+                            raw_reward = min(
+                                1.0, raw_reward + SUCCESS_BONUS / (SUCCESS_BONUS + 1.0))
 
                     if REWARD_BASELINE == "ema":
                         signal = raw_reward - reward_baseline
@@ -910,7 +961,7 @@ def main() -> None:
                 prev_lines = render(
                     step + 1, total_steps, ep, world,
                     phi, v, p, vp, tap_gate, phys["tapped"],
-                    N_INPUTS, action_enabled, oracle_enabled,
+                    N_INPUTS, action_enabled, oracle_enabled, pursuit_enabled,
                     s_err, st_err, m_err,
                     sensor_history, state_history, max_err,
                     prev_lines,
@@ -921,7 +972,7 @@ def main() -> None:
                     total_active_steps += 1
 
                 # ---- Fovea update ----
-                if action_enabled:
+                if control_enabled:
                     v_target = _disp * ACTION_GAIN - SPRING_K * phi
                     v = float(np.clip(
                         (1.0 - ACTION_SMOOTH) * v_target + ACTION_SMOOTH * v,
@@ -941,7 +992,7 @@ def main() -> None:
                 # ---- Pointer physics ----
                 gaze_centre = phi + N_INPUTS / 2.0
                 f_spring = -POINTER_SPRING_K * (p - gaze_centre)
-                if action_enabled:
+                if control_enabled:
                     f_action = POINTER_ACTION_GAIN * _pdisp
                 else:
                     f_action = rng.normal(0.0, POINTER_DRIFT)
@@ -963,6 +1014,7 @@ def main() -> None:
         tap_count, reward_sum, reward_steps,
         reward_pos, reward_neg,
         ptr_toward_obj, ptr_total_steps, ptr_descent_ok,
+        pursuit_toward_obj, pursuit_total_steps,
     )
 
 
