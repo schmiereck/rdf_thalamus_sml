@@ -615,6 +615,10 @@ def print_summary(
     ptr_descent_ok: int,
     pursuit_toward_obj: int = 0,
     pursuit_total_steps: int = 0,
+    push_side_ok: int = 0,
+    push_side_total: int = 0,
+    tap_toward_target: int = 0,
+    tap_total: int = 0,
 ) -> None:
     n = len(sensor_history)
     q = max(1, n // 10)
@@ -669,6 +673,21 @@ def print_summary(
             f"  (a) ptr-error ↓    : {ptr_descent_ok}/{ptr_total_steps}"
             f"  ({descent_pct:.1f}%)"
             f"   [>50% = active inference OK]"
+        )
+
+    if push_side_total > 0:
+        side_pct = 100.0 * push_side_ok / push_side_total
+        print(
+            f"  ptr on PUSH side   : {push_side_ok}/{push_side_total}"
+            f"  ({side_pct:.1f}%)"
+            f"   [>50% = positioned to push object toward target]"
+        )
+    if tap_total > 0:
+        tt_pct = 100.0 * tap_toward_target / tap_total
+        print(
+            f"  taps toward target : {tap_toward_target}/{tap_total}"
+            f"  ({tt_pct:.1f}%)"
+            f"   [>50% = taps push object the right way]"
         )
 
     if reward_steps > 0:
@@ -746,6 +765,10 @@ def main() -> None:
     # False = object starts with a random velocity (same as pursuit phase),
     #         allowing the network to also exploit natural bounce dynamics.
     ACTIVE_STATIC_OBJ = True
+    # Fraction of PURSUIT episodes that also start the object stationary, so the
+    # pointer practices APPROACHING a still object (not just chasing a moving
+    # one).  0.0 = always moving (old behaviour), 1.0 = always static.
+    PURSUIT_STATIC_FRAC = 0.5
 
     # ---- Reward -----------------------------------------------------------
     # Reward = normalised closeness of object to target:
@@ -827,6 +850,13 @@ def main() -> None:
     ptr_toward_obj      = 0
     ptr_total_steps     = 0
     ptr_descent_ok      = 0
+    # Push-side diagnostics (active phase): is the pointer on the side of the
+    # object AWAY from the target, i.e. positioned so a tap would push the
+    # object TOWARD the target?
+    push_side_ok        = 0   # pointer on the correct (away-from-target) side
+    push_side_total     = 0   # steps where object is off-target and pointer is off-object
+    tap_toward_target   = 0   # taps whose impulse pushed the object toward target
+    tap_total           = 0   # taps that actually landed (active phase)
 
     try:
         for ep in range(total_episodes):
@@ -841,9 +871,12 @@ def main() -> None:
                 reward_baseline = 0.0   # reset RPE baseline: reward target changed
 
             # Reset world and effectors at episode start.
-            # In the active phase the object can start stationary so that only
-            # the pointer tap sets it in motion (controlled experiment).
-            world.reset(static=action_enabled and ACTIVE_STATIC_OBJ)
+            # Active phase: object can start stationary so only a tap moves it.
+            # Pursuit phase: a fraction of episodes also start static so the
+            # pointer practices approaching a still object.
+            ep_static = (action_enabled and ACTIVE_STATIC_OBJ) or (
+                pursuit_enabled and rng.random() < PURSUIT_STATIC_FRAC)
+            world.reset(static=ep_static)
             phi = 0.0
             v   = 0.0
             p   = float(N_INPUTS // 2)
@@ -919,10 +952,29 @@ def main() -> None:
                 else:
                     tap_gate = 0.0
 
+                # ---- Push-side diagnostic (active phase, pre-physics) ----
+                # A tap pushes the object in direction sign(obj - pointer).
+                # To move it toward the target we need that to match
+                # sign(target - obj): the pointer must sit on the side of the
+                # object AWAY from the target.
+                if action_enabled:
+                    obj_pre  = world.obj_pos
+                    to_tgt   = world.target_pos - obj_pre
+                    obj_p    = obj_pre - p
+                    if abs(to_tgt) > 0.5 and abs(obj_p) > 0.3:
+                        push_side_total += 1
+                        if np.sign(obj_p) == np.sign(to_tgt):
+                            push_side_ok += 1
+
                 # ---- Physics step ----
                 phys = world.step(tap_gate, p)
                 if phys["tapped"]:
                     tap_count += 1
+                    if action_enabled and abs(world.target_pos - obj_pre) > 0.5:
+                        tap_total += 1
+                        # impulse direction applied inside step = sign(obj - pointer)
+                        if np.sign(obj_pre - p) == np.sign(world.target_pos - obj_pre):
+                            tap_toward_target += 1
                 if action_enabled and phys["success"]:
                     success_count += 1
 
@@ -1034,6 +1086,8 @@ def main() -> None:
         reward_pos, reward_neg,
         ptr_toward_obj, ptr_total_steps, ptr_descent_ok,
         pursuit_toward_obj, pursuit_total_steps,
+        push_side_ok, push_side_total,
+        tap_toward_target, tap_total,
     )
 
 
