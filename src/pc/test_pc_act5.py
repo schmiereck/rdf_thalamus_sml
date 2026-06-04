@@ -89,11 +89,20 @@ class PhysicsWorld1D:
         self.flash_timer: int  = 0
         self.reset()
 
-    def reset(self, fixed: bool = False) -> None:
-        """Reset object to a position in the left third."""
+    def reset(self, fixed: bool = False, static: bool = False) -> None:
+        """Reset object position.
+
+        fixed  — deterministic start (left quarter, vel=0.8) for diagnostics.
+        static — random position but zero initial velocity; the object only
+                 moves when the pointer taps it.  Used in the active phase to
+                 isolate intentional pushing from spontaneous bouncing.
+        """
         if fixed:
             self.obj_pos = float(self.n // 4)
             self.obj_vel = 0.8
+        elif static:
+            self.obj_pos = float(self._rng.integers(1, max(2, self.n // 3)))
+            self.obj_vel = 0.0
         else:
             self.obj_pos = float(self._rng.integers(1, max(2, self.n // 3)))
             self.obj_vel = float(
@@ -730,6 +739,14 @@ def main() -> None:
     # In passive/oracle phases the pointer does not tap (tap_gate = 0).
     TAP_PASSIVE = False   # allow tap in passive / oracle phases
 
+    # ---- Active-phase object behaviour ------------------------------------
+    # True  = object starts STATIONARY each active episode; only the pointer
+    #         tap can set it in motion.  Isolates intentional pushing from
+    #         opportunistic bounce-exploitation.
+    # False = object starts with a random velocity (same as pursuit phase),
+    #         allowing the network to also exploit natural bounce dynamics.
+    ACTIVE_STATIC_OBJ = True
+
     # ---- Reward -----------------------------------------------------------
     # Reward = normalised closeness of object to target:
     #   r = 1 - |obj_pos - target_pos| / (N_INPUTS / 2)   clipped to [-1, 1]
@@ -823,8 +840,10 @@ def main() -> None:
                 passive_steps = step
                 reward_baseline = 0.0   # reset RPE baseline: reward target changed
 
-            # Reset world and effectors at episode start
-            world.reset()
+            # Reset world and effectors at episode start.
+            # In the active phase the object can start stationary so that only
+            # the pointer tap sets it in motion (controlled experiment).
+            world.reset(static=action_enabled and ACTIVE_STATIC_OBJ)
             phi = 0.0
             v   = 0.0
             p   = float(N_INPUTS // 2)
