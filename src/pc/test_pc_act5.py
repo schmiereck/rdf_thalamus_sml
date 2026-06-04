@@ -822,7 +822,7 @@ def main() -> None:
     SPRING_K          = 0.05
     PASSIVE_DRIFT     = 0.8    # wider drift so the fovea wanders across the world
     PASSIVE_SPRING_K  = 0.01   # weak centering toward PHI_MID
-    PASSIVE_TRACK_K   = 0.06   # weak pull of fovea toward object (passive tracking)
+    PASSIVE_TRACK_K   = 0.10   # weak pull of fovea toward object (passive tracking)
     ORACLE_TARGET     = 0.35
     # Fovea window (N_INPUTS wide) slides over the WORLD_W-wide world.  phi is the
     # window's left-edge offset in world coords; allow the window CENTRE
