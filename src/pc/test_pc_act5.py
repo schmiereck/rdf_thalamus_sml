@@ -977,10 +977,10 @@ def main() -> None:
             # With PERSIST_OBJ the object keeps its position across episodes and
             # is moved only by taps + auto-kicks (full-world coverage over time).
             world.reset(static=ep_static, reposition=not PERSIST_OBJ)
-            phi = PHI_MID
-            v   = 0.0
-            p   = float(WORLD_W // 2)
-            vp  = 0.0
+            # Fovea (phi), pointer (p) and their velocities PERSIST across
+            # episode boundaries — like the object — so the scene flows
+            # continuously instead of snapping back to the world centre every
+            # episode (which created an artificial recurring "reset to middle").
             tap_gate = 0.0
 
             for frame_idx in range(EPISODE_LEN):
