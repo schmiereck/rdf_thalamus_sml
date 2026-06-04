@@ -168,8 +168,14 @@ class PhysicsWorld1D:
         at_target = abs(self.obj_pos - self.target_pos) < 1.5
         at_rest   = abs(self.obj_vel) < 0.3
         success   = at_target and at_rest
+        kicked = False
         if success and self.flash_timer == 0:
             self.flash_timer = self.flash_duration
+            # Right after a successful flash, kick the object off to a fresh
+            # random destination so it does not linger at the target.  This
+            # applies in every phase and keeps the world in motion.
+            self._do_kick()
+            kicked = True
         if self.flash_timer > 0:
             self.flash_timer -= 1
 
@@ -180,9 +186,13 @@ class PhysicsWorld1D:
         # tap keeps pinning it), we kick it toward a fresh random destination.
         # This fires as often as needed and is immune to the small back-and-forth
         # wandering that previously masked "stuck" states.
-        kicked = False
         self._t += 1
-        if abs(self.obj_pos - self._kick_ref_pos) > self.kick_idle_thr:
+        if kicked:
+            # A flash-kick already happened this step; refresh the progress
+            # reference so the idle counter starts fresh from the new motion.
+            self._kick_ref_pos  = self.obj_pos
+            self._kick_ref_step = self._t
+        elif abs(self.obj_pos - self._kick_ref_pos) > self.kick_idle_thr:
             self._kick_ref_pos  = self.obj_pos
             self._kick_ref_step = self._t
         elif self._t - self._kick_ref_step >= self.kick_after:
