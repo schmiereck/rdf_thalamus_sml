@@ -74,12 +74,18 @@ class PhysicsWorld1D:
         tap_range:       float = 2.5,
         flash_duration:  int   = 8,
         target_frac:     float = 0.75,
+        kick_after:      int   = 150,   # steps of near-idleness before auto-kick
+        kick_idle_thr:   float = 1.5,   # total displacement below this = idle
+        kick_vel:        float = 4.0,   # strong push toward opposite side of world
         seed:            int   = 0,
     ) -> None:
         self.n             = n
         self.obj_friction  = obj_friction
         self.tap_impulse   = tap_impulse
         self.tap_range     = tap_range
+        self.kick_after    = kick_after
+        self.kick_idle_thr = kick_idle_thr
+        self.kick_vel      = kick_vel
         self.flash_duration = flash_duration
         self.target_pos    = float(round(target_frac * (n - 1)))
         self._rng          = np.random.default_rng(seed)
@@ -87,6 +93,9 @@ class PhysicsWorld1D:
         self.obj_pos:    float = 0.0
         self.obj_vel:    float = 0.0
         self.flash_timer: int  = 0
+        self._ep_step:   int   = 0     # steps since last reset
+        self._start_pos: float = 0.0   # object position at episode start
+        self._kicked:    bool  = False  # only kick once per episode
         self.reset()
 
     def reset(self, fixed: bool = False, static: bool = False) -> None:
@@ -109,6 +118,9 @@ class PhysicsWorld1D:
                 self._rng.uniform(0.4, 1.2) * self._rng.choice([-1.0, 1.0])
             )
         self.flash_timer = 0
+        self._ep_step    = 0
+        self._start_pos  = self.obj_pos
+        self._kicked     = False
 
     def step(self, tap_gate: float, pointer_pos: float) -> dict:
         """Advance physics one frame.  Returns {tapped, success, flash}."""
@@ -139,7 +151,23 @@ class PhysicsWorld1D:
         if self.flash_timer > 0:
             self.flash_timer -= 1
 
-        return {"tapped": tapped, "success": success, "flash": self.flash_timer > 0}
+        # Auto-kick: if the object has barely moved after kick_after steps,
+        # give it a strong push toward the opposite side of the world.
+        # Fires at most once per episode so the network always gets a chance
+        # to see a moving object and learns what a pushed object looks like.
+        kicked = False
+        self._ep_step += 1
+        if (not self._kicked
+                and self._ep_step >= self.kick_after
+                and abs(self.obj_pos - self._start_pos) < self.kick_idle_thr):
+            # Push toward the far side: if left half → kick right, else ← left
+            kick_dir = 1.0 if self.obj_pos < self.n / 2.0 else -1.0
+            self.obj_vel += self.kick_vel * kick_dir
+            self._kicked = True
+            kicked = True
+
+        return {"tapped": tapped, "success": success,
+                "flash": self.flash_timer > 0, "kicked": kicked}
 
     # ------------------------------------------------------------------
 
@@ -475,6 +503,7 @@ def render(
     vp: float,
     tap_gate: float,
     tapped: bool,
+    kicked: bool,
     n_inputs: int,
     action_enabled: bool,
     oracle_enabled: bool,
@@ -497,6 +526,7 @@ def render(
                  else "Phase 1.5 [ORACLE]" if oracle_enabled
                  else "Phase 1 [passive]")
     flash_str = " [FLASH!]" if world.flash_timer > 0 else ""
+    kick_str  = " [KICK]"  if kicked else ""
 
     pad = n_inputs
     obj_world    = world.render_obj_channel()
@@ -568,7 +598,7 @@ def render(
     lines.append(
         f"Step {step:5d}/{total_steps}  {phase_str}  "
         f"ep={episode}  obj={world.obj_pos:+.1f}  vel={world.obj_vel:+.2f}"
-        f"  tgt={world.target_pos:.0f}{flash_str}"
+        f"  tgt={world.target_pos:.0f}{flash_str}{kick_str}"
     )
     lines.append(f"  Obj world:  {obj_disp}   (φ={phi:+.1f}  v={v:+.2f})  ‸=target")
     lines.append(f"  Obj sensor: {' ' * win_start_disp}[{_obj_sensor_str()}]")
@@ -1031,7 +1061,7 @@ def main() -> None:
 
                 prev_lines = render(
                     step + 1, total_steps, ep, world,
-                    phi, v, p, vp, tap_gate, phys["tapped"],
+                    phi, v, p, vp, tap_gate, phys["tapped"], phys["kicked"],
                     N_INPUTS, action_enabled, oracle_enabled, pursuit_enabled,
                     s_err, st_err, m_err,
                     sensor_history, state_history, max_err,
