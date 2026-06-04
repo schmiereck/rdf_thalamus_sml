@@ -122,9 +122,14 @@ class PhysicsWorld1D:
         else:
             if reposition:
                 self.obj_pos = float(self._rng.uniform(lo, hi))
-            self.obj_vel = 0.0 if static else float(
-                self._rng.uniform(0.4, 1.2) * self._rng.choice([-1.0, 1.0])
-            )
+            if static:
+                self.obj_vel = 0.0
+            else:
+                # Use _do_kick so every episode start sends the object toward a
+                # fresh random world-spanning destination — guarantees coverage
+                # in every phase including passive, not just when the idle timer
+                # fires.
+                self._do_kick()
         self.flash_timer    = 0
         self._kick_ref_pos  = self.obj_pos
         self._kick_ref_step = self._t
