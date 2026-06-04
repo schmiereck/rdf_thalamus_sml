@@ -74,9 +74,11 @@ class PhysicsWorld1D:
         tap_range:       float = 2.5,
         flash_duration:  int   = 8,
         target_frac:     float = 0.75,
-        kick_after:      int   = 150,   # steps of near-idleness before auto-kick
-        kick_idle_thr:   float = 1.5,   # total displacement below this = idle
-        kick_vel:        float = 4.0,   # strong push toward opposite side of world
+        kick_after:      int   = 60,    # steps without net progress before a kick
+        kick_idle_thr:   float = 1.5,   # net displacement below this = "stuck"
+        kick_margin:     float = 1.0,   # keep kick destinations off the walls
+        kick_gain:       float = 1.2,   # impulse strength toward the random dest
+        kick_min_dist:   float = None,  # min destination distance (default n*0.4)
         seed:            int   = 0,
     ) -> None:
         self.n             = n
@@ -85,7 +87,9 @@ class PhysicsWorld1D:
         self.tap_range     = tap_range
         self.kick_after    = kick_after
         self.kick_idle_thr = kick_idle_thr
-        self.kick_vel      = kick_vel
+        self.kick_margin   = kick_margin
+        self.kick_gain     = kick_gain
+        self.kick_min_dist = kick_min_dist if kick_min_dist is not None else n * 0.4
         self.flash_duration = flash_duration
         self.target_pos    = float(round(target_frac * (n - 1)))
         self._rng          = np.random.default_rng(seed)
@@ -93,34 +97,52 @@ class PhysicsWorld1D:
         self.obj_pos:    float = 0.0
         self.obj_vel:    float = 0.0
         self.flash_timer: int  = 0
-        self._ep_step:   int   = 0     # steps since last reset
-        self._start_pos: float = 0.0   # object position at episode start
-        self._kicked:    bool  = False  # only kick once per episode
+        self._t:         int   = 0     # global step counter (never reset)
+        self._kick_ref_pos:  float = 0.0  # last position where real progress seen
+        self._kick_ref_step: int   = 0    # _t at that moment
         self.reset()
 
-    def reset(self, fixed: bool = False, static: bool = False) -> None:
-        """Reset object position.
+    def reset(self, fixed: bool = False, static: bool = False,
+              reposition: bool = True) -> None:
+        """Reset the object.
 
-        fixed  — deterministic start (left quarter, vel=0.8) for diagnostics.
-        static — random position but zero initial velocity; the object only
-                 moves when the pointer taps it.  Used in the active phase to
-                 isolate intentional pushing from spontaneous bouncing.
+        fixed      — deterministic start (left quarter, vel=0.8) for diagnostics.
+        static     — zero initial velocity (object only moves via tap/kick).
+        reposition — if False, keep the current obj_pos (object persists across
+                     episodes; motion comes only from taps and auto-kicks).
+
+        When repositioning, the object is placed uniformly across the FULL world
+        width (minus a small margin), not just the left third — so training
+        covers the whole world instead of a narrow band.
         """
+        lo, hi = self.kick_margin, self.n - 1 - self.kick_margin
         if fixed:
             self.obj_pos = float(self.n // 4)
             self.obj_vel = 0.8
-        elif static:
-            self.obj_pos = float(self._rng.integers(1, max(2, self.n // 3)))
-            self.obj_vel = 0.0
         else:
-            self.obj_pos = float(self._rng.integers(1, max(2, self.n // 3)))
-            self.obj_vel = float(
+            if reposition:
+                self.obj_pos = float(self._rng.uniform(lo, hi))
+            self.obj_vel = 0.0 if static else float(
                 self._rng.uniform(0.4, 1.2) * self._rng.choice([-1.0, 1.0])
             )
-        self.flash_timer = 0
-        self._ep_step    = 0
-        self._start_pos  = self.obj_pos
-        self._kicked     = False
+        self.flash_timer    = 0
+        self._kick_ref_pos  = self.obj_pos
+        self._kick_ref_step = self._t
+
+    def _do_kick(self) -> None:
+        """Send the object toward a random destination across the world.
+
+        The impulse magnitude is tuned to the friction so the object roughly
+        coasts to the chosen destination (travel ≈ v0 / friction), giving
+        varied, world-spanning trajectories rather than a fixed shove.
+        """
+        lo, hi = self.kick_margin, self.n - 1 - self.kick_margin
+        dest = float(self._rng.uniform(lo, hi))
+        # Ensure the destination is a meaningful distance away.
+        if abs(dest - self.obj_pos) < self.kick_min_dist:
+            direction = 1.0 if self.obj_pos < self.n / 2.0 else -1.0
+            dest = float(np.clip(self.obj_pos + direction * self.kick_min_dist, lo, hi))
+        self.obj_vel = (dest - self.obj_pos) * self.obj_friction * self.kick_gain
 
     def step(self, tap_gate: float, pointer_pos: float) -> dict:
         """Advance physics one frame.  Returns {tapped, success, flash}."""
@@ -151,19 +173,22 @@ class PhysicsWorld1D:
         if self.flash_timer > 0:
             self.flash_timer -= 1
 
-        # Auto-kick: if the object has barely moved after kick_after steps,
-        # give it a strong push toward the opposite side of the world.
-        # Fires at most once per episode so the network always gets a chance
-        # to see a moving object and learns what a pushed object looks like.
+        # Auto-kick (recurring): track NET progress, not displacement from a
+        # fixed start.  Whenever the object actually moves more than
+        # kick_idle_thr we refresh the reference; if it fails to make that much
+        # progress within kick_after steps (e.g. it only jitters in place, or a
+        # tap keeps pinning it), we kick it toward a fresh random destination.
+        # This fires as often as needed and is immune to the small back-and-forth
+        # wandering that previously masked "stuck" states.
         kicked = False
-        self._ep_step += 1
-        if (not self._kicked
-                and self._ep_step >= self.kick_after
-                and abs(self.obj_pos - self._start_pos) < self.kick_idle_thr):
-            # Push toward the far side: if left half → kick right, else ← left
-            kick_dir = 1.0 if self.obj_pos < self.n / 2.0 else -1.0
-            self.obj_vel += self.kick_vel * kick_dir
-            self._kicked = True
+        self._t += 1
+        if abs(self.obj_pos - self._kick_ref_pos) > self.kick_idle_thr:
+            self._kick_ref_pos  = self.obj_pos
+            self._kick_ref_step = self._t
+        elif self._t - self._kick_ref_step >= self.kick_after:
+            self._do_kick()
+            self._kick_ref_pos  = self.obj_pos
+            self._kick_ref_step = self._t
             kicked = True
 
         return {"tapped": tapped, "success": success,
@@ -799,6 +824,12 @@ def main() -> None:
     # pointer practices APPROACHING a still object (not just chasing a moving
     # one).  0.0 = always moving (old behaviour), 1.0 = always static.
     PURSUIT_STATIC_FRAC = 0.5
+    # Object persistence: when True the object is NOT repositioned at episode
+    # boundaries — it keeps its position and is moved only by taps and recurring
+    # auto-kicks toward random, world-spanning destinations.  This breaks the
+    # narrow "object always starts left, pointer guards the gap" regime by
+    # forcing the object across the whole world over time.
+    PERSIST_OBJ = True
 
     # ---- Reward -----------------------------------------------------------
     # Reward = normalised closeness of object to target:
@@ -906,7 +937,9 @@ def main() -> None:
             # pointer practices approaching a still object.
             ep_static = (action_enabled and ACTIVE_STATIC_OBJ) or (
                 pursuit_enabled and rng.random() < PURSUIT_STATIC_FRAC)
-            world.reset(static=ep_static)
+            # With PERSIST_OBJ the object keeps its position across episodes and
+            # is moved only by taps + auto-kicks (full-world coverage over time).
+            world.reset(static=ep_static, reposition=not PERSIST_OBJ)
             phi = 0.0
             v   = 0.0
             p   = float(N_INPUTS // 2)
