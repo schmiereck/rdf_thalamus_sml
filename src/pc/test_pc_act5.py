@@ -993,13 +993,21 @@ def main() -> None:
             for frame_idx in range(EPISODE_LEN):
                 # ---- Post-success freeze ----
                 # After a hit the network sits in silence for SUCCESS_FREEZE
-                # steps: sensors hold their last values, learning is disabled,
-                # actions and reward are zero.  This prevents the FLASH
-                # prediction-error spike from being experienced as aversive.
+                # steps: ALL sensor inputs are set to zero, no action, no
+                # reward.  This prevents the FLASH prediction-error spike from
+                # being experienced as aversive — the network simply rests.
                 frozen = freeze_countdown > 0
                 if frozen:
                     freeze_countdown -= 1
-                    # Still advance physics and display so the world keeps moving.
+                    for s in object_sensors:
+                        s.set_input(np.zeros(s.dim))
+                    for s in pointer_sensors:
+                        s.set_input(np.zeros(s.dim))
+                    flash_sensor.set_input(np.zeros(flash_sensor.dim))
+                    motor_sensor.set_input(np.zeros(motor_sensor.dim))
+                    net.step(learn=True)
+                    net.commit_step()
+                    # Physics and display keep running so the world moves on.
                     phys = world.step(0.0, p)
                     step += 1
                     if action_enabled:
