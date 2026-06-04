@@ -94,6 +94,11 @@ class PhysicsWorld1D:
         self.kick_gain     = kick_gain
         self.kick_min_dist = kick_min_dist if kick_min_dist is not None else n * 0.4
         self.flash_duration = flash_duration
+        # Centered 3/4 band of the world: 1/8 .. 7/8 (width = 3/4, centered).
+        # Object spawns, kick destinations and post-flash target positions are
+        # all drawn from this band so the action stays in the central 3/4.
+        self.range_lo      = n / 8.0
+        self.range_hi      = n * 7.0 / 8.0
         self.target_pos    = float(round(target_frac * (n - 1)))
         self._rng          = np.random.default_rng(seed)
 
@@ -118,7 +123,7 @@ class PhysicsWorld1D:
         width (minus a small margin), not just the left third — so training
         covers the whole world instead of a narrow band.
         """
-        lo, hi = self.kick_margin, self.n - 1 - self.kick_margin
+        lo, hi = self.range_lo, self.range_hi
         if fixed:
             self.obj_pos = float(self.n // 4)
             self.obj_vel = 0.8
@@ -144,7 +149,7 @@ class PhysicsWorld1D:
         coasts to the chosen destination (travel ≈ v0 / friction), giving
         varied, world-spanning trajectories rather than a fixed shove.
         """
-        lo, hi = self.kick_margin, self.n - 1 - self.kick_margin
+        lo, hi = self.range_lo, self.range_hi
         dest = float(self._rng.uniform(lo, hi))
         # Ensure the destination is a meaningful distance away.
         if abs(dest - self.obj_pos) < self.kick_min_dist:
@@ -184,6 +189,10 @@ class PhysicsWorld1D:
             # applies in every phase and keeps the world in motion.
             self._do_kick()
             kicked = True
+            # Move the target to a new random spot in the centered 3/4 band, so
+            # success must be re-earned at a fresh location each time.
+            self.target_pos = float(round(
+                self._rng.uniform(self.range_lo, self.range_hi)))
         if self.flash_timer > 0:
             self.flash_timer -= 1
 
