@@ -1,4 +1,4 @@
-"""
+r"""
 test_pc_act3.py — Active Inference demo: 1D fovea + a movable POINTER.
 
 Builds on test_pc_act2.py (bouncing patterns, fovea tracking) and adds a
