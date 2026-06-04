@@ -83,11 +83,17 @@ class PCConnection:
     # Phase 4: local Hebbian weight update
     # ------------------------------------------------------------------
 
-    def learn(self) -> None:
-        """ΔW = η · f(μ_source) ⊗ ε_target  (outer product, local rule)"""
+    def learn(self, modulation: float = 1.0) -> None:
+        """ΔW = η · modulation · f(μ_source) ⊗ ε_target  (outer product, local rule)
+
+        `modulation` is a global neuromodulator (default 1.0 = neutral). Values
+        >1 amplify the update ("reward"), values <1 attenuate it, and negative
+        values reverse it ("punish"/anti-Hebbian).  Weight decay and clipping
+        are NOT modulated — only the Hebbian step is.
+        """
         dW = np.outer(self.source.activation, self.target.epsilon)  # [dim_source × dim_target]
         if np.all(np.isfinite(dW)):
-            self.W += self.eta_learn * dW
+            self.W += self.eta_learn * modulation * dW
         if self.lambda_decay > 0.0:
             self.W *= (1.0 - self.lambda_decay)
         if self.w_clip > 0.0:

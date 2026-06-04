@@ -197,9 +197,13 @@ class PCNode:
     # Phase 4 (temporal): learn V and compute next prediction
     # ------------------------------------------------------------------
 
-    def learn_temporal(self) -> None:
+    def learn_temporal(self, modulation: float = 1.0) -> None:
         """
         Update the temporal weight matrix V.
+
+        `modulation` is the global neuromodulator (default 1.0 = neutral); it
+        scales the V update just like the connection W update, so reward shapes
+        the forward model that drives anticipatory predictions (and actions).
 
         The forward model predicts: predicted_next = f(V @ f(μ_prev))
         The target is the ACTUAL μ at the current step (which IS the next step
@@ -218,7 +222,7 @@ class PCNode:
         # "single" mode: predicted = V @ f(mu_prev), gradient is just the outer product
         dV = np.outer(delta, self._prev_f_mu)
         if np.all(np.isfinite(dV)):
-            self.V += self.eta_temporal * dV
+            self.V += self.eta_temporal * modulation * dV
         if self.w_clip_V > 0.0:
             np.clip(self.V, -self.w_clip_V, self.w_clip_V, out=self.V)
 

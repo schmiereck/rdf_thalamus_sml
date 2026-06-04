@@ -65,6 +65,13 @@ class PCNetwork:
         self._nodes: dict[str, PCNode] = {}
         self._connections: list[PCConnection] = []
 
+        # Global neuromodulator ("dopamine"): scales every learning update in the
+        # next learn phase.  1.0 = neutral ("weiter so", no influence).  Set via
+        # set_reward()/set_neuromodulator() before step(); auto-resets to 1.0
+        # after each learn phase so a one-shot signal never lingers.
+        self.neuromod: float = 1.0
+        self.reward_gain: float = 1.0
+
     # ------------------------------------------------------------------
     # Graph construction
     # ------------------------------------------------------------------
@@ -172,6 +179,32 @@ class PCNetwork:
     def phase_learn(self) -> None:
         self._phase_learn()
 
+    # ------------------------------------------------------------------
+    # Neuromodulation ("global reward")
+    # ------------------------------------------------------------------
+
+    def set_neuromodulator(self, value: float) -> None:
+        """Set the raw learning-rate multiplier for the NEXT learn phase.
+
+        1.0 = neutral (no influence).  >1 reinforces, <1 attenuates, <0 reverses.
+        Consumed (reset to 1.0) after the next step()/phase_learn().
+        """
+        self.neuromod = float(value)
+
+    def set_reward(self, reward: float, gain: float | None = None) -> None:
+        """Send a global reward signal for the NEXT learn phase.
+
+        reward in [-1, +1] (clipped):
+            > 0  "gut gemacht"   — amplify the updates about to be made
+            = 0  "weiter so"     — no influence, normal learning
+            < 0  "schlecht"      — attenuate / reverse the updates
+        Mapped to a multiplier:  neuromod = 1 + gain · reward
+        (gain defaults to self.reward_gain).
+        """
+        g = self.reward_gain if gain is None else gain
+        r = float(np.clip(reward, -1.0, 1.0))
+        self.neuromod = 1.0 + g * r
+
     def commit_step(self) -> None:
         """
         End-of-frame bookkeeping: snapshot each node's relaxed state, then run
@@ -224,11 +257,18 @@ class PCNetwork:
         return self.n_relax
 
     def _phase_learn(self) -> None:
-        """Phase 4: hierarchical W update + temporal V update."""
+        """Phase 4: hierarchical W update + temporal V update.
+
+        All updates are scaled by the global neuromodulator self.neuromod
+        (1.0 = neutral).  The modulator is a one-shot signal: it auto-resets to
+        1.0 afterwards so it only affects the step it was set for.
+        """
+        m = self.neuromod
         for conn in self._connections:
-            conn.learn()
+            conn.learn(m)
         for node in self._nodes.values():
-            node.learn_temporal()
+            node.learn_temporal(m)
+        self.neuromod = 1.0   # consume the one-shot signal
 
     # ------------------------------------------------------------------
     # Utilities

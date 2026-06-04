@@ -710,6 +710,15 @@ def main() -> None:
     # "object" = taught: pointer reuses the object gradient (shares fovea's goal).
     POINTER_DRIVE       = "self"
 
+    # ---- Global reward / neuromodulation (Phase 2 only) -------------------
+    # "off"      = no reward; pure self-organisation (default, unchanged).
+    # "distance" = reward = +1 when pointer sits on the object COM, -1 when a
+    #              half-world away.  Tests whether a global "well done" signal
+    #              shapes emergent object-following without prescribing the action.
+    REWARD_MODE     = "off"
+    REWARD_GAIN     = 1.0    # neuromod = 1 + REWARD_GAIN · reward
+    REWARD_STRENGTH = 1.0    # scales the raw reward before clipping to [-1, 1]
+
     # Fovea range: the sensor window can slide from -N_INPUTS (fully left of world)
     # to +N_INPUTS (fully right of world).  phi=0 = world fully in view.
     PHI_MIN = float(-N_INPUTS)
@@ -728,7 +737,9 @@ def main() -> None:
         dim_growth=DIM_GROWTH,
         lateral_steps=LATERAL_STEPS,
         eta_learn=ETA_LEARN,
+
     )
+    net.reward_gain = REWARD_GAIN   # global neuromodulator gain (reward shaping)
 
     # Sample fixed pattern sets once — patterns are N_INPUTS wide (world size)
     # Bouncing-only: 1–2 objects, blob sizes 1–3 pixels.
@@ -873,6 +884,16 @@ def main() -> None:
                                     (np.array(pert_shifted) - pi_val) ** 2))
                                 if e_new < e_cur:
                                     ptr_descent_ok += 1
+
+                        # Global reward (neuromodulation): a single scalar broadcast
+                        # to every learning update.  Shapes WHAT gets consolidated
+                        # without prescribing the action itself.
+                        if action_enabled and REWARD_MODE == "distance":
+                            com = world_com(world_frame)
+                            if com is not None:
+                                # +1 on the object, -1 a half-world away, 0 = neutral.
+                                reward = 1.0 - 2.0 * abs(p - com) / N_INPUTS
+                                net.set_reward(reward * REWARD_STRENGTH)
 
                         # Full PC step (predict/error/relax/learn) — clean diagnostics
                         info = net.step(learn=True)
