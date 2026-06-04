@@ -798,6 +798,8 @@ def main() -> None:
     ptr_total_steps = 0  # total active steps with pointer
     ptr_toward_obj  = 0  # steps where f_act points toward the object COM
     ptr_abs_vp_sum  = 0.0  # accumulated |vp| during active phase
+    reward_sum      = 0.0  # accumulated raw reward during active phase
+    reward_steps    = 0    # active steps where a reward was actually sent
     ptr_descent_ok  = 0  # (a)-test: steps where the action reduces pointer-row error
 
     try:
@@ -894,6 +896,8 @@ def main() -> None:
                                 # +1 on the object, -1 a half-world away, 0 = neutral.
                                 reward = 1.0 - 2.0 * abs(p - com) / N_INPUTS
                                 net.set_reward(reward * REWARD_STRENGTH)
+                                reward_sum   += reward * REWARD_STRENGTH
+                                reward_steps += 1
 
                         # Full PC step (predict/error/relax/learn) — clean diagnostics
                         info = net.step(learn=True)
@@ -1017,6 +1021,17 @@ def main() -> None:
             f"  (a) action REDUCES ptr-error: {ptr_descent_ok}/{ptr_total_steps} steps"
             f"  ({descent_pct:.1f}%)"
             f"   [>50% = active inference works as designed]"
+        )
+
+    if REWARD_MODE != "off" and reward_steps > 0:
+        mean_r = reward_sum / reward_steps
+        # Count positive/negative steps from the clipped [-1,1] scale
+        print(
+            f"\n  Reward stats  (mode={REWARD_MODE!r}, gain={REWARD_GAIN}):"
+        )
+        print(
+            f"    mean reward  : {mean_r:+.3f}  over {reward_steps} steps"
+            f"   [+1=always on obj, 0=random, -1=always far away]"
         )
 
     print_summary(
