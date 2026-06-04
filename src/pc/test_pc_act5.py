@@ -26,7 +26,10 @@ World schematic
   Pointer row [pos, ptr]       ← 2-channel, dim=2 each pixel
   Flash sensor[flash]          ← 1-channel, 1.0 when success
 
-  Target is fixed at 3/4 of the world (world pixel 12 for N_INPUTS=16).
+  The physical world is WORLD_W = 3*N_INPUTS pixels wide; the N_INPUTS-wide
+  visual/fovea window slides over it (phi = window left-edge offset).  Object
+  and pointer both live in world coords and may roam the whole world.
+  Target is fixed at 3/4 of the world (world pixel 35 for WORLD_W=48).
   Object starts near left edge, bounces with light friction.
   Pointer (force-controlled) can TAP the object: if tap_gate > TAP_THRESHOLD
   and the pointer is within TAP_RANGE of the object, the object receives an
@@ -568,10 +571,13 @@ def render(
     flash_str = " [FLASH!]" if world.flash_timer > 0 else ""
     kick_str  = " [KICK]"  if kicked else ""
 
-    pad = n_inputs
     obj_world    = world.render_obj_channel()
     target_world = world.render_target_channel()
-    ptr_world    = render_pointer_row(p, n_inputs)
+    world_w      = len(obj_world)
+    ptr_world    = render_pointer_row(p, world_w)
+    # Padding on each side of the world so the fovea window can be drawn even
+    # when it overshoots a world edge (phi may run slightly past 0 / WORLD_W).
+    pad = n_inputs // 2
 
     # Padded display [pad zeros][world][pad zeros]
     def _pad_display(frame: list[float], bracket_at: int) -> str:
@@ -592,7 +598,7 @@ def render(
     # Object world: object as block chars, with the fixed target overlaid as a
     # caret "‸" wherever there is no object pixel.  When the pointer TAPS, its
     # contact pixel is flashed into this row as "✸" so the interaction is visible.
-    tap_world = render_pointer_row(p, n_inputs) if tapped else [0.0] * n_inputs
+    tap_world = render_pointer_row(p, world_w) if tapped else [0.0] * world_w
 
     def _pad_obj_display(obj_f: list[float], tgt_f: list[float],
                          tap_f: list[float], bracket_at: int) -> str:
@@ -782,7 +788,8 @@ def main() -> None:
     # -----------------------------------------------------------------------
     # Configuration
     # -----------------------------------------------------------------------
-    N_INPUTS       = 16   # visual sensor window width = world width (pixels)
+    N_INPUTS       = 16   # visual sensor / fovea WINDOW width (pixels)
+    WORLD_W        = 3 * N_INPUTS  # physical world width: fovea slides over it
     N_LAYERS       = 3    # hidden pyramid layers
     BASE_DIM       = 4    # state dim at layer 1
     DIM_GROWTH     = 2    # dim increment per layer
@@ -804,11 +811,15 @@ def main() -> None:
     ACTION_SMOOTH     = 0.2
     MAX_V             = 2.0
     SPRING_K          = 0.05
-    PASSIVE_DRIFT     = 0.3
-    PASSIVE_SPRING_K  = 0.30
+    PASSIVE_DRIFT     = 0.8    # wider drift so the fovea wanders across the world
+    PASSIVE_SPRING_K  = 0.01   # weak centering: allow exploration of the full world
     ORACLE_TARGET     = 0.35
-    PHI_MIN           = float(-N_INPUTS)
-    PHI_MAX           = float(N_INPUTS)
+    # Fovea window (N_INPUTS wide) slides over the WORLD_W-wide world.  phi is the
+    # window's left-edge offset in world coords; allow the window CENTRE
+    # (phi + N_INPUTS/2) to reach either world edge.
+    PHI_MIN           = float(-N_INPUTS // 2)
+    PHI_MAX           = float(WORLD_W - N_INPUTS // 2)
+    PHI_MID           = float((WORLD_W - N_INPUTS) / 2.0)  # window centred in world
 
     # ---- Pointer ----------------------------------------------------------
     POINTER_WIDTH        = 2
@@ -819,7 +830,7 @@ def main() -> None:
     POINTER_DRIFT        = 0.3
     MAX_VP               = 2.0
     P_MIN                = 0.0
-    P_MAX                = float(N_INPUTS - 1)
+    P_MAX                = float(WORLD_W - 1)
     POINTER_DRIVE        = "self"
 
     # ---- Tap --------------------------------------------------------------
@@ -874,7 +885,7 @@ def main() -> None:
     )
     net.reward_gain = REWARD_GAIN
 
-    world = PhysicsWorld1D(n=N_INPUTS, seed=0)
+    world = PhysicsWorld1D(n=WORLD_W, seed=0)
 
     total_episodes = (N_EPISODES_PASSIVE + N_EPISODES_ORACLE
                       + N_EPISODES_PURSUIT + N_EPISODES_ACTIVE)
@@ -887,7 +898,8 @@ def main() -> None:
 
     print(net.summary())
     print(f"\nAct5 — Push-to-target")
-    print(f"World:    {N_INPUTS}px  |  target at pixel {world.target_pos:.0f}")
+    print(f"World:    {WORLD_W}px  |  fovea window {N_INPUTS}px"
+          f"  |  target at pixel {world.target_pos:.0f}")
     print(f"Physics:  friction={world.obj_friction}  tap_impulse={world.tap_impulse}"
           f"  tap_range={world.tap_range}")
     print(f"Phase 1:   {N_EPISODES_PASSIVE} episodes × {EPISODE_LEN} steps (passive)")
@@ -904,9 +916,9 @@ def main() -> None:
     prev_lines    = 0
     step          = 0
     passive_steps = 0
-    phi = 0.0
+    phi = PHI_MID
     v   = 0.0
-    p   = float(N_INPUTS // 2)
+    p   = float(WORLD_W // 2)
     vp  = 0.0
     tap_gate      = 0.0
     ptr_f_action  = 0.0
@@ -955,9 +967,9 @@ def main() -> None:
             # With PERSIST_OBJ the object keeps its position across episodes and
             # is moved only by taps + auto-kicks (full-world coverage over time).
             world.reset(static=ep_static, reposition=not PERSIST_OBJ)
-            phi = 0.0
+            phi = PHI_MID
             v   = 0.0
-            p   = float(N_INPUTS // 2)
+            p   = float(WORLD_W // 2)
             vp  = 0.0
             tap_gate = 0.0
 
@@ -965,7 +977,7 @@ def main() -> None:
                 # ---- Build world frames ----
                 obj_world    = world.render_obj_channel()
                 target_world = world.render_target_channel()
-                ptr_world    = render_pointer_row(p, N_INPUTS, POINTER_WIDTH)
+                ptr_world    = render_pointer_row(p, WORLD_W, POINTER_WIDTH)
 
                 obj_shifted  = apply_fovea_shift(obj_world,    phi, N_INPUTS)
                 tgt_shifted  = apply_fovea_shift(target_world, phi, N_INPUTS)
@@ -1011,7 +1023,7 @@ def main() -> None:
                     pi_val = np.array([s.pi[1] for s in pointer_sensors])
                     e_cur  = float(np.sum((np.array(ptr_shifted) - pi_val) ** 2))
                     p_pert = float(np.clip(p + 0.5 * np.sign(_pdisp), P_MIN, P_MAX))
-                    pert_w = render_pointer_row(p_pert, N_INPUTS, POINTER_WIDTH)
+                    pert_w = render_pointer_row(p_pert, WORLD_W, POINTER_WIDTH)
                     pert_s = apply_fovea_shift(pert_w, phi, N_INPUTS)
                     e_new  = float(np.sum((np.array(pert_s) - pi_val) ** 2))
                     if e_new < e_cur:
@@ -1068,7 +1080,7 @@ def main() -> None:
                         ))
                     else:
                         raw_reward = float(np.clip(
-                            (1.0 - abs(world.obj_pos - world.target_pos) / (N_INPUTS / 2))
+                            (1.0 - abs(world.obj_pos - world.target_pos) / (WORLD_W / 2))
                             * REWARD_STRENGTH,
                             -1.0, 1.0,
                         ))
@@ -1133,7 +1145,8 @@ def main() -> None:
                     v = float(np.clip(target_phi - phi, -MAX_V, MAX_V))
                 else:
                     v = float(np.clip(
-                        rng.normal(0.0, PASSIVE_DRIFT) - PASSIVE_SPRING_K * phi,
+                        rng.normal(0.0, PASSIVE_DRIFT)
+                        - PASSIVE_SPRING_K * (phi - PHI_MID),
                         -MAX_V, MAX_V,
                     ))
                 phi = float(np.clip(phi + v, PHI_MIN, PHI_MAX))
