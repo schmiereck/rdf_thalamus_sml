@@ -1205,13 +1205,17 @@ def main() -> None:
                     # motion so a constantly-moving object stays centred instead
                     # of lagging to the leading edge (smooth-pursuit tracking).
                     com = world.world_com() + world.obj_vel
-                    target_phi = com - ORACLE_TARGET * N_INPUTS
+                    # Centre on the TRUE geometric middle of the window:
+                    # indices 0..N_INPUTS-1 → centre = (N_INPUTS-1)/2 = 7.5 for
+                    # N_INPUTS=16.  Using N_INPUTS (=8) would put the object half
+                    # a pixel right of centre.
+                    target_phi = com - ORACLE_TARGET * (N_INPUTS - 1)
                     v = float(np.clip(target_phi - phi, -MAX_V, MAX_V))
                 else:
                     # Passive fovea: random drift + weak centering + weak pull
                     # toward the object so the network reliably sees it while
                     # still exploring the full world width.
-                    obj_phi = world.world_com() - N_INPUTS / 2.0  # ideal phi to centre object
+                    obj_phi = world.world_com() - (N_INPUTS - 1) / 2.0  # ideal phi to centre object
                     v = float(np.clip(
                         rng.normal(0.0, PASSIVE_DRIFT)
                         - PASSIVE_SPRING_K * (phi - PHI_MID)
@@ -1221,7 +1225,7 @@ def main() -> None:
                 phi = float(np.clip(phi + v, PHI_MIN, PHI_MAX))
 
                 # ---- Pointer physics ----
-                gaze_centre = phi + N_INPUTS / 2.0
+                gaze_centre = phi + (N_INPUTS - 1) / 2.0
                 f_spring = -POINTER_SPRING_K * (p - gaze_centre)
                 if control_enabled:
                     f_action = POINTER_ACTION_GAIN * _pdisp
