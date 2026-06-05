@@ -58,14 +58,19 @@ def blob(p: float, w: int = W, sigma: float = 1.0) -> np.ndarray:
     return np.exp(-0.5 * ((x - c) / sigma) ** 2)
 
 
-def build(rng: np.random.Generator):
+def build(rng: np.random.Generator, eta_temporal: float = 0.1):
+    """eta_temporal=0 freezes the temporal forward model V at its near-identity
+    init (pure persistence warm-start) — removes the recurrent V loop that can
+    diverge.  Used to test whether that loop is actually necessary here."""
     net = PCNetwork(
         eta_inf=0.1, n_relax=80, eps_tol=1e-6, alpha=1.0, beta=1.0,
         gamma=0.3, eta_learn=0.01, lambda_decay=0.0, w_clip=3.0, rng=rng,
     )
     goal_img = net.add(SensorNode("goal_img", dim=W))
-    goal_z   = net.add(PCNode("goal_z", dim=Z, activation="tanh", rng=rng))
-    belief   = net.add(PCNode("belief", dim=B, activation="identity", rng=rng))
+    goal_z   = net.add(PCNode("goal_z", dim=Z, activation="tanh",
+                              eta_temporal=eta_temporal, rng=rng))
+    belief   = net.add(PCNode("belief", dim=B, activation="identity",
+                              eta_temporal=eta_temporal, rng=rng))
     pos      = net.add(SensorNode("pos", dim=1))
 
     net.connect("goal_z", "goal_img", ConnType.UP, pressure_scale=1.0)  # decoder
@@ -140,6 +145,21 @@ def run(net, goal_img, goal_z, pos, rng, *, mode, episodes, **kw):
     return (100.0 * reached / episodes, float(np.mean(dists)), float(np.mean(steps)))
 
 
+def run_config(rng_seed: int, eta_temporal: float) -> None:
+    rng = np.random.default_rng(rng_seed)
+    net, goal_img, goal_z, belief, pos = build(rng, eta_temporal=eta_temporal)
+    babble(net, goal_img, pos, rng, steps=8000)
+    a = run(net, goal_img, goal_z, pos, rng, mode="shown",   episodes=300)
+    b = run(net, goal_img, goal_z, pos, rng, mode="control", episodes=300)
+    d = run(net, goal_img, goal_z, pos, rng, mode="dream",   episodes=300)
+    tag = f"eta_temporal={eta_temporal}" + (
+        "  (V frozen → no recurrent loop)" if eta_temporal == 0.0 else "  (default)")
+    print(f"  [{tag}]")
+    print(f"     A) shown goal image   : reached={a[0]:5.1f}%  final_dist={a[1]:.3f}  steps={a[2]:.1f}")
+    print(f"     B) control (no goal)  : reached={b[0]:5.1f}%  final_dist={b[1]:.3f}  steps={b[2]:.1f}")
+    print(f"     D) DREAM (latent only): reached={d[0]:5.1f}%  final_dist={d[1]:.3f}  steps={d[2]:.1f}")
+
+
 def main() -> None:
     rng = np.random.default_rng(0)
     net, goal_img, goal_z, belief, pos = build(rng)
@@ -157,6 +177,12 @@ def main() -> None:
     print(f"  A) shown goal image      : reached={a[0]:5.1f}%  final_dist={a[1]:.3f}  steps={a[2]:.1f}")
     print(f"  B) control (no goal)     : reached={b[0]:5.1f}%  final_dist={b[1]:.3f}  steps={b[2]:.1f}")
     print(f"  D) DREAM (latent only)   : reached={d[0]:5.1f}%  final_dist={d[1]:.3f}  steps={d[2]:.1f}")
+
+    # ---- Loop-necessity test: does freezing the temporal V loop hurt? ----
+    print("-" * 76)
+    print("  Temporal-V loop necessity (default vs frozen):")
+    run_config(0, eta_temporal=0.1)
+    run_config(0, eta_temporal=0.0)
 
     # Show the latent code is a smooth, meaningful map of position.
     zs = np.array([encode(net, goal_img, goal_z, p) for p in np.linspace(0.1, 0.9, 9)])
