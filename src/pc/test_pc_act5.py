@@ -1201,7 +1201,10 @@ def main() -> None:
                     # Reliable object tracking — same goal as the passive fovea,
                     # so PURSUIT trains the pointer-follows-object mapping with
                     # the object centred, NOT the opposite (fovea-on-pointer).
-                    com = world.world_com()
+                    # Velocity feed-forward (+ obj_vel) anticipates the object's
+                    # motion so a constantly-moving object stays centred instead
+                    # of lagging to the leading edge (smooth-pursuit tracking).
+                    com = world.world_com() + world.obj_vel
                     target_phi = com - ORACLE_TARGET * N_INPUTS
                     v = float(np.clip(target_phi - phi, -MAX_V, MAX_V))
                 else:
