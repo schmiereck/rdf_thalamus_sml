@@ -47,7 +47,7 @@ Z = 3      # latent language dim
 B = 3      # belief dim
 GRAB = 0.06        # finger grabs when |pointer - obj| < GRAB
 P_GAIN = 0.25      # pointer approach/carry gain
-VP_MAX = 0.05      # max pointer speed (slow enough that the drag keeps the grasp)
+VP_MAX = 0.05      # max pointer speed (rigid drag keeps the grasp at any speed)
 
 
 def blob(p: float, w: int = W, sigma: float = 1.0) -> np.ndarray:
@@ -99,26 +99,30 @@ def encode(net, goal_img, goal_z, tgt):
 
 def push_episode(net, obj_img, goal_img, goal_z, tgt, obj0, p0, *,
                  mode, z_star=None, max_steps=200, tol=0.05):
+    # ---- Perceive the goal ONCE: decode the desired object position from the
+    # goal module, prior-only (obj_img unclamped so the current object does not
+    # contaminate it).  This is the "image/latent in mind" → target position. ----
     if mode == "dream":
         goal_img.unclamp(); goal_z.clamp(z_star)
+    elif mode == "shown":
+        goal_img.set_input(blob(tgt))
+    elif mode == "control":
+        goal_img.set_input(blob(obj0))             # goal == initial current → no transport
+    obj_img.unclamp()
+    net.phase_predict(); net.phase_error(); net.phase_relax()
+    desired = com(net.node("obj_img").pi)
+    obj_img.clamp(blob(obj0))
+
+    # ---- Transport: grab the object and carry it to the perceived desired pos. ----
     obj, p = float(obj0), float(p0)
     for t in range(max_steps):
-        if mode == "shown":
-            goal_img.set_input(blob(tgt))
-        elif mode == "control":
-            goal_img.set_input(blob(obj))          # goal == current object → no drive
-        obj_img.set_input(blob(obj))
-        net.phase_predict(); net.phase_error(); net.phase_relax()
-        desired = com(net.node("obj_img").pi)      # where the net believes the object should be
-        # grab-and-carry controller
         grabbed = abs(p - obj) < GRAB
-        p_target = desired if grabbed else obj     # carry to desired, else go grab the object
+        p_target = desired if grabbed else obj     # carry to desired, else go grab
         vp = float(np.clip(P_GAIN * (p_target - p), -VP_MAX, VP_MAX))
         p_new = float(np.clip(p + vp, 0.0, 1.0))
         if grabbed:
             obj = float(np.clip(obj + (p_new - p), 0.0, 1.0))   # rigid drag: object carried
         p = p_new
-        net.commit_step()
         if abs(obj - tgt) < tol:
             break
     if mode == "dream":
@@ -146,7 +150,19 @@ def main():
     print("  Push-to-goal via GoalModule + finger/drag  (1-D; object transported)")
     print(f"  image W={W}  latent Z={Z}   start |obj-tgt| baseline ≈ 0.34")
     print("=" * 76)
-    babble(net, obj_img, goal_img, rng, steps=8000)
+    babble(net, obj_img, goal_img, rng, steps=16000)
+
+    # Decode-accuracy probe: does encode(target)→belief→decode reproduce target?
+    # (obj_img unclamped so the belief is driven only by the goal prior.)
+    obj_img.unclamp()
+    derr = []
+    for tg in np.linspace(0.15, 0.85, 15):
+        goal_img.set_input(blob(tg))
+        net.phase_predict(); net.phase_error(); net.phase_relax()
+        derr.append(abs(com(net.node("obj_img").pi) - tg))
+    obj_img.clamp(blob(0.5))
+    print(f"  goal-module decode error (mean |decoded−target|) = {np.mean(derr):.3f}")
+
     a = run(net, obj_img, goal_img, goal_z, rng, mode="shown",   episodes=300)
     b = run(net, obj_img, goal_img, goal_z, rng, mode="control", episodes=300)
     d = run(net, obj_img, goal_img, goal_z, rng, mode="dream",   episodes=300)
