@@ -52,6 +52,81 @@ from pc.module import PCModule
 
 
 # ---------------------------------------------------------------------------
+# Goal module — standalone PC autoencoder with a learned latent "language".
+# ---------------------------------------------------------------------------
+# Encodes a desired object WORLD-position (shown as a coarse blob image) into a
+# small latent code, and decodes it back to a position.  Used as the goal prior:
+# the active phase decodes the "desired object position" from the shown target
+# (or from a DREAMED latent) and the finger transports the object there — the
+# dark-room antidote validated in test_pc_goal_module / test_pc_push_goal.
+# It is its OWN module (own net) so goals can later be dreamed in its latent space.
+class GoalModule:
+    def __init__(self, world_w: float, img: int = 16, latent: int = 3,
+                 activation: str = "identity",
+                 rng: np.random.Generator | None = None) -> None:
+        self.world_w = float(world_w)
+        self.G = img
+        self.rng = rng or np.random.default_rng()
+        net = PCNetwork(eta_inf=0.1, n_relax=60, eps_tol=1e-6, alpha=1.0,
+                        beta=1.0, gamma=0.3, eta_learn=0.01, lambda_decay=0.0,
+                        w_clip=3.0, rng=self.rng)
+        self.img_node = net.add(SensorNode("g_img", dim=img))
+        self.z_node   = net.add(PCNode("g_z", dim=latent, activation=activation,
+                                       eta_temporal=0.0, rng=self.rng))
+        net.connect("g_z", "g_img", ConnType.UP, pressure_scale=1.0)  # decoder
+        self.net = net
+
+    def _blob(self, world_pos: float) -> np.ndarray:
+        c = world_pos / self.world_w * (self.G - 1)
+        x = np.arange(self.G)
+        return np.exp(-0.5 * ((x - c) / 1.0) ** 2)
+
+    def _com(self, img: np.ndarray) -> float:
+        img = np.clip(img, 0.0, None)
+        s = img.sum()
+        if s < 1e-6:
+            return self.world_w / 2.0
+        return float((np.arange(self.G) * img).sum() / s / (self.G - 1) * self.world_w)
+
+    def pretrain(self, steps: int = 5000) -> None:
+        """Babble across the world: learn the position↔latent autoencoder."""
+        pos = float(self.rng.uniform(0.0, self.world_w))
+        for _ in range(steps):
+            pos = float(np.clip(pos + self.rng.normal(0.0, self.world_w * 0.05),
+                                0.0, self.world_w))
+            self.img_node.set_input(self._blob(pos))
+            self.net.phase_predict(); self.net.phase_error(); self.net.phase_relax()
+            self.net.phase_learn(); self.net.commit_step()
+
+    def decode_target(self, target_world: float) -> float:
+        """Show a target image, return the decoded desired world-position."""
+        self.z_node.unclamp()
+        self.img_node.set_input(self._blob(target_world))
+        self.net.phase_predict(); self.net.phase_error(); self.net.phase_relax()
+        return self._com(self.img_node.pi)
+
+    def encode(self, target_world: float) -> np.ndarray:
+        self.decode_target(target_world)
+        return self.z_node.mu.copy()
+
+    def decode_dream(self, z: np.ndarray) -> float:
+        """Decode a goal specified purely in latent space (no image)."""
+        self.img_node.unclamp()
+        self.z_node.clamp(z)
+        self.net.phase_predict(); self.net.phase_error(); self.net.phase_relax()
+        d = self._com(self.img_node.pi)
+        self.z_node.unclamp()
+        self.img_node.clamp(self._blob(self.world_w / 2.0))
+        return d
+
+    def decode_error(self, n: int = 15) -> float:
+        """Mean |decoded - target| across the world (sanity check)."""
+        errs = [abs(self.decode_target(t) - t)
+                for t in np.linspace(0.1 * self.world_w, 0.9 * self.world_w, n)]
+        return float(np.mean(errs))
+
+
+# ---------------------------------------------------------------------------
 # 1-D Physics World
 # ---------------------------------------------------------------------------
 
@@ -922,6 +997,15 @@ def main() -> None:
     GOAL_K               = 0.40   # spring gain toward the push position
     GOAL_OFFSET          = 1.8    # push-position offset past the object (< tap_range)
     GOAL_DIST_SCALE      = 6.0    # distance (px) over which drive strength saturates
+    # ---- act6: goal-MODULE driven manipulation (the real integration) --------
+    # The GoalModule decodes the desired object world-position from the shown
+    # target (GOAL6_DREAM=False) or from a dreamed latent (True).  In the active
+    # phase the finger auto-grabs the object and the pointer carries it to that
+    # decoded desired — the validated goal-prior antidote to the dark room,
+    # REPLACING the reward-modulated premotor finger.  env ACT6_GOAL (0/1).
+    GOAL6_DRIVE          = True
+    GOAL6_K              = 0.15   # pointer spring gain toward grab/carry target
+    GOAL6_DREAM          = False  # True = specify the goal purely in latent space
 
     # ---- Tap --------------------------------------------------------------
     # In active phase, the tap gate is derived from the PremotorModule:
@@ -1014,6 +1098,8 @@ def main() -> None:
     TAP_EXPL_SIGMA = float(os.environ.get("ACT5_TAP_EXPL", TAP_EXPL_SIGMA))
     GOAL_DRIVE     = os.environ.get("ACT5_GOAL_DRIVE", "1" if GOAL_DRIVE else "0") == "1"
     GOAL_K         = float(os.environ.get("ACT5_GOAL_K", GOAL_K))
+    GOAL6_DRIVE    = os.environ.get("ACT6_GOAL", "1" if GOAL6_DRIVE else "0") == "1"
+    GOAL6_DREAM    = os.environ.get("ACT6_DREAM", "1" if GOAL6_DREAM else "0") == "1"
     TAP_SETTLE_GATE = float(os.environ.get("ACT5_SETTLE_GATE", TAP_SETTLE_GATE))
     _ep_scale  = float(os.environ.get("ACT5_EPISODES_SCALE", "1.0"))
     if _ep_scale != 1.0:
@@ -1035,6 +1121,15 @@ def main() -> None:
     net.reward_gain = REWARD_GAIN
 
     world = PhysicsWorld1D(n=WORLD_W, dwell_steps=DWELL_STEPS, seed=0)
+
+    # Goal module: its own PC autoencoder over object world-positions.  Pre-train
+    # it so it can decode a desired object position from a shown target (or a
+    # dreamed latent).  In the active phase this decoded desired drives the
+    # finger to transport the object there (goal-prior antidote to the dark room).
+    goal_mod = GoalModule(WORLD_W, img=16, latent=6, activation="identity",
+                          rng=np.random.default_rng(7))
+    if GOAL6_DRIVE:
+        goal_mod.pretrain(steps=15000)
 
     total_episodes = (N_EPISODES_PASSIVE + N_EPISODES_ORACLE
                       + N_EPISODES_PURSUIT + N_EPISODES_ACTIVE)
@@ -1064,6 +1159,10 @@ def main() -> None:
           f"  drag actuator (no impulse)")
     print(f"Goal:     GOAL_DRIVE={GOAL_DRIVE}  GOAL_K={GOAL_K}  GOAL_OFFSET={GOAL_OFFSET}"
           f"  GOAL_DIST_SCALE={GOAL_DIST_SCALE}  [PHASE-A scaffold]")
+    if GOAL6_DRIVE:
+        print(f"act6 Goal-MODULE: ON  GOAL6_K={GOAL6_K}  dream={GOAL6_DREAM}"
+              f"  decode_err={goal_mod.decode_error():.2f}px (world {WORLD_W}px)"
+              f"  [finger auto-grabs, carries object to decoded target]")
     if HEADLESS:
         print(f"[headless] windowed active metrics every {LOG_EVERY} active steps:")
         print(f"[headless]   meanDist = mean |obj-target|  (lower = closer; "
@@ -1199,6 +1298,7 @@ def main() -> None:
                 # ---- Action signals (require phase_predict + phase_error first) ----
                 _disp  = 0.0
                 _pdisp = 0.0
+                goal_vp = 0.0   # act6: synced goal-carry pointer velocity (GOAL6_DRIVE)
                 if control_enabled:
                     net.phase_predict()
                     net.phase_error()
@@ -1242,6 +1342,26 @@ def main() -> None:
                         if (TAP_SETTLE_GATE > 0.0
                                 and abs(world.obj_pos - world.target_pos) < TAP_SETTLE_GATE):
                             finger_y = 0.0
+                        if GOAL6_DRIVE:
+                            # act6: decode the desired object position from the goal
+                            # module, auto-grab, and compute a SYNCED carry velocity.
+                            # When grabbed, goal_vp drives the OBJECT toward desired;
+                            # object and pointer then move by the SAME goal_vp below
+                            # → rigid grasp (no drift).  When not grabbed, approach
+                            # the object to grab it.  (Replaces the premotor finger.)
+                            if GOAL6_DREAM:
+                                desired = goal_mod.decode_dream(
+                                    goal_mod.encode(world.target_pos))
+                            else:
+                                desired = goal_mod.decode_target(world.target_pos)
+                            grabbed = abs(p - world.obj_pos) < world.finger_radius
+                            finger_y = 1.0 if grabbed else 0.0
+                            if grabbed:
+                                goal_vp = float(np.clip(
+                                    GOAL6_K * (desired - world.obj_pos), -MAX_VP, MAX_VP))
+                            else:
+                                goal_vp = float(np.clip(
+                                    GOAL6_K * (world.obj_pos - p), -MAX_VP, MAX_VP))
                     else:
                         finger_y = 0.0
 
@@ -1276,7 +1396,8 @@ def main() -> None:
                 #                        TOWARD the target (sign(obj_vel)==sign(to_tgt))
                 obj_pre    = world.obj_pos
                 to_tgt_pre = world.target_pos - obj_pre
-                phys = world.step(finger_y, p, vp)
+                phys = world.step(finger_y, p,
+                                  goal_vp if (GOAL6_DRIVE and action_enabled) else vp)
                 if phys["contact"]:
                     tap_count += 1
                 if action_enabled and phys["dragged"] and abs(to_tgt_pre) > 0.5:
@@ -1446,7 +1567,12 @@ def main() -> None:
                 elif action_enabled:
                     gaze_centre = phi + (N_INPUTS - 1) / 2.0
                     f_spring = -POINTER_SPRING_K * (p - gaze_centre)
-                    if GOAL_DRIVE:
+                    if GOAL6_DRIVE:
+                        # act6: pointer is updated kinematically below using goal_vp
+                        # (computed in the control block for a synced rigid grasp).
+                        f_action = 0.0
+                        f_spring = 0.0
+                    elif GOAL_DRIVE:
                         # PHASE-A diagnostic scaffold: REPLACE the self-following
                         # drive with a goal-directed one.  The pointer is sprung to
                         # a point just past the object on the side AWAY from the
@@ -1480,11 +1606,19 @@ def main() -> None:
                     gaze_centre = phi + (N_INPUTS - 1) / 2.0
                     f_spring = -POINTER_SPRING_K * (p - gaze_centre)
                     f_action = rng.normal(0.0, POINTER_DRIFT)
-                accel = (f_action + f_spring + f_push) / POINTER_MASS
-                ptr_f_action = f_action
-                ptr_f_spring = f_spring
-                vp = float(np.clip((vp + accel) * (1.0 - POINTER_DAMPING), -MAX_VP, MAX_VP))
-                p  = float(np.clip(p + vp, P_MIN, P_MAX))
+                if GOAL6_DRIVE and action_enabled:
+                    # Kinematic: pointer moves by the SAME goal_vp the object was
+                    # dragged with → rigid grasp, no drift.
+                    vp = goal_vp
+                    p  = float(np.clip(p + vp, P_MIN, P_MAX))
+                    ptr_f_action = goal_vp
+                    ptr_f_spring = 0.0
+                else:
+                    accel = (f_action + f_spring + f_push) / POINTER_MASS
+                    ptr_f_action = f_action
+                    ptr_f_spring = f_spring
+                    vp = float(np.clip((vp + accel) * (1.0 - POINTER_DAMPING), -MAX_VP, MAX_VP))
+                    p  = float(np.clip(p + vp, P_MIN, P_MAX))
 
                 # ---- Active-phase target timeout ----
                 # Reset the clock whenever the object is on the target; otherwise
