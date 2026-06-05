@@ -55,7 +55,8 @@ from pc.module import PCModule
 # 1-D Physics World
 # ---------------------------------------------------------------------------
 
-TAP_THRESHOLD = 0.4   # minimum tap_gate to apply impulse
+TAP_THRESHOLD = 0.4   # (legacy) minimum tap_gate to apply impulse
+FINGER_DOWN   = 0.5   # finger extension above which it contacts the surface
 
 
 class PhysicsWorld1D:
@@ -75,6 +76,8 @@ class PhysicsWorld1D:
         obj_friction:    float = 0.025,
         tap_impulse:     float = 2.5,
         tap_range:       float = 2.5,
+        finger_radius:   float = 1.5,   # reach within which the finger grips the object
+        drag_slip:       float = 0.0,   # 0 = rigid carry; 1 = no coupling
         flash_duration:  int   = 8,
         dwell_steps:     int   = 12,
         target_frac:     float = 0.75,
@@ -89,6 +92,8 @@ class PhysicsWorld1D:
         self.obj_friction  = obj_friction
         self.tap_impulse   = tap_impulse
         self.tap_range     = tap_range
+        self.finger_radius = finger_radius
+        self.drag_slip     = drag_slip
         self.kick_after    = kick_after
         self.kick_idle_thr = kick_idle_thr
         self.kick_margin   = kick_margin
@@ -161,9 +166,17 @@ class PhysicsWorld1D:
             dest = float(np.clip(self.obj_pos + direction * self.kick_min_dist, lo, hi))
         self.obj_vel = (dest - self.obj_pos) * self.obj_friction * self.kick_gain
 
-    def step(self, tap_gate: float, pointer_pos: float) -> dict:
-        """Advance physics one frame.  Returns {tapped, success, flash, kicked}."""
-        tapped = False
+    def step(self, finger_y: float, pointer_pos: float,
+             pointer_vel: float = 0.0) -> dict:
+        """Advance physics one frame.
+
+        The actuator is a FINGER that extends (finger_y → contact) and, while
+        touching the object, drags it along with the pointer's sideways motion —
+        graded velocity control, not an impulse.  Returns
+        {contact, dragged, success, flash, kicked}.
+        """
+        contact = False
+        dragged = False
         kicked = False
 
         # ---- Dwell: quiet rest on the target after a hit ----
@@ -189,18 +202,26 @@ class PhysicsWorld1D:
                 self._kick_ref_pos  = self.obj_pos
                 self._kick_ref_step = self._t
                 kicked = True
-            return {"tapped": False, "success": True,
+            return {"contact": False, "dragged": False, "success": True,
                     "flash": self.flash_timer > 0, "kicked": kicked}
 
-        if tap_gate > TAP_THRESHOLD:
-            dist = abs(pointer_pos - self.obj_pos)
-            if 0.1 < dist < self.tap_range:
-                impulse_dir = np.sign(self.obj_pos - pointer_pos)
-                self.obj_vel += self.tap_impulse * tap_gate * float(impulse_dir)
-                tapped = True
-
-        self.obj_vel *= (1.0 - self.obj_friction)
-        self.obj_pos += self.obj_vel
+        # ---- Finger contact + drag ----
+        # When the finger is extended (finger_y > FINGER_DOWN) and within reach of
+        # the object, the object's velocity is coupled toward the pointer's
+        # sideways velocity (graded carry; drag_slip=0 → rigid).  No impulse:
+        # extending onto a still pointer (pointer_vel≈0) just holds the object in
+        # place — your "direct hit ⇒ do nothing".  While held the object does not
+        # feel friction; on release it keeps the finger's velocity and coasts.
+        contact = (finger_y > FINGER_DOWN
+                   and abs(pointer_pos - self.obj_pos) < self.finger_radius)
+        if contact:
+            self.obj_vel = ((1.0 - self.drag_slip) * pointer_vel
+                            + self.drag_slip * self.obj_vel)
+            dragged = abs(self.obj_vel) > 1e-6
+            self.obj_pos += self.obj_vel
+        else:
+            self.obj_vel *= (1.0 - self.obj_friction)
+            self.obj_pos += self.obj_vel
 
         # Elastic wall bounce with slight energy loss
         if self.obj_pos <= 0.0:
@@ -243,7 +264,7 @@ class PhysicsWorld1D:
             self._kick_ref_step = self._t
             kicked = True
 
-        return {"tapped": tapped, "success": success,
+        return {"contact": contact, "dragged": dragged, "success": success,
                 "flash": self.flash_timer > 0, "kicked": kicked}
 
     # ------------------------------------------------------------------
@@ -677,7 +698,7 @@ def render(
 
     win_start_disp = pad + phi_r
     arrow = "→net   " if abs(f_action) > abs(f_spring) else "→spring"
-    tap_str = f"  TAP!" if tapped else ""
+    tap_str = f"  GRAB!" if tapped else ""
 
     lines = []
     lines.append(
@@ -690,7 +711,7 @@ def render(
     lines.append(f"  Ptr world:  {ptr_disp}   (p={p:+.1f}  vp={vp:+.2f})")
     lines.append(
         f"  Ptr force:  f_act={f_action:+.3f}  f_spr={f_spring:+.3f}  [{arrow}]"
-        f"  tap={tap_gate:.2f}{tap_str}"
+        f"  finger={tap_gate:.2f}{tap_str}"
     )
     lines.append("")
     lines.append(f"  sensor_error  {_bar(sensor_err, max_err)}  {sensor_err:7.4f}")
@@ -773,8 +794,8 @@ def print_summary(
         print(f"  Task successes     : {success_count}"
               f"   ({100.0 * success_count / max(1, total_active_steps):.2f}% of active steps in flash)")
         tap_pct = 100.0 * tap_count / total_active_steps
-        print(f"  Tap events         : {tap_count}/{total_active_steps}"
-              f"  ({tap_pct:.1f}% of steps)   [>0 = premotor fires]")
+        print(f"  Finger contact     : {tap_count}/{total_active_steps}"
+              f"  ({tap_pct:.1f}% of steps)   [finger touching the object]")
 
     if ptr_total_steps > 0:
         toward_pct  = 100.0 * ptr_toward_obj / ptr_total_steps
@@ -800,9 +821,9 @@ def print_summary(
     if tap_total > 0:
         tt_pct = 100.0 * tap_toward_target / tap_total
         print(
-            f"  taps toward target : {tap_toward_target}/{tap_total}"
+            f"  drag toward target : {tap_toward_target}/{tap_total}"
             f"  ({tt_pct:.1f}%)"
-            f"   [>50% = taps push object the right way]"
+            f"   [>50% = drags move the object the right way]"
         )
 
     if reward_steps > 0:
@@ -878,12 +899,44 @@ def main() -> None:
     # damping make it lag during motion — the desired loose coupling.  Lower K =
     # looser / more lag; raise K (or POINTER_DAMPING) if it overshoots/oscillates.
     POINTER_PURSUIT_K    = 0.10
+    # Soft push-positioning bias (ACTIVE phase only).  Gently nudges the pointer
+    # toward the side of the object AWAY from the target, so that a tap would push
+    # the object TOWARD the target.  Deliberately weak: a *tendency* that creates
+    # opportunities for good pushes — which the reward then reinforces — not a
+    # command that solves the task mechanically.  The network still drives the
+    # pointer (f_action) and decides WHEN to tap; this only tilts the resting
+    # position to the helpful side.  POINTER_PUSH_K=0 disables it (env ACT5_PUSH_K).
+    # NOTE: tried at 0.04 — made things clearly WORSE (object ratcheted to the
+    # wall, following collapsed 48%→16%, push-side 24%→5.5%).  A weak oracle bias
+    # fights the learned f_action and destabilises the dynamics.  Default 0.
+    POINTER_PUSH_K       = 0.0    # strength of the push-side bias
+    POINTER_PUSH_OFFSET  = 1.8    # how far past the object to aim (< tap_range=2.5)
+    # PHASE-A goal-directed pointer scaffold (diagnostic).  When GOAL_DRIVE is on,
+    # the active-phase pointer is sprung to the push-side of the object instead of
+    # following it, with strength ∝ object→target distance (self-limiting).  This
+    # REPLACES the self-gradient drive (no fighting) to test whether forcing good
+    # positioning is sufficient to solve the push task.  env: ACT5_GOAL_DRIVE (0/1).
+    # Default OFF: the Phase-A scaffold was a diagnostic (it confirmed positioning
+    # is NOT the final blocker — see findings).  Enable via ACT5_GOAL_DRIVE=1.
+    GOAL_DRIVE           = False
+    GOAL_K               = 0.40   # spring gain toward the push position
+    GOAL_OFFSET          = 1.8    # push-position offset past the object (< tap_range)
+    GOAL_DIST_SCALE      = 6.0    # distance (px) over which drive strength saturates
 
     # ---- Tap --------------------------------------------------------------
     # In active phase, the tap gate is derived from the PremotorModule:
-    #   tap_gate = clip( (tanh(pm_node.pi[0]) + 1) / 2 , 0, 1 )
+    #   tap_gate = clip( (tanh(pm_node.pi[0]) + 1) / 2 + noise , 0, 1 )
+    # read AFTER a relax (see "Ingredient 1" in the loop).
     # In passive/oracle phases the pointer does not tap (tap_gate = 0).
     TAP_PASSIVE = False   # allow tap in passive / oracle phases
+    # Exploration noise on the tap gate (active phase), annealed linearly to 0
+    # across the active phase.  Without it the reward modulator has nothing to
+    # reinforce (the diagnostic test_pc_tap_diag.py needed expl>0 to learn at
+    # all).  env override: ACT5_TAP_EXPL.
+    TAP_EXPL_SIGMA = 0.3
+    # PHASE-A.2 diagnostic: suppress the tap when |obj-target| < this, so the
+    # object can coast to rest at the target (success needs at-rest).  0 = off.
+    TAP_SETTLE_GATE = 0.0
 
     # ---- Active-phase object behaviour ------------------------------------
     # True  = object starts STATIONARY each active episode; only the pointer
@@ -910,6 +963,10 @@ def main() -> None:
     ACTIVE_TARGET_TIMEOUT = 200
 
     # ---- Reward -----------------------------------------------------------
+    # (Experiment 1 — REWARD_GAIN>1 + high SHAPING_GAIN for genuine un-learning —
+    # produced no behavioural change vs 1.0/8.0, so reverted.  The real blocker is
+    # structural: the pointer almost never reaches the push side.  Both still
+    # overridable via ACT5_REWARD_GAIN / ACT5_SHAPING_GAIN for future sweeps.)
     REWARD_GAIN       = 1.0
     REWARD_STRENGTH   = 1.0
     # PURSUIT phase keeps the EMA-baselined proximity reward (pointer-near-object).
@@ -941,6 +998,30 @@ def main() -> None:
     DELAY = 0.0   # seconds between steps (0 = as fast as possible)
     # -----------------------------------------------------------------------
 
+    # ---- Environment overrides (headless evaluation / A-B experiments) ----
+    #   ACT5_HEADLESS=1        : no terminal animation; print periodic windowed
+    #                            active-phase metrics + the final summary instead.
+    #   ACT5_SHAPING_GAIN=<f>  : override SHAPING_GAIN (per-step closeness reward).
+    #   ACT5_REWARD_GAIN=<f>   : override REWARD_GAIN  (>1 enables un-learning).
+    #   ACT5_LOG_EVERY=<int>   : active-step window size for the headless metrics.
+    #   ACT5_EPISODES_SCALE=<f>: scale every phase's episode count (quick smoke).
+    HEADLESS   = os.environ.get("ACT5_HEADLESS", "0") == "1"
+    LIVE       = not HEADLESS
+    LOG_EVERY  = int(os.environ.get("ACT5_LOG_EVERY", "2000"))
+    SHAPING_GAIN = float(os.environ.get("ACT5_SHAPING_GAIN", SHAPING_GAIN))
+    REWARD_GAIN  = float(os.environ.get("ACT5_REWARD_GAIN",  REWARD_GAIN))
+    POINTER_PUSH_K = float(os.environ.get("ACT5_PUSH_K", POINTER_PUSH_K))
+    TAP_EXPL_SIGMA = float(os.environ.get("ACT5_TAP_EXPL", TAP_EXPL_SIGMA))
+    GOAL_DRIVE     = os.environ.get("ACT5_GOAL_DRIVE", "1" if GOAL_DRIVE else "0") == "1"
+    GOAL_K         = float(os.environ.get("ACT5_GOAL_K", GOAL_K))
+    TAP_SETTLE_GATE = float(os.environ.get("ACT5_SETTLE_GATE", TAP_SETTLE_GATE))
+    _ep_scale  = float(os.environ.get("ACT5_EPISODES_SCALE", "1.0"))
+    if _ep_scale != 1.0:
+        N_EPISODES_PASSIVE = max(1, round(N_EPISODES_PASSIVE * _ep_scale))
+        N_EPISODES_ORACLE  = max(1, round(N_EPISODES_ORACLE  * _ep_scale))
+        N_EPISODES_PURSUIT = max(1, round(N_EPISODES_PURSUIT * _ep_scale))
+        N_EPISODES_ACTIVE  = max(1, round(N_EPISODES_ACTIVE  * _ep_scale))
+
     rng = np.random.default_rng(42)
     net, object_sensors, pointer_sensors, flash_sensor, motor_sensor = build_network(
         rng,
@@ -958,6 +1039,7 @@ def main() -> None:
     total_episodes = (N_EPISODES_PASSIVE + N_EPISODES_ORACLE
                       + N_EPISODES_PURSUIT + N_EPISODES_ACTIVE)
     total_steps    = total_episodes * EPISODE_LEN
+    planned_active_steps = N_EPISODES_ACTIVE * EPISODE_LEN  # for tap-exploration anneal
 
     sensor_history: list[float] = []
     state_history:  list[float] = []
@@ -968,14 +1050,30 @@ def main() -> None:
     print(f"\nAct5 — Push-to-target")
     print(f"World:    {WORLD_W}px  |  fovea window {N_INPUTS}px"
           f"  |  target at pixel {world.target_pos:.0f}")
-    print(f"Physics:  friction={world.obj_friction}  tap_impulse={world.tap_impulse}"
-          f"  tap_range={world.tap_range}")
+    print(f"Physics:  friction={world.obj_friction}"
+          f"  finger_radius={world.finger_radius}  drag_slip={world.drag_slip}")
     print(f"Phase 1:   {N_EPISODES_PASSIVE} episodes × {EPISODE_LEN} steps (passive)")
     print(f"Phase 1.5: {N_EPISODES_ORACLE} episodes × {EPISODE_LEN} steps (oracle fovea)")
     print(f"Phase 1.75:{N_EPISODES_PURSUIT} episodes × {EPISODE_LEN} steps (pursuit: pointer follows object)")
     print(f"Phase 2:   {N_EPISODES_ACTIVE} episodes × {EPISODE_LEN} steps (active push-to-target)")
     print(f"Total:    ≈{total_steps} steps\n")
-    print("Press Ctrl+C to stop early.\n")
+    print(f"Reward:   SHAPING_GAIN={SHAPING_GAIN}  REWARD_GAIN={REWARD_GAIN}"
+          f"  REWARD_DWELL={REWARD_DWELL}  DWELL_STEPS={DWELL_STEPS}"
+          f"  ACTIVE_TARGET_TIMEOUT={ACTIVE_TARGET_TIMEOUT}")
+    print(f"Finger:   FINGER_EXPL_SIGMA={TAP_EXPL_SIGMA} (post-relax read, annealed)"
+          f"  drag actuator (no impulse)")
+    print(f"Goal:     GOAL_DRIVE={GOAL_DRIVE}  GOAL_K={GOAL_K}  GOAL_OFFSET={GOAL_OFFSET}"
+          f"  GOAL_DIST_SCALE={GOAL_DIST_SCALE}  [PHASE-A scaffold]")
+    if HEADLESS:
+        print(f"[headless] windowed active metrics every {LOG_EVERY} active steps:")
+        print(f"[headless]   meanDist = mean |obj-target|  (lower = closer; "
+              f"WORLD_W/2={WORLD_W/2:.0f} = chance)")
+        print(f"[headless]   meanObj  = mean object world-pos (24=centre, "
+              f"~47=right wall, ~0=left wall)")
+        print(f"[headless]   →tgt(cum)= cumulative % of taps pushing toward target")
+        print(f"[headless]   neg-mod  = % steps with neuromod<0 (genuine un-learning)\n")
+    else:
+        print("Press Ctrl+C to stop early.\n")
 
     oracle_start_ep  = N_EPISODES_PASSIVE
     pursuit_start_ep = N_EPISODES_PASSIVE + N_EPISODES_ORACLE
@@ -988,7 +1086,7 @@ def main() -> None:
     v   = 0.0
     p   = float(WORLD_W // 2)
     vp  = 0.0
-    tap_gate      = 0.0
+    finger_y      = 0.0
     ptr_f_action  = 0.0
     ptr_f_spring  = 0.0
 
@@ -1016,6 +1114,8 @@ def main() -> None:
     push_side_total     = 0   # steps where object is off-target and pointer is off-object
     tap_toward_target   = 0   # taps whose impulse pushed the object toward target
     tap_total           = 0   # taps that actually landed (active phase)
+    # Headless windowed active-phase metrics (reset every LOG_EVERY active steps).
+    eval_win = dict(steps=0, dist=0.0, objpos=0.0, succ=0, taps=0, negmod=0)
 
     try:
         for ep in range(total_episodes):
@@ -1044,7 +1144,7 @@ def main() -> None:
             # episode boundaries — like the object — so the scene flows
             # continuously instead of snapping back to the world centre every
             # episode (which created an artificial recurring "reset to middle").
-            tap_gate = 0.0
+            finger_y = 0.0
 
             for frame_idx in range(EPISODE_LEN):
                 # ---- Post-success freeze ----
@@ -1064,19 +1164,20 @@ def main() -> None:
                     net.step(learn=True)
                     net.commit_step()
                     # Physics and display keep running so the world moves on.
-                    phys = world.step(0.0, p)
+                    phys = world.step(0.0, p, 0.0)
                     step += 1
                     if action_enabled:
                         total_active_steps += 1
-                    prev_lines = render(
-                        step, total_steps, ep, world,
-                        phi, v, p, vp, 0.0, False, phys["kicked"],
-                        N_INPUTS, action_enabled, oracle_enabled, pursuit_enabled,
-                        0.0, 0.0, 0.0,
-                        sensor_history, state_history, max_err,
-                        prev_lines,
-                        f_action=0.0, f_spring=0.0,
-                    )
+                    if LIVE:
+                        prev_lines = render(
+                            step, total_steps, ep, world,
+                            phi, v, p, vp, 0.0, False, phys["kicked"],
+                            N_INPUTS, action_enabled, oracle_enabled, pursuit_enabled,
+                            0.0, 0.0, 0.0,
+                            sensor_history, state_history, max_err,
+                            prev_lines,
+                            f_action=0.0, f_spring=0.0,
+                        )
                     continue
 
                 # ---- Build world frames ----
@@ -1093,7 +1194,7 @@ def main() -> None:
                 set_frame_obj(object_sensors, obj_shifted, tgt_shifted)
                 set_frame_ptr(pointer_sensors, ptr_shifted)
                 flash_sensor.set_input(np.array([flash_val]))
-                motor_sensor.set_input(np.array([v / MAX_V, vp / MAX_VP, tap_gate]))
+                motor_sensor.set_input(np.array([v / MAX_V, vp / MAX_VP, finger_y]))
 
                 # ---- Action signals (require phase_predict + phase_error first) ----
                 _disp  = 0.0
@@ -1118,11 +1219,31 @@ def main() -> None:
                     # Tap gate from PremotorModule — only in the active push-to-target
                     # phase.  During pursuit the pointer just learns to follow, no tap.
                     if action_enabled:
-                        pm_node  = net.node("pm_0")
-                        tap_gate = float(np.clip(
+                        # Ingredient 1: read the tap AFTER a relax, so pm_0 reflects
+                        # the CURRENT frame's evidence (not just the temporal warm-
+                        # start prediction).  The diagnostic (test_pc_tap_diag.py)
+                        # showed the conditional tap only becomes learnable post-relax.
+                        # This relax is discarded by net.step()'s own predict/relax
+                        # below (warm-start is reloaded), so learning is unchanged.
+                        net.phase_relax()
+                        pm_node    = net.node("pm_0")
+                        finger_raw = float(np.clip(
                             (np.tanh(pm_node.pi[0]) + 1.0) / 2.0, 0.0, 1.0))
+                        # Ingredient 2: exploration noise on the finger extension,
+                        # annealed to 0 across the active phase, so reward has
+                        # something to reinforce.  The noisy value is executed AND
+                        # fed back as the efference copy next frame.
+                        finger_sigma = TAP_EXPL_SIGMA * max(
+                            0.0, 1.0 - total_active_steps / max(1, planned_active_steps))
+                        finger_y = float(np.clip(
+                            finger_raw + rng.normal(0.0, finger_sigma), 0.0, 1.0))
+                        # (diagnostic) optionally RETRACT the finger near the target
+                        # so the object coasts to rest.  env ACT5_SETTLE_GATE; 0=off.
+                        if (TAP_SETTLE_GATE > 0.0
+                                and abs(world.obj_pos - world.target_pos) < TAP_SETTLE_GATE):
+                            finger_y = 0.0
                     else:
-                        tap_gate = 0.0
+                        finger_y = 0.0
 
                     # (a) test: does pointer action direction reduce pointer-row error?
                     pi_val = np.array([s.pi[1] for s in pointer_sensors])
@@ -1145,31 +1266,23 @@ def main() -> None:
                         if pursuit_enabled:
                             pursuit_total_steps += 1
                 else:
-                    tap_gate = 0.0
+                    finger_y = 0.0
 
-                # ---- Push-side diagnostic (active phase, pre-physics) ----
-                # A tap pushes the object in direction sign(obj - pointer).
-                # To move it toward the target we need that to match
-                # sign(target - obj): the pointer must sit on the side of the
-                # object AWAY from the target.
-                if action_enabled:
-                    obj_pre  = world.obj_pos
-                    to_tgt   = world.target_pos - obj_pre
-                    obj_p    = obj_pre - p
-                    if abs(to_tgt) > 0.5 and abs(obj_p) > 0.3:
-                        push_side_total += 1
-                        if np.sign(obj_p) == np.sign(to_tgt):
-                            push_side_ok += 1
-
-                # ---- Physics step ----
-                phys = world.step(tap_gate, p)
-                if phys["tapped"]:
+                # ---- Physics step (finger drags the object via pointer motion) ----
+                # Stat slots are reused for the finger actuator:
+                #   tap_count         := steps the finger is in CONTACT
+                #   tap_total         := drag steps with the target off-object
+                #   tap_toward_target := of those, drags that moved the object
+                #                        TOWARD the target (sign(obj_vel)==sign(to_tgt))
+                obj_pre    = world.obj_pos
+                to_tgt_pre = world.target_pos - obj_pre
+                phys = world.step(finger_y, p, vp)
+                if phys["contact"]:
                     tap_count += 1
-                    if action_enabled and abs(world.target_pos - obj_pre) > 0.5:
-                        tap_total += 1
-                        # impulse direction applied inside step = sign(obj - pointer)
-                        if np.sign(obj_pre - p) == np.sign(world.target_pos - obj_pre):
-                            tap_toward_target += 1
+                if action_enabled and phys["dragged"] and abs(to_tgt_pre) > 0.5:
+                    tap_total += 1
+                    if np.sign(world.obj_vel) == np.sign(to_tgt_pre):
+                        tap_toward_target += 1
                 if action_enabled and phys["success"]:
                     success_count += 1
                     if SUCCESS_FREEZE > 0:
@@ -1234,18 +1347,46 @@ def main() -> None:
                 motor_history.append(m_err)
                 max_err = max(max_err * 0.99, s_err, st_err, 0.1)
 
-                prev_lines = render(
-                    step + 1, total_steps, ep, world,
-                    phi, v, p, vp, tap_gate, phys["tapped"], phys["kicked"],
-                    N_INPUTS, action_enabled, oracle_enabled, pursuit_enabled,
-                    s_err, st_err, m_err,
-                    sensor_history, state_history, max_err,
-                    prev_lines,
-                    f_action=ptr_f_action, f_spring=ptr_f_spring,
-                )
+                if LIVE:
+                    prev_lines = render(
+                        step + 1, total_steps, ep, world,
+                        phi, v, p, vp, finger_y, phys["contact"], phys["kicked"],
+                        N_INPUTS, action_enabled, oracle_enabled, pursuit_enabled,
+                        s_err, st_err, m_err,
+                        sensor_history, state_history, max_err,
+                        prev_lines,
+                        f_action=ptr_f_action, f_spring=ptr_f_spring,
+                    )
                 step += 1
                 if action_enabled:
                     total_active_steps += 1
+
+                # ---- Headless windowed active-phase metrics ----
+                if HEADLESS and action_enabled:
+                    ew = eval_win
+                    ew["steps"]    += 1
+                    ew["dist"]     += abs(world.obj_pos - world.target_pos)
+                    ew["objpos"]   += world.obj_pos
+                    if phys["success"]:
+                        ew["succ"] += 1
+                    if phys["contact"]:
+                        ew["taps"] += 1
+                    # signal is the modulator input this step; neuromod = 1+gain·signal
+                    if 1.0 + REWARD_GAIN * signal < 0.0:
+                        ew["negmod"] += 1
+                    if ew["steps"] >= LOG_EVERY:
+                        n   = ew["steps"]
+                        tt  = (100.0 * tap_toward_target / tap_total) if tap_total else 0.0
+                        print(
+                            f"[active {total_active_steps:6d}]  "
+                            f"meanDist={ew['dist']/n:5.1f}  "
+                            f"meanObj={ew['objpos']/n:5.1f}  "
+                            f"succ={ew['succ']:4d}  contact={ew['taps']:4d}  "
+                            f"drag→tgt(cum)={tt:4.1f}%  neg-mod={100.0*ew['negmod']/n:4.1f}%",
+                            flush=True,
+                        )
+                        eval_win = dict(steps=0, dist=0.0, objpos=0.0,
+                                        succ=0, taps=0, negmod=0)
 
                 # ---- Fovea update ----
                 # The fovea always keeps the OBJECT in view (consistent across
@@ -1289,6 +1430,7 @@ def main() -> None:
                 phi = float(np.clip(phi + v, PHI_MIN, PHI_MAX))
 
                 # ---- Pointer physics ----
+                f_push = 0.0
                 if pursuit_enabled:
                     # Loose object-following: spring-damper anchored DIRECTLY on
                     # the object.  The spring's only fixed point is the object,
@@ -1302,17 +1444,43 @@ def main() -> None:
                     f_action = 0.0
                     f_spring = -POINTER_PURSUIT_K * (p - world.world_com())
                 elif action_enabled:
-                    # Active inference: pointer driven by its own error gradient,
-                    # softly centred on the gaze (window) centre.
                     gaze_centre = phi + (N_INPUTS - 1) / 2.0
                     f_spring = -POINTER_SPRING_K * (p - gaze_centre)
-                    f_action = POINTER_ACTION_GAIN * _pdisp
+                    if GOAL_DRIVE:
+                        # PHASE-A diagnostic scaffold: REPLACE the self-following
+                        # drive with a goal-directed one.  The pointer is sprung to
+                        # a point just past the object on the side AWAY from the
+                        # target (so a tap pushes the object toward the target).
+                        # The drive is SELF-LIMITING: its strength ∝ object→target
+                        # distance and →0 near the target, so the pointer stops
+                        # shoving once the object arrives (the suspected ratchet
+                        # cause of the old additive POINTER_PUSH_K bias).  This
+                        # forces good positioning to TEST whether positioning is the
+                        # binding constraint; it is NOT the final mechanism.
+                        d = world.target_pos - world.obj_pos
+                        if abs(d) > 0.5:
+                            strength = min(1.0, abs(d) / GOAL_DIST_SCALE)
+                            push_pos = (world.obj_pos
+                                        + np.sign(world.obj_pos - world.target_pos)
+                                        * GOAL_OFFSET)
+                            f_action = GOAL_K * strength * (push_pos - p)
+                        else:
+                            f_action = 0.0   # at target: let the pointer settle
+                    else:
+                        # Active inference: pointer driven by its own error gradient.
+                        f_action = POINTER_ACTION_GAIN * _pdisp
+                        # (legacy) optional weak additive push bias.
+                        if POINTER_PUSH_K > 0.0 and abs(world.obj_pos - world.target_pos) > 0.5:
+                            push_pos = (world.obj_pos
+                                        + np.sign(world.obj_pos - world.target_pos)
+                                        * POINTER_PUSH_OFFSET)
+                            f_push = POINTER_PUSH_K * (push_pos - p)
                 else:
                     # Passive: random drift, weak centring on the gaze centre.
                     gaze_centre = phi + (N_INPUTS - 1) / 2.0
                     f_spring = -POINTER_SPRING_K * (p - gaze_centre)
                     f_action = rng.normal(0.0, POINTER_DRIFT)
-                accel = (f_action + f_spring) / POINTER_MASS
+                accel = (f_action + f_spring + f_push) / POINTER_MASS
                 ptr_f_action = f_action
                 ptr_f_spring = f_spring
                 vp = float(np.clip((vp + accel) * (1.0 - POINTER_DAMPING), -MAX_VP, MAX_VP))
