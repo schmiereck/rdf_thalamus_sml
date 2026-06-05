@@ -76,6 +76,7 @@ class PhysicsWorld1D:
         tap_impulse:     float = 2.5,
         tap_range:       float = 2.5,
         flash_duration:  int   = 8,
+        dwell_steps:     int   = 12,
         target_frac:     float = 0.75,
         kick_after:      int   = 60,    # steps without net progress before a kick
         kick_idle_thr:   float = 1.5,   # net displacement below this = "stuck"
@@ -94,6 +95,7 @@ class PhysicsWorld1D:
         self.kick_gain     = kick_gain
         self.kick_min_dist = kick_min_dist if kick_min_dist is not None else n * 0.4
         self.flash_duration = flash_duration
+        self.dwell_steps    = dwell_steps
         # Centered 3/4 band of the world: 1/8 .. 7/8 (width = 3/4, centered).
         # Object spawns, kick destinations and post-flash target positions are
         # all drawn from this band so the action stays in the central 3/4.
@@ -105,6 +107,7 @@ class PhysicsWorld1D:
         self.obj_pos:    float = 0.0
         self.obj_vel:    float = 0.0
         self.flash_timer: int  = 0
+        self.dwell_timer: int  = 0     # >0 = object resting quietly on the target
         self._t:         int   = 0     # global step counter (never reset)
         self._kick_ref_pos:  float = 0.0  # last position where real progress seen
         self._kick_ref_step: int   = 0    # _t at that moment
@@ -139,6 +142,7 @@ class PhysicsWorld1D:
                 # fires.
                 self._do_kick()
         self.flash_timer    = 0
+        self.dwell_timer    = 0
         self._kick_ref_pos  = self.obj_pos
         self._kick_ref_step = self._t
 
@@ -158,8 +162,36 @@ class PhysicsWorld1D:
         self.obj_vel = (dest - self.obj_pos) * self.obj_friction * self.kick_gain
 
     def step(self, tap_gate: float, pointer_pos: float) -> dict:
-        """Advance physics one frame.  Returns {tapped, success, flash}."""
+        """Advance physics one frame.  Returns {tapped, success, flash, kicked}."""
         tapped = False
+        kicked = False
+
+        # ---- Dwell: quiet rest on the target after a hit ----
+        # Instead of scrambling the world the instant the object reaches the
+        # target, the object is pinned ON the target for `dwell_steps` frames:
+        # zero velocity, taps ignored, the scene perfectly steady.  This is a
+        # genuine low-surprise rest that the reward keeps reinforcing — the
+        # achieved goal-state becomes attractive instead of being destroyed on
+        # contact.  Only when the dwell ends is the object sent off and the
+        # target relocated.
+        if self.dwell_timer > 0:
+            self.dwell_timer -= 1
+            self.obj_pos = self.target_pos
+            self.obj_vel = 0.0
+            if self.flash_timer > 0:
+                self.flash_timer -= 1
+            self._t += 1
+            if self.dwell_timer == 0:
+                # Dwell over: send the object off and move the target to a fresh
+                # random spot, so success must be re-earned at a new location.
+                self._do_kick()
+                self.relocate_target()
+                self._kick_ref_pos  = self.obj_pos
+                self._kick_ref_step = self._t
+                kicked = True
+            return {"tapped": False, "success": True,
+                    "flash": self.flash_timer > 0, "kicked": kicked}
+
         if tap_gate > TAP_THRESHOLD:
             dist = abs(pointer_pos - self.obj_pos)
             if 0.1 < dist < self.tap_range:
@@ -181,18 +213,11 @@ class PhysicsWorld1D:
         at_target = abs(self.obj_pos - self.target_pos) < 1.5
         at_rest   = abs(self.obj_vel) < 0.3
         success   = at_target and at_rest
-        kicked = False
         if success and self.flash_timer == 0:
+            # Begin the quiet dwell (handled at the top of the next step) instead
+            # of an immediate kick + target relocation.
             self.flash_timer = self.flash_duration
-            # Right after a successful flash, kick the object off to a fresh
-            # random destination so it does not linger at the target.  This
-            # applies in every phase and keeps the world in motion.
-            self._do_kick()
-            kicked = True
-            # Move the target to a new random spot in the centered 3/4 band, so
-            # success must be re-earned at a fresh location each time.
-            self.target_pos = float(round(
-                self._rng.uniform(self.range_lo, self.range_hi)))
+            self.dwell_timer = self.dwell_steps
         if self.flash_timer > 0:
             self.flash_timer -= 1
 
@@ -234,6 +259,11 @@ class PhysicsWorld1D:
     def world_com(self) -> float:
         """Centre-of-mass of the object in world coords."""
         return self.obj_pos
+
+    def relocate_target(self) -> None:
+        """Move the target to a fresh random spot in the centered 3/4 band."""
+        self.target_pos = float(round(
+            self._rng.uniform(self.range_lo, self.range_hi)))
 
 
 def _flat_blob(center: float, n: int, width: int = 1) -> list[float]:
@@ -842,6 +872,12 @@ def main() -> None:
     P_MIN                = 0.0
     P_MAX                = float(WORLD_W - 1)
     POINTER_DRIVE        = "self"
+    # PURSUIT-phase follow stiffness.  The pointer is a spring-damper anchored
+    # directly on the OBJECT: its only fixed point is the object position, so
+    # there is no steady-state offset (and none can be learned), while mass +
+    # damping make it lag during motion — the desired loose coupling.  Lower K =
+    # looser / more lag; raise K (or POINTER_DAMPING) if it overshoots/oscillates.
+    POINTER_PURSUIT_K    = 0.10
 
     # ---- Tap --------------------------------------------------------------
     # In active phase, the tap gate is derived from the PremotorModule:
@@ -866,22 +902,38 @@ def main() -> None:
     # narrow "object always starts left, pointer guards the gap" regime by
     # forcing the object across the whole world over time.
     PERSIST_OBJ = True
+    # Active-phase target timeout: if the object fails to reach the target
+    # within this many active steps, the target is moved to a fresh random
+    # location.  Stops the network from settling into a stable "guard one spot,
+    # never score" regime — keeps the goal fresh so that actually scoring stays
+    # the only route to the quiet dwell.
+    ACTIVE_TARGET_TIMEOUT = 200
 
     # ---- Reward -----------------------------------------------------------
-    # Reward = normalised closeness of object to target:
-    #   r = 1 - |obj_pos - target_pos| / (N_INPUTS / 2)   clipped to [-1, 1]
-    # Additional success bonus applied when flash fires.
     REWARD_GAIN       = 1.0
     REWARD_STRENGTH   = 1.0
+    # PURSUIT phase keeps the EMA-baselined proximity reward (pointer-near-object).
     REWARD_BASELINE   = "ema"     # "none" or "ema" (RPE = reward - running mean)
     REWARD_BASE_DECAY = 0.99
-    SUCCESS_BONUS     = 1.5       # extra reward when object is at target & resting
-    # After a successful hit, freeze the network for this many steps: sensors
-    # hold their last values, learning is off, reward = 0, actions = 0.
-    # Hypothesis: the FLASH spike is a sudden prediction-error burst that the
-    # network may experience as aversive rather than rewarding.  Complete
-    # silence lets the success settle without a disturbing signal.
-    SUCCESS_FREEZE    = 3
+    SUCCESS_BONUS     = 1.5       # (legacy, unused) replaced by REWARD_DWELL below
+    # --- Active-phase reward: potential-based shaping + goal term ----------
+    # Instead of absolute proximity minus a slow EMA, the active phase rewards
+    # the CHANGE in object→target closeness each step (Ng-style potential-based
+    # shaping):  pushing the object toward the target is promptly positive,
+    # pushing it away promptly negative — without hard-coding which side to tap
+    # from.  A separate goal term rewards RESTING on the target (the dwell), so
+    # both the approach and the achieved state are reinforced.
+    #   Φ      = 1 - |obj - target| / (WORLD_W/2)        (closeness potential)
+    #   signal = clip(SHAPING_GAIN·(Φ_now - Φ_prev) + goal, -1, 1)
+    #   goal   = REWARD_DWELL  while the object rests on the target, else 0
+    SHAPING_GAIN      = 8.0       # amplifies per-step closeness change → modulator
+    REWARD_DWELL      = 0.5       # reward per step while the object rests on target
+    DWELL_STEPS       = 12        # frames the object dwells quietly on the target
+    # The post-success freeze (inputs blanked to 0) is REPLACED by the quiet
+    # dwell above: the object now rests *visibly* on the target instead of the
+    # inputs being zeroed — zeroing was itself a surprise spike, not calm.
+    # Kept at 0; set >0 to re-enable the old freeze behaviour.
+    SUCCESS_FREEZE    = 0
 
     # ---- Learning ---------------------------------------------------------
     ETA_LEARN = 0.004
@@ -901,7 +953,7 @@ def main() -> None:
     )
     net.reward_gain = REWARD_GAIN
 
-    world = PhysicsWorld1D(n=WORLD_W, seed=0)
+    world = PhysicsWorld1D(n=WORLD_W, dwell_steps=DWELL_STEPS, seed=0)
 
     total_episodes = (N_EPISODES_PASSIVE + N_EPISODES_ORACLE
                       + N_EPISODES_PURSUIT + N_EPISODES_ACTIVE)
@@ -950,6 +1002,8 @@ def main() -> None:
     reward_sum          = 0.0
     reward_steps        = 0
     reward_baseline     = 0.0
+    phi_prev            = None   # previous closeness potential (shaping reward)
+    target_idle         = 0      # active steps since the object last reached target
     reward_pos          = 0
     reward_neg          = 0
     ptr_toward_obj      = 0
@@ -974,6 +1028,8 @@ def main() -> None:
             if ep == active_start_ep:
                 passive_steps = step
                 reward_baseline = 0.0   # reset RPE baseline: reward target changed
+                phi_prev = None         # no stale potential into the active phase
+                target_idle = 0         # start the target-timeout clock fresh
 
             # Reset world and effectors at episode start.
             # Active phase: object can start stationary so only a tap moves it.
@@ -1124,27 +1180,35 @@ def main() -> None:
                 # Active phase : reward = object-near-target  (+ success bonus).
                 if control_enabled:
                     if pursuit_enabled:
+                        # Pursuit: reward pointer-near-object (EMA-baselined RPE).
                         raw_reward = float(np.clip(
                             (1.0 - abs(p - world.obj_pos) / (N_INPUTS / 2))
                             * REWARD_STRENGTH,
                             -1.0, 1.0,
                         ))
-                    else:
-                        raw_reward = float(np.clip(
-                            (1.0 - abs(world.obj_pos - world.target_pos) / (WORLD_W / 2))
-                            * REWARD_STRENGTH,
-                            -1.0, 1.0,
-                        ))
-                        if phys["success"]:
-                            raw_reward = min(
-                                1.0, raw_reward + SUCCESS_BONUS / (SUCCESS_BONUS + 1.0))
-
-                    if REWARD_BASELINE == "ema":
                         signal = raw_reward - reward_baseline
                         reward_baseline = (REWARD_BASE_DECAY * reward_baseline
                                            + (1.0 - REWARD_BASE_DECAY) * raw_reward)
                     else:
-                        signal = raw_reward
+                        # Active: potential-based shaping + goal term (see config).
+                        #   shaping = Φ_now - Φ_prev   (motivate moving toward target)
+                        #   goal    = REWARD_DWELL     (reinforce resting on target)
+                        # Shaping is skipped on the first step and across a target
+                        # relocation (phys["kicked"]), where Φ_prev is stale and the
+                        # potential jump is not the action's doing.
+                        phi_now = float(np.clip(
+                            1.0 - abs(world.obj_pos - world.target_pos) / (WORLD_W / 2),
+                            -1.0, 1.0,
+                        ))
+                        if phi_prev is None or phys["kicked"]:
+                            shaping = 0.0
+                        else:
+                            shaping = phi_now - phi_prev
+                        phi_prev = phi_now
+                        goal   = REWARD_DWELL if phys["success"] else 0.0
+                        signal = float(np.clip(
+                            SHAPING_GAIN * shaping + goal, -1.0, 1.0))
+                        raw_reward = signal
 
                     net.set_reward(signal)
                     reward_sum   += raw_reward
@@ -1225,17 +1289,48 @@ def main() -> None:
                 phi = float(np.clip(phi + v, PHI_MIN, PHI_MAX))
 
                 # ---- Pointer physics ----
-                gaze_centre = phi + (N_INPUTS - 1) / 2.0
-                f_spring = -POINTER_SPRING_K * (p - gaze_centre)
-                if control_enabled:
+                if pursuit_enabled:
+                    # Loose object-following: spring-damper anchored DIRECTLY on
+                    # the object.  The spring's only fixed point is the object,
+                    # so the pointer's steady-state target IS the object (no
+                    # offset, and none can be learned); mass + damping produce the
+                    # lag during motion.  The network's own pointer gradient is
+                    # NOT fed back as a force here — a self-driven pointer
+                    # (POINTER_DRIVE="self") forms a self-fulfilling loop that can
+                    # settle at an arbitrary offset from the object.  _pdisp is
+                    # still computed above, but only for the following-statistic.
+                    f_action = 0.0
+                    f_spring = -POINTER_PURSUIT_K * (p - world.world_com())
+                elif action_enabled:
+                    # Active inference: pointer driven by its own error gradient,
+                    # softly centred on the gaze (window) centre.
+                    gaze_centre = phi + (N_INPUTS - 1) / 2.0
+                    f_spring = -POINTER_SPRING_K * (p - gaze_centre)
                     f_action = POINTER_ACTION_GAIN * _pdisp
                 else:
+                    # Passive: random drift, weak centring on the gaze centre.
+                    gaze_centre = phi + (N_INPUTS - 1) / 2.0
+                    f_spring = -POINTER_SPRING_K * (p - gaze_centre)
                     f_action = rng.normal(0.0, POINTER_DRIFT)
                 accel = (f_action + f_spring) / POINTER_MASS
                 ptr_f_action = f_action
                 ptr_f_spring = f_spring
                 vp = float(np.clip((vp + accel) * (1.0 - POINTER_DAMPING), -MAX_VP, MAX_VP))
                 p  = float(np.clip(p + vp, P_MIN, P_MAX))
+
+                # ---- Active-phase target timeout ----
+                # Reset the clock whenever the object is on the target; otherwise
+                # count up and, after ACTIVE_TARGET_TIMEOUT idle steps, move the
+                # target so the network cannot settle into "guard one spot".
+                if action_enabled:
+                    if phys["success"]:
+                        target_idle = 0
+                    else:
+                        target_idle += 1
+                        if target_idle >= ACTIVE_TARGET_TIMEOUT:
+                            world.relocate_target()
+                            target_idle = 0
+                            phi_prev = None   # target jumped: skip shaping next step
 
                 if DELAY > 0:
                     time.sleep(DELAY)
