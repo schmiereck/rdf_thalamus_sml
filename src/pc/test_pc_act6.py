@@ -1058,6 +1058,11 @@ def main() -> None:
     GOAL6_DRIVE          = True
     GOAL6_K              = 0.15   # pointer spring gain toward grab/carry target
     GOAL6_DREAM          = False  # True = specify the goal purely in latent space
+    # Cap the CARRY velocity (object held) below the fovea's max tracking speed
+    # (MAX_V=2.0) so the gaze keeps the carried object in view instead of being
+    # outrun — the object/pointer otherwise jump faster than the fovea can follow.
+    # Only the carry is limited; the (object-less) grab approach may stay fast.
+    GOAL6_VMAX           = 1.2    # max |goal_vp| while carrying  (env ACT6_VMAX)
 
     # ---- Tap --------------------------------------------------------------
     # In active phase, the tap gate is derived from the PremotorModule:
@@ -1152,6 +1157,7 @@ def main() -> None:
     GOAL_K         = float(os.environ.get("ACT5_GOAL_K", GOAL_K))
     GOAL6_DRIVE    = os.environ.get("ACT6_GOAL", "1" if GOAL6_DRIVE else "0") == "1"
     GOAL6_DREAM    = os.environ.get("ACT6_DREAM", "1" if GOAL6_DREAM else "0") == "1"
+    GOAL6_VMAX     = float(os.environ.get("ACT6_VMAX", GOAL6_VMAX))
     # act6 Planner: the agent DREAMS its own next goal (curiosity-driven) instead of
     # a random/shown target.  Requires GOAL6_DRIVE (reuses the pretrained goal mod).
     PLANNER        = os.environ.get("ACT6_PLANNER", "0") == "1"
@@ -1228,8 +1234,8 @@ def main() -> None:
               f"  [finger auto-grabs, carries object to decoded target]")
     if planner is not None:
         print(f"act6 PLANNER:     ON  curiosity-driven  k={planner.k}"
-              f"  memory={planner.memory}  [agent DREAMS its own next goal,"
-              f" replacing random target relocation]")
+              f"  memory={planner.memory}  carry_vmax={GOAL6_VMAX}"
+              f"  [agent DREAMS its own next goal; desired=dreamed goal directly]")
     if HEADLESS:
         print(f"[headless] windowed active metrics every {LOG_EVERY} active steps:")
         print(f"[headless]   meanDist = mean |obj-target|  (lower = closer; "
@@ -1418,7 +1424,14 @@ def main() -> None:
                             # object and pointer then move by the SAME goal_vp below
                             # → rigid grasp (no drift).  When not grabbed, approach
                             # the object to grab it.  (Replaces the premotor finger.)
-                            if GOAL6_DREAM:
+                            if planner is not None:
+                                # The planner already decoded its dreamed latent to
+                                # target_pos — use it directly (no second decode), so
+                                # "carry destination" == "success criterion" and the
+                                # object reaches its own goal instead of resting at a
+                                # re-decoded point short of it (the freeze cause).
+                                desired = world.target_pos
+                            elif GOAL6_DREAM:
                                 desired = goal_mod.decode_dream(
                                     goal_mod.encode(world.target_pos))
                             else:
@@ -1426,8 +1439,10 @@ def main() -> None:
                             grabbed = abs(p - world.obj_pos) < world.finger_radius
                             finger_y = 1.0 if grabbed else 0.0
                             if grabbed:
+                                # Carry capped at GOAL6_VMAX so the fovea keeps up.
                                 goal_vp = float(np.clip(
-                                    GOAL6_K * (desired - world.obj_pos), -MAX_VP, MAX_VP))
+                                    GOAL6_K * (desired - world.obj_pos),
+                                    -GOAL6_VMAX, GOAL6_VMAX))
                             else:
                                 goal_vp = float(np.clip(
                                     GOAL6_K * (world.obj_pos - p), -MAX_VP, MAX_VP))
