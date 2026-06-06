@@ -1158,6 +1158,14 @@ def main() -> None:
     GOAL6_DRIVE    = os.environ.get("ACT6_GOAL", "1" if GOAL6_DRIVE else "0") == "1"
     GOAL6_DREAM    = os.environ.get("ACT6_DREAM", "1" if GOAL6_DREAM else "0") == "1"
     GOAL6_VMAX     = float(os.environ.get("ACT6_VMAX", GOAL6_VMAX))
+    # Option-3 MEASUREMENT: drive the carry controller from PERCEIVED positions
+    # (retinal centre-of-mass + fovea offset) instead of oracle world positions, to
+    # quantify the cost of closing the perception loop.  No memory/active-looking yet:
+    # when a needed thing is out of the fovea window the controller cannot act.
+    #   off  : oracle (current behaviour)
+    #   obj  : object perceived, target still oracle
+    #   both : object AND target perceived (full perception loop)
+    PERCEIVE       = os.environ.get("ACT6_PERCEIVE", "off").lower()
     # act6 Planner: the agent DREAMS its own next goal (curiosity-driven) instead of
     # a random/shown target.  Requires GOAL6_DRIVE (reuses the pretrained goal mod).
     PLANNER        = os.environ.get("ACT6_PLANNER", "0") == "1"
@@ -1236,6 +1244,9 @@ def main() -> None:
         print(f"act6 PLANNER:     ON  curiosity-driven  k={planner.k}"
               f"  memory={planner.memory}  carry_vmax={GOAL6_VMAX}"
               f"  [agent DREAMS its own next goal; desired=dreamed goal directly]")
+    if PERCEIVE != "off":
+        print(f"act6 PERCEIVE:    {PERCEIVE.upper()}  [carry driven by retinal COM + "
+              f"fovea offset; NO memory — out-of-view = cannot act this step]")
     if HEADLESS:
         print(f"[headless] windowed active metrics every {LOG_EVERY} active steps:")
         print(f"[headless]   meanDist = mean |obj-target|  (lower = closer; "
@@ -1288,6 +1299,11 @@ def main() -> None:
     tap_total           = 0   # taps that actually landed (active phase)
     # Headless windowed active-phase metrics (reset every LOG_EVERY active steps).
     eval_win = dict(steps=0, dist=0.0, objpos=0.0, succ=0, taps=0, negmod=0)
+    # Option-3 perception-loop visibility stats (PERCEIVE != off): how often the
+    # object / target are actually in the fovea window when the controller needs them.
+    perceive_steps = 0
+    obj_seen_count = 0
+    tgt_seen_count = 0
 
     try:
         for ep in range(total_episodes):
@@ -1424,28 +1440,58 @@ def main() -> None:
                             # object and pointer then move by the SAME goal_vp below
                             # → rigid grasp (no drift).  When not grabbed, approach
                             # the object to grab it.  (Replaces the premotor finger.)
+                            # Positions the carry controller acts on: oracle, or
+                            # PERCEIVED from the retina (COM in the window + offset).
+                            # round(phi) matches apply_fovea_shift's window offset.
+                            if PERCEIVE == "off":
+                                obj_ctrl = world.obj_pos
+                                tgt_ctrl = world.target_pos
+                            else:
+                                _oc = retinal_com(obj_shifted)
+                                obj_ctrl = (round(phi) + _oc) if _oc is not None else None
+                                if PERCEIVE == "both":
+                                    _tc = retinal_com(tgt_shifted)
+                                    tgt_ctrl = (round(phi) + _tc) if _tc is not None else None
+                                else:
+                                    tgt_ctrl = world.target_pos
+                                perceive_steps += 1
+                                if obj_ctrl is not None:
+                                    obj_seen_count += 1
+                                if tgt_ctrl is not None:
+                                    tgt_seen_count += 1
+
+                            # The goal position the object is carried to.
                             if planner is not None:
                                 # The planner already decoded its dreamed latent to
                                 # target_pos — use it directly (no second decode), so
                                 # "carry destination" == "success criterion" and the
                                 # object reaches its own goal instead of resting at a
                                 # re-decoded point short of it (the freeze cause).
-                                desired = world.target_pos
+                                desired = tgt_ctrl
                             elif GOAL6_DREAM:
-                                desired = goal_mod.decode_dream(
+                                desired = (goal_mod.decode_dream(
                                     goal_mod.encode(world.target_pos))
+                                    if tgt_ctrl is not None else None)
                             else:
-                                desired = goal_mod.decode_target(world.target_pos)
-                            grabbed = abs(p - world.obj_pos) < world.finger_radius
-                            finger_y = 1.0 if grabbed else 0.0
-                            if grabbed:
-                                # Carry capped at GOAL6_VMAX so the fovea keeps up.
-                                goal_vp = float(np.clip(
-                                    GOAL6_K * (desired - world.obj_pos),
-                                    -GOAL6_VMAX, GOAL6_VMAX))
+                                desired = (goal_mod.decode_target(world.target_pos)
+                                           if tgt_ctrl is not None else None)
+
+                            if obj_ctrl is None or desired is None:
+                                # Needed perception missing (out of view) and no
+                                # memory yet → the controller cannot act this step.
+                                finger_y = 0.0
+                                goal_vp = 0.0
                             else:
-                                goal_vp = float(np.clip(
-                                    GOAL6_K * (world.obj_pos - p), -MAX_VP, MAX_VP))
+                                grabbed = abs(p - obj_ctrl) < world.finger_radius
+                                finger_y = 1.0 if grabbed else 0.0
+                                if grabbed:
+                                    # Carry capped at GOAL6_VMAX so the fovea keeps up.
+                                    goal_vp = float(np.clip(
+                                        GOAL6_K * (desired - obj_ctrl),
+                                        -GOAL6_VMAX, GOAL6_VMAX))
+                                else:
+                                    goal_vp = float(np.clip(
+                                        GOAL6_K * (obj_ctrl - p), -MAX_VP, MAX_VP))
                     else:
                         finger_y = 0.0
 
@@ -1723,6 +1769,12 @@ def main() -> None:
 
     except KeyboardInterrupt:
         print("\n\nStopped early.")
+
+    if PERCEIVE != "off" and perceive_steps > 0:
+        print(f"\n[perceive {PERCEIVE}]  control steps={perceive_steps}"
+              f"  object-in-view={100.0*obj_seen_count/perceive_steps:.1f}%"
+              f"  target-in-view={100.0*tgt_seen_count/perceive_steps:.1f}%"
+              f"   [out-of-view = could not act; motivates memory/active-looking]")
 
     print_summary(
         step, sensor_history, state_history, motor_history,
