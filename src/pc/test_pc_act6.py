@@ -127,6 +127,50 @@ class GoalModule:
 
 
 # ---------------------------------------------------------------------------
+# Curiosity planner — the agent DREAMS its own next goal.
+# ---------------------------------------------------------------------------
+# The next PC layer above the goal module: instead of an externally-shown target,
+# the planner proposes the next goal purely in the goal module's latent space,
+# preferring NOVEL (recently-unvisited) regions — self-directed exploration.  It
+# replaces act6's random target relocation, so the agent sets its OWN goals and the
+# validated goal-prior + finger machinery transports the object to each.  Distance/
+# density novelty (validated in test_pc_planner_curiosity.py); a short visited-memory
+# keeps it exploring indefinitely ("go where you haven't been recently").
+class CuriosityPlanner:
+    def __init__(self, goal_mod: "GoalModule", lo: float, hi: float, *,
+                 k: int = 24, memory: int = 20,
+                 rng: np.random.Generator | None = None) -> None:
+        self.gm = goal_mod
+        self.lo, self.hi = float(lo), float(hi)
+        self.k, self.memory = k, memory
+        self.rng = rng or np.random.default_rng()
+        # Encode a position grid → the goal module's latent manifold (for fast
+        # on-manifold candidate proposal by interpolation).
+        self._grid  = np.linspace(0.03 * goal_mod.world_w, 0.97 * goal_mod.world_w, 60)
+        self._zgrid = np.array([goal_mod.encode(p) for p in self._grid])
+        self._visited: list[np.ndarray] = []   # recent dreamed latents
+
+    def _latent(self, pos: float) -> np.ndarray:
+        return np.array([np.interp(pos, self._grid, self._zgrid[:, k])
+                         for k in range(self._zgrid.shape[1])])
+
+    def _novelty(self, z: np.ndarray) -> float:
+        if not self._visited:
+            return 1.0
+        return float(min(np.linalg.norm(z - s) for s in self._visited))
+
+    def next_goal(self, current_pos: float | None = None) -> float:
+        """Dream the next goal: most-novel of K on-manifold candidates → decode."""
+        cands_pos = self.rng.uniform(self.lo, self.hi, self.k)
+        cands_z   = [self._latent(p) for p in cands_pos]
+        z = cands_z[int(np.argmax([self._novelty(c) for c in cands_z]))]
+        self._visited.append(z)
+        if len(self._visited) > self.memory:
+            self._visited.pop(0)
+        return float(np.clip(self.gm.decode_dream(z), self.lo, self.hi))
+
+
+# ---------------------------------------------------------------------------
 # 1-D Physics World
 # ---------------------------------------------------------------------------
 
@@ -182,6 +226,9 @@ class PhysicsWorld1D:
         self.range_lo      = n / 8.0
         self.range_hi      = n * 7.0 / 8.0
         self.target_pos    = float(round(target_frac * (n - 1)))
+        # Optional callable () -> next target world-position.  When set (e.g. by a
+        # CuriosityPlanner) it REPLACES random relocation so goals are self-dreamed.
+        self.target_provider = None
         self._rng          = np.random.default_rng(seed)
 
         self.obj_pos:    float = 0.0
@@ -357,9 +404,14 @@ class PhysicsWorld1D:
         return self.obj_pos
 
     def relocate_target(self) -> None:
-        """Move the target to a fresh random spot in the centered 3/4 band."""
-        self.target_pos = float(round(
-            self._rng.uniform(self.range_lo, self.range_hi)))
+        """Move the target to a fresh spot in the centered 3/4 band.  If a
+        target_provider is set (the planner), the next goal is DREAMED, not random."""
+        if self.target_provider is not None:
+            self.target_pos = float(round(np.clip(
+                self.target_provider(), self.range_lo, self.range_hi)))
+        else:
+            self.target_pos = float(round(
+                self._rng.uniform(self.range_lo, self.range_hi)))
 
 
 def _flat_blob(center: float, n: int, width: int = 1) -> list[float]:
@@ -1100,6 +1152,9 @@ def main() -> None:
     GOAL_K         = float(os.environ.get("ACT5_GOAL_K", GOAL_K))
     GOAL6_DRIVE    = os.environ.get("ACT6_GOAL", "1" if GOAL6_DRIVE else "0") == "1"
     GOAL6_DREAM    = os.environ.get("ACT6_DREAM", "1" if GOAL6_DREAM else "0") == "1"
+    # act6 Planner: the agent DREAMS its own next goal (curiosity-driven) instead of
+    # a random/shown target.  Requires GOAL6_DRIVE (reuses the pretrained goal mod).
+    PLANNER        = os.environ.get("ACT6_PLANNER", "0") == "1"
     TAP_SETTLE_GATE = float(os.environ.get("ACT5_SETTLE_GATE", TAP_SETTLE_GATE))
     _ep_scale  = float(os.environ.get("ACT5_EPISODES_SCALE", "1.0"))
     if _ep_scale != 1.0:
@@ -1130,6 +1185,14 @@ def main() -> None:
                           rng=np.random.default_rng(7))
     if GOAL6_DRIVE:
         goal_mod.pretrain(steps=15000)
+
+    # Curiosity planner: when enabled, the agent dreams its own next goal (replacing
+    # random target relocation) — a self-directed, autonomous goal-setting loop.
+    planner = None
+    if GOAL6_DRIVE and PLANNER:
+        planner = CuriosityPlanner(goal_mod, world.range_lo, world.range_hi,
+                                   rng=np.random.default_rng(11))
+        world.target_provider = lambda: planner.next_goal(world.obj_pos)
 
     total_episodes = (N_EPISODES_PASSIVE + N_EPISODES_ORACLE
                       + N_EPISODES_PURSUIT + N_EPISODES_ACTIVE)
@@ -1163,6 +1226,10 @@ def main() -> None:
         print(f"act6 Goal-MODULE: ON  GOAL6_K={GOAL6_K}  dream={GOAL6_DREAM}"
               f"  decode_err={goal_mod.decode_error():.2f}px (world {WORLD_W}px)"
               f"  [finger auto-grabs, carries object to decoded target]")
+    if planner is not None:
+        print(f"act6 PLANNER:     ON  curiosity-driven  k={planner.k}"
+              f"  memory={planner.memory}  [agent DREAMS its own next goal,"
+              f" replacing random target relocation]")
     if HEADLESS:
         print(f"[headless] windowed active metrics every {LOG_EVERY} active steps:")
         print(f"[headless]   meanDist = mean |obj-target|  (lower = closer; "
@@ -1229,6 +1296,8 @@ def main() -> None:
                 reward_baseline = 0.0   # reset RPE baseline: reward target changed
                 phi_prev = None         # no stale potential into the active phase
                 target_idle = 0         # start the target-timeout clock fresh
+                if planner is not None:
+                    world.relocate_target()   # dream the FIRST self-set goal
 
             # Reset world and effectors at episode start.
             # Active phase: object can start stationary so only a tap moves it.
