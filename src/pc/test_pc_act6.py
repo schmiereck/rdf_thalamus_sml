@@ -144,12 +144,14 @@ class GoalModule:
 class GoalPlanner:
     def __init__(self, goal_mod: "GoalModule", lo: float, hi: float, *,
                  mode: str = "curiosity", external=None, k: int = 24, memory: int = 20,
+                 cond: int = 0, learned_steps: int = 8000,
                  rng: np.random.Generator | None = None) -> None:
         self.gm = goal_mod
         self.lo, self.hi = float(lo), float(hi)
         self.mode = mode
         self.external = [float(g) for g in external] if external else []
         self.k, self.memory = k, memory
+        self.cond = int(cond)
         self.min_disp = 0.25 * (self.hi - self.lo)   # 'state' mode: min move from now
         self.rng = rng or np.random.default_rng()
         # Encode a position grid → the goal module's latent manifold (for fast
@@ -159,6 +161,17 @@ class GoalPlanner:
         self._visited: list[np.ndarray] = []   # recent dreamed latents
         self._state: float | None = None       # latest PERCEIVED object position
         self._ext_i = 0
+        # 'learned' mode: a trained state->goal net (Option-1 planner) over the same
+        # goal module; the conditioning flag selects behaviour from OUTSIDE.
+        self.learned = None
+        if mode == "learned":
+            self.learned = LearnedStateGoalNet(
+                goal_mod, self.lo, self.hi, self._grid, self._zgrid, rng=self.rng)
+            band = self.lo + self.hi
+            # Two conditionable behaviours the net LEARNS (flag steers them):
+            #   flag 0 → mirror (object to the opposite side)  ; flag 1 → centre.
+            rule = lambda pos, flags: (band - pos) if flags[0] < 0.5 else 0.5 * band
+            self.learned.pretrain(rule, learned_steps)
 
     def set_state(self, pos: float | None) -> None:
         """Feed the planner the latest perceived object position (state mode)."""
@@ -180,6 +193,10 @@ class GoalPlanner:
             g = self.external[self._ext_i % len(self.external)]
             self._ext_i += 1
             return float(np.clip(g, self.lo, self.hi))
+        if self.mode == "learned" and self.learned is not None:
+            # Learned state->goal: dream from the PERCEIVED state + conditioning flag.
+            pos = self._state if self._state is not None else 0.5 * (self.lo + self.hi)
+            return self.learned.dream(pos, (float(self.cond),))
         cands_pos = self.rng.uniform(self.lo, self.hi, self.k)
         cands_z   = [self._latent(p) for p in cands_pos]
         pool = list(zip(cands_pos, cands_z))
@@ -194,6 +211,73 @@ class GoalPlanner:
         if len(self._visited) > self.memory:
             self._visited.pop(0)
         return float(np.clip(self.gm.decode_dream(z), self.lo, self.hi))
+
+
+# ---------------------------------------------------------------------------
+# Learned state -> goal net (Option-1 planner, validated in test_pc_planner.py).
+# ---------------------------------------------------------------------------
+# A small PC net above the goal module: a perceived object position (+ conditioning
+# flags) is mapped, through a LEARNED state->goal->latent chain, to a goal-module
+# latent — instead of a hand-coded rule in the control loop.  Trained before the
+# active phase on (state, flag) -> goal pairs; at run time it dreams the goal from
+# the PERCEIVED state, and the flag steers the behaviour from OUTSIDE (conditioning).
+class LearnedStateGoalNet:
+    def __init__(self, goal_mod: "GoalModule", lo: float, hi: float,
+                 grid: np.ndarray, zgrid: np.ndarray, *, n_flags: int = 1,
+                 state_w: int = 16, plan_dim: int = 10, flag_amp: float = 4.0,
+                 rng: np.random.Generator | None = None) -> None:
+        self.gm = goal_mod
+        self.lo, self.hi = float(lo), float(hi)
+        self.grid, self.zgrid = grid, zgrid
+        self.Z = zgrid.shape[1]
+        self.S = state_w
+        self.n_flags = n_flags
+        self.flag_amp = flag_amp
+        self.rng = rng or np.random.default_rng()
+        net = PCNetwork(eta_inf=0.1, n_relax=80, eps_tol=1e-6, alpha=1.0, beta=1.0,
+                        gamma=0.3, eta_learn=0.01, lambda_decay=0.0, w_clip=3.0,
+                        rng=self.rng)
+        self.state  = net.add(SensorNode("lp_state", dim=self.S + n_flags))
+        self.plan_z = net.add(PCNode("lp_z", dim=plan_dim, activation="tanh",
+                                     eta_temporal=0.0, rng=self.rng))
+        self.goal_z = net.add(PCNode("lp_gz", dim=self.Z, activation="identity",
+                                     eta_temporal=0.0, rng=self.rng))
+        net.connect("lp_z", "lp_state", ConnType.UP, pressure_scale=1.0)  # ground state
+        net.connect("lp_z", "lp_gz",    ConnType.UP, pressure_scale=1.5)  # predict goal
+        self.net = net
+
+    def _blob(self, pos: float) -> np.ndarray:
+        c = (pos - self.lo) / (self.hi - self.lo) * (self.S - 1)
+        x = np.arange(self.S)
+        return np.exp(-0.5 * ((x - c) / 1.0) ** 2)
+
+    def _state_vec(self, pos: float, flags) -> np.ndarray:
+        return np.concatenate([self._blob(pos),
+                               self.flag_amp * np.asarray(flags, dtype=float)])
+
+    def _latent(self, gpos: float) -> np.ndarray:
+        return np.array([np.interp(gpos, self.grid, self.zgrid[:, k])
+                         for k in range(self.Z)])
+
+    def pretrain(self, rule, steps: int) -> None:
+        """Learn state(+flag) -> goal: clamp (state, goal-latent) pairs and learn."""
+        for _ in range(steps):
+            pos   = float(self.rng.uniform(self.lo, self.hi))
+            flags = tuple(float(self.rng.integers(0, 2)) for _ in range(self.n_flags))
+            g     = rule(pos, flags)
+            self.state.set_input(self._state_vec(pos, flags))
+            self.goal_z.clamp(self._latent(g))
+            self.net.phase_predict(); self.net.phase_error(); self.net.phase_relax()
+            self.net.phase_learn(); self.net.commit_step()
+        self.goal_z.unclamp()
+
+    def dream(self, pos: float, flags) -> float:
+        """Clamp the perceived state(+flag), relax, decode the predicted goal."""
+        self.goal_z.unclamp()
+        self.state.set_input(self._state_vec(pos, flags))
+        self.net.phase_predict(); self.net.phase_error(); self.net.phase_relax()
+        return float(np.clip(self.gm.decode_dream(self.goal_z.mu.copy()),
+                             self.lo, self.hi))
 
 
 # ---------------------------------------------------------------------------
@@ -1212,6 +1296,9 @@ def main() -> None:
     EXTERNAL_GOALS = [float(x) for x in _ext_raw.split(",") if x.strip()] if _ext_raw else []
     if EXTERNAL_GOALS:
         PLAN_MODE = "external"
+    # Conditioning flag for the LEARNED planner: an external command selecting the
+    # learned behaviour (0 = mirror / transport across, 1 = gather to centre).
+    PLAN_COND      = int(os.environ.get("ACT6_COND", "0"))
     TAP_SETTLE_GATE = float(os.environ.get("ACT5_SETTLE_GATE", TAP_SETTLE_GATE))
     _ep_scale  = float(os.environ.get("ACT5_EPISODES_SCALE", "1.0"))
     if _ep_scale != 1.0:
@@ -1248,7 +1335,7 @@ def main() -> None:
     planner = None
     if GOAL6_DRIVE and PLANNER:
         planner = GoalPlanner(goal_mod, world.range_lo, world.range_hi,
-                              mode=PLAN_MODE, external=EXTERNAL_GOALS,
+                              mode=PLAN_MODE, external=EXTERNAL_GOALS, cond=PLAN_COND,
                               rng=np.random.default_rng(11))
         world.target_provider = planner.next_goal
 
@@ -1285,11 +1372,17 @@ def main() -> None:
               f"  decode_err={goal_mod.decode_error():.2f}px (world {WORLD_W}px)"
               f"  [finger auto-grabs, carries object to decoded target]")
     if planner is not None:
-        src = (f"external goals={planner.external}" if planner.mode == "external"
-               else f"mode={planner.mode}  k={planner.k}  memory={planner.memory}"
-                    + (f"  min_disp={planner.min_disp:.0f}px" if planner.mode == "state" else ""))
+        if planner.mode == "external":
+            src = f"external goals={planner.external}"
+        elif planner.mode == "learned":
+            src = (f"mode=learned  cond={planner.cond} "
+                   f"({'mirror/transport-across' if planner.cond == 0 else 'gather-to-centre'})"
+                   f"  [LEARNED state->goal net; flag steers from outside]")
+        else:
+            src = (f"mode={planner.mode}  k={planner.k}  memory={planner.memory}"
+                   + (f"  min_disp={planner.min_disp:.0f}px" if planner.mode == "state" else ""))
         print(f"act6 PLANNER:     ON  {src}  carry_vmax={GOAL6_VMAX}"
-              f"  [state mode uses the PERCEIVED object position]")
+              f"  [planner state = PERCEIVED object position]")
     if PERCEIVE != "off":
         mem_str = (f"OBJ-MEM on (ttl={OBJ_MEM_TTL}, look_k={OBJ_LOOK_K}; efference-"
                    f"advanced, fovea looks back)" if OBJ_MEM else "NO memory")
