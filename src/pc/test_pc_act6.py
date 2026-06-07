@@ -271,6 +271,15 @@ class LearnedStateGoalNet:
             self.net.phase_learn(); self.net.commit_step()
         self.goal_z.unclamp()
 
+    def learn_pair(self, pos: float, flags, goal: float) -> None:
+        """One ONLINE update from a single (state, flag) -> goal example, so the
+        map can be learned from the agent's own streamed experience (not a rule)."""
+        self.state.set_input(self._state_vec(pos, flags))
+        self.goal_z.clamp(self._latent(goal))
+        self.net.phase_predict(); self.net.phase_error(); self.net.phase_relax()
+        self.net.phase_learn(); self.net.commit_step()
+        self.goal_z.unclamp()
+
     def dream(self, pos: float, flags) -> float:
         """Clamp the perceived state(+flag), relax, decode the predicted goal."""
         self.goal_z.unclamp()
@@ -1294,8 +1303,13 @@ def main() -> None:
     PLAN_MODE      = os.environ.get("ACT6_PLAN", "curiosity").lower()
     _ext_raw       = os.environ.get("ACT6_GOALS", "").strip()
     EXTERNAL_GOALS = [float(x) for x in _ext_raw.split(",") if x.strip()] if _ext_raw else []
-    if EXTERNAL_GOALS:
+    # ACT6_GOALS auto-selects external mode ONLY from the default, so a stale
+    # ACT6_GOALS in the shell cannot silently override an explicit ACT6_PLAN=learned.
+    if EXTERNAL_GOALS and PLAN_MODE == "curiosity":
         PLAN_MODE = "external"
+    if PLAN_MODE == "external" and not EXTERNAL_GOALS:
+        print("[warn] ACT6_PLAN=external but ACT6_GOALS empty → falling back to curiosity")
+        PLAN_MODE = "curiosity"
     # Conditioning flag for the LEARNED planner: an external command selecting the
     # learned behaviour (0 = mirror / transport across, 1 = gather to centre).
     PLAN_COND      = int(os.environ.get("ACT6_COND", "0"))
