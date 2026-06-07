@@ -127,28 +127,43 @@ class GoalModule:
 
 
 # ---------------------------------------------------------------------------
-# Curiosity planner — the agent DREAMS its own next goal.
+# Goal planner — the agent's next goal, from three interchangeable sources.
 # ---------------------------------------------------------------------------
-# The next PC layer above the goal module: instead of an externally-shown target,
-# the planner proposes the next goal purely in the goal module's latent space,
-# preferring NOVEL (recently-unvisited) regions — self-directed exploration.  It
-# replaces act6's random target relocation, so the agent sets its OWN goals and the
-# validated goal-prior + finger machinery transports the object to each.  Distance/
-# density novelty (validated in test_pc_planner_curiosity.py); a short visited-memory
-# keeps it exploring indefinitely ("go where you haven't been recently").
-class CuriosityPlanner:
+# The next PC layer above the goal module.  It proposes the next goal in the goal
+# module's latent space and replaces act6's random target relocation, so the agent
+# sets its OWN goals and the validated goal-prior + finger machinery transports the
+# object to each.  Three modes share the same downstream carry:
+#   curiosity : most-novel of K on-manifold candidates (state-agnostic exploration,
+#               validated in test_pc_planner_curiosity.py); short visited-memory
+#               keeps it exploring ("go where you haven't been recently").
+#   state     : STATE-CONDITIONED — dream a novel goal that also fits the current
+#               PERCEIVED object position (novel AND a meaningful distance from where
+#               the object is now), so the goal adapts to the observed situation.
+#   external  : a list of goals GIVEN FROM OUTSIDE — the agent obeys imposed goals
+#               (must remain possible alongside self-set goals).
+class GoalPlanner:
     def __init__(self, goal_mod: "GoalModule", lo: float, hi: float, *,
-                 k: int = 24, memory: int = 20,
+                 mode: str = "curiosity", external=None, k: int = 24, memory: int = 20,
                  rng: np.random.Generator | None = None) -> None:
         self.gm = goal_mod
         self.lo, self.hi = float(lo), float(hi)
+        self.mode = mode
+        self.external = [float(g) for g in external] if external else []
         self.k, self.memory = k, memory
+        self.min_disp = 0.25 * (self.hi - self.lo)   # 'state' mode: min move from now
         self.rng = rng or np.random.default_rng()
         # Encode a position grid → the goal module's latent manifold (for fast
         # on-manifold candidate proposal by interpolation).
         self._grid  = np.linspace(0.03 * goal_mod.world_w, 0.97 * goal_mod.world_w, 60)
         self._zgrid = np.array([goal_mod.encode(p) for p in self._grid])
         self._visited: list[np.ndarray] = []   # recent dreamed latents
+        self._state: float | None = None       # latest PERCEIVED object position
+        self._ext_i = 0
+
+    def set_state(self, pos: float | None) -> None:
+        """Feed the planner the latest perceived object position (state mode)."""
+        if pos is not None:
+            self._state = float(pos)
 
     def _latent(self, pos: float) -> np.ndarray:
         return np.array([np.interp(pos, self._grid, self._zgrid[:, k])
@@ -159,11 +174,22 @@ class CuriosityPlanner:
             return 1.0
         return float(min(np.linalg.norm(z - s) for s in self._visited))
 
-    def next_goal(self, current_pos: float | None = None) -> float:
-        """Dream the next goal: most-novel of K on-manifold candidates → decode."""
+    def next_goal(self) -> float:
+        """Produce the next goal world-position per the active mode."""
+        if self.mode == "external" and self.external:
+            g = self.external[self._ext_i % len(self.external)]
+            self._ext_i += 1
+            return float(np.clip(g, self.lo, self.hi))
         cands_pos = self.rng.uniform(self.lo, self.hi, self.k)
         cands_z   = [self._latent(p) for p in cands_pos]
-        z = cands_z[int(np.argmax([self._novelty(c) for c in cands_z]))]
+        pool = list(zip(cands_pos, cands_z))
+        if self.mode == "state" and self._state is not None:
+            # Keep only candidates a meaningful distance from the current perceived
+            # object position, so every goal is a real transport FROM the situation.
+            far = [(p, z) for p, z in pool if abs(p - self._state) >= self.min_disp]
+            if far:
+                pool = far
+        z = max(pool, key=lambda pz: self._novelty(pz[1]))[1]
         self._visited.append(z)
         if len(self._visited) > self.memory:
             self._visited.pop(0)
@@ -1178,6 +1204,14 @@ def main() -> None:
     # act6 Planner: the agent DREAMS its own next goal (curiosity-driven) instead of
     # a random/shown target.  Requires GOAL6_DRIVE (reuses the pretrained goal mod).
     PLANNER        = os.environ.get("ACT6_PLANNER", "0") == "1"
+    # Planner goal SOURCE: curiosity (state-agnostic) | state (conditioned on the
+    # perceived object position) | external (obey a given list of goals).  Supplying
+    # ACT6_GOALS (comma-separated world positions) forces external mode.
+    PLAN_MODE      = os.environ.get("ACT6_PLAN", "curiosity").lower()
+    _ext_raw       = os.environ.get("ACT6_GOALS", "").strip()
+    EXTERNAL_GOALS = [float(x) for x in _ext_raw.split(",") if x.strip()] if _ext_raw else []
+    if EXTERNAL_GOALS:
+        PLAN_MODE = "external"
     TAP_SETTLE_GATE = float(os.environ.get("ACT5_SETTLE_GATE", TAP_SETTLE_GATE))
     _ep_scale  = float(os.environ.get("ACT5_EPISODES_SCALE", "1.0"))
     if _ep_scale != 1.0:
@@ -1213,9 +1247,10 @@ def main() -> None:
     # random target relocation) — a self-directed, autonomous goal-setting loop.
     planner = None
     if GOAL6_DRIVE and PLANNER:
-        planner = CuriosityPlanner(goal_mod, world.range_lo, world.range_hi,
-                                   rng=np.random.default_rng(11))
-        world.target_provider = lambda: planner.next_goal(world.obj_pos)
+        planner = GoalPlanner(goal_mod, world.range_lo, world.range_hi,
+                              mode=PLAN_MODE, external=EXTERNAL_GOALS,
+                              rng=np.random.default_rng(11))
+        world.target_provider = planner.next_goal
 
     total_episodes = (N_EPISODES_PASSIVE + N_EPISODES_ORACLE
                       + N_EPISODES_PURSUIT + N_EPISODES_ACTIVE)
@@ -1250,9 +1285,11 @@ def main() -> None:
               f"  decode_err={goal_mod.decode_error():.2f}px (world {WORLD_W}px)"
               f"  [finger auto-grabs, carries object to decoded target]")
     if planner is not None:
-        print(f"act6 PLANNER:     ON  curiosity-driven  k={planner.k}"
-              f"  memory={planner.memory}  carry_vmax={GOAL6_VMAX}"
-              f"  [agent DREAMS its own next goal; desired=dreamed goal directly]")
+        src = (f"external goals={planner.external}" if planner.mode == "external"
+               else f"mode={planner.mode}  k={planner.k}  memory={planner.memory}"
+                    + (f"  min_disp={planner.min_disp:.0f}px" if planner.mode == "state" else ""))
+        print(f"act6 PLANNER:     ON  {src}  carry_vmax={GOAL6_VMAX}"
+              f"  [state mode uses the PERCEIVED object position]")
     if PERCEIVE != "off":
         mem_str = (f"OBJ-MEM on (ttl={OBJ_MEM_TTL}, look_k={OBJ_LOOK_K}; efference-"
                    f"advanced, fovea looks back)" if OBJ_MEM else "NO memory")
@@ -1491,6 +1528,11 @@ def main() -> None:
                                     mem_used_count += 1   # acted via memory, object unseen
                                 if tgt_ctrl is not None:
                                     tgt_seen_count += 1
+
+                            # Feed the planner the PERCEIVED object position so a
+                            # state-conditioned dream adapts to the observed situation.
+                            if planner is not None and obj_ctrl is not None:
+                                planner.set_state(obj_ctrl)
 
                             # The goal position the object is carried to.
                             if planner is not None:
