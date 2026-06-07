@@ -161,17 +161,33 @@ class GoalPlanner:
         self._visited: list[np.ndarray] = []   # recent dreamed latents
         self._state: float | None = None       # latest PERCEIVED object position
         self._ext_i = 0
-        # 'learned' mode: a trained state->goal net (Option-1 planner) over the same
-        # goal module; the conditioning flag selects behaviour from OUTSIDE.
+        # Two conditionable behaviours the net represents (flag steers them):
+        #   flag 0 → mirror (object to the opposite side)  ; flag 1 → centre.
+        band = self.lo + self.hi
+        self._rule = lambda pos, flags: float(np.clip(
+            (band - pos) if flags[0] < 0.5 else 0.5 * band, self.lo, self.hi))
+        # 'learned'      : net pretrained OFFLINE on the rule (formula → net).
+        # 'experience'   : net learns the SAME map ONLINE from pursued goals (doing →
+        #                  net): a teacher proposes structured goals while the world
+        #                  supplies diverse states (carries + kicks); after a warm-up
+        #                  the net DRIVES.  De-risked in test_pc_planner_experience.py.
         self.learned = None
-        if mode == "learned":
+        self._buf: list = []
+        self._probe = np.linspace(self.lo, self.hi, 15)  # fixed HELD-OUT states
+        self._curve: list = []     # (goal#, mean |net.dream - teacher| over the probe grid)
+        self._goals_seen = 0
+        self.warmup = 150          # goals the teacher drives while the net learns
+        self._replay, self._batch = 120, 16
+        # After warm-up the net drives; a deterministic policy would ping-pong between
+        # ~2 states and starve learning of state diversity (the de-risk's E1 collapse).
+        # ε-exploration: a fraction of goals are random, keeping states diverse so the
+        # online learning stays healthy while the net mostly drives.
+        self.explore_eps = 0.3
+        if mode in ("learned", "experience"):
             self.learned = LearnedStateGoalNet(
                 goal_mod, self.lo, self.hi, self._grid, self._zgrid, rng=self.rng)
-            band = self.lo + self.hi
-            # Two conditionable behaviours the net LEARNS (flag steers them):
-            #   flag 0 → mirror (object to the opposite side)  ; flag 1 → centre.
-            rule = lambda pos, flags: (band - pos) if flags[0] < 0.5 else 0.5 * band
-            self.learned.pretrain(rule, learned_steps)
+            if mode == "learned":
+                self.learned.pretrain(self._rule, learned_steps)
 
     def set_state(self, pos: float | None) -> None:
         """Feed the planner the latest perceived object position (state mode)."""
@@ -197,6 +213,28 @@ class GoalPlanner:
             # Learned state->goal: dream from the PERCEIVED state + conditioning flag.
             pos = self._state if self._state is not None else 0.5 * (self.lo + self.hi)
             return self.learned.dream(pos, (float(self.cond),))
+        if self.mode == "experience" and self.learned is not None:
+            # Learn the conditioned state->goal map ONLINE from pursued goals.
+            s = self._state if self._state is not None else 0.5 * (self.lo + self.hi)
+            flags = (float(self.cond),)
+            teacher_goal = self._rule(s, flags)
+            self._buf.append((s, teacher_goal))
+            if len(self._buf) > self._replay:
+                self._buf.pop(0)
+            self.learned.learn_pair(s, flags, teacher_goal)          # new pair
+            for _ in range(self._batch):                              # + replay
+                bs, bg = self._buf[self.rng.integers(0, len(self._buf))]
+                self.learned.learn_pair(bs, flags, bg)
+            self._goals_seen += 1
+            if self._goals_seen % 20 == 0:                           # held-out eval
+                err = np.mean([abs(self.learned.dream(ps, flags) - self._rule(ps, flags))
+                               for ps in self._probe])
+                self._curve.append((self._goals_seen, float(err)))
+            if self._goals_seen <= self.warmup:
+                return teacher_goal                       # teacher drives while learning
+            if self.rng.random() < self.explore_eps:
+                return float(self.rng.uniform(self.lo, self.hi))  # ε-explore: keep states diverse
+            return self.learned.dream(s, flags)           # otherwise the LEARNED net drives
         cands_pos = self.rng.uniform(self.lo, self.hi, self.k)
         cands_z   = [self._latent(p) for p in cands_pos]
         pool = list(zip(cands_pos, cands_z))
@@ -1351,6 +1389,7 @@ def main() -> None:
         planner = GoalPlanner(goal_mod, world.range_lo, world.range_hi,
                               mode=PLAN_MODE, external=EXTERNAL_GOALS, cond=PLAN_COND,
                               rng=np.random.default_rng(11))
+        planner.explore_eps = float(os.environ.get("ACT6_EXPLORE_EPS", planner.explore_eps))
         world.target_provider = planner.next_goal
 
     total_episodes = (N_EPISODES_PASSIVE + N_EPISODES_ORACLE
@@ -1388,10 +1427,12 @@ def main() -> None:
     if planner is not None:
         if planner.mode == "external":
             src = f"external goals={planner.external}"
-        elif planner.mode == "learned":
-            src = (f"mode=learned  cond={planner.cond} "
-                   f"({'mirror/transport-across' if planner.cond == 0 else 'gather-to-centre'})"
-                   f"  [LEARNED state->goal net; flag steers from outside]")
+        elif planner.mode in ("learned", "experience"):
+            beh = 'mirror/transport-across' if planner.cond == 0 else 'gather-to-centre'
+            how = ("pretrained on rule" if planner.mode == "learned"
+                   else f"LEARNS ONLINE from doing (warmup={planner.warmup} goals)")
+            src = (f"mode={planner.mode}  cond={planner.cond} ({beh})"
+                   f"  [{how}; state from perception]")
         else:
             src = (f"mode={planner.mode}  k={planner.k}  memory={planner.memory}"
                    + (f"  min_disp={planner.min_disp:.0f}px" if planner.mode == "state" else ""))
@@ -1963,6 +2004,15 @@ def main() -> None:
 
     except KeyboardInterrupt:
         print("\n\nStopped early.")
+
+    if planner is not None and planner.mode == "experience" and planner._curve:
+        c = planner._curve
+        pts = [c[0]] + [c[len(c)//4]] + [c[len(c)//2]] + [c[-1]]
+        print(f"\n[experience]  goals={planner._goals_seen}  warmup={planner.warmup}"
+              f"  eps={planner.explore_eps}")
+        print("              held-out tracking |net-teacher| over goals (should DROP & STAY low):")
+        print("              " + "  ".join(f"g{g}:{e:.1f}px" for g, e in pts)
+              + "   [the planner LEARNED its goal map from doing]")
 
     if PERCEIVE != "off" and perceive_steps > 0:
         acted = obj_seen_count + mem_used_count
