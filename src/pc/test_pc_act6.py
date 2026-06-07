@@ -1063,6 +1063,14 @@ def main() -> None:
     # outrun — the object/pointer otherwise jump faster than the fovea can follow.
     # Only the carry is limited; the (object-less) grab approach may stay fast.
     GOAL6_VMAX           = 1.2    # max |goal_vp| while carrying  (env ACT6_VMAX)
+    # Option-3b OBJECT PERMANENCE (perception modes only).  A short-term memory of
+    # the last-seen object position; while carrying out of view it is advanced by the
+    # known carry velocity (efference copy), and the fovea looks BACK to the
+    # remembered spot to re-acquire the object.  Lets perception survive brief sight
+    # losses (fovea lag / saccades) without the oracle.  env ACT6_OBJ_MEM (0/1).
+    OBJ_MEM              = True
+    OBJ_MEM_TTL          = 40     # frames a memory is trusted before it is dropped
+    OBJ_LOOK_K           = 0.8    # fovea gain looking back toward the remembered object
 
     # ---- Tap --------------------------------------------------------------
     # In active phase, the tap gate is derived from the PremotorModule:
@@ -1166,6 +1174,7 @@ def main() -> None:
     #   obj  : object perceived, target still oracle
     #   both : object AND target perceived (full perception loop)
     PERCEIVE       = os.environ.get("ACT6_PERCEIVE", "off").lower()
+    OBJ_MEM        = os.environ.get("ACT6_OBJ_MEM", "1" if OBJ_MEM else "0") == "1"
     # act6 Planner: the agent DREAMS its own next goal (curiosity-driven) instead of
     # a random/shown target.  Requires GOAL6_DRIVE (reuses the pretrained goal mod).
     PLANNER        = os.environ.get("ACT6_PLANNER", "0") == "1"
@@ -1245,8 +1254,10 @@ def main() -> None:
               f"  memory={planner.memory}  carry_vmax={GOAL6_VMAX}"
               f"  [agent DREAMS its own next goal; desired=dreamed goal directly]")
     if PERCEIVE != "off":
+        mem_str = (f"OBJ-MEM on (ttl={OBJ_MEM_TTL}, look_k={OBJ_LOOK_K}; efference-"
+                   f"advanced, fovea looks back)" if OBJ_MEM else "NO memory")
         print(f"act6 PERCEIVE:    {PERCEIVE.upper()}  [carry driven by retinal COM + "
-              f"fovea offset; NO memory — out-of-view = cannot act this step]")
+              f"fovea offset; {mem_str}]")
     if HEADLESS:
         print(f"[headless] windowed active metrics every {LOG_EVERY} active steps:")
         print(f"[headless]   meanDist = mean |obj-target|  (lower = closer; "
@@ -1304,6 +1315,9 @@ def main() -> None:
     perceive_steps = 0
     obj_seen_count = 0
     tgt_seen_count = 0
+    mem_used_count = 0       # active steps the controller relied on object MEMORY
+    obj_mem        = None    # last-known object world-position (object permanence)
+    obj_mem_age    = 0       # frames since the memory was last refreshed by sight
 
     try:
         for ep in range(total_episodes):
@@ -1390,6 +1404,7 @@ def main() -> None:
                 _disp  = 0.0
                 _pdisp = 0.0
                 goal_vp = 0.0   # act6: synced goal-carry pointer velocity (GOAL6_DRIVE)
+                obj_seen_now = True   # (perception modes overwrite; oracle = always seen)
                 if control_enabled:
                     net.phase_predict()
                     net.phase_error()
@@ -1448,15 +1463,32 @@ def main() -> None:
                                 tgt_ctrl = world.target_pos
                             else:
                                 _oc = retinal_com(obj_shifted)
-                                obj_ctrl = (round(phi) + _oc) if _oc is not None else None
+                                obj_seen_now  = _oc is not None
+                                perceived_obj = (round(phi) + _oc) if obj_seen_now else None
+                                if OBJ_MEM:
+                                    # Object permanence: refresh the memory from sight;
+                                    # when unseen, hold it (advanced below by the carry
+                                    # efference copy) until it goes stale (TTL).
+                                    if obj_seen_now:
+                                        obj_mem = perceived_obj
+                                        obj_mem_age = 0
+                                    elif obj_mem is not None:
+                                        obj_mem_age += 1
+                                        if obj_mem_age > OBJ_MEM_TTL:
+                                            obj_mem = None
+                                    obj_ctrl = obj_mem
+                                else:
+                                    obj_ctrl = perceived_obj
                                 if PERCEIVE == "both":
                                     _tc = retinal_com(tgt_shifted)
                                     tgt_ctrl = (round(phi) + _tc) if _tc is not None else None
                                 else:
                                     tgt_ctrl = world.target_pos
                                 perceive_steps += 1
-                                if obj_ctrl is not None:
+                                if obj_seen_now:
                                     obj_seen_count += 1
+                                elif obj_ctrl is not None:
+                                    mem_used_count += 1   # acted via memory, object unseen
                                 if tgt_ctrl is not None:
                                     tgt_seen_count += 1
 
@@ -1492,6 +1524,12 @@ def main() -> None:
                                 else:
                                     goal_vp = float(np.clip(
                                         GOAL6_K * (obj_ctrl - p), -MAX_VP, MAX_VP))
+                                # Object permanence: while carrying out of view, advance
+                                # the remembered position by our own carry velocity
+                                # (efference copy) so the estimate tracks the object.
+                                if (OBJ_MEM and PERCEIVE != "off" and not obj_seen_now
+                                        and obj_mem is not None and grabbed):
+                                    obj_mem = float(obj_mem + goal_vp)
                     else:
                         finger_y = 0.0
 
@@ -1646,9 +1684,16 @@ def main() -> None:
                 # the final ACTIVE phase is the fovea self-driven by the
                 # prediction-error gradient (true active inference).
                 if action_enabled:
-                    # Active inference: fovea driven by its own error gradient,
-                    # softly centred on the world middle (PHI_MID, not 0).
-                    v_target = _disp * ACTION_GAIN - SPRING_K * (phi - PHI_MID)
+                    if (OBJ_MEM and PERCEIVE != "off" and not obj_seen_now
+                            and obj_mem is not None):
+                        # Object lost from view: actively look BACK toward the
+                        # remembered position to re-acquire it (object permanence).
+                        obj_phi  = obj_mem - (N_INPUTS - 1) / 2.0
+                        v_target = OBJ_LOOK_K * (obj_phi - phi)
+                    else:
+                        # Active inference: fovea driven by its own error gradient,
+                        # softly centred on the world middle (PHI_MID, not 0).
+                        v_target = _disp * ACTION_GAIN - SPRING_K * (phi - PHI_MID)
                     v = float(np.clip(
                         (1.0 - ACTION_SMOOTH) * v_target + ACTION_SMOOTH * v,
                         -MAX_V, MAX_V,
@@ -1771,10 +1816,12 @@ def main() -> None:
         print("\n\nStopped early.")
 
     if PERCEIVE != "off" and perceive_steps > 0:
+        acted = obj_seen_count + mem_used_count
         print(f"\n[perceive {PERCEIVE}]  control steps={perceive_steps}"
               f"  object-in-view={100.0*obj_seen_count/perceive_steps:.1f}%"
-              f"  target-in-view={100.0*tgt_seen_count/perceive_steps:.1f}%"
-              f"   [out-of-view = could not act; motivates memory/active-looking]")
+              f"  via-memory={100.0*mem_used_count/perceive_steps:.1f}%"
+              f"  could-act={100.0*acted/perceive_steps:.1f}%"
+              f"  target-in-view={100.0*tgt_seen_count/perceive_steps:.1f}%")
 
     print_summary(
         step, sensor_history, state_history, motor_history,
