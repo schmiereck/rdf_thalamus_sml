@@ -381,10 +381,15 @@ class PhysicsWorld1D:
         kick_min_dist:   float = None,  # min destination distance (default n*0.4)
         n_objects:       int   = 2,     # act8: target + (n_objects-1) distractors
         command_color:   str   = None,  # act8: which colour to fetch (target)
+        collide:         bool  = True,  # act8 step2: objects physically collide
+        collide_dist:    float = 2.0,   # centre distance at which objects touch
         seed:            int   = 0,
     ) -> None:
         self.n_objects     = n_objects
         self._command_arg  = command_color
+        self.collide       = collide
+        self.collide_dist  = collide_dist
+        self.collisions    = 0          # count of object-object shoves (diagnostic)
         self.n             = n
         self.obj_friction  = obj_friction
         self.tap_impulse   = tap_impulse
@@ -457,7 +462,10 @@ class PhysicsWorld1D:
         distractor sitting unseen at a far edge.  (Step 2 makes them mobile.)"""
         lo, hi = self.range_lo, self.range_hi
         centre = 0.5 * (lo + hi)
-        spread = max(2.0, self.finger_radius)          # well inside the fovea half-window
+        # Spread distractors across the central CARRY corridor (where the target is
+        # carried), so a carried object actually meets them (interference) while the
+        # gaze, tracking the target through that corridor, still passes over them.
+        spread = 0.25 * (hi - lo)
         others = [i for i in range(len(OBJECT_COLORS))
                   if OBJECT_COLORS[i][0] != self.command_color_name]
         self._rng.shuffle(others)
@@ -522,6 +530,47 @@ class PhysicsWorld1D:
             dest = float(np.clip(self.obj_pos + direction * self.kick_min_dist, lo, hi))
         self.obj_vel = (dest - self.obj_pos) * self.obj_friction * self.kick_gain
 
+    def _physics_distractors(self, contact: bool) -> None:
+        """act8 step2: distractors NEVER self-propel — they lie at rest until something
+        hits them.  Here we (a) coast any already-moving distractor with friction + wall
+        bounce, then (b) resolve object-object collisions.  A held target imposes its
+        motion (the finger dominates): it shoves the other object aside with its own
+        velocity and is itself unmoved by the collision.  Two free objects do an elastic
+        equal-mass 1-D bounce (swap velocities).  So a carried object can plough into a
+        resting distractor and knock it away — physical interference, no self-motion."""
+        n1 = self.n - 1
+        for i, o in enumerate(self.objects):          # (a) coast non-target objects
+            if i == self.target_idx:
+                continue
+            o["vel"] *= (1.0 - self.obj_friction)
+            o["pos"] += o["vel"]
+            if o["pos"] <= 0.0:
+                o["pos"] = 0.0;        o["vel"] = abs(o["vel"]) * 0.85
+            elif o["pos"] >= n1:
+                o["pos"] = float(n1);  o["vel"] = -abs(o["vel"]) * 0.85
+        if not self.collide:
+            return
+        held = self.target_idx if contact else None    # (b) resolve overlaps
+        D = self.collide_dist
+        objs = self.objects
+        for i in range(len(objs)):
+            for j in range(i + 1, len(objs)):
+                a, b = objs[i], objs[j]
+                d = b["pos"] - a["pos"]
+                if abs(d) >= D:
+                    continue
+                self.collisions += 1
+                sgn = 1.0 if d >= 0 else -1.0          # b sits on the +sgn side of a
+                overlap = D - abs(d)
+                if held == i:                          # a held → shove b out with a's vel
+                    b["pos"] = float(np.clip(a["pos"] + sgn * D, 0.0, n1)); b["vel"] = a["vel"]
+                elif held == j:
+                    a["pos"] = float(np.clip(b["pos"] - sgn * D, 0.0, n1)); a["vel"] = b["vel"]
+                else:                                  # free–free elastic (swap + separate)
+                    a["vel"], b["vel"] = b["vel"], a["vel"]
+                    a["pos"] = float(np.clip(a["pos"] - sgn * overlap / 2, 0.0, n1))
+                    b["pos"] = float(np.clip(b["pos"] + sgn * overlap / 2, 0.0, n1))
+
     def step(self, finger_y: float, pointer_pos: float,
              pointer_vel: float = 0.0) -> dict:
         """Advance physics one frame.
@@ -547,6 +596,7 @@ class PhysicsWorld1D:
             self.dwell_timer -= 1
             self.obj_pos = self.target_pos
             self.obj_vel = 0.0
+            self._physics_distractors(contact=False)   # shoved distractors settle
             if self.flash_timer > 0:
                 self.flash_timer -= 1
             self._t += 1
@@ -588,6 +638,9 @@ class PhysicsWorld1D:
         elif self.obj_pos >= self.n - 1:
             self.obj_pos = float(self.n - 1)
             self.obj_vel = -abs(self.obj_vel) * 0.85
+
+        # Distractors coast/collide (they only move when hit — see _physics_distractors)
+        self._physics_distractors(contact)
 
         at_target = abs(self.obj_pos - self.target_pos) < 1.5
         at_rest   = abs(self.obj_vel) < 0.3
@@ -1510,7 +1563,8 @@ def main() -> None:
 
     world = PhysicsWorld1D(n=WORLD_W, dwell_steps=DWELL_STEPS,
                            n_objects=int(os.environ.get("ACT8_NOBJ", "2")),
-                           command_color=os.environ.get("ACT8_COLOR", None), seed=0)
+                           command_color=os.environ.get("ACT8_COLOR", None),
+                           collide=os.environ.get("ACT8_NOCOLLIDE", "0") != "1", seed=0)
 
     # Goal module: its own PC autoencoder over object world-positions.  Pre-train
     # it so it can decode a desired object position from a shown target (or a
@@ -1547,7 +1601,10 @@ def main() -> None:
           f" '{world.command_color_name}' (ACT8_COLOR) selects which to transport,"
           f" the rest are distractors (resting)")
     print(f"Perceive: colour-matched COM picks the commanded-colour object"
-          f"  [step 1: distractors rest & are not grippable]")
+          f"  [distractors rest & are not grippable]")
+    print(f"Physics:  object-object collision = {world.collide}"
+          f"  [step 2: a carried object shoves resting distractors aside; they coast"
+          f" & bounce, never self-propel]")
     print(f"World:    {WORLD_W}px  |  fovea window {N_INPUTS}px"
           f"  |  target at pixel {world.target_pos:.0f}")
     print(f"Physics:  friction={world.obj_friction}"
@@ -2204,6 +2261,10 @@ def main() -> None:
         print("              held-out tracking |net-teacher| over goals (should DROP & STAY low):")
         print("              " + "  ".join(f"g{g}:{e:.1f}px" for g, e in pts)
               + "   [the planner LEARNED its goal map from doing]")
+
+    if world.collide:
+        print(f"\n[collide]  object-object shoves = {world.collisions}"
+              f"   [>0 → carried target physically interferes with resting distractors]")
 
     if geom_in > 0 and perceive_steps > 0:
         print(f"\n[diag]  target geometrically in fovea window = {100.0*geom_in/perceive_steps:.1f}%"
