@@ -449,8 +449,15 @@ class PhysicsWorld1D:
 
     def _spawn(self) -> None:
         """(Re)create all objects: target (index 0) gets the COMMAND colour; the
-        distractors get other distinct colours.  Step-1: distractors rest (vel=0)."""
+        distractors get other distinct colours.  Step-1: distractors rest (vel=0).
+
+        Distractors spawn in the CENTRAL active zone (where the target, carried by the
+        planner, spends most time), so both colours are frequently in the fovea window
+        together — the colour SELECTION is then visible to an observer instead of the
+        distractor sitting unseen at a far edge.  (Step 2 makes them mobile.)"""
         lo, hi = self.range_lo, self.range_hi
+        centre = 0.5 * (lo + hi)
+        spread = max(2.0, self.finger_radius)          # well inside the fovea half-window
         others = [i for i in range(len(OBJECT_COLORS))
                   if OBJECT_COLORS[i][0] != self.command_color_name]
         self._rng.shuffle(others)
@@ -459,7 +466,8 @@ class PhysicsWorld1D:
                          "name": self.command_color_name}]
         for k in range(self.n_objects - 1):
             name, rgb = OBJECT_COLORS[others[k % len(others)]]
-            self.objects.append({"pos": float(self._rng.uniform(lo, hi)), "vel": 0.0,
+            pos = float(np.clip(centre + self._rng.uniform(-spread, spread), lo, hi))
+            self.objects.append({"pos": pos, "vel": 0.0,
                                  "color": np.array(rgb, dtype=float), "name": name})
         self.target_idx = 0
 
