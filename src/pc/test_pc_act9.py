@@ -340,6 +340,44 @@ class GoalModule2D:
 # --------------------------------------------------------------------------- #
 # 2-D planner: curiosity (novelty) or learned state->goal (conditioned)
 # --------------------------------------------------------------------------- #
+class LearnedGoalNet2D:
+    """Online-learned state->goal map (act6's experience planner, ported to 2D).
+    A small PC net maps the PERCEIVED object position (a coarse blob image) + a
+    conditioning flag to a 2-D GOAL position (NOT through the goal module — the user
+    wants a direct goal the prior can use).  Trained online from pursued goals."""
+    def __init__(self, lo, hi, n_flags=1, simg=8, plan_dim=12, flag_amp=4.0, rng=None):
+        self.lo, self.hi, self.n_flags, self.S = lo, hi, n_flags, simg
+        self.flag_amp = flag_amp
+        self.rng = rng or np.random.default_rng()
+        net = PCNetwork(eta_inf=0.1, n_relax=60, eps_tol=1e-6, eta_learn=0.01,
+                        gamma=0.3, w_clip=3.0, rng=self.rng)
+        self.state = net.add(SensorNode("lp_state", dim=simg * simg + n_flags))
+        self.plan_z = net.add(PCNode("lp_z", dim=plan_dim, activation="tanh",
+                                     eta_temporal=0.0, rng=self.rng))
+        self.goal = net.add(PCNode("lp_goal", dim=2, activation="identity",
+                                   eta_temporal=0.0, rng=self.rng))
+        net.connect("lp_z", "lp_state", ConnType.UP, pressure_scale=1.0)  # ground state
+        net.connect("lp_z", "lp_goal", ConnType.UP, pressure_scale=1.5)   # predict goal
+        self.net = net
+
+    def _vec(self, pos, flags):
+        return np.concatenate([blob2d(np.asarray(pos), self.S).reshape(-1),
+                               self.flag_amp * np.asarray(flags, float)])
+
+    def learn_pair(self, pos, flags, goal):
+        self.state.set_input(self._vec(pos, flags))
+        self.goal.clamp(np.asarray(goal, float) / (G - 1))
+        self.net.phase_predict(); self.net.phase_error(); self.net.phase_relax()
+        self.net.phase_learn(); self.net.commit_step()
+        self.goal.unclamp()
+
+    def dream(self, pos, flags):
+        self.goal.unclamp()
+        self.state.set_input(self._vec(pos, flags))
+        self.net.phase_predict(); self.net.phase_error(); self.net.phase_relax()
+        return np.clip(self.goal.mu.copy() * (G - 1), self.lo, self.hi)
+
+
 class Planner2D:
     def __init__(self, gm, lo, hi, mode="curiosity", cond=0, k=24, memory=16, rng=None):
         self.gm, self.lo, self.hi = gm, lo, hi
@@ -347,6 +385,14 @@ class Planner2D:
         self.rng = rng or np.random.default_rng()
         self.visited = []
         self.state = None
+        # experience mode: an online-learned state->goal net (step 2)
+        self.learned = None
+        self.buf = []; self.replay = 80; self.batch = 12
+        self.warmup = 120; self.explore_eps = 0.3; self.seen = 0
+        self.curve = []                       # held-out tracking error vs the teacher
+        self.probe = self.rng.uniform(lo, hi, (12, 2))
+        if mode == "experience":
+            self.learned = LearnedGoalNet2D(lo, hi, rng=self.rng)
 
     def set_state(self, pos):
         if pos is not None:
@@ -360,6 +406,28 @@ class Planner2D:
         if self.mode == "learned":
             base = self.state if self.state is not None else np.array([G / 2.0, G / 2.0])
             return np.clip(self._rule(base), self.lo, self.hi)
+        if self.mode == "experience":
+            s = self.state if self.state is not None else np.array([G / 2.0, G / 2.0])
+            flags = (float(self.cond),)
+            teacher = np.clip(self._rule(s), self.lo, self.hi)
+            self.buf.append((s.copy(), teacher.copy()))
+            if len(self.buf) > self.replay:
+                self.buf.pop(0)
+            self.learned.learn_pair(s, flags, teacher)                 # new pair
+            for _ in range(self.batch):                                # + replay
+                bs, bg = self.buf[self.rng.integers(0, len(self.buf))]
+                self.learned.learn_pair(bs, flags, bg)
+            self.seen += 1
+            if self.seen % 20 == 0:                                    # held-out eval
+                err = np.mean([np.linalg.norm(self.learned.dream(p, flags)
+                                              - np.clip(self._rule(p), self.lo, self.hi))
+                               for p in self.probe])
+                self.curve.append((self.seen, float(err)))
+            if self.seen <= self.warmup:
+                return teacher                                         # teacher drives
+            if self.rng.random() < self.explore_eps:
+                return self.rng.uniform(self.lo, self.hi, 2)           # ε-explore (diversity)
+            return self.learned.dream(s, flags)                        # net drives
         cands = self.rng.uniform(self.lo, self.hi, (self.k, 2))
         if not self.visited:
             g = cands[0]
@@ -470,6 +538,10 @@ def main():
     NOBJ = int(os.environ.get("ACT9_NOBJ", "3"))
     GRIP = os.environ.get("ACT9_GRIP", "1") == "1"
     CYCLE = os.environ.get("ACT9_CYCLE", "1") == "1"
+    # net = localise on the hex net's RECONSTRUCTION (forces learning, but the small
+    # net's blurry/colour-biased recon under-selects → experimental); raw = on the
+    # windowed image.  Default raw so the system works; see the readout work for net.
+    PERCEIVE = os.environ.get("ACT9_PERCEIVE", "raw").lower()
     SCALE = float(os.environ.get("ACT9_EPISODES_SCALE", "1.0"))
     LOG_EVERY = int(os.environ.get("ACT9_LOG_EVERY", "2000"))
     DELAY = float(os.environ.get("ACT9_DELAY", "0.0"))
@@ -497,7 +569,8 @@ def main():
     last_cmd = world.command_color_name
 
     print(f"act9 — 2D top-down  world={G}x{G}  fovea={F}x{F}  hex sensor sheet")
-    print(f"  plan={PLAN} cond={COND}  objects={NOBJ}  grip={GRIP} cycle={CYCLE}")
+    print(f"  plan={PLAN} cond={COND}  objects={NOBJ}  grip={GRIP} cycle={CYCLE}"
+          f"  perceive={PERCEIVE}")
     print(f"  goal-module decode_err={gm.decode_error():.2f}px  (2D)")
 
     se_hist = []
@@ -513,7 +586,25 @@ def main():
         lum_w = window(lum, phi); rgb_w = window(rgb, phi); ptr_w = window(ptr_field, phi)
         set_sheet(cells, lum_w, rgb_w, ptr_w)
 
-        match_w = color_match_map(rgb_w, world.command_color)
+        # The PC net infers + LEARNS every step (predict→error→relax→learn).  Doing it
+        # HERE (before control) means perception can read the net's own RECONSTRUCTION.
+        r = net.step(learn=True); net.commit_step()
+        se = r["sensor_error"]
+        if np.isfinite(se):
+            se_hist.append(se)
+
+        # ---- Perception source (step 1): the commanded-colour object is localised
+        # either on the RAW window (PERCEIVE=raw) or on the net's RECONSTRUCTED RGB
+        # (PERCEIVE=net) — the latter makes the hex net's LEARNING necessary: an
+        # untrained net reconstructs badly → bad percept → it must learn to see.
+        if PERCEIVE == "net":
+            recon = np.zeros((F, F, 3))
+            for rr in range(F):
+                for cc in range(F):
+                    recon[rr, cc] = np.clip(cells[(rr, cc)].pi[1:4], 0.0, None)
+            match_w = color_match_map(recon, world.command_color)
+        else:
+            match_w = color_match_map(rgb_w, world.command_color)
 
         finger = False
         if active:
@@ -598,11 +689,6 @@ def main():
             phi = np.clip(phi + rng.normal(0, 1.0, 2), -F / 2.0, G - F / 2.0)
             info = {"flash": False, "success": False, "contact": False}
 
-        r = net.step(learn=True); net.commit_step()
-        se = r["sensor_error"]
-        if np.isfinite(se):
-            se_hist.append(se)
-
         if active:
             win["n"] += 1; win["dist"] += float(np.linalg.norm(world.obj_pos - world.target_pos))
             win["succ"] += int(info["success"])
@@ -633,6 +719,13 @@ def main():
               f" ({100.0*grip_wrong/grip_steps:.1f}%)")
     print(f"  object-object shoves: {world.collisions}"
           f"   command cycling: {world.cycle_command}")
+    if planner.mode == "experience" and planner.curve:
+        cv = planner.curve
+        pts = [cv[0], cv[len(cv)//3], cv[2*len(cv)//3], cv[-1]]
+        print(f"  experience planner (online state→goal, warmup={planner.warmup}):")
+        print(f"    held-out |net-teacher|: "
+              + "  ".join(f"g{g}:{e:.1f}px" for g, e in pts)
+              + "   [drops → it LEARNED its goal map from doing]")
     print("=" * 70)
 
 
