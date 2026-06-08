@@ -383,12 +383,17 @@ class PhysicsWorld1D:
         command_color:   str   = None,  # act8: which colour to fetch (target)
         collide:         bool  = True,  # act8 step2: objects physically collide
         collide_dist:    float = 2.0,   # centre distance at which objects touch
+        grippable:       bool  = False, # act8 step4: finger can grip ANY object
+        cycle_command:   bool  = False, # act8 step4: switch command colour per delivery
         seed:            int   = 0,
     ) -> None:
         self.n_objects     = n_objects
         self._command_arg  = command_color
         self.collide       = collide
         self.collide_dist  = collide_dist
+        self.grippable     = grippable
+        self.cycle_command = cycle_command
+        self.held_idx      = None       # index of the object the finger currently holds
         self.collisions    = 0          # count of object-object shoves (diagnostic)
         self.n             = n
         self.obj_friction  = obj_friction
@@ -530,27 +535,25 @@ class PhysicsWorld1D:
             dest = float(np.clip(self.obj_pos + direction * self.kick_min_dist, lo, hi))
         self.obj_vel = (dest - self.obj_pos) * self.obj_friction * self.kick_gain
 
-    def _physics_distractors(self, contact: bool) -> None:
-        """act8 step2: distractors NEVER self-propel — they lie at rest until something
-        hits them.  Here we (a) coast any already-moving distractor with friction + wall
-        bounce, then (b) resolve object-object collisions.  A held target imposes its
-        motion (the finger dominates): it shoves the other object aside with its own
-        velocity and is itself unmoved by the collision.  Two free objects do an elastic
-        equal-mass 1-D bounce (swap velocities).  So a carried object can plough into a
-        resting distractor and knock it away — physical interference, no self-motion."""
-        n1 = self.n - 1
-        for i, o in enumerate(self.objects):          # (a) coast non-target objects
-            if i == self.target_idx:
-                continue
-            o["vel"] *= (1.0 - self.obj_friction)
-            o["pos"] += o["vel"]
-            if o["pos"] <= 0.0:
-                o["pos"] = 0.0;        o["vel"] = abs(o["vel"]) * 0.85
-            elif o["pos"] >= n1:
-                o["pos"] = float(n1);  o["vel"] = -abs(o["vel"]) * 0.85
+    def _cycle_command(self) -> None:
+        """act8 step4: switch the COMMAND to a different PRESENT object's colour, so the
+        agent must find and fetch a NEW object each time (objects are not respawned —
+        only target_idx + command colour change; the new target is wherever it lies)."""
+        if len(self.objects) <= 1:
+            return
+        idxs = [i for i in range(len(self.objects)) if i != self.target_idx]
+        j = int(self._rng.choice(idxs))
+        self.target_idx = j
+        self.command_color_name = self.objects[j]["name"]
+        self.command_color = self.objects[j]["color"].copy()
+
+    def _resolve_collisions(self, held) -> None:
+        """Resolve object-object overlaps.  The HELD object dominates (the finger): it
+        shoves the other aside with its own velocity, itself unmoved.  Two free objects
+        do an elastic equal-mass 1-D bounce (swap velocities)."""
         if not self.collide:
             return
-        held = self.target_idx if contact else None    # (b) resolve overlaps
+        n1 = self.n - 1
         D = self.collide_dist
         objs = self.objects
         for i in range(len(objs)):
@@ -570,6 +573,21 @@ class PhysicsWorld1D:
                     a["vel"], b["vel"] = b["vel"], a["vel"]
                     a["pos"] = float(np.clip(a["pos"] - sgn * overlap / 2, 0.0, n1))
                     b["pos"] = float(np.clip(b["pos"] + sgn * overlap / 2, 0.0, n1))
+
+    def _coast_and_collide(self, skip: int) -> None:
+        """Coast every object except `skip` (friction + wall bounce), then collide.
+        Used during dwell, where the target is pinned and the others may still settle."""
+        n1 = self.n - 1
+        for i, o in enumerate(self.objects):
+            if i == skip:
+                continue
+            o["vel"] *= (1.0 - self.obj_friction)
+            o["pos"] += o["vel"]
+            if o["pos"] <= 0.0:
+                o["pos"] = 0.0;        o["vel"] = abs(o["vel"]) * 0.85
+            elif o["pos"] >= n1:
+                o["pos"] = float(n1);  o["vel"] = -abs(o["vel"]) * 0.85
+        self._resolve_collisions(skip)
 
     def step(self, finger_y: float, pointer_pos: float,
              pointer_vel: float = 0.0) -> dict:
@@ -596,7 +614,7 @@ class PhysicsWorld1D:
             self.dwell_timer -= 1
             self.obj_pos = self.target_pos
             self.obj_vel = 0.0
-            self._physics_distractors(contact=False)   # shoved distractors settle
+            self._coast_and_collide(skip=self.target_idx)   # shoved distractors settle
             if self.flash_timer > 0:
                 self.flash_timer -= 1
             self._t += 1
@@ -606,6 +624,10 @@ class PhysicsWorld1D:
                 # where it succeeded and is carried to the new goal from there, so the
                 # gaze never loses the (colour-tracked) target to a teleport.  (World
                 # coverage now comes from the planner's goals, not from kicks.)
+                if self.cycle_command:
+                    # act8 step4: after delivering, switch the command to ANOTHER
+                    # colour → the agent must find & fetch a new object next.
+                    self._cycle_command()
                 self.relocate_target()
                 self._kick_ref_pos  = self.obj_pos
                 self._kick_ref_step = self._t
@@ -613,34 +635,43 @@ class PhysicsWorld1D:
             return {"contact": False, "dragged": False, "success": True,
                     "flash": self.flash_timer > 0, "kicked": kicked}
 
-        # ---- Finger contact + drag ----
-        # When the finger is extended (finger_y > FINGER_DOWN) and within reach of
-        # the object, the object's velocity is coupled toward the pointer's
-        # sideways velocity (graded carry; drag_slip=0 → rigid).  No impulse:
-        # extending onto a still pointer (pointer_vel≈0) just holds the object in
-        # place — your "direct hit ⇒ do nothing".  While held the object does not
-        # feel friction; on release it keeps the finger's velocity and coasts.
-        contact = (finger_y > FINGER_DOWN
-                   and abs(pointer_pos - self.obj_pos) < self.finger_radius)
-        if contact:
-            self.obj_vel = ((1.0 - self.drag_slip) * pointer_vel
-                            + self.drag_slip * self.obj_vel)
-            dragged = abs(self.obj_vel) > 1e-6
-            self.obj_pos += self.obj_vel
+        # ---- Finger grip + drag ----
+        # The finger grips an object when extended (finger_y > FINGER_DOWN) and within
+        # finger_radius.  act8 step4 (grippable=True): it grips the NEAREST object of
+        # ANY colour — so it CAN grab the wrong one; the agent must position on the
+        # commanded colour (and release a wrong grab).  Otherwise only the target is
+        # grippable (steps 1-2).  The grip is STICKY: once holding, it keeps that object
+        # until the finger lifts, even as other objects pass nearby.  The held object is
+        # dragged rigidly by the pointer; all others coast (friction + wall bounce).
+        if finger_y > FINGER_DOWN:
+            if self.held_idx is None:
+                if self.grippable:
+                    cand = [(abs(pointer_pos - o["pos"]), i)
+                            for i, o in enumerate(self.objects)
+                            if abs(pointer_pos - o["pos"]) < self.finger_radius]
+                    self.held_idx = min(cand)[1] if cand else None
+                elif abs(pointer_pos - self.objects[self.target_idx]["pos"]) < self.finger_radius:
+                    self.held_idx = self.target_idx
+            contact = self.held_idx is not None
         else:
-            self.obj_vel *= (1.0 - self.obj_friction)
-            self.obj_pos += self.obj_vel
+            self.held_idx = None
 
-        # Elastic wall bounce with slight energy loss
-        if self.obj_pos <= 0.0:
-            self.obj_pos = 0.0
-            self.obj_vel = abs(self.obj_vel) * 0.85
-        elif self.obj_pos >= self.n - 1:
-            self.obj_pos = float(self.n - 1)
-            self.obj_vel = -abs(self.obj_vel) * 0.85
+        n1 = self.n - 1
+        for i, o in enumerate(self.objects):
+            if i == self.held_idx:
+                o["vel"] = ((1.0 - self.drag_slip) * pointer_vel
+                            + self.drag_slip * o["vel"])
+                o["pos"] += o["vel"]
+                dragged = abs(o["vel"]) > 1e-6
+            else:
+                o["vel"] *= (1.0 - self.obj_friction)
+                o["pos"] += o["vel"]
+            if o["pos"] <= 0.0:
+                o["pos"] = 0.0;        o["vel"] = abs(o["vel"]) * 0.85
+            elif o["pos"] >= n1:
+                o["pos"] = float(n1);  o["vel"] = -abs(o["vel"]) * 0.85
 
-        # Distractors coast/collide (they only move when hit — see _physics_distractors)
-        self._physics_distractors(contact)
+        self._resolve_collisions(self.held_idx)
 
         at_target = abs(self.obj_pos - self.target_pos) < 1.5
         at_rest   = abs(self.obj_vel) < 0.3
@@ -1564,7 +1595,9 @@ def main() -> None:
     world = PhysicsWorld1D(n=WORLD_W, dwell_steps=DWELL_STEPS,
                            n_objects=int(os.environ.get("ACT8_NOBJ", "2")),
                            command_color=os.environ.get("ACT8_COLOR", None),
-                           collide=os.environ.get("ACT8_NOCOLLIDE", "0") != "1", seed=0)
+                           collide=os.environ.get("ACT8_NOCOLLIDE", "0") != "1",
+                           grippable=os.environ.get("ACT8_GRIP", "0") == "1",
+                           cycle_command=os.environ.get("ACT8_CYCLE", "0") == "1", seed=0)
 
     # Goal module: its own PC autoencoder over object world-positions.  Pre-train
     # it so it can decode a desired object position from a shown target (or a
@@ -1703,6 +1736,8 @@ def main() -> None:
     tgt_seen_count = 0
     sel_correct    = 0       # colour-selection hits the commanded object (not a distractor)
     sel_total      = 0
+    grab_total     = 0       # step4: grasp acquisitions (right + wrong)
+    grab_wrong     = 0       # step4: of those, a WRONG-colour object was grabbed
     geom_in        = 0       # diag: target geometrically inside the fovea window
     geom_in_seen   = 0       # diag: ...and the colour-match detected it
     mem_used_count = 0       # active steps the controller relied on object MEMORY
@@ -1711,6 +1746,7 @@ def main() -> None:
     search_dir     = 1       # act8 visual-search sweep direction (±1)
     obj_prev_seen  = None    # previous PERCEIVED target position (for its velocity)
     obj_seen_vel   = 0.0     # last perceived target velocity (directs the search)
+    last_command   = world.command_color_name   # detect ACT8_CYCLE command switches
 
     try:
         for ep in range(total_episodes):
@@ -1859,6 +1895,15 @@ def main() -> None:
                                 obj_ctrl = world.obj_pos
                                 tgt_ctrl = world.target_pos
                             else:
+                                # act8 step4: when the COMMAND colour just switched, the
+                                # remembered target is the OLD object — invalidate it so
+                                # the gaze immediately SEARCHES for the new colour instead
+                                # of staring at the old position until the memory expires.
+                                if world.command_color_name != last_command:
+                                    last_command = world.command_color_name
+                                    obj_mem = None
+                                    obj_mem_age = OBJ_MEM_TTL + 1
+                                    obj_prev_seen = None
                                 # act8: perceive the COMMANDED-colour object via the
                                 # colour-matched signal (not raw luminance, which would
                                 # average BOTH objects).  This is the colour selection.
@@ -1941,7 +1986,20 @@ def main() -> None:
                             else:
                                 grabbed = abs(p - obj_ctrl) < world.finger_radius
                                 finger_y = 1.0 if grabbed else 0.0
-                                if grabbed:
+                                # act8 step4: colour-conditioned grasp.  If the finger
+                                # is holding the WRONG-colour object (grabbed a distractor),
+                                # RELEASE and re-approach — the grasp must select the
+                                # commanded colour, not whatever it closed on.
+                                wrong_grab = (world.grippable and world.held_idx is not None
+                                              and world.held_idx != world.target_idx)
+                                if wrong_grab:
+                                    grab_total += 1; grab_wrong += 1
+                                    finger_y = 0.0
+                                    goal_vp = float(np.clip(
+                                        GOAL6_K * (obj_ctrl - p), -MAX_VP, MAX_VP))
+                                elif grabbed:
+                                    if world.grippable and world.held_idx == world.target_idx:
+                                        grab_total += 1
                                     # Carry capped at GOAL6_VMAX so the fovea keeps up.
                                     goal_vp = float(np.clip(
                                         GOAL6_K * (desired - obj_ctrl),
@@ -2266,7 +2324,17 @@ def main() -> None:
         print(f"\n[collide]  object-object shoves = {world.collisions}"
               f"   [>0 → carried target physically interferes with resting distractors]")
 
-    if geom_in > 0 and perceive_steps > 0:
+    if world.grippable and grab_total > 0:
+        print(f"[grasp]  grip-steps={grab_total}  wrong-colour={grab_wrong}"
+              f" ({100.0*grab_wrong/grab_total:.1f}%)  [grippable distractors: a wrong grab"
+              f" is detected by colour and released → re-approach the commanded colour]")
+    if world.cycle_command:
+        print(f"[cycle]  command colour switches per delivery → agent re-finds a new"
+              f" object each time (final cmd={world.command_color_name})")
+
+    if geom_in > 0 and perceive_steps > 0 and not world.cycle_command:
+        # (Stationary-target diagnostic; under ACT8_CYCLE the target identity jumps so
+        # this window/seen comparison is not meaningful — omitted there.)
         print(f"\n[diag]  target geometrically in fovea window = {100.0*geom_in/perceive_steps:.1f}%"
               f" of steps; of those, colour-match detected it = {100.0*geom_in_seen/geom_in:.1f}%"
               f"   [low first → fovea loses the target; low second → colour-match misses]")
