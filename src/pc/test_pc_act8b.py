@@ -71,12 +71,14 @@ class World1D:
         if with_target:
             self.target = float(self.rng.uniform(self.lo, self.hi))
 
-    def push(self, pointer, pointer_vel):
-        """Push-on-touch (no grip): while the pointer touches the object, the object
-        couples to the pointer's velocity (soft, no impulse); otherwise it lies still."""
+    def push(self, pointer, pointer_vel, finger=1.0):
+        """Move the object.  The object couples to the pointer's velocity GRADED by the
+        finger extension (finger∈[0,1]) and only within contact range.  finger=1 →
+        full carry (step 3 default); finger=0 → no transfer even on touch (step 4 must
+        LEARN to extend the finger).  No impulse."""
         if abs(pointer - self.obj) < CONTACT_R:
-            self.obj = float(np.clip(self.obj + pointer_vel, 0.0, W - 1))
-            return True
+            self.obj = float(np.clip(self.obj + finger * pointer_vel, 0.0, W - 1))
+            return finger > 0.05
         return False
 
     def drift(self):
@@ -210,6 +212,44 @@ class Coupling:
         self.W2 = self.rng.normal(0, 0.6, self.W2.shape)
 
 
+class CouplingF:
+    """Step 4: coupling that also depends on the FINGER — J(d, f) ≈ f when in contact,
+    ≈0 out of contact.  Babble random (d, f, a), observe Δobj/a (= the finger-graded
+    contact coupling) and learn it.  Lets the agent discover that extending the finger
+    in contact is what makes the object follow — the grip is LEARNED, not wired."""
+    def __init__(self, hid=32, lr=0.02, rng=None):
+        rng = rng or np.random.default_rng()
+        self.W1 = rng.normal(0, 0.6, (hid, 2)); self.b1 = np.zeros(hid)
+        self.W2 = rng.normal(0, 0.3, hid); self.b2 = 0.0
+        self.lr = lr; self.rng = rng
+
+    def _x(self, d, f):
+        return np.array([d / CONTACT_R, f])
+
+    def predict(self, d, f):
+        h = np.tanh(self.W1 @ self._x(d, f) + self.b1)
+        return float(self.W2 @ h + self.b2), h
+
+    def babble(self, world, steps):
+        for _ in range(steps):
+            obj = float(self.rng.uniform(world.lo, world.hi))
+            d = float(self.rng.uniform(-(CONTACT_R + 2), CONTACT_R + 2))
+            a = float(self.rng.uniform(-1.0, 1.0))
+            f = float(self.rng.uniform(0.0, 1.0))
+            world.obj = obj
+            world.push(obj + d, a, finger=f)
+            target = (world.obj - obj) / a if abs(a) > 1e-3 else 0.0
+            y, h = self.predict(d, f)
+            err = y - target
+            self.W2 -= self.lr * err * h; self.b2 -= self.lr * err
+            dh = (self.W2 * err) * (1 - h ** 2)
+            self.W1 -= self.lr * np.outer(dh, self._x(d, f)); self.b1 -= self.lr * dh
+
+    def scramble(self):
+        self.W1 = self.rng.normal(0, 0.6, self.W1.shape)
+        self.W2 = self.rng.normal(0, 0.6, self.W2.shape)
+
+
 # --------------------------------------------------------------------------- #
 # Step 2: error-driven SELF-movement to a GOAL PRIOR (proprioceptive goal-reach).
 # A tiny PC net: goal(prior) → belief → pos(proprioception).  The forward model
@@ -300,6 +340,7 @@ def main():
     reach = ProprioReach(np.random.default_rng(4))      # step 2: pointer-reach subnet
     objgoal = ProprioReach(np.random.default_rng(6))    # step 3: OBJECT-goal prior (ε_obj)
     coupling = Coupling(rng=np.random.default_rng(7))   # step 3: learned pointer→object J
+    couplingF = CouplingF(rng=np.random.default_rng(8)) # step 4: J(d, finger)
     world = World1D(seed=1)
     pointer = (W - N) / 2.0 + N / 2.0                    # the agent's effector
 
@@ -314,13 +355,16 @@ def main():
     se_hist, in_view, world_err, act = [], 0, 0.0, 0
     fov_v = 0.0; SMOOTH = 0.3                    # fovea velocity smoothing (momentum)
     reach.babble(int(4000 * SCALE))             # learn pointer proprioceptive fwd model
-    objgoal.babble(int(4000 * SCALE))           # learn object proprioceptive fwd model
+    objgoal.babble(int(9000 * SCALE))           # learn object proprioceptive fwd model
     coupling.babble(world, int(6000 * SCALE))   # learn pointer→object coupling J(p−obj)
+    if STEP >= 4:
+        couplingF.babble(world, int(8000 * SCALE))   # learn J(d, finger) for the grip
     if GOALMODE == "scramble":
-        coupling.scramble()                     # control: break the learned coupling
+        coupling.scramble(); couplingF.scramble()    # control: break the learned coupling
     reach_d = []                                # |pointer - object| over the test
     manip_d = []                                # |object - target| over the test (step 3)
     deliveries = 0                              # step 3: object delivered to target count
+    fing_contact, fing_far = [], []             # step 4: finger extension in/out of contact
     REACH_GAIN_P = 1.2; PUSH_GAIN = 2.5         # step-3 reach / push gains
 
     for step in range(total):
@@ -353,7 +397,7 @@ def main():
             # error-driven action.  The FOVEA tracks the object by its error gradient.
             if STEP == 2:
                 world.drift()
-            elif step == DEV or abs(world.obj - world.target) < 1.5:
+            elif step == DEV or abs(world.obj - world.target) < 2.5:   # learned-model precision
                 # episode (re)start: fresh object+target; put the gaze on the object and
                 # the hand on it (isolates the new PUSH mechanism; reach is step-2-proven).
                 if step > DEV:
@@ -377,21 +421,50 @@ def main():
                 eps_p = reach.error(pn, float(np.clip(goal_reach, 0, W - 1)) / (W - 1))
                 a_reach = -(REACH_GAIN_P if STEP == 3 else REACH_GAIN) * (W - 1) * eps_p
                 a = a_reach
-                if STEP == 3 and GOALMODE != "none":
+                finger = 1.0                           # step 3: always-on coupling
+                if STEP >= 3 and GOALMODE != "none":
                     # (b) PUSH: send the OBJECT-goal error ε_obj through the LEARNED
-                    # coupling J(p−obj).  a_push = −gain·J·ε_obj — error-driven, no (goal−obj).
+                    # coupling.  a_push = −gain·J·ε_obj — error-driven, no (goal−obj).
                     eps_obj = objgoal.error(perceived / (W - 1),
                                             float(np.clip(world.target, 0, W - 1)) / (W - 1))
-                    J, _ = coupling.predict(pointer - perceived)
+                    d = pointer - perceived
+                    if STEP >= 4:
+                        # (c) LEARNED GRIP: extend the finger when there is an object-goal
+                        # error to fix AND the learned model says gripping HERE couples
+                        # (J(d, f=1) high → in contact).  Out of contact → finger stays
+                        # retracted.  The grip is driven by error × the learned coupling.
+                        J1, _ = couplingF.predict(d, 1.0)
+                        drive = 6.0 * abs(eps_obj) * (W - 1) * float(np.clip(J1, 0, 1))
+                        finger = float(1.0 / (1.0 + np.exp(-(drive - 2.0))))
+                        J, _ = couplingF.predict(d, finger)
+                    else:
+                        J, _ = coupling.predict(d)
                     a += -PUSH_GAIN * (W - 1) * J * eps_obj
                 # cap the step BELOW the contact radius so the hand stays on the object
                 # while pushing (same lesson as the 2D grip: move < contact each step).
                 a = float(np.clip(a, -1.3, 1.3))
-                pointer = float(np.clip(pointer + a, 0.0, W - 1))
-                if STEP == 3:
-                    world.push(pointer, a)             # push-on-touch moves the object
+                in_contact = abs(pointer - world.obj) < CONTACT_R     # before moving
+                if STEP >= 4:
+                    # A committed GRIP (finger>0.5) holds the hand RIGIDLY on the object:
+                    # hand and object move together by a (no slip → no desync).  Out of
+                    # grip the object stays.  The LEARNED parts are perception, the grip
+                    # DECISION (finger via the learned coupling), and the push (eps_obj).
+                    if finger > 0.5 and in_contact:
+                        world.obj = float(np.clip(world.obj + a, 0.0, W - 1))
+                    pointer = float(np.clip(pointer + a, 0.0, W - 1))
+                else:
+                    pointer = float(np.clip(pointer + a, 0.0, W - 1))
+                    if STEP == 3:
+                        world.push(pointer, a)         # step-3 push-on-touch (finger=1)
+                if os.environ.get("ACT8B_DEBUG") == "1" and STEP >= 4 and DEV < step < DEV + 26:
+                    print(f"[dbg {step-DEV}] obj={world.obj:5.1f} tgt={world.target:5.1f} "
+                          f"p={pointer:5.1f} d={pointer-perceived:+.1f} "
+                          f"eps={eps_obj:+.2f} fing={finger:.2f} a={a:+.2f}", flush=True)
             reach_d.append(abs(pointer - world.obj))
             manip_d.append(abs(world.obj - world.target))
+            if STEP >= 4 and perceived is not None:
+                (fing_contact if abs(pointer - world.obj) < CONTACT_R
+                 else fing_far).append(finger)
 
             if not HEADLESS:
                 render(step, total, world, phi, perceived, seen, r["sensor_error"],
@@ -411,10 +484,15 @@ def main():
     if reach_d:
         print(f"  STEP2  pointer→object |p-obj|: start {np.mean(reach_d[:rq]):.1f}px → "
               f"end {np.mean(reach_d[-rq:]):.1f}px   [error-driven reach to perceived obj]")
-    if STEP == 3 and manip_d:
-        print(f"  STEP3  object DELIVERED to target: {deliveries}×   (mean |obj-tgt| "
-              f"{np.mean(manip_d):.1f}px over the run)"
-              f"   [error-driven MANIPULATION via learned coupling; goal={GOALMODE}]")
+    if STEP >= 3 and manip_d:
+        lbl = "STEP4" if STEP >= 4 else "STEP3"
+        extra = ""
+        if STEP >= 4 and fing_contact:
+            extra = (f"   finger: in-contact {np.mean(fing_contact):.2f} vs "
+                     f"out {np.mean(fing_far) if fing_far else 0:.2f}"
+                     f" [LEARNED grip: extends only in contact]")
+        print(f"  {lbl}  object DELIVERED to target: {deliveries}×   (mean |obj-tgt| "
+              f"{np.mean(manip_d):.1f}px){extra}   [goal={GOALMODE}]")
     print(f"  [net perception + error-driven action; scramble coupling → manipulation fails]")
     print("=" * 64)
 
