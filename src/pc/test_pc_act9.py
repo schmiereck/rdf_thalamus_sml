@@ -544,38 +544,43 @@ def set_sheet(cells, lum_w, rgb_w, ptr_w):
 # Rendering (top-down)
 # --------------------------------------------------------------------------- #
 def render(step, total, world, phi, ptr, finger, info, headless_skip=False):
+    """Top-down HEX grid: cells are space-separated and odd rows are shifted half a
+    cell (the odd-r offset lattice the net is wired on).  The fovea window is shown by
+    '[' and ']' placed IN the inter-cell gaps (replacing a gap space) so the grid never
+    shifts.  '+' goal, colour initial = object (lowercase = the commanded target),
+    P/p = pointer (grip/free)."""
     ox, oy = int(round(phi[0])), int(round(phi[1]))
-    grid = [["·"] * G for _ in range(G)]
+    glyph = [["·"] * G for _ in range(G)]
     tx, ty = int(round(world.target_pos[0])), int(round(world.target_pos[1]))
     if 0 <= tx < G and 0 <= ty < G:
-        grid[ty][tx] = "+"
+        glyph[ty][tx] = "+"
     for i, o in enumerate(world.objects):
         x, y = int(round(o["pos"][0])), int(round(o["pos"][1]))
         if 0 <= x < G and 0 <= y < G:
             ch = COLOR_INITIAL[o["name"]]
-            grid[y][x] = ch if i != world.target_idx else ch.lower()
+            glyph[y][x] = ch.lower() if i == world.target_idx else ch
     px, py = int(round(ptr[0])), int(round(ptr[1]))
     if 0 <= px < G and 0 <= py < G:
-        grid[py][px] = "P" if finger else "p"
+        glyph[py][px] = "P" if finger else "p"
+
     lines = [f"Step {step}/{total}  cmd={world.command_color_name}"
              f"  tgt=({tx},{ty})  held={world.held_idx}"
              f"{'  [FLASH]' if info.get('flash') else ''}"]
-    objs = " ".join(f"{'*' if i==world.target_idx else ''}{o['name'][0]}"
-                    f"({o['pos'][0]:.0f},{o['pos'][1]:.0f})"
-                    for i, o in enumerate(world.objects))
-    lines.append("  " + objs)
+    lines.append("  " + " ".join(
+        f"{'*' if i==world.target_idx else ''}{o['name'][0]}"
+        f"({o['pos'][0]:.0f},{o['pos'][1]:.0f})" for i, o in enumerate(world.objects)))
+
+    c0, c1 = max(ox, 0), min(ox + F - 1, G - 1)        # visible window column span
     for r in range(G):
-        row = "".join(grid[r])
-        mark = "  <" if oy <= r < oy + F else ""
-        # show fovea column span with brackets on the marked rows
-        if oy <= r < oy + F:
-            rr = list(row)
-            if 0 <= ox <= G:
-                rr.insert(min(ox, G), "[")
-            if 0 <= ox + F <= G:
-                rr.insert(min(ox + F + 1, G + 1), "]")
-            row = "".join(rr)
-        lines.append("  " + row + mark)
+        win_row = oy <= r <= oy + F - 1 and c0 <= c1
+        gaps = [" "] * (G + 1)                          # gaps[c] = char LEFT of cell c
+        if win_row:
+            gaps[c0] = "["
+            gaps[c1 + 1] = "]"                          # gap right of the last window cell
+        cells = glyph[r]
+        row = "".join(gaps[c] + cells[c] for c in range(G)) + gaps[G]
+        offset = " " if r % 2 == 1 else ""              # odd rows: +half-cell (odd-r hex)
+        lines.append("  " + offset + row)
     sys.stdout.write("\x1b[H\x1b[2J")
     print("\n".join(lines), flush=True)
 
