@@ -71,6 +71,19 @@ class World1D:
         if with_target:
             self.target = float(self.rng.uniform(self.lo, self.hi))
 
+    def shove(self, p_new, a, finger):
+        """Genuine PUSH (step 5): the extended finger can only push the object AWAY in
+        the hand's motion direction — it cannot pull/carry.  If the hand moves TOWARD
+        the object and reaches contact, the object is shoved to stay just ahead of the
+        hand.  So to move the object left you must be on its right and move left."""
+        if finger > 0.5 and a != 0.0 and abs(p_new - self.obj) < CONTACT_R:
+            toward = np.sign(self.obj - (p_new - a))      # hand→object direction (pre-move)
+            if np.sign(a) == toward:                      # moving INTO the object
+                self.obj = float(np.clip(p_new + np.sign(a) * CONTACT_R * 0.9,
+                                         0.0, W - 1))
+                return True
+        return False
+
     def push(self, pointer, pointer_vel, finger=1.0):
         """Move the object.  The object couples to the pointer's velocity GRADED by the
         finger extension (finger∈[0,1]) and only within contact range.  finger=1 →
@@ -307,38 +320,42 @@ class ProprioReach:
 
 
 # --------------------------------------------------------------------------- #
-def render(step, total, world, phi, perceived, seen, sensor_err, pointer=None, target=None):
+def render(step, total, world, phi, perceived, seen, sensor_err,
+           pointer=None, target=None, finger=0.0):
+    """TWO-ROW top-down view: object row (O, +target, x=net percept) and pointer/hand
+    row (P=finger out, p=finger in), with the fovea window [..] on both rows."""
     o = int(round(phi))
-    row = ["·"] * W
-    if target is not None:
-        tt = int(round(target))
-        if 0 <= tt < W:
-            row[tt] = "+"          # the object's goal (step 3)
-    ob = int(round(world.obj))
-    if 0 <= ob < W:
-        row[ob] = "O"
+    obj_row = ["·"] * W
+    ptr_row = ["·"] * W
+    if target is not None and 0 <= int(round(target)) < W:
+        obj_row[int(round(target))] = "+"
+    if 0 <= int(round(world.obj)) < W:
+        obj_row[int(round(world.obj))] = "O"
     if perceived is not None:
         pp = int(round(perceived))
-        if 0 <= pp < W and pp != ob:
-            row[pp] = "x"          # where the NET thinks the object is
-    if pointer is not None:
-        pt = int(round(pointer))
-        if 0 <= pt < W and row[pt] == "·":
-            row[pt] = "P"          # the agent's effector (reaches the perceived object)
-    chars = []
-    for i in range(W):
-        if i == o:
-            chars.append("[")
-        chars.append(row[i])
-        if i == o + N - 1:
-            chars.append("]")
+        if 0 <= pp < W and obj_row[pp] == "·":
+            obj_row[pp] = "x"
+    if pointer is not None and 0 <= int(round(pointer)) < W:
+        ptr_row[int(round(pointer))] = "P" if finger > 0.5 else "p"
+
+    def fmt(rowlist):
+        chars = []
+        for i in range(W):
+            if i == o:
+                chars.append("[")
+            chars.append(rowlist[i])
+            if i == o + N - 1:
+                chars.append("]")
+        return "".join(chars)
+
     sys.stdout.write("\x1b[H\x1b[2J")
     tgt_str = f"  target={target:.1f}" if target is not None else ""
     print(f"Step {step}/{total}   obj={world.obj:5.1f}  "
           f"perceived={perceived if perceived is None else round(perceived,1)}{tgt_str}  "
-          f"seen={seen}  sensor_err={sensor_err:.3f}")
-    print("  O=object  x=net's percept  P=hand  +=target  [..]=fovea")
-    print("  " + "".join(chars))
+          f"finger={finger:.2f}  seen={seen}  sensor_err={sensor_err:.3f}")
+    print("  O=object  +=target  x=net's percept  |  P/p=hand(finger out/in)  [..]=fovea")
+    print("  obj │ " + fmt(obj_row))
+    print("  ptr │ " + fmt(ptr_row))
 
 
 def main():
@@ -443,7 +460,31 @@ def main():
                 world_err += abs(perceived - world.obj)
 
             obj_before = world.obj
-            if perceived is not None:
+            if perceived is not None and STEP == 5:
+                # ===== GENUINE PUSH (step 5): finger actuator; the hand can only push =====
+                # the object AWAY (never pull/carry), so it must get on the FAR side of the
+                # object (opposite the target) and push toward the target.  Side + push are
+                # driven by the perceived object-goal error; the hand+object are SEEN in the
+                # two rows.  (This is act5's original push-side problem, solved with learned
+                # perception + visible relative geometry + error-driven action.)
+                pn = pointer / (W - 1)
+                finger = 0.0
+                a = 0.0
+                if GOALMODE != "none":
+                    eps_obj = objgoal.error(perceived / (W - 1),
+                                            float(np.clip(world.target, 0, W - 1)) / (W - 1))
+                    s = np.sign(eps_obj) if abs(eps_obj) > 1e-3 else 0.0   # obj on +s of target
+                    push_pos = perceived + s * (CONTACT_R * 0.8)           # far-from-target side
+                    behind = (pointer - perceived) * s > 0.1               # hand on the far side
+                    if behind and abs(pointer - push_pos) < 1.2:
+                        finger = 1.0                                       # in place → PUSH
+                        a = float(np.clip(-PUSH_GAIN * (W - 1) * eps_obj, -1.3, 1.3))
+                    else:                                                  # REPOSITION (finger in)
+                        eps_p = reach.error(pn, float(np.clip(push_pos, 0, W - 1)) / (W - 1))
+                        a = float(np.clip(-REACH_GAIN_P * (W - 1) * eps_p, -2.0, 2.0))
+                pointer = float(np.clip(pointer + a, 0.0, W - 1))
+                world.shove(pointer, a, finger)               # push-only: object shoved away
+            elif perceived is not None:
                 pn = pointer / (W - 1)
                 # (a) REACH: drive the hand toward the perceived object (error-driven).
                 eps_p = reach.error(pn, float(np.clip(perceived, 0, W - 1)) / (W - 1))
@@ -530,13 +571,14 @@ def main():
         print(f"  STEP2  pointer→object |p-obj|: start {np.mean(reach_d[:rq]):.1f}px → "
               f"end {np.mean(reach_d[-rq:]):.1f}px   [error-driven reach to perceived obj]")
     if STEP >= 3 and manip_d:
-        lbl = "STEP4" if STEP >= 4 else "STEP3"
+        lbl = f"STEP{STEP}"
+        verb = "PUSHED (genuine, no carry)" if STEP == 5 else "DELIVERED"
         extra = ""
         if STEP >= 4 and fing_contact:
+            mech = "PUSH: finger out only when pushing" if STEP == 5 else "grip: extends only in contact"
             extra = (f"   finger: in-contact {np.mean(fing_contact):.2f} vs "
-                     f"out {np.mean(fing_far) if fing_far else 0:.2f}"
-                     f" [LEARNED grip: extends only in contact]")
-        print(f"  {lbl}  object DELIVERED to target: {deliveries}×   (mean |obj-tgt| "
+                     f"out {np.mean(fing_far) if fing_far else 0:.2f} [{mech}]")
+        print(f"  {lbl}  object {verb} to target: {deliveries}×   (mean |obj-tgt| "
               f"{np.mean(manip_d):.1f}px){extra}   [goal={GOALMODE}]")
     print(f"  [net perception + error-driven action; scramble coupling → manipulation fails]")
     print("=" * 64)
