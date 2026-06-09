@@ -317,10 +317,11 @@ def render(step, total, world, phi, perceived, seen, sensor_err, pointer=None, t
         if i == o + N - 1:
             chars.append("]")
     sys.stdout.write("\x1b[H\x1b[2J")
+    tgt_str = f"  target={target:.1f}" if target is not None else ""
     print(f"Step {step}/{total}   obj={world.obj:5.1f}  "
-          f"perceived={perceived if perceived is None else round(perceived,1)}  "
+          f"perceived={perceived if perceived is None else round(perceived,1)}{tgt_str}  "
           f"seen={seen}  sensor_err={sensor_err:.3f}")
-    print("  O=object  x=net's percept  [..]=fovea")
+    print("  O=object  x=net's percept  P=hand  +=target  [..]=fovea")
     print("  " + "".join(chars))
 
 
@@ -355,7 +356,7 @@ def main():
     se_hist, in_view, world_err, act = [], 0, 0.0, 0
     fov_v = 0.0; SMOOTH = 0.3                    # fovea velocity smoothing (momentum)
     reach.babble(int(4000 * SCALE))             # learn pointer proprioceptive fwd model
-    objgoal.babble(int(9000 * SCALE))           # learn object proprioceptive fwd model
+    objgoal.babble(int(20000 * SCALE))          # learn object proprioceptive fwd model
     coupling.babble(world, int(6000 * SCALE))   # learn pointer→object coupling J(p−obj)
     if STEP >= 4:
         couplingF.babble(world, int(8000 * SCALE))   # learn J(d, finger) for the grip
@@ -417,12 +418,12 @@ def main():
             obj_before = world.obj
             if perceived is not None:
                 pn = pointer / (W - 1)
-                # (a) REACH: keep the hand on the perceived object (step-2 mechanism).
-                goal_reach = perceived if (STEP == 2 and GOALMODE == "none") else perceived
-                eps_p = reach.error(pn, float(np.clip(goal_reach, 0, W - 1)) / (W - 1))
-                a_reach = -(REACH_GAIN_P if STEP == 3 else REACH_GAIN) * (W - 1) * eps_p
+                # (a) REACH: drive the hand toward the perceived object (error-driven).
+                eps_p = reach.error(pn, float(np.clip(perceived, 0, W - 1)) / (W - 1))
+                a_reach = -(REACH_GAIN_P if STEP >= 3 else REACH_GAIN) * (W - 1) * eps_p
                 a = a_reach
                 finger = 1.0                           # step 3: always-on coupling
+                in_contact = abs(pointer - world.obj) < CONTACT_R
                 if STEP >= 3 and GOALMODE != "none":
                     # (b) PUSH: send the OBJECT-goal error ε_obj through the LEARNED
                     # coupling.  a_push = −gain·J·ε_obj — error-driven, no (goal−obj).
@@ -440,7 +441,13 @@ def main():
                         J, _ = couplingF.predict(d, finger)
                     else:
                         J, _ = coupling.predict(d)
-                    a += -PUSH_GAIN * (W - 1) * J * eps_obj
+                    a_push = -PUSH_GAIN * (W - 1) * J * eps_obj
+                    # When GRIPPING (step 4) or in firm contact (step 3), the grip holds
+                    # the hand on the object → drop the reach (it would fight the push by
+                    # pulling the hand 'back onto' the object).  Push ALONE transports.
+                    gripping = (STEP >= 4 and finger > 0.5 and in_contact) or \
+                               (STEP == 3 and in_contact)
+                    a = a_push if gripping else (a_reach + 0.3 * a_push)
                 # cap the step BELOW the contact radius so the hand stays on the object
                 # while pushing (same lesson as the 2D grip: move < contact each step).
                 a = float(np.clip(a, -1.3, 1.3))
@@ -476,7 +483,7 @@ def main():
 
             if not HEADLESS:
                 render(step, total, world, phi, perceived, seen, r["sensor_error"],
-                       pointer, world.target if STEP == 3 else None)
+                       pointer, world.target if STEP >= 3 else None)
                 if DELAY > 0:
                     time.sleep(DELAY)
 
