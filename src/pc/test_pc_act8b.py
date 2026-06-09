@@ -202,6 +202,68 @@ def gather(net, ids):
 
 
 # --------------------------------------------------------------------------- #
+# Body model — proprioception as its OWN PC module (PCNetwork + PCModule).
+# --------------------------------------------------------------------------- #
+# Each body PART has a belief node b_<part> (its FELT position, normalised) and an
+# observation sensor s_<part> (vision of that part, when in view); belief→obs is the
+# LEARNED generative map.  The belief is moved by EFFERENCE (the agent's own motor
+# command) and CORRECTED by vision via PC inference when the part is observed — so the
+# agent knows where its body is even OUT of sight (no jitter).  Extensible: add parts,
+# and later LATERAL belief↔belief links to model how body parts relate to each other.
+class BodyModel:
+    def __init__(self, parts=("hand",), rng=None):
+        self.rng = rng or np.random.default_rng()
+        net = PCNetwork(eta_inf=0.25, n_relax=20, eps_tol=1e-6, eta_learn=0.02,
+                        gamma=0.3, w_clip=3.0, rng=self.rng)
+        self.b, self.s, self.conn = {}, {}, {}
+        for p in parts:
+            self.b[p] = net.add(PCNode(f"b_{p}", dim=1, activation="identity",
+                                       eta_temporal=0.0, rng=self.rng))
+            self.s[p] = net.add(SensorNode(f"s_{p}", dim=1))
+            self.conn[p] = net.connect(f"b_{p}", f"s_{p}", ConnType.UP,
+                                       pressure_scale=1.0)               # belief→obs
+        mod = PCModule("BodyModel")
+        for p in parts:
+            (mod.add_in_port(f"{p}_obs", [f"s_{p}"])
+                .add_out_port(f"{p}_belief", [f"b_{p}"]))
+        net.add_module(mod)
+        self.net, self.parts = net, parts
+
+    def babble(self, steps):
+        """Learn the belief→obs generative weight (≈identity): clamp belief=obs=random."""
+        for _ in range(steps):
+            for p in self.parts:
+                v = float(self.rng.uniform(0.0, 1.0))
+                self.b[p].clamp(np.array([v])); self.s[p].set_input(np.array([v]))
+            self.net.phase_predict(); self.net.phase_error(); self.net.phase_relax()
+            self.net.phase_learn(); self.net.commit_step()
+        for p in self.parts:
+            self.b[p].unclamp()
+
+    def set_felt(self, part, world_pos):              # re-sync the belief (episode start)
+        self.b[part].mu = np.array([world_pos / (W - 1)])
+
+    def update(self, part, a_world, world_value, eta=0.5):
+        """One body-model step: EFFERENCE moves the belief by the motor command, then —
+        if the part is in view — a PC correction pulls the belief toward the observation
+        THROUGH the learned belief→obs weight (manual, so phase_predict's temporal warm-
+        start cannot clobber the efference).  Out of view → efference-only (dead reckon)."""
+        b = self.b[part]
+        # efference, clipped to the body's reachable range (the hand cannot move past
+        # the world edge — a known limb limit; without this the belief diverges from the
+        # clipped real hand when it presses against a wall while out of view).
+        b.mu = np.clip(b.mu + a_world / (W - 1), 0.0, 1.0)
+        if world_value is not None:
+            Wm = self.conn[part].W                                # learned belief→obs
+            pred = Wm @ b.mu                                      # predicted observation
+            err = np.array([world_value / (W - 1)]) - pred       # prediction error
+            b.mu = b.mu + eta * (Wm.T @ err)                     # PC correction toward obs
+
+    def felt(self, part):
+        return float(self.b[part].mu[0]) * (W - 1)
+
+
+# --------------------------------------------------------------------------- #
 # Step 3: learned pointer→object COUPLING model J(p−obj).  Babble: jiggle the pointer
 # at random offsets from the object, observe how much the object moves (Δobj/a), and
 # learn J(d) — the Jacobian "does my motion move the object?" (≈1 in contact, ≈0 out).
@@ -377,7 +439,17 @@ def main():
     coupling = Coupling(rng=np.random.default_rng(7))   # step 3: learned pointer→object J
     couplingF = CouplingF(rng=np.random.default_rng(8)) # step 4: J(d, finger)
     world = World1D(seed=1)
-    pointer = (W - N) / 2.0 + N / 2.0                    # the agent's effector
+    pointer = (W - N) / 2.0 + N / 2.0                    # the agent's PHYSICAL effector
+    # BODY MODEL (proprioception): the agent acts on its FELT hand position, an internal
+    # estimate maintained by EFFERENCE (integrating its own move commands) and CORRECTED
+    # by vision when the hand is in the fovea window — so it knows where its hand is even
+    # OUT of view (no jitter), like a biological body sense.  env ACT8B_BODY (0/1).
+    BODY = os.environ.get("ACT8B_BODY", "1") == "1"
+    EXEC_NOISE = 0.12                                    # execution noise → vision correction matters
+    body = BodyModel(parts=("hand",), rng=np.random.default_rng(21))
+    body.babble(2000)                                    # learn belief→obs (identity)
+    body.set_felt("hand", pointer)
+    body_err_in, body_n_in, body_err_out, body_n_out = 0.0, 0, 0.0, 0
 
     DEV = int(3000 * SCALE)                     # developmental phase (learn net+readout)
     TEST = int(3000 * SCALE)                    # active test (error-driven fovea)
@@ -441,10 +513,12 @@ def main():
             perceived = (net_world if PERCEIVE == "net" else raw_world) if seen else None
         # POINTER perception (the now-visible hand row) — self-supervised + scored
         ptr_com = com1d(ptr_w)
+        ptr_vis = None                          # visual hand estimate, None if out of view
         if ptr_com is not None:
             readout_p.train(x, ptr_com / (N - 1))
             pp, _ = readout_p.predict(x)
             ptr_perceived = int(round(phi)) + float(np.clip(pp * (N - 1), 0, N - 1))
+            ptr_vis = ptr_perceived
             if not dev:
                 ptr_perc_err += abs(ptr_perceived - pointer); ptr_perc_n += 1
 
@@ -480,6 +554,7 @@ def main():
                 off = (CONTACT_R + 1.5) * (1.0 if rng.random() < 0.5 else -1.0)
                 pointer = float(np.clip(world.obj + off, 0.0, W - 1)) if STEP >= 5 \
                     else float(world.obj)
+                body.set_felt("hand", pointer)         # body sense re-synced at episode start
             disp = -fovea_gradient(obj_cells)
             fov_v = (1 - SMOOTH) * (GAIN * disp) + SMOOTH * fov_v   # momentum
             fov_v = float(np.clip(fov_v, -2.0, 2.0))
@@ -498,6 +573,7 @@ def main():
                 # out of the learned dynamics + short-horizon planning toward the goal.
                 finger = 0.0
                 a = 0.0
+                hand = body.felt("hand") if BODY else pointer   # the agent acts on its FELT hand
                 # track progress; if the object hasn't gotten closer for STALL_K steps
                 # the MPC is in a stuck oscillation → JOLT: one random reposition (finger
                 # off) to break it and let the planner re-engage from a fresh geometry.
@@ -511,10 +587,21 @@ def main():
                         a = (1.5 if rng.random() < 0.5 else -1.5); finger = 0.0
                         ep_stall = 0                   # re-arm the stall detector
                     else:
-                        a, finger = mpc_plan(pushmodel, perceived, pointer,
+                        a, finger = mpc_plan(pushmodel, perceived, hand,
                                              float(np.clip(world.target, 0, W - 1)), MPC_HORIZON)
-                pointer = float(np.clip(pointer + a, 0.0, W - 1))
+                # PHYSICAL execution (with noise) — the real hand moves; the BODY MODEL
+                # updates by efference (the command a) and is corrected by vision when the
+                # hand is in view, so 'hand_felt' tracks the real hand even out of sight.
+                noise = rng.normal(0.0, EXEC_NOISE) if BODY else 0.0
+                pointer = float(np.clip(pointer + a + noise, 0.0, W - 1))
                 world.shove(pointer, a, finger)
+                if BODY:
+                    body.update("hand", a, ptr_vis)        # efference + vision correction
+                    err = abs(body.felt("hand") - pointer)
+                    if ptr_vis is not None:
+                        body_err_in += err; body_n_in += 1
+                    else:
+                        body_err_out += err; body_n_out += 1
             elif perceived is not None and STEP == 5:
                 # ===== GENUINE PUSH (step 5): finger actuator; the hand can only push =====
                 # the object AWAY (never pull/carry), so it must get on the FAR side of the
@@ -622,6 +709,12 @@ def main():
     if ptr_perc_n:
         print(f"  STEP1  POINTER perceived (2-row hex, net) vs true hand: "
               f"{ptr_perc_err/ptr_perc_n:.2f}px mean   [the hand is now SEEN in its own row]")
+    if BODY and (body_n_in or body_n_out):
+        ein = body_err_in / max(1, body_n_in)
+        eout = body_err_out / max(1, body_n_out)
+        print(f"  BODY   felt-hand vs true hand: in-view {ein:.2f}px ({body_n_in}) | "
+              f"OUT-of-view {eout:.2f}px ({body_n_out})   [efference+vision body model: "
+              f"the agent knows its hand even out of sight]")
     if reach_d:
         print(f"  STEP2  pointer→object |p-obj|: start {np.mean(reach_d[:rq]):.1f}px → "
               f"end {np.mean(reach_d[-rq:]):.1f}px   [error-driven reach to perceived obj]")
