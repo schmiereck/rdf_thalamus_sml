@@ -410,7 +410,9 @@ def main():
     reach_d = []                                # |pointer - object| over the test
     manip_d = []                                # |object - target| over the test (step 3)
     deliveries = 0                              # step 3: object delivered to target count
-    episodes_started = 0; ep_steps = 0; EP_CAP = 120   # per-episode cap (no permanent stalls)
+    episodes_started = 0; ep_steps = 0
+    EP_CAP = int(os.environ.get("ACT8B_EPCAP", "120"))   # per-episode cap (no permanent stalls)
+    ep_best = 1e9; ep_stall = 0; STALL_K = 25            # step-6: detect a stuck episode
     fing_contact, fing_far = [], []             # step 4: finger extension in/out of contact
     REACH_GAIN_P = 1.2; PUSH_GAIN = 2.5         # step-3 reach / push gains
 
@@ -466,7 +468,7 @@ def main():
                     episodes_started += 1
                     if abs(world.obj - world.target) < 2.5:
                         deliveries += 1                # object reached target → delivered
-                ep_steps = 0
+                ep_steps = 0; ep_best = 1e9; ep_stall = 0
                 world.scatter(with_target=True)
                 if STEP >= 5:                          # require a real transport (no
                     while abs(world.obj - world.target) < 12.0:   # lucky-scatter deliveries)
@@ -496,9 +498,21 @@ def main():
                 # out of the learned dynamics + short-horizon planning toward the goal.
                 finger = 0.0
                 a = 0.0
+                # track progress; if the object hasn't gotten closer for STALL_K steps
+                # the MPC is in a stuck oscillation → JOLT: one random reposition (finger
+                # off) to break it and let the planner re-engage from a fresh geometry.
+                dist_now = abs(world.obj - world.target)
+                if dist_now < ep_best - 0.5:
+                    ep_best = dist_now; ep_stall = 0
+                else:
+                    ep_stall += 1
                 if GOALMODE != "none":
-                    a, finger = mpc_plan(pushmodel, perceived, pointer,
-                                         float(np.clip(world.target, 0, W - 1)), MPC_HORIZON)
+                    if ep_stall >= STALL_K:
+                        a = (1.5 if rng.random() < 0.5 else -1.5); finger = 0.0
+                        ep_stall = 0                   # re-arm the stall detector
+                    else:
+                        a, finger = mpc_plan(pushmodel, perceived, pointer,
+                                             float(np.clip(world.target, 0, W - 1)), MPC_HORIZON)
                 pointer = float(np.clip(pointer + a, 0.0, W - 1))
                 world.shove(pointer, a, finger)
             elif perceived is not None and STEP == 5:

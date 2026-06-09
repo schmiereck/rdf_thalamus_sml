@@ -80,9 +80,8 @@ class PushModel:
 
 def plan(model, obj, p, target, horizon):
     """MPC through the learned model with CUMULATIVE discounted cost: return the first
-    action of the best sequence.  Cumulative cost (vs final-only) rewards reducing
-    |obj-target| SOONER, so it breaks the tie that made every first action look equal
-    (any first action was 'recoverable') and favours reposition-then-push."""
+    action of the best sequence (full search — beam search prunes the high-early-cost
+    reposition detour, so it underperforms here; horizon 3 full = 100%)."""
     best_a, best_cost = ACTIONS[0], 1e9
     for (a, f) in ACTIONS:
         c = _step_cost(model, obj, p, target, a, f, horizon)
@@ -95,7 +94,7 @@ def _step_cost(model, obj, p, target, a, f, horizon):
     dobj, _ = model.predict(p - obj, a, f)
     obj2 = float(np.clip(obj + dobj, 0, W - 1))
     p2 = float(np.clip(p + a, 0, W - 1))
-    cost = abs(obj2 - target)                         # cost incurred this step
+    cost = abs(obj2 - target)
     if horizon > 1:
         cost += GAMMA * min(_step_cost(model, obj2, p2, target, aa, ff, horizon - 1)
                             for (aa, ff) in ACTIONS)
@@ -139,7 +138,7 @@ def main():
               f"a=-1 → {model.predict(d,-1,1)[0]:+.2f}")
     print("-" * 74)
 
-    for H in (1, 3):                              # 8 actions → keep horizon small (8^H)
+    for H in (1, 3):                              # full search, 8 actions → horizon ≤3
         acc = run(model, horizon=H, rng=np.random.default_rng(3))
         tag = "(greedy, too short)" if H == 1 else ""
         print(f"  learned model, horizon={H}: delivered {acc:5.1f}%  {tag}")
