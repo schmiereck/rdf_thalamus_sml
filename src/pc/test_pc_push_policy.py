@@ -35,9 +35,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 from pc.test_pc_act8b import World1D, CONTACT_R, W
 
-STEP_A = 1.5          # discrete move magnitude
+STEP_A = 1.5          # max move magnitude
 GAMMA = 0.85          # discount for cumulative-cost MPC
-ACTIONS = [(+STEP_A, 1.0), (-STEP_A, 1.0), (+STEP_A, 0.0), (-STEP_A, 0.0)]  # (a, finger)
+# Coarse AND fine moves × finger {push, lift}: fine steps let the MPC fine-tune near
+# the target without overshooting (the overshoot→retract→stall failure in act8b).
+ACTIONS = [(+1.5, 1.0), (-1.5, 1.0), (+0.6, 1.0), (-0.6, 1.0),
+           (+1.5, 0.0), (-1.5, 0.0), (+0.6, 0.0), (-0.6, 0.0)]  # (a, finger)
 
 
 class PushModel:
@@ -59,7 +62,7 @@ class PushModel:
         for _ in range(steps):
             obj = float(self.rng.uniform(world.lo, world.hi))
             d = float(self.rng.uniform(-(CONTACT_R + 3), CONTACT_R + 3))
-            a = float(self.rng.choice([-1, 1])) * STEP_A
+            a = float(self.rng.uniform(-STEP_A, STEP_A))   # continuous → covers fine moves
             f = float(self.rng.integers(0, 2))
             world.obj = obj
             world.shove((obj + d) + a, a, f)           # genuine push from act8b
@@ -136,12 +139,12 @@ def main():
               f"a=-1 → {model.predict(d,-1,1)[0]:+.2f}")
     print("-" * 74)
 
-    for H in (1, 3, 6):
+    for H in (1, 3):                              # 8 actions → keep horizon small (8^H)
         acc = run(model, horizon=H, rng=np.random.default_rng(3))
         tag = "(greedy, too short)" if H == 1 else ""
         print(f"  learned model, horizon={H}: delivered {acc:5.1f}%  {tag}")
     sm = PushModel(rng=np.random.default_rng(4)); sm.babble(w, 30000); sm.scramble()
-    print(f"  SCRAMBLED model, horizon=6: delivered {run(sm, 6, rng=np.random.default_rng(3)):5.1f}%"
+    print(f"  SCRAMBLED model, horizon=3: delivered {run(sm, 3, rng=np.random.default_rng(3)):5.1f}%"
           f"   [control: planning on garbage dynamics]")
     print("-" * 74)
     print("  Read: horizon-6 with the learned model delivers from the WRONG side")
