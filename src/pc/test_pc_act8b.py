@@ -158,7 +158,47 @@ def gather(net, ids):
 
 
 # --------------------------------------------------------------------------- #
-def render(step, total, world, phi, perceived, seen, sensor_err):
+# Step 2: error-driven SELF-movement to a GOAL PRIOR (proprioceptive goal-reach).
+# A tiny PC net: goal(prior) → belief → pos(proprioception).  The forward model
+# belief→pos is LEARNED by babble (goal == current).  At run time the goal is clamped
+# (= the LEARNED-perceived object), and the action moves the pointer to REDUCE the
+# proprioceptive prediction error: p -= gain · pos.epsilon.  The agent never computes
+# (goal − p); the move emerges from error-minimisation on the learned model — scramble
+# the weights and it fails (proof it is learned, not a wired coordinate controller).
+# --------------------------------------------------------------------------- #
+class ProprioReach:
+    def __init__(self, rng):
+        net = PCNetwork(eta_inf=0.1, n_relax=40, eps_tol=1e-6, eta_learn=0.02,
+                        gamma=0.3, w_clip=3.0, rng=rng)
+        self.goal = net.add(SensorNode("goal", dim=1))
+        self.belief = net.add(PCNode("belief", dim=4, activation="identity",
+                                     eta_temporal=0.0, rng=rng))
+        self.pos = net.add(SensorNode("pos", dim=1))
+        net.connect("goal", "belief", ConnType.UP, pressure_scale=1.0)
+        net.connect("belief", "pos", ConnType.UP, pressure_scale=1.0)
+        self.net = net; self.rng = rng
+
+    def babble(self, steps):
+        for _ in range(steps):
+            v = float(self.rng.uniform(0, 1))      # goal == current → learn fwd model
+            self.goal.set_input(np.array([v])); self.pos.set_input(np.array([v]))
+            self.net.phase_predict(); self.net.phase_error(); self.net.phase_relax()
+            self.net.phase_learn(); self.net.commit_step()
+
+    def scramble(self):
+        conns = self.net._connections
+        conns = conns.values() if hasattr(conns, "values") else conns
+        for conn in conns:
+            conn.W = self.rng.normal(0, 0.5, conn.W.shape)
+
+    def error(self, p_norm, goal_norm):
+        self.goal.set_input(np.array([goal_norm])); self.pos.set_input(np.array([p_norm]))
+        self.net.phase_predict(); self.net.phase_error(); self.net.phase_relax()
+        return float(self.net.node("pos").epsilon[0])
+
+
+# --------------------------------------------------------------------------- #
+def render(step, total, world, phi, perceived, seen, sensor_err, pointer=None):
     o = int(round(phi))
     row = ["·"] * W
     ob = int(round(world.obj))
@@ -168,6 +208,10 @@ def render(step, total, world, phi, perceived, seen, sensor_err):
         pp = int(round(perceived))
         if 0 <= pp < W and pp != ob:
             row[pp] = "x"          # where the NET thinks the object is
+    if pointer is not None:
+        pt = int(round(pointer))
+        if 0 <= pt < W and row[pt] == "·":
+            row[pt] = "P"          # the agent's effector (reaches the perceived object)
     chars = []
     for i in range(W):
         if i == o:
@@ -186,25 +230,33 @@ def render(step, total, world, phi, perceived, seen, sensor_err):
 def main():
     HEADLESS = os.environ.get("ACT8B_HEADLESS", "0") == "1"
     PERCEIVE = os.environ.get("ACT8B_PERCEIVE", "net").lower()   # net | raw
+    GOALMODE = os.environ.get("ACT8B_GOAL", "obj").lower()       # obj | none | scramble
     SCALE = float(os.environ.get("ACT8B_SCALE", "1.0"))
     DELAY = float(os.environ.get("ACT8B_DELAY", "0.0"))
     GAIN = float(os.environ.get("ACT8B_GAIN", "3.0"))   # fovea action gain
+    REACH_GAIN = 2.0                                     # pointer error-driven gain
     rng = np.random.default_rng(0)
 
     net, cells, h1 = build_net(rng)
     readout = Readout(in_dim=len(h1) * 6, rng=np.random.default_rng(3))
+    reach = ProprioReach(np.random.default_rng(4))      # step 2: goal-reach subnet
     world = World1D(seed=1)
+    pointer = (W - N) / 2.0 + N / 2.0                    # the agent's effector
 
     DEV = int(3000 * SCALE)                     # developmental phase (learn net+readout)
     TEST = int(3000 * SCALE)                    # active test (error-driven fovea)
     total = DEV + TEST
     phi = (W - N) / 2.0
 
-    print(f"act8b step 1 — learned perception + error-driven fovea (1D, no oracle)")
-    print(f"  world={W} fovea={N}  perceive={PERCEIVE}  dev={DEV} test={TEST}")
+    print(f"act8b step 1+2 — learned perception + error-driven fovea AND pointer reach")
+    print(f"  world={W} fovea={N}  perceive={PERCEIVE}  goal={GOALMODE}  dev={DEV} test={TEST}")
 
     se_hist, in_view, world_err, act = [], 0, 0.0, 0
     fov_v = 0.0; SMOOTH = 0.3                    # fovea velocity smoothing (momentum)
+    reach.babble(int(4000 * SCALE))             # learn the proprioceptive forward model
+    if GOALMODE == "scramble":
+        reach.scramble()                        # control: break the learned model
+    reach_d = []                                # |pointer - object| over the test
 
     for step in range(total):
         dev = step < DEV
@@ -242,20 +294,36 @@ def main():
             in_view += int(seen)
             if perceived is not None:
                 world_err += abs(perceived - world.obj)
+
+            # ---- Step 2: move the POINTER to the goal via error-driven action ----
+            # goal = the LEARNED-perceived object (obj), or the current pointer (none,
+            # → should not move).  The proprioceptive prediction error drives the move;
+            # no (goal − p) is ever computed.
+            if perceived is not None:
+                goal_pos = perceived if GOALMODE != "none" else pointer
+                eps = reach.error(pointer / (W - 1), float(np.clip(goal_pos, 0, W - 1)) / (W - 1))
+                pointer = float(np.clip(pointer - REACH_GAIN * (W - 1) * eps, 0.0, W - 1))
+            reach_d.append(abs(pointer - world.obj))
+
             if not HEADLESS:
-                render(step, total, world, phi, perceived, seen, r["sensor_error"])
+                render(step, total, world, phi, perceived, seen, r["sensor_error"], pointer)
                 if DELAY > 0:
                     time.sleep(DELAY)
 
     q = max(1, len(se_hist) // 10)
+    rq = max(1, len(reach_d) // 10)
     print("=" * 64)
-    print(f"  act8b step 1 summary")
+    print(f"  act8b step 1+2 summary   (perceive={PERCEIVE}  goal={GOALMODE})")
     print(f"  sensor_error: {np.mean(se_hist[:q]):.3f} → {np.mean(se_hist[-q:]):.3f}"
           f"   [drops → the net learned the world model]")
-    print(f"  fovea (error-driven) kept object in view: {100.0*in_view/max(1,act):.1f}%")
-    print(f"  readout retinal error (EMA): {readout.err_ema*(N-1):.2f}px  in {N}px window")
-    print(f"  perceived ({PERCEIVE}) vs true object: {world_err/max(1,act):.2f}px mean")
-    print(f"  [perceive=net → position came from the LEARNED net, raw COM only taught it]")
+    print(f"  STEP1  fovea (error-driven) kept object in view: {100.0*in_view/max(1,act):.1f}%")
+    print(f"  STEP1  readout retinal error (EMA): {readout.err_ema*(N-1):.2f}px in {N}px window")
+    print(f"  STEP1  perceived ({PERCEIVE}) vs true object: {world_err/max(1,act):.2f}px mean")
+    if reach_d:
+        print(f"  STEP2  pointer→object |p-obj|: start {np.mean(reach_d[:rq]):.1f}px → "
+              f"end {np.mean(reach_d[-rq:]):.1f}px"
+              f"   [error-driven reach to the PERCEIVED object; goal={GOALMODE}]")
+    print(f"  [net perception + error-driven action; scramble the fwd model → reach fails]")
     print("=" * 64)
 
 
