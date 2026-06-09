@@ -117,6 +117,7 @@ class World2D:
         self.lo, self.hi = G / 8.0, G * 7.0 / 8.0
         pal = dict(OBJECT_COLORS)
         cmd = command_color if command_color in pal else OBJECT_COLORS[0][0]
+        self._cmd_arg = cmd
         self.command_color_name = cmd
         self.command_color = np.array(pal[cmd], float)
         self.target_pos = self._rand_pos()
@@ -445,7 +446,7 @@ class Planner2D:
 # lateral coupling, hidden nodes with hex receptive fields.
 # --------------------------------------------------------------------------- #
 def build_hexnet(rng):
-    net = PCNetwork(eta_inf=0.05, n_relax=20, eps_tol=1e-5, eta_learn=0.003,
+    net = PCNetwork(eta_inf=0.05, n_relax=24, eps_tol=1e-5, eta_learn=0.006,
                     gamma=0.3, w_clip=3.0, rng=rng)
     CH = 5                                       # [lum, R, G, B, ptr]
     cells = {}
@@ -459,25 +460,76 @@ def build_hexnet(rng):
             for (rr, cc) in hex_neighbors(r, c, F, F):
                 net.connect(f"s_{r}_{c}", f"s_{rr}_{cc}", ConnType.LATERAL,
                             pressure_scale=HEX_PS)
-    # hidden layer 1: a node at every stride-2 cell, hex receptive field
+    # hidden layer 1: a node at every stride-2 cell, hex receptive field (strengthened)
     centers = [(r, c) for r in range(0, F, 2) for c in range(0, F, 2)]
     h1 = []
     for (r, c) in centers:
         nid = f"h1_{r}_{c}"
-        net.add(PCNode(nid, dim=6, activation="tanh", rng=rng))
+        net.add(PCNode(nid, dim=10, activation="tanh", rng=rng))
         h1.append(nid)
         rf = [(r, c)] + hex_neighbors(r, c, F, F)
         for (rr, cc) in rf:
             net.connect(nid, f"s_{rr}_{cc}", ConnType.UP, pressure_scale=1.0)
-    # top layer: one node pooling all of h1
+    # hidden layer 2: pool 2×2 blocks of h1 (a bit more depth)
+    h2 = []
+    grid1 = {(r, c): f"h1_{r}_{c}" for (r, c) in centers}
+    for br in range(0, F, 4):
+        for bc in range(0, F, 4):
+            nid = f"h2_{br}_{bc}"
+            net.add(PCNode(nid, dim=8, activation="tanh", rng=rng)); h2.append(nid)
+            for dr in (0, 2):
+                for dc in (0, 2):
+                    src = grid1.get((br + dr, bc + dc))
+                    if src:
+                        net.connect(nid, src, ConnType.UP, pressure_scale=0.5)
+    # top layer: pool all of h2
     net.add(PCNode("top", dim=8, activation="tanh", rng=rng))
-    for nid in h1:
-        net.connect("top", nid, ConnType.UP, pressure_scale=0.2)
+    for nid in h2:
+        net.connect("top", nid, ConnType.UP, pressure_scale=0.3)
     vc = PCModule("VisualCortex2D")
     vc.add_in_port("cells", [f"s_{r}_{c}" for r in range(F) for c in range(F)])
     vc.add_out_port("abstract", ["top"])
     net.add_module(vc)
-    return net, cells
+    return net, cells, h1
+
+
+class PerceptReadout:
+    """Learned amortised-inference head: maps the hex net's HIDDEN beliefs (h1 mu) +
+    the COMMAND colour → the 2-D position of that colour's object.  Trained online,
+    self-supervised against the raw colour-match COM (the 'teacher').  At run time the
+    agent ACTS on this readout — so the position genuinely comes from the LEARNED net
+    (the raw COM is only a developmental teaching signal, not used to act)."""
+    def __init__(self, in_dim, hid=48, lr=0.02, rng=None):
+        rng = rng or np.random.default_rng()
+        d = in_dim + 3                                   # + command RGB
+        self.W1 = rng.normal(0, 1.0 / np.sqrt(d), (hid, d)); self.b1 = np.zeros(hid)
+        self.W2 = rng.normal(0, 1.0 / np.sqrt(hid), (2, hid)); self.b2 = np.zeros(2)
+        self.lr = lr
+        self.err_ema = None
+
+    def _feat(self, h1_mu, cmd):
+        return np.concatenate([h1_mu, np.asarray(cmd, float)])
+
+    def predict(self, h1_mu, cmd):
+        x = self._feat(h1_mu, cmd)
+        h = np.tanh(self.W1 @ x + self.b1)
+        return self.W2 @ h + self.b2, x, h          # RETINAL (in-window) pos, normalised
+
+    def train(self, h1_mu, cmd, target_win_norm):
+        # target_win_norm = the in-window (retinal) COM, normalised to [0,1] by (F-1).
+        y, x, h = self.predict(h1_mu, cmd)
+        err = y - np.asarray(target_win_norm, float)
+        e = float(np.linalg.norm(err))
+        self.err_ema = e if self.err_ema is None else 0.99 * self.err_ema + 0.01 * e
+        dW2 = np.outer(err, h); db2 = err
+        dh = (self.W2.T @ err) * (1 - h ** 2)
+        dW1 = np.outer(dh, x); db1 = dh
+        self.W2 -= self.lr * dW2; self.b2 -= self.lr * db2
+        self.W1 -= self.lr * dW1; self.b1 -= self.lr * db1
+
+
+def gather_h1(net, h1_ids):
+    return np.concatenate([net.node(nid).mu for nid in h1_ids])
 
 
 def set_sheet(cells, lum_w, rgb_w, ptr_w):
@@ -547,7 +599,8 @@ def main():
     DELAY = float(os.environ.get("ACT9_DELAY", "0.0"))
 
     rng = np.random.default_rng(42)
-    net, cells = build_hexnet(rng)
+    net, cells, h1_ids = build_hexnet(rng)
+    readout = PerceptReadout(in_dim=len(h1_ids) * 10, rng=np.random.default_rng(5))
     gm = GoalModule2D(img=12, latent=10, rng=np.random.default_rng(7))
     gm.pretrain(int(8000 * SCALE) if SCALE < 1 else 8000)
 
@@ -581,6 +634,13 @@ def main():
 
     for step in range(total):
         active = step >= PASSIVE
+        if step == PASSIVE:                    # entering active: restore a clean task
+            world.command_color_name = world._cmd_arg
+            world.command_color = np.array(dict(OBJECT_COLORS)[world._cmd_arg], float)
+            world._spawn()
+            world.relocate_target()
+            last_cmd = world.command_color_name
+            obj_mem = None
         lum = world.render_lum(); rgb = world.render_rgb()
         ptr_field = blob2d(ptr, G)
         lum_w = window(lum, phi); rgb_w = window(rgb, phi); ptr_w = window(ptr_field, phi)
@@ -593,31 +653,39 @@ def main():
         if np.isfinite(se):
             se_hist.append(se)
 
-        # ---- Perception source (step 1): the commanded-colour object is localised
-        # either on the RAW window (PERCEIVE=raw) or on the net's RECONSTRUCTED RGB
-        # (PERCEIVE=net) — the latter makes the hex net's LEARNING necessary: an
-        # untrained net reconstructs badly → bad percept → it must learn to see.
+        # ---- Perception (step 1). The RAW colour-match COM is the low-level cue: a
+        # cosine colour filter (the "retina") that says where the commanded colour is.
+        # PERCEIVE=raw  : the agent acts on that COM directly (hand-coded percept).
+        # PERCEIVE=net  : the agent acts on a LEARNED READOUT of the hex net's hidden
+        #                 beliefs (h1) — position genuinely from the net; the raw COM
+        #                 is only the developmental TEACHER training the readout.
+        raw_match = color_match_map(rgb_w, world.command_color)
+        raw_com = com2d(raw_match)
+        raw_seen = raw_com is not None
+        raw_world = (np.array([int(round(phi[0])) + raw_com[0],
+                               int(round(phi[1])) + raw_com[1]]) if raw_seen else None)
         if PERCEIVE == "net":
-            recon = np.zeros((F, F, 3))
-            for rr in range(F):
-                for cc in range(F):
-                    recon[rr, cc] = np.clip(cells[(rr, cc)].pi[1:4], 0.0, None)
-            match_w = color_match_map(recon, world.command_color)
+            # The readout reads the RETINAL (in-window) position from h1; the world
+            # position = known gaze φ + retinal position.  Teacher = raw in-window COM.
+            h1mu = gather_h1(net, h1_ids)
+            if raw_seen:
+                readout.train(h1mu, world.command_color, raw_com / (F - 1))
+            pred, _, _ = readout.predict(h1mu, world.command_color)
+            win_xy = np.clip(pred * (F - 1), 0, F - 1)
+            net_world = np.array([int(round(phi[0])) + win_xy[0],
+                                  int(round(phi[1])) + win_xy[1]])
+            percept_world = net_world if raw_seen else None
         else:
-            match_w = color_match_map(rgb_w, world.command_color)
+            percept_world = raw_world
 
         finger = False
         if active:
             # command switched → drop stale memory, search the new colour
             if world.command_color_name != last_cmd:
                 last_cmd = world.command_color_name; obj_mem = None; mem_age = MEM_TTL + 1
-            com = com2d(match_w)          # (x,y) within the F×F window
-            seen = com is not None
-            perceived = None
-            # perceived world pos = window offset (round phi) + in-window (x,y) COM
+            seen = raw_seen
+            perceived = percept_world      # raw COM (raw) or learned readout (net)
             if seen:
-                perceived = np.array([int(round(phi[0])) + com[0],
-                                      int(round(phi[1])) + com[1]])
                 obj_mem = perceived; mem_age = 0
             elif obj_mem is not None:
                 mem_age += 1
@@ -685,8 +753,20 @@ def main():
                 if phi[1] >= G - F / 2.0:
                     phi[1] = -F / 2.0
         else:
-            # passive: wander the gaze so the hex net learns the 2-D image
-            phi = np.clip(phi + rng.normal(0, 1.0, 2), -F / 2.0, G - F / 2.0)
+            # passive / DEVELOPMENTAL: see objects of every colour at MANY positions so
+            # both the hex net and the position readout learn the mapping (not memorise
+            # fixed spots).  Each step: scatter the objects, pick a random present
+            # colour as the command, and centre the gaze on that object (for NEXT step).
+            for o in world.objects:
+                o["pos"] = world._rand_pos()
+            ti = int(rng.integers(0, len(world.objects)))
+            world.target_idx = ti
+            world.command_color_name = world.objects[ti]["name"]
+            world.command_color = world.objects[ti]["color"].copy()
+            # place the object at a VARIED spot WITHIN the window (not always centred)
+            # so the readout must learn to localise it, not just predict centre.
+            phi = np.clip(world.objects[ti]["pos"] - rng.uniform(1.0, F - 1.0, 2),
+                          -F / 2.0, G - F / 2.0)
             info = {"flash": False, "success": False, "contact": False}
 
         if active:
@@ -714,6 +794,10 @@ def main():
     print(f"  colour-select: {100.0*sel_correct/max(1,sel_total):.1f}%   "
           f"object-in-view: {100.0*seen_steps/max(1,act_steps):.1f}%   "
           f"could-act: {100.0*act_steps/max(1,steps_active):.1f}%")
+    if PERCEIVE == "net" and readout.err_ema is not None:
+        print(f"  perception=NET: readout RETINAL error (EMA) = "
+              f"{readout.err_ema*(F-1):.2f}px in an {F}px window   [agent acts on the"
+              f" LEARNED net readout; raw colour-match was only the teacher]")
     if world.grippable and grip_steps:
         print(f"  grip-steps: {grip_steps}  wrong-colour: {grip_wrong}"
               f" ({100.0*grip_wrong/grip_steps:.1f}%)")
