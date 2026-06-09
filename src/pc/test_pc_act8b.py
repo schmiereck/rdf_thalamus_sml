@@ -107,39 +107,55 @@ def window(field, phi):
 # a stride-2 hidden layer with local RFs, a top node.  Learns to predict the image.
 # --------------------------------------------------------------------------- #
 def build_net(rng):
+    """TWO-ROW hex-coupled sensor sheet (like act5–act9): an OBJECT row (so) and a
+    POINTER row (sp), each N cells of object/pointer luminance, coupled hexagonally
+    (each object cell ↔ its sp{i}, sp{i+1} — 1 pointer pixel shared by 2 object
+    pixels).  The hidden layer pools BOTH rows, so the net perceives object AND hand
+    AND their relative geometry — the basis for genuine pushing and the 2-D port."""
     net = PCNetwork(eta_inf=0.05, n_relax=24, eps_tol=1e-5, eta_learn=0.006,
                     gamma=0.3, w_clip=3.0, rng=rng)
-    cells = [net.add(SensorNode(f"s{i}", dim=1)) for i in range(N)]
-    for i in range(N):                       # lateral coupling to nearest neighbours
+    obj_cells = [net.add(SensorNode(f"so{i}", dim=1)) for i in range(N)]
+    ptr_cells = [net.add(SensorNode(f"sp{i}", dim=1)) for i in range(N)]
+    HEX_PS = 0.1
+    for i in range(N):                       # lateral within the object row
         for j in (i - 1, i + 1):
             if 0 <= j < N:
-                net.connect(f"s{i}", f"s{j}", ConnType.LATERAL, pressure_scale=0.1)
+                net.connect(f"so{i}", f"so{j}", ConnType.LATERAL, pressure_scale=0.1)
+    for i in range(N):                       # hex coupling object ↔ pointer rows
+        for j in (i, i + 1):
+            if 0 <= j < N:
+                net.connect(f"so{i}", f"sp{j}", ConnType.LATERAL, pressure_scale=HEX_PS)
+                net.connect(f"sp{j}", f"so{i}", ConnType.LATERAL, pressure_scale=HEX_PS)
     h1 = []
-    for c in range(0, N, 2):                 # hidden node every 2 cells, RF = [c-1..c+1]
+    for c in range(0, N, 2):                 # hidden node every 2 cells, pools BOTH rows
         nid = f"h1_{c}"
-        net.add(PCNode(nid, dim=6, activation="tanh", rng=rng)); h1.append(nid)
+        net.add(PCNode(nid, dim=8, activation="tanh", rng=rng)); h1.append(nid)
         for j in (c - 1, c, c + 1):
             if 0 <= j < N:
-                net.connect(nid, f"s{j}", ConnType.UP, pressure_scale=1.0)
-    net.add(PCNode("top", dim=6, activation="tanh", rng=rng))
+                net.connect(nid, f"so{j}", ConnType.UP, pressure_scale=1.0)
+                net.connect(nid, f"sp{j}", ConnType.UP, pressure_scale=1.0)
+    net.add(PCNode("top", dim=8, activation="tanh", rng=rng))
     for nid in h1:
         net.connect("top", nid, ConnType.UP, pressure_scale=0.3)
-    m = PCModule("Cortex1D"); m.add_in_port("cells", [f"s{i}" for i in range(N)])
+    m = PCModule("Cortex1D")
+    m.add_in_port("obj_row", [f"so{i}" for i in range(N)])
+    m.add_in_port("ptr_row", [f"sp{i}" for i in range(N)])
     m.add_out_port("abstract", ["top"]); net.add_module(m)
-    return net, cells, h1
+    return net, obj_cells, ptr_cells, h1
 
 
-def set_sheet(cells, lum_w):
+def set_sheet(obj_cells, ptr_cells, obj_w, ptr_w):
     for i in range(N):
-        cells[i].set_input(np.array([lum_w[i]]))
+        obj_cells[i].set_input(np.array([obj_w[i]]))
+        ptr_cells[i].set_input(np.array([ptr_w[i]]))
 
 
-def fovea_gradient(cells):
-    """Active-inference fovea drive: ∂E/∂φ on the object channel.  Uses the net's
+def fovea_gradient(obj_cells):
+    """Active-inference fovea drive: ∂E/∂φ on the OBJECT row.  Uses the net's
     prediction (pi) and error (epsilon); moving against this reduces the error → the
     fovea slides to centre the object.  No oracle, no coordinate target."""
-    e = np.array([c.epsilon[0] for c in cells])
-    base = np.array([c.pi[0] for c in cells])
+    e = np.array([c.epsilon[0] for c in obj_cells])
+    base = np.array([c.pi[0] for c in obj_cells])
     grad = (np.roll(base, -1) - np.roll(base, 1)) * 0.5
     return float(np.sum(e * grad))
 
@@ -336,8 +352,9 @@ def main():
     rng = np.random.default_rng(0)
 
     STEP = int(os.environ.get("ACT8B_STEP", "3"))        # 2 = reach demo, 3 = manipulate
-    net, cells, h1 = build_net(rng)
-    readout = Readout(in_dim=len(h1) * 6, rng=np.random.default_rng(3))
+    net, obj_cells, ptr_cells, h1 = build_net(rng)       # two-row hex sensor sheet
+    readout = Readout(in_dim=len(h1) * 8, rng=np.random.default_rng(3))      # object
+    readout_p = Readout(in_dim=len(h1) * 8, rng=np.random.default_rng(9))    # pointer
     reach = ProprioReach(np.random.default_rng(4))      # step 2: pointer-reach subnet
     objgoal = ProprioReach(np.random.default_rng(6))    # step 3: OBJECT-goal prior (ε_obj)
     coupling = Coupling(rng=np.random.default_rng(7))   # step 3: learned pointer→object J
@@ -368,24 +385,34 @@ def main():
     fing_contact, fing_far = [], []             # step 4: finger extension in/out of contact
     REACH_GAIN_P = 1.2; PUSH_GAIN = 2.5         # step-3 reach / push gains
 
+    ptr_perc_err, ptr_perc_n = 0.0, 0           # pointer-perception accuracy (two-row)
     for step in range(total):
         dev = step < DEV
-        lum = world.world_lum()
-        lum_w = window(lum, phi)
-        set_sheet(cells, lum_w)
+        obj_w = window(world.world_lum(), phi)              # object row
+        ptr_w = window(blob1d(pointer, W), phi)             # pointer row (hand visible!)
+        set_sheet(obj_cells, ptr_cells, obj_w, ptr_w)
         r = net.step(learn=True); net.commit_step()
         if np.isfinite(r["sensor_error"]):
             se_hist.append(r["sensor_error"])
 
-        raw_com = com1d(lum_w)                  # in-window COM (teacher / raw percept)
-        seen = raw_com is not None
         x = gather(net, h1)
-        if seen:                                # train the readout (self-supervised)
+        # OBJECT perception (from the net's hidden beliefs over BOTH rows)
+        raw_com = com1d(obj_w)
+        seen = raw_com is not None
+        if seen:
             readout.train(x, raw_com / (N - 1))
         pred_win, _ = readout.predict(x)
         net_world = int(round(phi)) + float(np.clip(pred_win * (N - 1), 0, N - 1))
         raw_world = (int(round(phi)) + raw_com) if seen else None
         perceived = (net_world if PERCEIVE == "net" else raw_world) if seen else None
+        # POINTER perception (the now-visible hand row) — self-supervised + scored
+        ptr_com = com1d(ptr_w)
+        if ptr_com is not None:
+            readout_p.train(x, ptr_com / (N - 1))
+            pp, _ = readout_p.predict(x)
+            ptr_perceived = int(round(phi)) + float(np.clip(pp * (N - 1), 0, N - 1))
+            if not dev:
+                ptr_perc_err += abs(ptr_perceived - pointer); ptr_perc_n += 1
 
         if dev:
             # developmental: object at VARIED in-window positions so the readout must
@@ -406,7 +433,7 @@ def main():
                 world.scatter(with_target=True)
                 phi = float(np.clip(world.obj - N / 2.0, PHI_MIN, PHI_MAX))
                 pointer = float(world.obj)
-            disp = -fovea_gradient(cells)
+            disp = -fovea_gradient(obj_cells)
             fov_v = (1 - SMOOTH) * (GAIN * disp) + SMOOTH * fov_v   # momentum
             fov_v = float(np.clip(fov_v, -2.0, 2.0))
             phi = float(np.clip(phi + fov_v, PHI_MIN, PHI_MAX))
@@ -496,6 +523,9 @@ def main():
     print(f"  STEP1  fovea (error-driven) kept object in view: {100.0*in_view/max(1,act):.1f}%")
     print(f"  STEP1  readout retinal error (EMA): {readout.err_ema*(N-1):.2f}px in {N}px window")
     print(f"  STEP1  perceived ({PERCEIVE}) vs true object: {world_err/max(1,act):.2f}px mean")
+    if ptr_perc_n:
+        print(f"  STEP1  POINTER perceived (2-row hex, net) vs true hand: "
+              f"{ptr_perc_err/ptr_perc_n:.2f}px mean   [the hand is now SEEN in its own row]")
     if reach_d:
         print(f"  STEP2  pointer→object |p-obj|: start {np.mean(reach_d[:rq]):.1f}px → "
               f"end {np.mean(reach_d[-rq:]):.1f}px   [error-driven reach to perceived obj]")
