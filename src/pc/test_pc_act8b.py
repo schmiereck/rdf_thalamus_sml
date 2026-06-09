@@ -410,6 +410,7 @@ def main():
     reach_d = []                                # |pointer - object| over the test
     manip_d = []                                # |object - target| over the test (step 3)
     deliveries = 0                              # step 3: object delivered to target count
+    episodes_started = 0; ep_steps = 0; EP_CAP = 120   # per-episode cap (no permanent stalls)
     fing_contact, fing_far = [], []             # step 4: finger extension in/out of contact
     REACH_GAIN_P = 1.2; PUSH_GAIN = 2.5         # step-3 reach / push gains
 
@@ -432,7 +433,10 @@ def main():
         pred_win, _ = readout.predict(x)
         net_world = int(round(phi)) + float(np.clip(pred_win * (N - 1), 0, N - 1))
         raw_world = (int(round(phi)) + raw_com) if seen else None
-        perceived = (net_world if PERCEIVE == "net" else raw_world) if seen else None
+        if PERCEIVE == "oracle":                # diagnostic: perfect object position
+            perceived, seen = float(world.obj), True
+        else:
+            perceived = (net_world if PERCEIVE == "net" else raw_world) if seen else None
         # POINTER perception (the now-visible hand row) — self-supervised + scored
         ptr_com = com1d(ptr_w)
         if ptr_com is not None:
@@ -453,12 +457,20 @@ def main():
             # error-driven action.  The FOVEA tracks the object by its error gradient.
             if STEP == 2:
                 world.drift()
-            elif step == DEV or abs(world.obj - world.target) < 2.5:   # learned-model precision
+            elif step == DEV or abs(world.obj - world.target) < 2.5 or ep_steps >= EP_CAP:
                 # episode (re)start: fresh object+target; put the gaze on the object and
                 # the hand on it (isolates the new PUSH mechanism; reach is step-2-proven).
+                # EP_CAP: give up a stuck episode (no permanent stalls — matches the
+                # de-risk's per-episode cap; without it a stuck MPC config persists forever).
                 if step > DEV:
-                    deliveries += 1                    # object reached target → delivered
+                    episodes_started += 1
+                    if abs(world.obj - world.target) < 2.5:
+                        deliveries += 1                # object reached target → delivered
+                ep_steps = 0
                 world.scatter(with_target=True)
+                if STEP >= 5:                          # require a real transport (no
+                    while abs(world.obj - world.target) < 12.0:   # lucky-scatter deliveries)
+                        world.target = float(rng.uniform(world.lo, world.hi))
                 phi = float(np.clip(world.obj - N / 2.0, PHI_MIN, PHI_MAX))
                 # Push modes: start the hand OFF the object (a random side), not exactly
                 # on it — at d=0 the shove's contact test is degenerate (no push) and the
@@ -471,6 +483,7 @@ def main():
             fov_v = float(np.clip(fov_v, -2.0, 2.0))
             phi = float(np.clip(phi + fov_v, PHI_MIN, PHI_MAX))
             act += 1
+            ep_steps += 1
             in_view += int(seen)
             if perceived is not None:
                 world_err += abs(perceived - world.obj)
@@ -609,7 +622,10 @@ def main():
                     else "grip: extends only in contact")
             extra = (f"   finger: in-contact {np.mean(fing_contact):.2f} vs "
                      f"out {np.mean(fing_far) if fing_far else 0:.2f} [{mech}]")
-        print(f"  {lbl}  object {verb} to target: {deliveries}×   (mean |obj-tgt| "
+        rate = (f"  success {100.0*deliveries/episodes_started:.0f}% "
+                f"({deliveries}/{episodes_started} episodes, cap {EP_CAP})"
+                if episodes_started else f"  {deliveries}×")
+        print(f"  {lbl}  object {verb}:{rate}   (mean |obj-tgt| "
               f"{np.mean(manip_d):.1f}px){extra}   [goal={GOALMODE}]")
     print(f"  [net perception + error-driven action; scramble coupling → manipulation fails]")
     print("=" * 64)
