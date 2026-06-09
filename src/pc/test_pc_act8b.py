@@ -414,6 +414,7 @@ def main():
             if perceived is not None:
                 world_err += abs(perceived - world.obj)
 
+            obj_before = world.obj
             if perceived is not None:
                 pn = pointer / (W - 1)
                 # (a) REACH: keep the hand on the perceived object (step-2 mechanism).
@@ -456,10 +457,17 @@ def main():
                     pointer = float(np.clip(pointer + a, 0.0, W - 1))
                     if STEP == 3:
                         world.push(pointer, a)         # step-3 push-on-touch (finger=1)
-                if os.environ.get("ACT8B_DEBUG") == "1" and STEP >= 4 and DEV < step < DEV + 26:
-                    print(f"[dbg {step-DEV}] obj={world.obj:5.1f} tgt={world.target:5.1f} "
-                          f"p={pointer:5.1f} d={pointer-perceived:+.1f} "
-                          f"eps={eps_obj:+.2f} fing={finger:.2f} a={a:+.2f}", flush=True)
+            # Efference-copy gaze pursuit: the agent moved the object by a known amount,
+            # so slide the fovea along with it.  Keeps the manipulated object centred
+            # even when the net predicts it so well there is no error gradient to follow
+            # (the fovea-freezes-during-manipulation bug).  No oracle — it's our own act.
+            if STEP >= 3:
+                phi = float(np.clip(phi + (world.obj - obj_before), PHI_MIN, PHI_MAX))
+                if os.environ.get("ACT8B_DEBUG") == "1" and STEP >= 4 and (step - DEV) % 80 == 0:
+                    print(f"[dbg {step-DEV}] phi={phi:5.1f} obj={world.obj:5.1f} "
+                          f"perc={perceived if perceived is None else round(perceived,1)} "
+                          f"tgt={world.target:5.1f} p={pointer:5.1f} "
+                          f"fovgrad={disp:+.2f} fing={finger:.2f} a={a:+.2f}", flush=True)
             reach_d.append(abs(pointer - world.obj))
             manip_d.append(abs(world.obj - world.target))
             if STEP >= 4 and perceived is not None:
