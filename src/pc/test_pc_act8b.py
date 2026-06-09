@@ -36,7 +36,7 @@ from pc import PCNode, SensorNode, PCNetwork
 from pc.connection import ConnType
 from pc.module import PCModule
 
-W = 48        # world width
+W = 48        # world width  (also used by the imported push-policy model)
 N = 16        # fovea window width
 PHI_MIN = -N / 2.0
 PHI_MAX = W - N / 2.0
@@ -392,10 +392,21 @@ def main():
     reach.babble(int(4000 * SCALE))             # learn pointer proprioceptive fwd model
     objgoal.babble(int(20000 * SCALE))          # learn object proprioceptive fwd model
     coupling.babble(world, int(6000 * SCALE))   # learn pointer→object coupling J(p−obj)
-    if STEP >= 4:
+    if STEP == 4:
         couplingF.babble(world, int(8000 * SCALE))   # learn J(d, finger) for the grip
+    pushmodel = mpc_plan = None
+    MPC_HORIZON = 3
+    if STEP >= 6:
+        # step 6: LEARNED push-side policy — a learned push-dynamics model + MPC (the
+        # side emerges from the learned dynamics + planning; replaces step-5's hand-
+        # coded sign(eps_obj)).  De-risked in test_pc_push_policy.py.
+        from pc.test_pc_push_policy import PushModel, plan as mpc_plan
+        pushmodel = PushModel(rng=np.random.default_rng(12))
+        pushmodel.babble(world, int(30000 * SCALE))
     if GOALMODE == "scramble":
         coupling.scramble(); couplingF.scramble()    # control: break the learned coupling
+        if pushmodel is not None:
+            pushmodel.scramble()
     reach_d = []                                # |pointer - object| over the test
     manip_d = []                                # |object - target| over the test (step 3)
     deliveries = 0                              # step 3: object delivered to target count
@@ -449,7 +460,12 @@ def main():
                     deliveries += 1                    # object reached target → delivered
                 world.scatter(with_target=True)
                 phi = float(np.clip(world.obj - N / 2.0, PHI_MIN, PHI_MAX))
-                pointer = float(world.obj)
+                # Push modes: start the hand OFF the object (a random side), not exactly
+                # on it — at d=0 the shove's contact test is degenerate (no push) and the
+                # MPC gets trapped; off-object the policy can reposition + push cleanly.
+                off = (CONTACT_R + 1.5) * (1.0 if rng.random() < 0.5 else -1.0)
+                pointer = float(np.clip(world.obj + off, 0.0, W - 1)) if STEP >= 5 \
+                    else float(world.obj)
             disp = -fovea_gradient(obj_cells)
             fov_v = (1 - SMOOTH) * (GAIN * disp) + SMOOTH * fov_v   # momentum
             fov_v = float(np.clip(fov_v, -2.0, 2.0))
@@ -460,7 +476,19 @@ def main():
                 world_err += abs(perceived - world.obj)
 
             obj_before = world.obj
-            if perceived is not None and STEP == 5:
+            finger = 0.0
+            if perceived is not None and STEP == 6:
+                # ===== LEARNED push-side policy (step 6): MPC through the learned push =====
+                # model on the PERCEIVED object + hand.  The side is NOT coded — it falls
+                # out of the learned dynamics + short-horizon planning toward the goal.
+                finger = 0.0
+                a = 0.0
+                if GOALMODE != "none":
+                    a, finger = mpc_plan(pushmodel, perceived, pointer,
+                                         float(np.clip(world.target, 0, W - 1)), MPC_HORIZON)
+                pointer = float(np.clip(pointer + a, 0.0, W - 1))
+                world.shove(pointer, a, finger)
+            elif perceived is not None and STEP == 5:
                 # ===== GENUINE PUSH (step 5): finger actuator; the hand can only push =====
                 # the object AWAY (never pull/carry), so it must get on the FAR side of the
                 # object (opposite the target) and push toward the target.  Side + push are
@@ -551,7 +579,7 @@ def main():
 
             if not HEADLESS:
                 render(step, total, world, phi, perceived, seen, r["sensor_error"],
-                       pointer, world.target if STEP >= 3 else None)
+                       pointer, world.target if STEP >= 3 else None, finger)
                 if DELAY > 0:
                     time.sleep(DELAY)
 
@@ -572,10 +600,13 @@ def main():
               f"end {np.mean(reach_d[-rq:]):.1f}px   [error-driven reach to perceived obj]")
     if STEP >= 3 and manip_d:
         lbl = f"STEP{STEP}"
-        verb = "PUSHED (genuine, no carry)" if STEP == 5 else "DELIVERED"
+        verb = ("PUSHED (learned side-policy, MPC)" if STEP == 6
+                else "PUSHED (genuine, no carry)" if STEP == 5 else "DELIVERED")
         extra = ""
         if STEP >= 4 and fing_contact:
-            mech = "PUSH: finger out only when pushing" if STEP == 5 else "grip: extends only in contact"
+            mech = ("PUSH: finger from learned-model MPC" if STEP == 6
+                    else "PUSH: finger out only when pushing" if STEP == 5
+                    else "grip: extends only in contact")
             extra = (f"   finger: in-contact {np.mean(fing_contact):.2f} vs "
                      f"out {np.mean(fing_far) if fing_far else 0:.2f} [{mech}]")
         print(f"  {lbl}  object {verb} to target: {deliveries}×   (mean |obj-tgt| "
