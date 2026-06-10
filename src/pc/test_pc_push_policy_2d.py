@@ -83,6 +83,14 @@ class PushModel2D:
             dh = (self.W2.T @ err) * (1 - h ** 2)
             self.W1 -= self.lr * np.outer(dh, self._x(d, a, f)); self.b1 -= self.lr * dh
 
+    def observe(self, d, a, f, dobj, lr=0.003):
+        """One online gradient step from a REAL experienced push — lifelong learning."""
+        y, h = self.predict(d, a, f)
+        err = y - dobj
+        self.W2 -= lr * np.outer(err, h); self.b2 -= lr * err
+        dh = (self.W2.T @ err) * (1 - h ** 2)
+        self.W1 -= lr * np.outer(dh, self._x(d, a, f)); self.b1 -= lr * dh
+
     def scramble(self):
         self.W1 = self.rng.normal(0, 0.5, self.W1.shape); self.W2 = self.rng.normal(0, 0.5, self.W2.shape)
 

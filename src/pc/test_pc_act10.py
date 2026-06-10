@@ -253,6 +253,13 @@ class BodyModel:
             err = np.asarray(obs, float) / (G - 1) - (Wm @ b.mu)
             b.mu = b.mu + eta * (Wm.T @ err)                              # vision correction
 
+    def learn(self, part, obs, lr=0.01):
+        """Online: nudge the belief→obs weight toward mapping the felt belief to the seen
+        position (keeps the body map calibrated lifelong; handles slow drift)."""
+        b = self.b[part]; Wm = self.conn[part].W
+        err = np.asarray(obs, float) / (G - 1) - (Wm @ b.mu)
+        self.conn[part].W = Wm + lr * np.outer(err, b.mu)
+
     def felt(self, part):
         return self.b[part].mu * (G - 1)
 
@@ -287,6 +294,17 @@ class Coupling:
             self.W2 -= self.lr * err * h; self.b2 -= self.lr * err
             dh = (self.W2 * err) * (1 - h**2)
             self.W1 -= self.lr * np.outer(dh, np.array([dist / CONTACT_R])); self.b1 -= self.lr * dh
+
+    def observe(self, dist, dobj, amag, lr=0.003):
+        """Online update from a real contact event — lifelong learning."""
+        if amag < 1e-3:
+            return
+        target = dobj / amag
+        y, h = self.predict(dist)
+        err = y - target
+        self.W2 -= lr * err * h; self.b2 -= lr * err
+        dh = (self.W2 * err) * (1 - h**2)
+        self.W1 -= lr * np.outer(dh, np.array([dist / CONTACT_R])); self.b1 -= lr * dh
 
     def scramble(self):
         self.W1 = self.rng.normal(0, 0.6, self.W1.shape); self.W2 = self.rng.normal(0, 0.6, self.W2.shape)
@@ -372,6 +390,7 @@ def main():
     DELAY = float(os.environ.get("ACT10_DELAY", "0.0"))
     GOAL = os.environ.get("ACT10_GOAL", "obj").lower()      # obj | none | scramble
     MANIP = os.environ.get("ACT10_MANIP", "carry").lower()  # carry | push
+    LIFELONG = os.environ.get("ACT10_LIFELONG", "1") == "1"  # motor modules keep learning
     MPC_HORIZON = 3; MAG_PUSH = 1.6                          # push step (stall-escape jolt)
     GAIN = 3.0; SMOOTH = 0.3
     rng = np.random.default_rng(0)
@@ -572,6 +591,15 @@ def main():
                 if finger:
                     world.shove(ptr, a, 1.0) if MANIP == "push" else world.push(ptr, a)
                 body.update("hand", a, ptr_vis)
+                if LIFELONG and GOAL != "scramble":      # motor modules learn from real
+                    dobj_obs = world.obj - obj_before    # experience (small lr), lifelong
+                    if MANIP == "push" and pushmodel is not None:
+                        pushmodel.observe(hand - obj_here, a, 1.0 if finger else 0.0, dobj_obs)
+                    elif MANIP == "carry" and finger:
+                        coupling.observe(float(np.linalg.norm(hand - obj_here)),
+                                         float(np.linalg.norm(dobj_obs)), float(np.linalg.norm(a)))
+                    if ptr_vis is not None:
+                        body.learn("hand", ptr_vis)
                 e = np.linalg.norm(body.felt("hand") - ptr)
                 if ptr_vis is not None:
                     ptr_in += e; ptr_in_n += 1
