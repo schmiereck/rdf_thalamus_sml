@@ -108,6 +108,17 @@ class World2D:
             return True
         return False
 
+    def shove(self, p_new, a, finger):
+        """Genuine 2-D PUSH (no carry): the finger can only push the object AWAY in the
+        hand's motion direction; it cannot pull.  To move the object somewhere you must
+        get on its far side and push toward there."""
+        amag = np.linalg.norm(a)
+        if finger > 0.5 and amag > 1e-6 and np.linalg.norm(p_new - self.obj) < CONTACT_R:
+            if np.dot(a, self.obj - (p_new - a)) > 0:           # moved INTO the object
+                self.obj = np.clip(p_new + (a / amag) * CONTACT_R * 0.9, 0, G - 1)
+                return True
+        return False
+
     def obj_lum(self):
         return blob2d(self.obj, G, sigma=self.obj_sigma)   # gaussian, size = obj_sigma
 
@@ -346,6 +357,8 @@ def main():
     SCALE = float(os.environ.get("ACT10_SCALE", "1.0"))
     DELAY = float(os.environ.get("ACT10_DELAY", "0.0"))
     GOAL = os.environ.get("ACT10_GOAL", "obj").lower()      # obj | none | scramble
+    MANIP = os.environ.get("ACT10_MANIP", "carry").lower()  # carry | push
+    MPC_HORIZON = 3; MAG_PUSH = 1.6                          # push step (stall-escape jolt)
     GAIN = 3.0; SMOOTH = 0.3
     rng = np.random.default_rng(0)
 
@@ -362,8 +375,16 @@ def main():
     world = World2D(seed=1)
     prog("contact-coupling babble ..."); coupling.babble(world, int(8000 * SCALE))
     prog("object-goal prior babble ..."); goalprior.babble(int(9000 * SCALE))
+    # MANIP: carry (learned-coupling, default) | push (genuine learned 2-D push-side MPC)
+    pushmodel = mpc_plan = None
+    if MANIP == "push":
+        prog("2-D push-dynamics model babble ...")
+        from pc.test_pc_push_policy_2d import PushModel2D, plan as mpc_plan
+        pushmodel = PushModel2D(rng=np.random.default_rng(8)); pushmodel.babble(int(40000 * SCALE))
     if GOAL == "scramble":
         coupling.scramble(); goalprior.scramble()       # control: break the learned models
+        if pushmodel is not None:
+            pushmodel.scramble()
     sys.stdout.write("\r\x1b[2K"); sys.stdout.flush()
 
     DEV = int(3000 * SCALE); ACTIVE = int(6000 * SCALE); total = DEV + ACTIVE
@@ -373,7 +394,8 @@ def main():
     obj_err, obj_n = 0.0, 0
     ptr_in, ptr_in_n, ptr_out, ptr_out_n = 0.0, 0, 0.0, 0
     in_view = act = 0
-    deliveries = episodes = ep_steps = 0; ep_best = 1e9; EP_CAP = 160
+    deliveries = episodes = ep_steps = 0; ep_best = 1e9; ep_stall = 0
+    EP_CAP = 160; STALL_K = 25
     se_hist = []
 
     print(f"act10 — 2D port of act8b (learned perception + error-driven action + body model)")
@@ -422,12 +444,18 @@ def main():
                     episodes += 1
                     if np.linalg.norm(world.obj - world.target) < TOL:
                         deliveries += 1
-                ep_steps = 0; ep_best = 1e9
+                ep_steps = 0; ep_best = 1e9; ep_stall = 0
                 world.scatter(with_target=True)
                 while np.linalg.norm(world.obj - world.target) < 8:
                     world.target = world._rand()
                 phi = np.clip(world.obj - np.array([F/2.0, F/2.0]), -F/2.0, G - F/2.0)
-                ptr = world.obj.copy(); body.set_felt("hand", ptr)
+                if MANIP == "push":                      # genuine push: start hand OFF the
+                    ang = rng.uniform(0, 2*np.pi)         # object (a random side; at d=0 the
+                    ptr = np.clip(world.obj + (CONTACT_R + 1.5) *  # shove test is degenerate)
+                                  np.array([np.cos(ang), np.sin(ang)]), 0, G - 1)
+                else:
+                    ptr = world.obj.copy()
+                body.set_felt("hand", ptr)
             # error-driven fovea on the object
             disp = -fovea_gradient(cells)
             fov_v = (1 - SMOOTH) * (GAIN * disp) + SMOOTH * fov_v
@@ -439,20 +467,37 @@ def main():
 
             obj_before = world.obj.copy()
             a = np.zeros(2); finger = False
+            dist_now = float(np.linalg.norm(world.obj - world.target))
+            if dist_now < ep_best - 0.5:
+                ep_best = dist_now; ep_stall = 0
+            else:
+                ep_stall += 1
             if obj_perc is not None and GOAL != "none":
                 hand = body.felt("hand")                 # act on the FELT hand
-                eps_obj = goalprior.error(obj_perc, world.target)   # signed obj→tgt error
-                grabbed = np.linalg.norm(hand - obj_perc) < CONTACT_R
-                if grabbed:
-                    finger = True
-                    J, _ = coupling.predict(0.0)
-                    a = np.clip(-GOAL_K * (G - 1) * J * eps_obj, -VMAX, VMAX)
+                if MANIP == "push":
+                    # GENUINE PUSH: learned 2-D push-side policy (MPC); the side emerges.
+                    if ep_stall >= STALL_K:              # break a stuck oscillation
+                        ang = rng.uniform(0, 2*np.pi)
+                        a = MAG_PUSH * np.array([np.cos(ang), np.sin(ang)]); finger = False
+                        ep_stall = 0
+                    else:
+                        av, fv = mpc_plan(pushmodel, obj_perc, hand, world.target, MPC_HORIZON)
+                        a = np.asarray(av, float); finger = fv > 0.5
                 else:
-                    a = np.clip(GOAL_K * (obj_perc - hand), -APPROACH, APPROACH)
+                    # CARRY: goal prior + learned coupling (default).
+                    eps_obj = goalprior.error(obj_perc, world.target)
+                    grabbed = np.linalg.norm(hand - obj_perc) < CONTACT_R
+                    if grabbed:
+                        finger = True
+                        J, _ = coupling.predict(0.0)
+                        a = np.clip(-GOAL_K * (G - 1) * J * eps_obj, -VMAX, VMAX)
+                    else:
+                        a = np.clip(GOAL_K * (obj_perc - hand), -APPROACH, APPROACH)
             # physical execution (with noise) + body model update
             noise = rng.normal(0, 0.12, 2)
             ptr = np.clip(ptr + a + noise, 0, G - 1)
-            world.push(ptr, a) if finger else None
+            if finger:
+                world.shove(ptr, a, 1.0) if MANIP == "push" else world.push(ptr, a)
             body.update("hand", a, ptr_vis)
             e = np.linalg.norm(body.felt("hand") - ptr)
             if ptr_vis is not None:
@@ -477,7 +522,8 @@ def main():
     print(f"  BODY felt-hand vs true: in-view {ptr_in/max(1,ptr_in_n):.2f}px | "
           f"out {ptr_out/max(1,ptr_out_n):.2f}px")
     rate = f"{100.0*deliveries/episodes:.0f}% ({deliveries}/{episodes})" if episodes else f"{deliveries}"
-    print(f"  object DELIVERED: {rate} (cap {EP_CAP})   [learned-coupling manipulation]")
+    mech = "genuine learned 2-D PUSH-side (MPC)" if MANIP == "push" else "learned-coupling carry"
+    print(f"  object DELIVERED: {rate} (cap {EP_CAP})   [{mech}]")
     print("=" * 70)
 
 
