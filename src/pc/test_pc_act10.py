@@ -513,12 +513,25 @@ def main():
                                   -F/2.0, G - F/2.0)
                     scan_idx += 1
             else:
-                # ── MANIPULATE toward the REMEMBERED target (error-driven, felt hand) ──
+                # ── GAZE FOLLOWS THE TASK: look at the HAND while reaching (keeps the
+                #    body model visually corrected → felt hand stays accurate → reliable
+                #    grab), look at the OBJECT while manipulating it.  Fixes the wandering
+                #    hand (felt drifting out of view → false grab → carry into empty). ──
                 in_view += int(obj_seen)
-                disp = -fovea_gradient(cells)            # error-driven fovea tracks object
-                fov_v = (1 - SMOOTH) * (GAIN * disp) + SMOOTH * fov_v
-                fov_v = np.clip(fov_v, -2.0, 2.0)
-                phi = np.clip(phi + fov_v, -F/2.0, G - F/2.0)
+                if obj_seen:
+                    obj_mem = obj_perc.copy()            # remember where the object is
+                obj_here = obj_perc if obj_perc is not None else obj_mem
+                hand = body.felt("hand")                 # act on the FELT hand
+                grabbed = np.linalg.norm(hand - obj_here) < CONTACT_R
+                if grabbed and obj_perc is not None:     # MANIPULATE → track the object
+                    disp = -fovea_gradient(cells)
+                    fov_v = (1 - SMOOTH) * (GAIN * disp) + SMOOTH * fov_v
+                    fov_v = np.clip(fov_v, -2.0, 2.0)
+                    phi = np.clip(phi + fov_v, -F/2.0, G - F/2.0)
+                    tracking = True
+                else:                                    # REACH → look at the hand
+                    phi = np.clip(hand - np.array([F/2.0, F/2.0]), -F/2.0, G - F/2.0)
+                    fov_v = np.zeros(2); tracking = False
                 if obj_perc is not None:
                     obj_err += np.linalg.norm(obj_perc - world.obj); obj_n += 1
                 goal = tgt_felt if tgt_felt is not None else world.target
@@ -527,25 +540,22 @@ def main():
                     ep_best = dist_now; ep_stall = 0
                 else:
                     ep_stall += 1
-                if obj_perc is not None and GOAL != "none":
-                    hand = body.felt("hand")             # act on the FELT hand
+                if GOAL != "none":
                     if MANIP == "push":
                         if ep_stall >= STALL_K:          # break a stuck oscillation
                             ang = rng.uniform(0, 2*np.pi)
                             a = MAG_PUSH * np.array([np.cos(ang), np.sin(ang)]); finger = False
                             ep_stall = 0
                         else:
-                            av, fv = mpc_plan(pushmodel, obj_perc, hand, goal, MPC_HORIZON)
+                            av, fv = mpc_plan(pushmodel, obj_here, hand, goal, MPC_HORIZON)
                             a = np.asarray(av, float); finger = fv > 0.5
+                    elif grabbed:
+                        finger = True
+                        eps_obj = goalprior.error(obj_here, goal)
+                        J, _ = coupling.predict(0.0)
+                        a = np.clip(-GOAL_K * (G - 1) * J * eps_obj, -VMAX, VMAX)
                     else:
-                        eps_obj = goalprior.error(obj_perc, goal)
-                        grabbed = np.linalg.norm(hand - obj_perc) < CONTACT_R
-                        if grabbed:
-                            finger = True
-                            J, _ = coupling.predict(0.0)
-                            a = np.clip(-GOAL_K * (G - 1) * J * eps_obj, -VMAX, VMAX)
-                        else:
-                            a = np.clip(GOAL_K * (obj_perc - hand), -APPROACH, APPROACH)
+                        a = np.clip(GOAL_K * (obj_here - hand), -APPROACH, APPROACH)
                 # physical execution (with noise) + body model update
                 noise = rng.normal(0, 0.12, 2)
                 ptr = np.clip(ptr + a + noise, 0, G - 1)
@@ -557,8 +567,15 @@ def main():
                     ptr_in += e; ptr_in_n += 1
                 else:
                     ptr_out += e; ptr_out_n += 1
-                # efference gaze pursuit (object moved by our own push)
-                phi = np.clip(phi + (world.obj - obj_before), -F/2.0, G - F/2.0)
+                if tracking:                             # gaze pursuit of the carried object
+                    phi = np.clip(phi + (world.obj - obj_before), -F/2.0, G - F/2.0)
+                if os.environ.get("ACT10_DEBUG") and np.linalg.norm(ptr - world.obj) > 3.0:
+                    h = body.felt("hand")
+                    print(f"[dbg {act}] trueP=({ptr[0]:.1f},{ptr[1]:.1f}) "
+                          f"feltH=({h[0]:.1f},{h[1]:.1f}) objP=({obj_perc[0]:.1f},{obj_perc[1]:.1f}) "
+                          f"trueObj=({world.obj[0]:.1f},{world.obj[1]:.1f}) "
+                          f"ptr_vis={'Y' if ptr_vis is not None else 'n'} fing={finger} "
+                          f"a=({a[0]:.2f},{a[1]:.2f})")
             info = {"finger": finger, "searching": searching, "tgt_felt": tgt_felt}
             if not HEADLESS:
                 render(step, total, world, phi, obj_perc, ptr, finger, info)
