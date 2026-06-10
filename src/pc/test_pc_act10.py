@@ -135,7 +135,7 @@ class World2D:
         return blob2d(ptr, G, sigma=0.6)
 
     def tgt_lum(self):
-        return blob2d(self.target, G, sigma=0.6)           # the target is a SEEN marker
+        return blob2d(self.target, G, sigma=1.0)   # target = a CLEAR marker (precise foveal COM)
 
 
 # --------------------------------------------------------------------------- #
@@ -471,7 +471,9 @@ def main():
             phi = np.clip(ti, -F/2.0, G - F/2.0)
             ptr = world._rand(); body.set_felt("hand", ptr)
         else:
+            did_reset = False
             if step == DEV or np.linalg.norm(world.obj - world.target) < TOL or ep_steps >= EP_CAP:
+                did_reset = True
                 if step > DEV:
                     episodes += 1
                     if np.linalg.norm(world.obj - world.target) < TOL:
@@ -498,10 +500,20 @@ def main():
                 #    CORRECTIVE saccade to FOVEATE it (centre it) before perceiving it
                 #    precisely — a peripheral hit at the window edge is unreliable. ──
                 center = (F - 1) / 2.0
-                if tgt_seen:
+                if tgt_seen and not did_reset:        # ignore STALE perception (old target)
+                                                      # on the reset step — it was computed
+                                                      # above with the previous episode's target
                     if np.linalg.norm(tc - center) < 1.3:    # well-foveated → remember
-                        tgt_felt = tgt_perc.copy()
+                        # remember the PRECISE foveal reading (COM of the centred marker
+                        # is sub-pixel; the readout is for peripheral DETECTION during the
+                        # scan).  The agent foveates the goal precisely, then memorises it.
+                        tgt_felt = (off + tc).astype(float)
                         tgt_err += float(np.linalg.norm(tgt_felt - world.target)); tgt_n += 1
+                        if os.environ.get("ACT10_DEBUG") and tgt_n <= 12:
+                            print(f"[tgt] off=({off[0]},{off[1]}) tc=({tc[0]:.2f},{tc[1]:.2f}) "
+                                  f"felt=({tgt_felt[0]:.2f},{tgt_felt[1]:.2f}) "
+                                  f"true=({world.target[0]:.2f},{world.target[1]:.2f}) "
+                                  f"err={np.linalg.norm(tgt_felt-world.target):.2f}")
                         found += 1; found_steps += scan_idx + 1
                         searching = False
                         phi = np.clip(obj_mem - np.array([F/2.0, F/2.0]), -F/2.0, G - F/2.0)
