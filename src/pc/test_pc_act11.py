@@ -109,6 +109,16 @@ class WorldColor:
     def carry_commanded(self, vel):
         self.pos[self.cmd] = np.clip(self.pos[self.cmd] + vel, 0, G - 1)
 
+    def shove_commanded(self, p_new, a, finger):
+        """Genuine 2-D PUSH of the COMMANDED object (no carry): the hand can only push it
+        AWAY in the motion direction; to move it you must get on its far side."""
+        o = self.pos[self.cmd]; amag = np.linalg.norm(a)
+        if finger > 0.5 and amag > 1e-6 and np.linalg.norm(p_new - o) < CONTACT_R:
+            if np.dot(a, o - (p_new - a)) > 0:
+                self.pos[self.cmd] = np.clip(p_new + (a / amag) * CONTACT_R * 0.9, 0, G - 1)
+                return True
+        return False
+
 
 # --------------------------------------------------------------------------- #
 def build_hexnet(rng):
@@ -192,7 +202,9 @@ def main():
     SCALE = float(os.environ.get("ACT11_SCALE", "1.0"))
     DELAY = float(os.environ.get("ACT11_DELAY", "0.0"))
     GOAL = os.environ.get("ACT11_GOAL", "obj").lower()       # obj | none | scramble
+    MANIP = os.environ.get("ACT11_MANIP", "carry").lower()   # carry | push
     LIFELONG = os.environ.get("ACT11_LIFELONG", "1") == "1"
+    MPC_HORIZON = 3; MAG_PUSH = 1.6; STALL_K = 25
     GAIN = 3.0; SMOOTH = 0.3
     rng = np.random.default_rng(0)
 
@@ -211,8 +223,15 @@ def main():
     from pc.test_pc_act10 import World2D
     coupling.babble(World2D(seed=2), int(8000 * SCALE))
     prog("object-goal prior babble ..."); goalprior.babble(int(9000 * SCALE))
+    pushmodel = mpc_plan = None
+    if MANIP == "push":
+        prog("2-D push-dynamics model babble ...")
+        from pc.test_pc_push_policy_2d import PushModel2D, plan as mpc_plan
+        pushmodel = PushModel2D(rng=np.random.default_rng(8)); pushmodel.babble(int(40000 * SCALE))
     if GOAL == "scramble":
         coupling.scramble(); goalprior.scramble()
+        if pushmodel is not None:
+            pushmodel.scramble()
     sys.stdout.write("\r\x1b[2K"); sys.stdout.flush()
 
     DEV = int(3000 * SCALE); ACTIVE = int(6000 * SCALE); total = DEV + ACTIVE
@@ -223,7 +242,7 @@ def main():
     in_view = act = 0
     sel_err, sel_n = 0.0, 0
     ptr_in, ptr_in_n, ptr_out, ptr_out_n = 0.0, 0, 0.0, 0
-    deliveries = episodes = ep_steps = 0; ep_best = 1e9; EP_CAP = 200
+    deliveries = episodes = ep_steps = 0; ep_best = 1e9; ep_stall = 0; EP_CAP = 200
     scan_gaze = [np.array([gx, gy], float) for gy in (0, 8, 16) for gx in (0, 8, 16)]
     searching = False; scan_idx = 0; tgt_felt = None; obj_mem = None
 
@@ -278,13 +297,19 @@ def main():
                 episodes += 1
                 if np.linalg.norm(world.commanded_pos() - world.target) < TOL:
                     deliveries += 1
-            ep_steps = 0; ep_best = 1e9
+            ep_steps = 0; ep_best = 1e9; ep_stall = 0
             world.scatter(with_target=True)
             while np.linalg.norm(world.commanded_pos() - world.target) < 8:
                 world.target = world._rand()
             phi = np.clip(world.commanded_pos() - np.array([F/2.0, F/2.0]), -F/2.0, G - F/2.0)
             searching = True; scan_idx = 0; tgt_felt = None; obj_mem = None
-            ptr = world.commanded_pos().copy(); body.set_felt("hand", ptr)
+            if MANIP == "push":                          # start the hand OFF the object
+                ang = rng.uniform(0, 2*np.pi)
+                ptr = np.clip(world.commanded_pos() + (CONTACT_R + 1.5) *
+                              np.array([np.cos(ang), np.sin(ang)]), 0, G - 1)
+            else:
+                ptr = world.commanded_pos().copy()
+            body.set_felt("hand", ptr)
 
         act += 1; ep_steps += 1
         a = np.zeros(2); finger = False; mode = ""
@@ -325,10 +350,21 @@ def main():
             goal = tgt_felt if tgt_felt is not None else world.target
             dist_now = float(np.linalg.norm(world.commanded_pos() - goal))
             if dist_now < ep_best - 0.5:
-                ep_best = dist_now
+                ep_best = dist_now; ep_stall = 0
+            else:
+                ep_stall += 1
             obj_before = world.commanded_pos().copy()
             if here is not None and GOAL != "none":
-                if grabbed:
+                if MANIP == "push":
+                    mode = f"PUSH '{NAMES[world.colors[world.cmd]]}' → target"
+                    if ep_stall >= STALL_K:               # break a stuck oscillation
+                        ang = rng.uniform(0, 2*np.pi)
+                        a = MAG_PUSH * np.array([np.cos(ang), np.sin(ang)]); finger = False
+                        ep_stall = 0
+                    else:
+                        av, fv = mpc_plan(pushmodel, here, hand, goal, MPC_HORIZON)
+                        a = np.asarray(av, float); finger = fv > 0.5
+                elif grabbed:
                     finger = True
                     eps = goalprior.error(here, goal)     # LEARNED signed object→goal error
                     J, _ = coupling.predict(0.0)
@@ -338,12 +374,15 @@ def main():
             noise = rng.normal(0, 0.12, 2)
             ptr = np.clip(ptr + a + noise, 0, G - 1)
             if finger:
-                world.carry_commanded(a)
+                world.shove_commanded(ptr, a, 1.0) if MANIP == "push" else world.carry_commanded(a)
             body.update("hand", a, ptr_vis)
-            if LIFELONG and GOAL != "scramble" and finger:
-                coupling.observe(float(np.linalg.norm(hand - here)),
-                                 float(np.linalg.norm(world.commanded_pos() - obj_before)),
-                                 float(np.linalg.norm(a)))
+            if LIFELONG and GOAL != "scramble":
+                dobj_obs = world.commanded_pos() - obj_before
+                if MANIP == "push" and pushmodel is not None:
+                    pushmodel.observe(hand - here, a, 1.0 if finger else 0.0, dobj_obs)
+                elif MANIP == "carry" and finger:
+                    coupling.observe(float(np.linalg.norm(hand - here)),
+                                     float(np.linalg.norm(dobj_obs)), float(np.linalg.norm(a)))
                 if ptr_vis is not None:
                     body.learn("hand", ptr_vis)
             e = np.linalg.norm(body.felt("hand") - ptr)
@@ -366,7 +405,8 @@ def main():
           f"   [colour command picks the right object among distractors]")
     print(f"  BODY felt-hand vs true: in {ptr_in/max(1,ptr_in_n):.2f}px | out {ptr_out/max(1,ptr_out_n):.2f}px")
     rate = f"{100.0*deliveries/episodes:.0f}% ({deliveries}/{episodes})" if episodes else f"{deliveries}"
-    print(f"  COMMANDED object DELIVERED: {rate} (cap {EP_CAP})")
+    mech = "genuine learned 2-D PUSH-side (MPC)" if MANIP == "push" else "learned-coupling carry"
+    print(f"  COMMANDED object DELIVERED: {rate} (cap {EP_CAP})   [{mech}]")
     print("=" * 70)
 
 
