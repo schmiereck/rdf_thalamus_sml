@@ -146,14 +146,25 @@ def set_sheet(cells, rgb_w, ptr_w, tgt_w):
 
 
 # --------------------------------------------------------------------------- #
+ANSI = {0: "\x1b[91m", 1: "\x1b[92m", 2: "\x1b[94m",       # R G B
+        3: "\x1b[93m", 4: "\x1b[95m", 5: "\x1b[96m"}        # Y M C
+RESET = "\x1b[0m"
+
+
 def render(step, total, world, phi, ptr, finger, info):
     ox, oy = int(round(phi[0])), int(round(phi[1]))
+    img = world.color_image()
     glyph = [["·"] * G for _ in range(G)]
-    for k in range(world.n):                          # objects: colour letter (cmd upper)
-        x, y = np.round(world.pos[k]).astype(int)
-        if 0 <= x < G and 0 <= y < G:
-            ch = NAMES[world.colors[k]]
-            glyph[y][x] = ch if k == world.cmd else ch.lower()
+    for y in range(G):                                 # objects: COLOURED gaussian/flat blobs
+        for x in range(G):
+            v = img[y, x]; lum = float(v.max())
+            ch = "█" if lum >= 0.85 else "▓" if lum >= 0.45 else "░" if lum >= 0.15 else None
+            if ch is not None:
+                k = int(np.argmax([color_match(v, PALETTE[j]) for j in range(len(PALETTE))]))
+                glyph[y][x] = ANSI[k] + ch + RESET
+    cx, cy = np.round(world.commanded_pos()).astype(int)   # mark the commanded object's centre
+    if 0 <= cx < G and 0 <= cy < G:
+        glyph[cy][cx] = ANSI[world.colors[world.cmd]] + NAMES[world.colors[world.cmd]] + RESET
     tx, ty = np.round(world.target).astype(int)
     if 0 <= tx < G and 0 <= ty < G and glyph[ty][tx] == "·":
         glyph[ty][tx] = "+"
@@ -164,7 +175,7 @@ def render(step, total, world, phi, ptr, finger, info):
     cmd = NAMES[world.colors[world.cmd]]
     mode = info.get("mode", "")
     lines = [f"Step {step}/{total}  COMMAND=move '{cmd}'  tgt=({tx},{ty})  {mode}",
-             f"  UPPER=commanded obj  lower=distractors  +=target  P/p=hand  [..]=fovea"]
+             f"  coloured blobs=objects (letter=commanded centre)  +=target  P/p=hand  [..]=fovea"]
     for r in range(G):
         win = oy <= r <= oy + F - 1 and c0 <= c1
         gaps = [" "] * (G + 1)
