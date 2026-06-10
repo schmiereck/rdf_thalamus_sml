@@ -44,11 +44,15 @@ APPROACH = 2.0
 TOL      = 1.6
 
 
-def blob2d(pos, n, sigma=1.0):
+def blob2d(pos, n, sigma=1.0, shape="gaussian"):
+    """A blob centred at world pos in an n×n image.  shape='gaussian' (soft falloff)
+    or 'flat' (a hard-edged disk of radius ≈2σ) — to compare fuzzy vs sharp objects."""
     cx = pos[0] / (G - 1) * (n - 1); cy = pos[1] / (G - 1) * (n - 1)
-    xs = np.arange(n)
-    return np.outer(np.exp(-0.5 * ((xs - cy) / sigma) ** 2),
-                    np.exp(-0.5 * ((xs - cx) / sigma) ** 2))   # [row=y, col=x]
+    ys, xs = np.mgrid[0:n, 0:n]
+    r2 = (xs - cx) ** 2 + (ys - cy) ** 2
+    if shape == "flat":
+        return (r2 <= (2.0 * sigma) ** 2).astype(float)        # sharp disk, no falloff
+    return np.exp(-0.5 * r2 / sigma ** 2)                       # gaussian falloff
 
 
 def com2d(w):
@@ -84,12 +88,13 @@ def window(field, phi):
 # 2-D world: one object (push-on-touch), a pointer, a target.
 # --------------------------------------------------------------------------- #
 class World2D:
-    def __init__(self, seed=0, obj_min=0.6, obj_max=2.0):
+    def __init__(self, seed=0, obj_min=0.3, obj_max=1.1, shapes=("gaussian", "flat")):
         self.rng = np.random.default_rng(seed)
         self.lo, self.hi = G / 8.0, G * 7.0 / 8.0
-        self.obj_min, self.obj_max = obj_min, obj_max     # object gaussian size (≈1–5px)
+        self.obj_min, self.obj_max = obj_min, obj_max     # object size: ≈1–5px DIAMETER
+        self.shapes = shapes                              # gaussian (soft) and/or flat (sharp)
         self.obj = self._rand(); self.target = self._rand()
-        self.obj_sigma = self._rand_sigma()
+        self.obj_sigma = self._rand_sigma(); self.obj_shape = self._rand_shape()
 
     def _rand(self):
         return self.rng.uniform(self.lo, self.hi, 2)
@@ -97,8 +102,12 @@ class World2D:
     def _rand_sigma(self):
         return float(self.rng.uniform(self.obj_min, self.obj_max))
 
+    def _rand_shape(self):
+        return str(self.rng.choice(self.shapes))
+
     def scatter(self, with_target=False):
-        self.obj = self._rand(); self.obj_sigma = self._rand_sigma()   # fresh size each time
+        self.obj = self._rand()
+        self.obj_sigma = self._rand_sigma(); self.obj_shape = self._rand_shape()  # fresh each time
         if with_target:
             self.target = self._rand()
 
@@ -120,10 +129,13 @@ class World2D:
         return False
 
     def obj_lum(self):
-        return blob2d(self.obj, G, sigma=self.obj_sigma)   # gaussian, size = obj_sigma
+        return blob2d(self.obj, G, sigma=self.obj_sigma, shape=self.obj_shape)
 
     def ptr_lum(self, ptr):
-        return blob2d(ptr, G, sigma=0.9)
+        return blob2d(ptr, G, sigma=0.6)
+
+    def tgt_lum(self):
+        return blob2d(self.target, G, sigma=0.6)           # the target is a SEEN marker
 
 
 # --------------------------------------------------------------------------- #
@@ -135,7 +147,7 @@ def build_hexnet(rng):
     cells = {}
     for r in range(F):
         for c in range(F):
-            cells[(r, c)] = net.add(SensorNode(f"s_{r}_{c}", dim=2))   # [obj, ptr]
+            cells[(r, c)] = net.add(SensorNode(f"s_{r}_{c}", dim=3))   # [obj, ptr, target]
     for r in range(F):
         for c in range(F):
             for (rr, cc) in hex_neighbors(r, c, F, F):
@@ -157,10 +169,10 @@ def build_hexnet(rng):
     return net, cells, h1
 
 
-def set_sheet(cells, obj_w, ptr_w):
+def set_sheet(cells, obj_w, ptr_w, tgt_w):
     for r in range(F):
         for c in range(F):
-            cells[(r, c)].set_input(np.array([obj_w[r, c], ptr_w[r, c]]))
+            cells[(r, c)].set_input(np.array([obj_w[r, c], ptr_w[r, c], tgt_w[r, c]]))
 
 
 def gather(net, ids):
@@ -338,9 +350,11 @@ def render(step, total, world, phi, perceived, ptr, finger, info):
         glyph[py][px] = "P" if finger else "p"
 
     c0, c1 = max(ox, 0), min(ox + F - 1, G - 1)
+    mode = "SEARCHING target" if info.get("searching") else \
+           ("target FOUND" if info.get("tgt_felt") is not None else "")
     lines = [f"Step {step}/{total}  obj=({world.obj[0]:.0f},{world.obj[1]:.0f}) "
-             f"size={world.obj_sigma:.1f}  tgt=({tx},{ty})  finger={finger}",
-             "  █▓░=object(gaussian)  +=target  P/p=hand  [..]=fovea"]
+             f"{world.obj_shape}/{world.obj_sigma:.1f}  tgt=({tx},{ty})  finger={finger}  {mode}",
+             "  █▓░=object  +=target marker  P/p=hand  [..]=fovea(saccades to find target)"]
     for r in range(G):
         win = oy <= r <= oy + F - 1 and c0 <= c1
         gaps = [" "] * (G + 1)
@@ -369,6 +383,7 @@ def main():
     net, cells, h1 = build_hexnet(rng)
     ro_obj = Readout(len(h1) * 10, rng=np.random.default_rng(3))
     ro_ptr = Readout(len(h1) * 10, rng=np.random.default_rng(4))
+    ro_tgt = Readout(len(h1) * 10, rng=np.random.default_rng(9))   # perceive the TARGET marker
     prog("body model babble ...");      body = BodyModel(("hand",), rng=np.random.default_rng(5)); body.babble(2000)
     coupling = Coupling(rng=np.random.default_rng(6))
     goalprior = GoalPrior(rng=np.random.default_rng(7))
@@ -396,6 +411,12 @@ def main():
     in_view = act = 0
     deliveries = episodes = ep_steps = 0; ep_best = 1e9; ep_stall = 0
     EP_CAP = 160; STALL_K = 25
+    # TARGET SEARCH: the goal is a SEEN marker, not an oracle.  The agent SACCADES (a
+    # coarse tiling scan) until the target enters the fovea, REMEMBERS it (tgt_felt), then
+    # returns to the object to manipulate toward the remembered target.
+    scan_gaze = [np.array([gx, gy], float) for gy in (0, 8, 16) for gx in (0, 8, 16)]
+    searching = False; scan_idx = 0; tgt_felt = None; obj_mem = world.obj.copy()
+    tgt_err = tgt_n = 0; found = found_steps = 0
     se_hist = []
 
     print(f"act10 — 2D port of act8b (learned perception + error-driven action + body model)")
@@ -412,7 +433,8 @@ def main():
                 sys.stdout.write("\r\x1b[2K  [done — active phase]\n"); sys.stdout.flush()
         obj_w = window(world.obj_lum(), phi)
         ptr_w = window(world.ptr_lum(ptr), phi)
-        set_sheet(cells, obj_w, ptr_w)
+        tgt_w = window(world.tgt_lum(), phi)
+        set_sheet(cells, obj_w, ptr_w, tgt_w)
         r = net.step(learn=True); net.commit_step()
         if np.isfinite(r["sensor_error"]):
             se_hist.append(r["sensor_error"])
@@ -432,10 +454,20 @@ def main():
             ro_ptr.train(x, pc / (F - 1))
             pp, _ = ro_ptr.predict(x)
             ptr_vis = off + np.clip(pp * (F - 1), 0, F - 1)
+        # TARGET perception — only when the gaze actually lands on the marker
+        tc = com2d(tgt_w); tgt_seen = tc is not None
+        tgt_perc = None
+        if tgt_seen:
+            ro_tgt.train(x, tc / (F - 1))
+            tp, _ = ro_tgt.predict(x)
+            tgt_perc = off + np.clip(tp * (F - 1), 0, F - 1)
 
         if dev:
-            world.scatter()
-            ti = world.obj - np.array([F/2.0, F/2.0]) + rng.normal(0, 2, 2)
+            world.scatter(with_target=True)
+            # fixate the object OR the target (varied offset) so BOTH readouts learn to
+            # localise their channel — the target readout needs the marker in view too.
+            focus = world.obj if rng.random() < 0.5 else world.target
+            ti = focus - np.array([F/2.0, F/2.0]) + rng.normal(0, 2, 2)
             phi = np.clip(ti, -F/2.0, G - F/2.0)
             ptr = world._rand(); body.set_felt("hand", ptr)
         else:
@@ -449,6 +481,8 @@ def main():
                 while np.linalg.norm(world.obj - world.target) < 8:
                     world.target = world._rand()
                 phi = np.clip(world.obj - np.array([F/2.0, F/2.0]), -F/2.0, G - F/2.0)
+                obj_mem = world.obj.copy()               # the object we start fixating
+                searching = True; scan_idx = 0; tgt_felt = None   # must FIND the target first
                 if MANIP == "push":                      # genuine push: start hand OFF the
                     ang = rng.uniform(0, 2*np.pi)         # object (a random side; at d=0 the
                     ptr = np.clip(world.obj + (CONTACT_R + 1.5) *  # shove test is degenerate)
@@ -456,57 +490,76 @@ def main():
                 else:
                     ptr = world.obj.copy()
                 body.set_felt("hand", ptr)
-            # error-driven fovea on the object
-            disp = -fovea_gradient(cells)
-            fov_v = (1 - SMOOTH) * (GAIN * disp) + SMOOTH * fov_v
-            fov_v = np.clip(fov_v, -2.0, 2.0)
-            phi = np.clip(phi + fov_v, -F/2.0, G - F/2.0)
-            act += 1; in_view += int(obj_seen); ep_steps += 1
-            if obj_perc is not None:
-                obj_err += np.linalg.norm(obj_perc - world.obj); obj_n += 1
+            act += 1; ep_steps += 1
+            a = np.zeros(2); finger = False; obj_before = world.obj.copy()
 
-            obj_before = world.obj.copy()
-            a = np.zeros(2); finger = False
-            dist_now = float(np.linalg.norm(world.obj - world.target))
-            if dist_now < ep_best - 0.5:
-                ep_best = dist_now; ep_stall = 0
-            else:
-                ep_stall += 1
-            if obj_perc is not None and GOAL != "none":
-                hand = body.felt("hand")                 # act on the FELT hand
-                if MANIP == "push":
-                    # GENUINE PUSH: learned 2-D push-side policy (MPC); the side emerges.
-                    if ep_stall >= STALL_K:              # break a stuck oscillation
-                        ang = rng.uniform(0, 2*np.pi)
-                        a = MAG_PUSH * np.array([np.cos(ang), np.sin(ang)]); finger = False
-                        ep_stall = 0
-                    else:
-                        av, fv = mpc_plan(pushmodel, obj_perc, hand, world.target, MPC_HORIZON)
-                        a = np.asarray(av, float); finger = fv > 0.5
+            if searching:
+                # ── SACCADIC TARGET SEARCH: scan until the marker appears, then make a
+                #    CORRECTIVE saccade to FOVEATE it (centre it) before perceiving it
+                #    precisely — a peripheral hit at the window edge is unreliable. ──
+                center = (F - 1) / 2.0
+                if tgt_seen:
+                    if np.linalg.norm(tc - center) < 1.3:    # well-foveated → remember
+                        tgt_felt = tgt_perc.copy()
+                        tgt_err += float(np.linalg.norm(tgt_felt - world.target)); tgt_n += 1
+                        found += 1; found_steps += scan_idx + 1
+                        searching = False
+                        phi = np.clip(obj_mem - np.array([F/2.0, F/2.0]), -F/2.0, G - F/2.0)
+                        fov_v = np.zeros(2)
+                    else:                                    # saccade to centre the target
+                        phi = np.clip(off + tc - np.array([F/2.0, F/2.0]), -F/2.0, G - F/2.0)
                 else:
-                    # CARRY: goal prior + learned coupling (default).
-                    eps_obj = goalprior.error(obj_perc, world.target)
-                    grabbed = np.linalg.norm(hand - obj_perc) < CONTACT_R
-                    if grabbed:
-                        finger = True
-                        J, _ = coupling.predict(0.0)
-                        a = np.clip(-GOAL_K * (G - 1) * J * eps_obj, -VMAX, VMAX)
-                    else:
-                        a = np.clip(GOAL_K * (obj_perc - hand), -APPROACH, APPROACH)
-            # physical execution (with noise) + body model update
-            noise = rng.normal(0, 0.12, 2)
-            ptr = np.clip(ptr + a + noise, 0, G - 1)
-            if finger:
-                world.shove(ptr, a, 1.0) if MANIP == "push" else world.push(ptr, a)
-            body.update("hand", a, ptr_vis)
-            e = np.linalg.norm(body.felt("hand") - ptr)
-            if ptr_vis is not None:
-                ptr_in += e; ptr_in_n += 1
+                    phi = np.clip(scan_gaze[scan_idx % len(scan_gaze)].copy(),
+                                  -F/2.0, G - F/2.0)
+                    scan_idx += 1
             else:
-                ptr_out += e; ptr_out_n += 1
-            # efference gaze pursuit (object moved by our own push)
-            phi = np.clip(phi + (world.obj - obj_before), -F/2.0, G - F/2.0)
-            info = {"finger": finger}
+                # ── MANIPULATE toward the REMEMBERED target (error-driven, felt hand) ──
+                in_view += int(obj_seen)
+                disp = -fovea_gradient(cells)            # error-driven fovea tracks object
+                fov_v = (1 - SMOOTH) * (GAIN * disp) + SMOOTH * fov_v
+                fov_v = np.clip(fov_v, -2.0, 2.0)
+                phi = np.clip(phi + fov_v, -F/2.0, G - F/2.0)
+                if obj_perc is not None:
+                    obj_err += np.linalg.norm(obj_perc - world.obj); obj_n += 1
+                goal = tgt_felt if tgt_felt is not None else world.target
+                dist_now = float(np.linalg.norm(world.obj - goal))
+                if dist_now < ep_best - 0.5:
+                    ep_best = dist_now; ep_stall = 0
+                else:
+                    ep_stall += 1
+                if obj_perc is not None and GOAL != "none":
+                    hand = body.felt("hand")             # act on the FELT hand
+                    if MANIP == "push":
+                        if ep_stall >= STALL_K:          # break a stuck oscillation
+                            ang = rng.uniform(0, 2*np.pi)
+                            a = MAG_PUSH * np.array([np.cos(ang), np.sin(ang)]); finger = False
+                            ep_stall = 0
+                        else:
+                            av, fv = mpc_plan(pushmodel, obj_perc, hand, goal, MPC_HORIZON)
+                            a = np.asarray(av, float); finger = fv > 0.5
+                    else:
+                        eps_obj = goalprior.error(obj_perc, goal)
+                        grabbed = np.linalg.norm(hand - obj_perc) < CONTACT_R
+                        if grabbed:
+                            finger = True
+                            J, _ = coupling.predict(0.0)
+                            a = np.clip(-GOAL_K * (G - 1) * J * eps_obj, -VMAX, VMAX)
+                        else:
+                            a = np.clip(GOAL_K * (obj_perc - hand), -APPROACH, APPROACH)
+                # physical execution (with noise) + body model update
+                noise = rng.normal(0, 0.12, 2)
+                ptr = np.clip(ptr + a + noise, 0, G - 1)
+                if finger:
+                    world.shove(ptr, a, 1.0) if MANIP == "push" else world.push(ptr, a)
+                body.update("hand", a, ptr_vis)
+                e = np.linalg.norm(body.felt("hand") - ptr)
+                if ptr_vis is not None:
+                    ptr_in += e; ptr_in_n += 1
+                else:
+                    ptr_out += e; ptr_out_n += 1
+                # efference gaze pursuit (object moved by our own push)
+                phi = np.clip(phi + (world.obj - obj_before), -F/2.0, G - F/2.0)
+            info = {"finger": finger, "searching": searching, "tgt_felt": tgt_felt}
             if not HEADLESS:
                 render(step, total, world, phi, obj_perc, ptr, finger, info)
                 if DELAY > 0:
@@ -521,6 +574,9 @@ def main():
     print(f"  object perceived (net) vs true: {obj_err/max(1,obj_n):.2f}px")
     print(f"  BODY felt-hand vs true: in-view {ptr_in/max(1,ptr_in_n):.2f}px | "
           f"out {ptr_out/max(1,ptr_out_n):.2f}px")
+    if found:
+        print(f"  TARGET search: found by saccade in {found_steps/found:.1f} gaze-shifts "
+              f"(avg), perceived {tgt_err/max(1,tgt_n):.2f}px vs true   [goal is SEEN, not given]")
     rate = f"{100.0*deliveries/episodes:.0f}% ({deliveries}/{episodes})" if episodes else f"{deliveries}"
     mech = "genuine learned 2-D PUSH-side (MPC)" if MANIP == "push" else "learned-coupling carry"
     print(f"  object DELIVERED: {rate} (cap {EP_CAP})   [{mech}]")
