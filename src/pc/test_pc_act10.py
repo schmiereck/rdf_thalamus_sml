@@ -84,16 +84,21 @@ def window(field, phi):
 # 2-D world: one object (push-on-touch), a pointer, a target.
 # --------------------------------------------------------------------------- #
 class World2D:
-    def __init__(self, seed=0):
+    def __init__(self, seed=0, obj_min=0.6, obj_max=2.0):
         self.rng = np.random.default_rng(seed)
         self.lo, self.hi = G / 8.0, G * 7.0 / 8.0
+        self.obj_min, self.obj_max = obj_min, obj_max     # object gaussian size (≈1–5px)
         self.obj = self._rand(); self.target = self._rand()
+        self.obj_sigma = self._rand_sigma()
 
     def _rand(self):
         return self.rng.uniform(self.lo, self.hi, 2)
 
+    def _rand_sigma(self):
+        return float(self.rng.uniform(self.obj_min, self.obj_max))
+
     def scatter(self, with_target=False):
-        self.obj = self._rand()
+        self.obj = self._rand(); self.obj_sigma = self._rand_sigma()   # fresh size each time
         if with_target:
             self.target = self._rand()
 
@@ -104,10 +109,10 @@ class World2D:
         return False
 
     def obj_lum(self):
-        return blob2d(self.obj, G)
+        return blob2d(self.obj, G, sigma=self.obj_sigma)   # gaussian, size = obj_sigma
 
     def ptr_lum(self, ptr):
-        return blob2d(ptr, G)
+        return blob2d(ptr, G, sigma=0.9)
 
 
 # --------------------------------------------------------------------------- #
@@ -301,28 +306,37 @@ class GoalPrior:
 
 # --------------------------------------------------------------------------- #
 def render(step, total, world, phi, perceived, ptr, finger, info):
+    """Top-down HEX grid: cells space-separated, odd rows shifted half a cell (odd-r
+    offset lattice the net is wired on); the F×F fovea window is shown by '[' ']' placed
+    IN the inter-cell gaps so the grid never shifts.  The object is drawn with its
+    gaussian falloff (█▓░ by luminance), + target, P/p hand."""
     ox, oy = int(round(phi[0])), int(round(phi[1]))
-    grid = [["·"] * G for _ in range(G)]
+    lum = world.obj_lum()
+    glyph = [["·"] * G for _ in range(G)]
+    for y in range(G):                                  # object: gaussian shading
+        for xc in range(G):
+            v = lum[y, xc]
+            if v >= 0.85:   glyph[y][xc] = "█"
+            elif v >= 0.45: glyph[y][xc] = "▓"
+            elif v >= 0.15: glyph[y][xc] = "░"
     tx, ty = np.round(world.target).astype(int)
-    if 0 <= tx < G and 0 <= ty < G:
-        grid[ty][tx] = "+"
-    ox2, oy2 = np.round(world.obj).astype(int)
-    if 0 <= ox2 < G and 0 <= oy2 < G:
-        grid[oy2][ox2] = "O"
+    if 0 <= tx < G and 0 <= ty < G and glyph[ty][tx] == "·":
+        glyph[ty][tx] = "+"
     px, py = np.round(ptr).astype(int)
-    if 0 <= px < G and 0 <= py < G and grid[py][px] == "·":
-        grid[py][px] = "P" if finger else "p"
+    if 0 <= px < G and 0 <= py < G:
+        glyph[py][px] = "P" if finger else "p"
+
+    c0, c1 = max(ox, 0), min(ox + F - 1, G - 1)
     lines = [f"Step {step}/{total}  obj=({world.obj[0]:.0f},{world.obj[1]:.0f}) "
-             f"tgt=({tx},{ty})  finger={finger}"]
+             f"size={world.obj_sigma:.1f}  tgt=({tx},{ty})  finger={finger}",
+             "  █▓░=object(gaussian)  +=target  P/p=hand  [..]=fovea"]
     for r in range(G):
-        row = []
-        for c in range(G):
-            if c == ox and oy <= r < oy + F:
-                row.append("[")
-            row.append(grid[r][c])
-            if c == ox + F - 1 and oy <= r < oy + F:
-                row.append("]")
-        lines.append("  " + "".join(row))
+        win = oy <= r <= oy + F - 1 and c0 <= c1
+        gaps = [" "] * (G + 1)
+        if win:
+            gaps[c0] = "["; gaps[c1 + 1] = "]"
+        row = "".join(gaps[c] + glyph[r][c] for c in range(G)) + gaps[G]
+        lines.append("  " + (" " if r % 2 == 1 else "") + row)
     sys.stdout.write("\x1b[H\x1b[2J"); print("\n".join(lines), flush=True)
 
 
@@ -335,16 +349,22 @@ def main():
     GAIN = 3.0; SMOOTH = 0.3
     rng = np.random.default_rng(0)
 
+    def prog(msg):
+        sys.stdout.write("\r\x1b[2K  [setup] " + msg); sys.stdout.flush()
+
+    print("act10 — 2D port: constructing & pre-training the modules ...")
     net, cells, h1 = build_hexnet(rng)
     ro_obj = Readout(len(h1) * 10, rng=np.random.default_rng(3))
     ro_ptr = Readout(len(h1) * 10, rng=np.random.default_rng(4))
-    body = BodyModel(("hand",), rng=np.random.default_rng(5)); body.babble(2000)
+    prog("body model babble ...");      body = BodyModel(("hand",), rng=np.random.default_rng(5)); body.babble(2000)
     coupling = Coupling(rng=np.random.default_rng(6))
     goalprior = GoalPrior(rng=np.random.default_rng(7))
     world = World2D(seed=1)
-    coupling.babble(world, int(8000 * SCALE)); goalprior.babble(int(9000 * SCALE))
+    prog("contact-coupling babble ..."); coupling.babble(world, int(8000 * SCALE))
+    prog("object-goal prior babble ..."); goalprior.babble(int(9000 * SCALE))
     if GOAL == "scramble":
         coupling.scramble(); goalprior.scramble()       # control: break the learned models
+    sys.stdout.write("\r\x1b[2K"); sys.stdout.flush()
 
     DEV = int(3000 * SCALE); ACTIVE = int(6000 * SCALE); total = DEV + ACTIVE
     phi = np.array([G/2.0 - F/2.0, G/2.0 - F/2.0])
@@ -361,6 +381,13 @@ def main():
 
     for step in range(total):
         dev = step < DEV
+        if dev and step % 100 == 0:                     # developmental-phase progress
+            se = np.mean(se_hist[-50:]) if se_hist else float("nan")
+            sys.stdout.write(f"\r\x1b[2K  [learning the 2D world model]  "
+                             f"{step}/{DEV} ({100*step//DEV}%)   sensor_err {se:.3f}")
+            sys.stdout.flush()
+            if step + 100 >= DEV:
+                sys.stdout.write("\r\x1b[2K  [done — active phase]\n"); sys.stdout.flush()
         obj_w = window(world.obj_lum(), phi)
         ptr_w = window(world.ptr_lum(ptr), phi)
         set_sheet(cells, obj_w, ptr_w)
