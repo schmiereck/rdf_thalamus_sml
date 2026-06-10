@@ -525,25 +525,23 @@ def main():
                                   -F/2.0, G - F/2.0)
                     scan_idx += 1
             else:
-                # ── GAZE FOLLOWS THE TASK: look at the HAND while reaching (keeps the
-                #    body model visually corrected → felt hand stays accurate → reliable
-                #    grab), look at the OBJECT while manipulating it.  Fixes the wandering
-                #    hand (felt drifting out of view → false grab → carry into empty). ──
+                # ── GAZE STAYS ON THE OBJECT (where the hand must go).  The hand is moved
+                #    BLINDLY by EFFERENCE (the agent knows its own commands); vision
+                #    corrects the felt hand ONLY when it enters the object's window — i.e.
+                #    near contact, for a PRECISE final grasp/push.  (User's model: guide
+                #    the hand blindly, then use sight to grasp.)  No gaze-chasing → no
+                #    runaway drift during the fast 2-D repositioning of the push. ──
                 in_view += int(obj_seen)
                 if obj_seen:
                     obj_mem = obj_perc.copy()            # remember where the object is
                 obj_here = obj_perc if obj_perc is not None else obj_mem
-                hand = body.felt("hand")                 # act on the FELT hand
+                hand = body.felt("hand")                 # act on the FELT (efference) hand
                 grabbed = np.linalg.norm(hand - obj_here) < CONTACT_R
-                if grabbed and obj_perc is not None:     # MANIPULATE → track the object
-                    disp = -fovea_gradient(cells)
-                    fov_v = (1 - SMOOTH) * (GAIN * disp) + SMOOTH * fov_v
-                    fov_v = np.clip(fov_v, -2.0, 2.0)
-                    phi = np.clip(phi + fov_v, -F/2.0, G - F/2.0)
-                    tracking = True
-                else:                                    # REACH → look at the hand
-                    phi = np.clip(hand - np.array([F/2.0, F/2.0]), -F/2.0, G - F/2.0)
-                    fov_v = np.zeros(2); tracking = False
+                disp = -fovea_gradient(cells)            # error-driven fovea tracks object
+                fov_v = (1 - SMOOTH) * (GAIN * disp) + SMOOTH * fov_v
+                fov_v = np.clip(fov_v, -2.0, 2.0)
+                phi = np.clip(phi + fov_v, -F/2.0, G - F/2.0)
+                tracking = True
                 if obj_perc is not None:
                     obj_err += np.linalg.norm(obj_perc - world.obj); obj_n += 1
                 goal = tgt_felt if tgt_felt is not None else world.target
