@@ -138,6 +138,7 @@ experiments** that validated a mechanism before it went live.
 | `test_pc_act10.py` | **2-D port of the learned/error-driven/coordinate-free line** (monochrome): learned 2-D perception, error-driven fovea, body model, learned-coupling carry, genuine 2-D push |
 | `test_pc_push_policy_2d.py` | **2-D push de-risk**: 8 push dirs + fine + reposition actions, horizon-3 MPC; the 2-D push side emerges |
 | **`test_pc_act11.py`** | **act10 + colour + multi-object + colour-command conditioning**, both carry and genuine push of the *commanded* object, surprise readout, precision-weighted body vision |
+| `pc_act12.py` | the same task on a **coupled 2-link arm** (shoulder+elbow joints) instead of the plotter x/y motors — a step toward a real robot arm; learned linear forward-kinematics + Jacobian control (carry 100 % / push 98 %, matches the plotter) |
 
 (Other `test_pc_planner*.py`, `test_pc_dream_goal.py`, `test_pc_goal_module.py` explored a
 higher "dreaming/curiosity" planner above the goal module — a parallel thread, not on the act11
