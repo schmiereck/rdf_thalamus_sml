@@ -59,7 +59,7 @@ class PushModel2D:
         rng = rng or np.random.default_rng()
         self.W1 = rng.normal(0, 0.5, (hid, 5)); self.b1 = np.zeros(hid)
         self.W2 = rng.normal(0, 0.3, (2, hid)); self.b2 = np.zeros(2)
-        self.lr = lr; self.rng = rng
+        self.lr = lr; self.rng = rng; self.last_surprise = None   # EMA |predicted Δobj - actual Δobj|
 
     def _x(self, d, a, f):
         return np.array([d[0] / CONTACT_R, d[1] / CONTACT_R, a[0], a[1], f])
@@ -87,6 +87,8 @@ class PushModel2D:
         """One online gradient step from a REAL experienced push — lifelong learning."""
         y, h = self.predict(d, a, f)
         err = y - dobj
+        s = float(np.sqrt(np.mean(err ** 2)))                     # SURPRISE: predicted vs actual Δobj
+        self.last_surprise = s if self.last_surprise is None else 0.9 * self.last_surprise + 0.1 * s
         self.W2 -= lr * np.outer(err, h); self.b2 -= lr * err
         dh = (self.W2.T @ err) * (1 - h ** 2)
         self.W1 -= lr * np.outer(dh, self._x(d, a, f)); self.b1 -= lr * dh

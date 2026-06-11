@@ -184,8 +184,15 @@ def render(step, total, world, phi, ptr, finger, info):
     c0, c1 = max(ox, 0), min(ox + F - 1, G - 1)
     cmd = NAMES[world.colors[world.cmd]]
     mode = info.get("mode", "")
+    sp = info.get("surprise", {})
+    def _s(v):
+        return f"{v:.3f}" if v is not None else "  -  "
+    sur = (f"  SURPRISE (pred vs actual):  vis-sens {_s(sp.get('vis_sens'))}  "
+           f"vis-LATENT {_s(sp.get('vis_lat'))}  |  body {_s(sp.get('body'))}  |  "
+           f"{sp.get('dyn_name','dyn')} {_s(sp.get('dyn'))}")
     lines = [f"Step {step}/{total}  COMMAND=move '{cmd}'  tgt=({tx},{ty})  {mode}",
-             f"  coloured blobs=objects (letter=commanded centre)  +=target  P/p=hand  [..]=fovea"]
+             f"  coloured blobs=objects (letter=commanded centre)  +=target  P/p=hand  [..]=fovea",
+             sur]
     for r in range(G):
         win = oy <= r <= oy + F - 1 and c0 <= c1
         gaps = [" "] * (G + 1)
@@ -239,6 +246,10 @@ def main():
     ptr = np.array([G/2.0, G/2.0]); body.set_felt("hand", ptr)
     fov_v = np.zeros(2)
     se_hist = []
+    # SURPRISE = prediction error (predicted vs actual); per-dimension RMS so modules compare
+    N_SENS = F * F * 5                          # clamped sensor dims (hex sheet)
+    N_LAT = len(h1) * 12 + 10                   # hidden latent dims (h1 + top)
+    sur_vis_sens = sur_vis_lat = None
     in_view = act = 0
     sel_err, sel_n = 0.0, 0
     ptr_in, ptr_in_n, ptr_out, ptr_out_n = 0.0, 0, 0.0, 0
@@ -264,6 +275,12 @@ def main():
         r = net.step(learn=True); net.commit_step()
         if np.isfinite(r["sensor_error"]):
             se_hist.append(r["sensor_error"])
+        # VisualCortex surprise: input-reconstruction + LATENT (h1/top) prediction error, EMA
+        if np.isfinite(r["sensor_error"]) and np.isfinite(r["state_error"]):
+            vs = float(np.sqrt(r["sensor_error"] / N_SENS))
+            vl = float(np.sqrt(r["state_error"] / N_LAT))
+            sur_vis_sens = vs if sur_vis_sens is None else 0.9 * sur_vis_sens + 0.1 * vs
+            sur_vis_lat = vl if sur_vis_lat is None else 0.9 * sur_vis_lat + 0.1 * vl
 
         x = gather(net, h1)
         off = np.array([int(round(phi[0])), int(round(phi[1]))])
@@ -393,7 +410,13 @@ def main():
             phi = np.clip(phi + (world.commanded_pos() - obj_before), -F/2.0, G - F/2.0)
 
         if not HEADLESS:
-            render(step, total, world, phi, ptr, finger, {"mode": mode})
+            dyn_s = pushmodel.last_surprise if MANIP == "push" else coupling.last_surprise
+            render(step, total, world, phi, ptr, finger, {
+                "mode": mode,
+                "surprise": {"vis_sens": sur_vis_sens, "vis_lat": sur_vis_lat,
+                             "body": body.surprise.get("hand"),
+                             "dyn": dyn_s,
+                             "dyn_name": "push-model" if MANIP == "push" else "coupling"}})
             if DELAY > 0:
                 time.sleep(DELAY)
 
@@ -407,6 +430,14 @@ def main():
     rate = f"{100.0*deliveries/episodes:.0f}% ({deliveries}/{episodes})" if episodes else f"{deliveries}"
     mech = "genuine learned 2-D PUSH-side (MPC)" if MANIP == "push" else "learned-coupling carry"
     print(f"  COMMANDED object DELIVERED: {rate} (cap {EP_CAP})   [{mech}]")
+    dyn_s = pushmodel.last_surprise if MANIP == "push" else coupling.last_surprise
+    dn = "push-model" if MANIP == "push" else "coupling"
+
+    def _s(v):
+        return f"{v:.3f}" if v is not None else "n/a"
+    print(f"  SURPRISE (pred vs actual latent):  vis-sens {_s(sur_vis_sens)}  "
+          f"vis-LATENT {_s(sur_vis_lat)} | body {_s(body.surprise.get('hand'))} | "
+          f"{dn} {_s(dyn_s)}")
     print("=" * 70)
 
 

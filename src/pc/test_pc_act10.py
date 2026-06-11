@@ -231,6 +231,7 @@ class BodyModel:
             mod.add_in_port(f"{p}_obs", [f"s_{p}"]).add_out_port(f"{p}_belief", [f"b_{p}"])
         net.add_module(mod)
         self.net, self.parts = net, parts
+        self.surprise = {p: None for p in parts}   # EMA of |obs - predicted obs| (proprio vs vision)
 
     def babble(self, steps):
         for _ in range(steps):
@@ -251,6 +252,8 @@ class BodyModel:
         if obs is not None:
             Wm = self.conn[part].W
             err = np.asarray(obs, float) / (G - 1) - (Wm @ b.mu)
+            s = float(np.sqrt(np.mean(err ** 2)))                         # SURPRISE: predicted vs seen
+            self.surprise[part] = s if self.surprise[part] is None else 0.9 * self.surprise[part] + 0.1 * s
             b.mu = b.mu + eta * (Wm.T @ err)                              # vision correction
 
     def learn(self, part, obs, lr=0.01):
@@ -272,7 +275,7 @@ class Coupling:
         rng = rng or np.random.default_rng()
         self.W1 = rng.normal(0, 0.6, (hid, 1)); self.b1 = np.zeros(hid)
         self.W2 = rng.normal(0, 0.3, hid); self.b2 = 0.0
-        self.lr = lr; self.rng = rng
+        self.lr = lr; self.rng = rng; self.last_surprise = None   # EMA |predicted - actual| coupling
 
     def predict(self, dist):
         h = np.tanh(self.W1 @ np.array([dist / CONTACT_R]) + self.b1)
@@ -302,6 +305,8 @@ class Coupling:
         target = dobj / amag
         y, h = self.predict(dist)
         err = y - target
+        s = abs(float(err))                                       # SURPRISE: predicted vs actual coupling
+        self.last_surprise = s if self.last_surprise is None else 0.9 * self.last_surprise + 0.1 * s
         self.W2 -= lr * err * h; self.b2 -= lr * err
         dh = (self.W2 * err) * (1 - h**2)
         self.W1 -= lr * np.outer(dh, np.array([dist / CONTACT_R])); self.b1 -= lr * dh
