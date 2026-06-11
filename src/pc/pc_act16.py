@@ -35,9 +35,10 @@ PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene be
 
 
 def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, perceive_fn=None):
-    """If perceive_fn is given it is called per episode (arm at home, cube visible) and must
-    return the commanded cube's xy as PERCEIVED (e.g. from the camera) — used for the grasp
-    approach instead of the privileged sim position.  Closes the perception->action loop."""
+    """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
+    return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
+    for the grasp approach, the target for the place, instead of the privileged sim values.
+    Closes the perception->action loop.  (target_xy may be None to keep the given target.)"""
     rng = np.random.default_rng(1)
     STRAY_LO, STRAY_HI = REACH_XY[0] - 0.03, REACH_XY[1] + 0.03   # valid table area (patch + margin)
 
@@ -71,7 +72,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
 
     if PERSIST:
         sim.reset_home(); scatter()
-    n_grasp = n_push = deliveries = 0; perr_sum = 0.0; perr_n = 0
+    n_grasp = n_push = deliveries = 0; perr_sum = perr_n = terr_sum = terr_n = 0.0
     for ep in range(episodes):
         if PERSIST:
             sim.arm_home(); reposition_strays()
@@ -84,9 +85,13 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         while np.linalg.norm(tgt - c0) < 0.06 or not clear(tgt, OBJS, 0.05):
             tgt = _rand_xy(rng)
         sim.set_target_marker(tgt); sim.step(40)
-        cube_plan = perceive_fn(cmd) if perceive_fn else None     # perceive the cube (arm at home)
-        if cube_plan is not None:
-            perr_sum += float(np.linalg.norm(cube_plan - sim.obj_pos(cmd)[:2])); perr_n += 1
+        tgt_true = tgt.copy(); cube_plan = None                   # perceive cube + target (camera)
+        if perceive_fn:
+            cube_plan, tgt_perc = perceive_fn(cmd)
+            if cube_plan is not None:
+                perr_sum += float(np.linalg.norm(cube_plan - sim.obj_pos(cmd)[:2])); perr_n += 1
+            if tgt_perc is not None:
+                terr_sum += float(np.linalg.norm(tgt_perc - tgt_true)); terr_n += 1; tgt = tgt_perc
         mode = force or "grasp"; phase = "over" if mode == "grasp" else "approach"
         dwell = 0; via = "grasp"; done = False
         for k in range(CAP):
@@ -154,14 +159,16 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             if viz is not None and k % 5 == 0:
                 viz.update(sim.render(CAM), f"ep {ep} {via} {cmd} [{phase}]"
                                             f"  obj->tgt {np.linalg.norm(c-tgt)*1000:.0f}mm")
-        err = np.linalg.norm(sim.obj_pos(cmd)[:2] - tgt)
+        err = np.linalg.norm(sim.obj_pos(cmd)[:2] - tgt_true)   # measure against the TRUE target
         ok = err < TOL
         deliveries += ok; n_grasp += (via == "grasp" and ok); n_push += (via == "push" and ok)
         print(f"  ep {ep:2d}: {'OK ' if ok else 'no '} via {via:5s}  obj->tgt {err*1000:.0f} mm")
     print(f"  == combined grasp-then-push: DELIVERED {deliveries}/{episodes}  "
           f"(by grasp {n_grasp}, by push {n_push}) ==")
     if perr_n:
-        print(f"  camera-perceived cube vs true: {perr_sum/perr_n*1000:.1f} mm  (over {perr_n} eps)")
+        print(f"  camera-perceived CUBE vs true: {perr_sum/perr_n*1000:.1f} mm  (over {int(perr_n)} eps)")
+    if terr_n:
+        print(f"  camera-perceived TARGET vs true: {terr_sum/terr_n*1000:.1f} mm  (over {int(terr_n)} eps)")
     if viz is not None:
         print("  [viz] close the window to exit."); viz.hold()
 
