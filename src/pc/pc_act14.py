@@ -60,6 +60,15 @@ class BracketArmSim:
             self.d.ctrl[self.act[j]] = v
         mujoco.mj_forward(self.m, self.d)
 
+    def arm_home(self):
+        """Return ONLY the arm to its home pose (objects keep their positions) — for
+        continual episodes where the scene persists and just the target/cube changes."""
+        for j, v in HOME.items():
+            self.d.qpos[self.jqadr[j]] = v
+            self.d.qvel[self.m.jnt_dofadr[self._jid(j)]] = 0.0
+            self.d.ctrl[self.act[j]] = v
+        mujoco.mj_forward(self.m, self.d)
+
     # ---- control ----
     def target(self, joint, value):
         self.d.ctrl[self.act[joint]] = float(value)

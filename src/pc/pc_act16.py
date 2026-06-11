@@ -29,31 +29,43 @@ from pc.pc_act14 import BracketArmSim, ArmBodyModel3D, HOME, _rand_xy, CamViz
 
 J5_OPEN, J5_GRIP, J5_PUSH = 1.8, 0.0, 0.12     # open / fully-closed (grip) / nearly-closed (push)
 OBJS = ["obj_red", "obj_green", "obj_blue"]
-OVER_Z, GRASP_Z, CARRY_Z, PUSH_Z = 0.07, 0.014, 0.10, 0.016
+OVER_Z, GRASP_Z, CARRY_Z, PUSH_Z = 0.06, 0.014, 0.055, 0.016
 STANDOFF, NEAR, TOL, CAP = 0.045, 0.02, 0.025, 2200
+PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene between episodes
 
 
-def run_combined(sim, body, viz, CAM, episodes=12, cmd="obj_red", force=None):
+def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None):
     rng = np.random.default_rng(1)
-    n_grasp = n_push = deliveries = 0
-    for ep in range(episodes):
-        sim.reset_home(); sim.target("joint_3", HOME["joint_3"]); sim.target("joint_5", J5_OPEN)
+
+    def scatter():
         pts = []
         for nm in OBJS:
             p = _rand_xy(rng)
             while any(np.linalg.norm(p - q) < 0.06 for q in pts):
                 p = _rand_xy(rng)
             pts.append(p); sim.set_object(nm, p)
-        tgt = _rand_xy(rng)
-        while np.linalg.norm(tgt - pts[OBJS.index(cmd)]) < 0.06:
-            tgt = _rand_xy(rng)
-        sim.set_target_marker(tgt)
         mujoco.mj_forward(sim.m, sim.d); sim.step(150)
+
+    if PERSIST:
+        sim.reset_home(); scatter()
+    n_grasp = n_push = deliveries = 0
+    for ep in range(episodes):
+        if PERSIST:
+            sim.arm_home()
+        else:
+            sim.reset_home(); scatter()
+        sim.target("joint_3", HOME["joint_3"]); sim.target("joint_5", J5_OPEN)
+        cmd = cmd_fixed or OBJS[ep % len(OBJS)]               # cycle which cube to fetch
+        c0 = sim.obj_pos(cmd)[:2]
+        tgt = _rand_xy(rng)
+        while np.linalg.norm(tgt - c0) < 0.06:
+            tgt = _rand_xy(rng)
+        sim.set_target_marker(tgt); sim.step(40)
         mode = force or "grasp"; phase = "over" if mode == "grasp" else "approach"
-        dwell = 0; via = "grasp"
+        dwell = 0; via = "grasp"; done = False
         for k in range(CAP):
             c = sim.obj_pos(cmd)[:2]; cz = sim.obj_pos(cmd)[2]; h = sim.grasp_pos(); hxy = h[:2]; hz = h[2]
-            if np.linalg.norm(c - tgt) < TOL and phase in ("carry", "place", "release", "push", "approach"):
+            if via == "push" and np.linalg.norm(c - tgt) < TOL:  # pushed home -> done
                 break
             d = tgt - c; n = np.linalg.norm(d); d = d / n if n > 1e-6 else np.array([1.0, 0.0])
 
@@ -73,8 +85,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd="obj_red", force=None):
                         phase = "lift"
                 elif phase == "lift":
                     j5, aim = J5_GRIP, np.array([hxy[0], hxy[1], CARRY_Z])
-                    if hz > CARRY_Z - 0.02:
-                        if cz > 0.045:
+                    if hz > CARRY_Z - 0.015:
+                        if cz > 0.030:                            # cube clearly lifted off the table
                             phase = "carry"                      # grasped!
                         else:
                             mode, phase = "push", "approach"      # missed -> push fallback
@@ -123,7 +135,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd="obj_red", force=None):
 def main():
     HEADLESS = os.environ.get("ACT16_HEADLESS", "0") == "1"
     CAM = os.environ.get("ACT16_CAM", "overview").lower()
-    TARGET = os.environ.get("ACT16_TARGET", "obj_red")
+    TARGET = os.environ.get("ACT16_TARGET", "") or None       # fix one cube, or None = cycle all
     EPISODES = int(os.environ.get("ACT16_EPISODES", "12"))
     MODE = os.environ.get("ACT16_MODE", "both").lower()
     force = None if MODE == "both" else MODE                  # grasp | push to force one branch
@@ -141,7 +153,7 @@ def main():
             viz = CamViz(CAM)
         except Exception as e:
             print(f"  [viz] matplotlib unavailable ({e}); running headless")
-    run_combined(sim, body, viz, CAM, episodes=EPISODES, cmd=TARGET, force=force)
+    run_combined(sim, body, viz, CAM, episodes=EPISODES, cmd_fixed=TARGET, force=force)
 
 
 if __name__ == "__main__":
