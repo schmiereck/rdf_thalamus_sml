@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 import mujoco
 
-from pc.pc_act14 import BracketArmSim, ArmBodyModel3D, HOME, _rand_xy, CamViz
+from pc.pc_act14 import BracketArmSim, ArmBodyModel3D, HOME, _rand_xy, CamViz, REACH_XY
 
 J5_OPEN, J5_GRIP, J5_PUSH = 1.8, 0.0, 0.12     # open / fully-closed (grip) / nearly-closed (push)
 OBJS = ["obj_red", "obj_green", "obj_blue"]
@@ -36,6 +36,13 @@ PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene be
 
 def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None):
     rng = np.random.default_rng(1)
+    STRAY_LO, STRAY_HI = REACH_XY[0] - 0.03, REACH_XY[1] + 0.03   # valid table area (patch + margin)
+
+    def others(nm):
+        return [o for o in OBJS if o != nm]
+
+    def clear(p, names, gap):
+        return all(np.linalg.norm(p - sim.obj_pos(o)[:2]) > gap for o in names)
 
     def scatter():
         pts = []
@@ -46,19 +53,32 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None):
             pts.append(p); sim.set_object(nm, p)
         mujoco.mj_forward(sim.m, sim.d); sim.step(150)
 
+    def reposition_strays():
+        """Any cube that wandered out of the valid area is dropped back inside (clear of others)."""
+        moved = False
+        for nm in OBJS:
+            p = sim.obj_pos(nm)[:2]
+            if np.any(p < STRAY_LO) or np.any(p > STRAY_HI):
+                q = _rand_xy(rng)
+                while not clear(q, others(nm), 0.06):
+                    q = _rand_xy(rng)
+                sim.set_object(nm, q); moved = True
+        if moved:
+            mujoco.mj_forward(sim.m, sim.d); sim.step(80)
+
     if PERSIST:
         sim.reset_home(); scatter()
     n_grasp = n_push = deliveries = 0
     for ep in range(episodes):
         if PERSIST:
-            sim.arm_home()
+            sim.arm_home(); reposition_strays()
         else:
             sim.reset_home(); scatter()
         sim.target("joint_3", HOME["joint_3"]); sim.target("joint_5", J5_OPEN)
         cmd = cmd_fixed or OBJS[ep % len(OBJS)]               # cycle which cube to fetch
         c0 = sim.obj_pos(cmd)[:2]
-        tgt = _rand_xy(rng)
-        while np.linalg.norm(tgt - c0) < 0.06:
+        tgt = _rand_xy(rng)                                  # target: away from the cube AND not on any cube
+        while np.linalg.norm(tgt - c0) < 0.06 or not clear(tgt, OBJS, 0.05):
             tgt = _rand_xy(rng)
         sim.set_target_marker(tgt); sim.step(40)
         mode = force or "grasp"; phase = "over" if mode == "grasp" else "approach"
@@ -80,8 +100,11 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None):
                     if hz < GRASP_Z + 0.010:
                         phase, dwell = "close", 0
                 elif phase == "close":
-                    j5, aim, dwell = J5_GRIP, np.array([c[0], c[1], GRASP_Z]), dwell + 1
-                    if dwell > 80:
+                    dwell += 1                                    # close SLOWLY (ramp) so the
+                    frac = min(1.0, dwell / 60.0)                 # claws don't shove the cube
+                    j5 = J5_OPEN + (J5_GRIP - J5_OPEN) * frac
+                    aim = np.array([c[0], c[1], GRASP_Z])
+                    if dwell > 90:
                         phase = "lift"
                 elif phase == "lift":
                     j5, aim = J5_GRIP, np.array([hxy[0], hxy[1], CARRY_Z])
@@ -116,7 +139,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None):
                         phase = "approach"
 
             sim.target("joint_5", j5)
-            g, mdq = (1.6, 0.020) if via == "push" else (2.0, 0.026)
+            g, mdq = (0.9, 0.010) if via == "push" else (2.0, 0.026)   # push gently (don't knock)
             q3 = sim.arm3_angles(); sim.set_arm3_targets(q3 + body.reach_velocity(q3, aim, gain=g, max_dq=mdq))
             sim.step(2)
             if viz is not None and k % 5 == 0:
