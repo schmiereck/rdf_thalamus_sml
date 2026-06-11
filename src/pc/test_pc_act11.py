@@ -373,12 +373,21 @@ def main():
             obj_before = world.commanded_pos().copy()
             if here is not None and GOAL != "none":
                 if MANIP == "push":
-                    mode = f"PUSH '{NAMES[world.colors[world.cmd]]}' → target"
-                    if ep_stall >= STALL_K:               # break a stuck oscillation
+                    name = NAMES[world.colors[world.cmd]]
+                    reach = CONTACT_R + 2.0               # the push model's valid babble range
+                    hd = float(np.linalg.norm(hand - here))
+                    if hd > reach:                        # LEASH: hand drifted out of range —
+                        mode = f"APPROACH '{name}'"        # walk straight to the object first
+                        u = here - hand
+                        a = (u / hd) * APPROACH; finger = False
+                        ep_stall = 0                      # approaching is progress, don't stall-escape
+                    elif ep_stall >= STALL_K:             # break a stuck oscillation
+                        mode = f"PUSH '{name}' → target"
                         ang = rng.uniform(0, 2*np.pi)
                         a = MAG_PUSH * np.array([np.cos(ang), np.sin(ang)]); finger = False
                         ep_stall = 0
-                    else:
+                    else:                                 # in range — MPC push-side policy
+                        mode = f"PUSH '{name}' → target"
                         av, fv = mpc_plan(pushmodel, here, hand, goal, MPC_HORIZON)
                         a = np.asarray(av, float); finger = fv > 0.5
                 elif grabbed:
