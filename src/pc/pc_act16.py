@@ -34,7 +34,10 @@ STANDOFF, NEAR, TOL, CAP = 0.045, 0.02, 0.025, 2200
 PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene between episodes
 
 
-def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None):
+def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, perceive_fn=None):
+    """If perceive_fn is given it is called per episode (arm at home, cube visible) and must
+    return the commanded cube's xy as PERCEIVED (e.g. from the camera) — used for the grasp
+    approach instead of the privileged sim position.  Closes the perception->action loop."""
     rng = np.random.default_rng(1)
     STRAY_LO, STRAY_HI = REACH_XY[0] - 0.03, REACH_XY[1] + 0.03   # valid table area (patch + margin)
 
@@ -68,7 +71,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None):
 
     if PERSIST:
         sim.reset_home(); scatter()
-    n_grasp = n_push = deliveries = 0
+    n_grasp = n_push = deliveries = 0; perr_sum = 0.0; perr_n = 0
     for ep in range(episodes):
         if PERSIST:
             sim.arm_home(); reposition_strays()
@@ -81,10 +84,16 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None):
         while np.linalg.norm(tgt - c0) < 0.06 or not clear(tgt, OBJS, 0.05):
             tgt = _rand_xy(rng)
         sim.set_target_marker(tgt); sim.step(40)
+        cube_plan = perceive_fn(cmd) if perceive_fn else None     # perceive the cube (arm at home)
+        if cube_plan is not None:
+            perr_sum += float(np.linalg.norm(cube_plan - sim.obj_pos(cmd)[:2])); perr_n += 1
         mode = force or "grasp"; phase = "over" if mode == "grasp" else "approach"
         dwell = 0; via = "grasp"; done = False
         for k in range(CAP):
-            c = sim.obj_pos(cmd)[:2]; cz = sim.obj_pos(cmd)[2]; h = sim.grasp_pos(); hxy = h[:2]; hz = h[2]
+            c_true = sim.obj_pos(cmd)[:2]; cz = sim.obj_pos(cmd)[2]; h = sim.grasp_pos(); hxy = h[:2]; hz = h[2]
+            # use the PERCEIVED cube position for the grasp approach (cube is static then); the
+            # true position is used once the cube is grabbed / for the fallback and the measure.
+            c = cube_plan if (cube_plan is not None and phase in ("over", "lower", "close")) else c_true
             if via == "push" and np.linalg.norm(c - tgt) < TOL:  # pushed home -> done
                 break
             d = tgt - c; n = np.linalg.norm(d); d = d / n if n > 1e-6 else np.array([1.0, 0.0])
@@ -151,6 +160,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None):
         print(f"  ep {ep:2d}: {'OK ' if ok else 'no '} via {via:5s}  obj->tgt {err*1000:.0f} mm")
     print(f"  == combined grasp-then-push: DELIVERED {deliveries}/{episodes}  "
           f"(by grasp {n_grasp}, by push {n_push}) ==")
+    if perr_n:
+        print(f"  camera-perceived cube vs true: {perr_sum/perr_n*1000:.1f} mm  (over {perr_n} eps)")
     if viz is not None:
         print("  [viz] close the window to exit."); viz.hold()
 
