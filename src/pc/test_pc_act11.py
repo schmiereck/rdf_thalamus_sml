@@ -289,11 +289,15 @@ def main():
         sel = selected_lum(rgb_w, cmd)
         sc = com2d(sel); obj_seen = sc is not None
         obj_perc = (off + sc) if obj_seen else None
-        # pointer perception (body model visual correction)
-        pc = com2d(ptr_w); ptr_vis = None
+        # pointer perception (body model visual correction), PRECISION-WEIGHTED: a hand
+        # seen near the fovea centre is decoded reliably (full trust); a peripheral sighting
+        # is uncertain, so it only weakly nudges the felt hand instead of corrupting it
+        # (inverse-variance weighting — the PC way; "vision grabs precisely at the centre").
+        pc = com2d(ptr_w); ptr_vis = None; ptr_conf = 0.0
         if pc is not None:
             ro_ptr.train(x, pc / (F - 1)); pp, _ = ro_ptr.predict(x)
             ptr_vis = off + np.clip(pp * (F - 1), 0, F - 1)
+            ptr_conf = float(max(0.0, 1.0 - np.linalg.norm(pc - (F - 1) / 2.0) / (F / 2.0)))
         # target perception
         tc = com2d(tgt_w); tgt_seen = tc is not None
         tgt_perc = (off + tc) if tgt_seen else None
@@ -357,20 +361,25 @@ def main():
             if obj_perc is not None:
                 obj_mem = obj_perc.copy()
                 sel_err += float(np.linalg.norm(obj_perc - world.commanded_pos())); sel_n += 1
-            # fovea: colour-cued servo onto the commanded object
-            if obj_perc is not None:
-                fov_v = (1 - SMOOTH) * (GAIN * (obj_perc - off - center)) + SMOOTH * fov_v
-                fov_v = np.clip(fov_v, -2.0, 2.0)
-                phi = np.clip(phi + fov_v, -F/2.0, G - F/2.0)
             hand = body.felt("hand")
             grabbed = here is not None and np.linalg.norm(hand - here) < CONTACT_R
             goal = tgt_felt if tgt_felt is not None else world.target
             dist_now = float(np.linalg.norm(world.commanded_pos() - goal))
+            obj_before = world.commanded_pos().copy()
+            # fovea: colour-cued servo onto the commanded object (or back to its memory).
+            # Gaze STAYS on the object — the hand is led there BLIND (felt) and corrected
+            # by vision only when it arrives near the centre (TRUST_R), "to grab precisely".
+            if obj_perc is not None:
+                fov_v = (1 - SMOOTH) * (GAIN * (obj_perc - off - center)) + SMOOTH * fov_v
+                fov_v = np.clip(fov_v, -2.0, 2.0)
+                phi = np.clip(phi + fov_v, -F/2.0, G - F/2.0)
+            elif obj_mem is not None:
+                phi = np.clip(obj_mem - np.array([F/2.0, F/2.0]), -F/2.0, G - F/2.0)
+                fov_v = np.zeros(2)
             if dist_now < ep_best - 0.5:
                 ep_best = dist_now; ep_stall = 0
             else:
                 ep_stall += 1
-            obj_before = world.commanded_pos().copy()
             if here is not None and GOAL != "none":
                 if MANIP == "push":
                     name = NAMES[world.colors[world.cmd]]
@@ -401,7 +410,7 @@ def main():
             ptr = np.clip(ptr + a + noise, 0, G - 1)
             if finger:
                 world.shove_commanded(ptr, a, 1.0) if MANIP == "push" else world.carry_commanded(a)
-            body.update("hand", a, ptr_vis)
+            body.update("hand", a, ptr_vis, eta=0.5 * ptr_conf)   # weak correction if peripheral
             if LIFELONG and GOAL != "scramble":
                 dobj_obs = world.commanded_pos() - obj_before
                 if MANIP == "push" and pushmodel is not None:
