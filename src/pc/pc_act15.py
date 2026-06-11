@@ -82,6 +82,85 @@ def detect_px(img, rgb):
     return np.array([xs.mean(), ys.mean()])
 
 
+class CamFoveaViz:
+    """Live view: the full camera frame with the fovea window + gaze + detected cube, and an
+    inset of the F×F crop the net actually sees."""
+    def __init__(self, cam, res):
+        import matplotlib.pyplot as plt
+        from matplotlib.patches import Rectangle
+        self.plt = plt; self._Rect = Rectangle; plt.ion()
+        self.fig, (self.axI, self.axC) = plt.subplots(1, 2, figsize=(9, 5),
+                                                       gridspec_kw={"width_ratios": [3, 1]})
+        self.fig.patch.set_facecolor("#0e0e12")
+        self.axI.set_title(f"act15 — {cam} camera + fovea", color="w"); self.axI.axis("off")
+        self.axC.set_title("net sees (F×F crop)", color="w"); self.axC.axis("off")
+        self.imI = self.axI.imshow(np.zeros((res, res, 3), np.uint8))
+        self.imC = self.axC.imshow(np.zeros((F, F, 3)), interpolation="nearest")
+        self.rect = self._Rect((0, 0), CROP, CROP, fill=False, ec="#33ccff", lw=2)
+        self.axI.add_patch(self.rect)
+        (self.gz,) = self.axI.plot([], [], "+", ms=14, mew=2, color="#33ccff")
+        (self.tru,) = self.axI.plot([], [], "o", ms=10, mfc="none", mec="yellow", mew=2)
+        self.txt = self.axI.text(0.02, 0.98, "", transform=self.axI.transAxes, va="top",
+                                 color="w", fontsize=9, family="monospace")
+
+    def update(self, img, gaze, rgb_w, true_px, label):
+        self.imI.set_data(img)
+        self.imC.set_data(np.clip(rgb_w, 0, 1))
+        self.rect.set_xy((gaze[0] - CROP / 2, gaze[1] - CROP / 2))
+        self.gz.set_data([gaze[0]], [gaze[1]])
+        if true_px is not None:
+            self.tru.set_data([true_px[0]], [true_px[1]])
+        self.txt.set_text(label)
+        self.fig.canvas.draw_idle(); self.fig.canvas.flush_events()
+
+    def alive(self):
+        return bool(self.plt.get_fignums())
+
+
+def run_live(sim, CAM, RES, CMD, rng):
+    import time
+    viz = CamFoveaViz(CAM, RES)
+    grid = np.linspace(CROP / 2, RES - CROP / 2, 5)
+    print("  [viz] live fovea search — close the window to exit.")
+    while viz.alive():
+        scatter_live(sim, rng)
+        img = sim.render(CAM); true = detect_px(img, CMD_COLOR[CMD])
+        gaze = np.array([RES / 2.0, RES / 2.0])
+        best, bg = 0.0, gaze                                      # coarse acquire scan
+        for gy in grid:
+            for gx in grid:
+                g = np.array([gx, gy]); rgb_w = fovea_crop(img, g)
+                s = selected_lum(rgb_w, CMD_COLOR[CMD]).sum()
+                viz.update(img, g, rgb_w, true, f"scan '{NAMES[CUBES.index(CMD)] if False else CMD}'")
+                time.sleep(0.02)
+                if s > best:
+                    best, bg = s, g
+                if not viz.alive():
+                    return
+        gaze = bg
+        for _ in range(14):                                       # refine: centre the cube
+            rgb_w = fovea_crop(img, gaze); com = sel_com(rgb_w, CMD_COLOR[CMD])
+            viz.update(img, gaze, rgb_w, true, "foveate (refine)")
+            time.sleep(0.06)
+            if com is None or not viz.alive():
+                break
+            gaze = np.clip(crop_to_image(com, gaze), CROP / 2, RES - CROP / 2)
+        err = np.linalg.norm(gaze - true) if true is not None else float("nan")
+        viz.update(img, gaze, fovea_crop(img, gaze), true, f"located {CMD}: {err:.0f}px off")
+        time.sleep(0.9)
+
+
+def scatter_live(sim, rng):
+    lo, hi = np.array([-0.08, 0.09]), np.array([0.08, 0.19])
+    pts = []
+    for nm in CUBES:
+        p = rng.uniform(lo, hi)
+        while any(np.linalg.norm(p - q) < 0.05 for q in pts):
+            p = rng.uniform(lo, hi)
+        pts.append(p); sim.set_object(nm, p)
+    mujoco.mj_forward(sim.m, sim.d)
+
+
 def main():
     HEADLESS = os.environ.get("ACT15_HEADLESS", "0") == "1"
     CAM = os.environ.get("ACT15_CAM", "top").lower()
@@ -92,6 +171,14 @@ def main():
     print(f"act15 — overhead camera + fovea into the net   cam={CAM}  res={RES}  cmd={CMD}")
     sim = BracketArmSim(render_wh=(RES, RES))
     sim.reset_home()                                              # arm parked at home (out of the way)
+
+    if not HEADLESS:                                              # live fovea-search view
+        try:
+            import matplotlib  # noqa
+            run_live(sim, CAM, RES, CMD, rng); return
+        except Exception as e:
+            print(f"  [viz] matplotlib unavailable ({e}); running headless metrics"); HEADLESS = True
+
     net, cells, h1 = build_hexnet(rng)
     lo, hi = np.array([-0.08, 0.09]), np.array([0.08, 0.19])      # reachable/visible table patch
 
