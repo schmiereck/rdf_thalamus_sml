@@ -30,6 +30,9 @@ ASSET = os.path.join(os.path.dirname(__file__), "assets", "bracket_arm.xml")
 ARM_JOINTS = ["joint_0", "joint_1", "joint_2", "joint_3", "joint_4"]   # 5 DOF (gripper = joint_5)
 HOME = {"joint_0": 1.5708, "joint_1": 0.0, "joint_2": 0.0,
         "joint_3": 3.14, "joint_4": 1.5708, "joint_5": 0.76}
+# the 3 motors used first: base-yaw + shoulder + elbow (wrist j3=pi points the gripper down so
+# the grasp reaches the table; j4/gripper held at home).  "3 motors with height".
+ARM3 = ["joint_0", "joint_1", "joint_2"]
 
 
 class BracketArmSim:
@@ -72,6 +75,26 @@ class BracketArmSim:
         for _ in range(n):
             mujoco.mj_step(self.m, self.d)
 
+    # ---- 3-motor subset (base+shoulder+elbow); wrist j3=pi (down), j4/gripper at home ----
+    def arm3_angles(self):
+        return np.array([self.d.qpos[self.jqadr[j]] for j in ARM3])
+
+    def set_arm3_targets(self, q3):
+        self.set_arm_targets([q3[0], q3[1], q3[2], HOME["joint_3"], HOME["joint_4"]])
+
+    def arm3_range(self):
+        return np.array([self.m.jnt_range[self._jid(j)] for j in ARM3])   # (3,2)
+
+    def fk_truth(self, q3):
+        """Eye-hand 'observation': set the 3 joints (others fixed), forward kinematics ->
+        grasp position.  In sim this is instant via mj_forward (no dynamics)."""
+        for j, v in zip(ARM3, q3):
+            self.d.qpos[self.jqadr[j]] = float(v)
+        self.d.qpos[self.jqadr["joint_3"]] = HOME["joint_3"]
+        self.d.qpos[self.jqadr["joint_4"]] = HOME["joint_4"]
+        mujoco.mj_forward(self.m, self.d)
+        return self.grasp_pos()
+
     # ---- state ----
     def grasp_pos(self):
         return self.d.site_xpos[self.grasp_sid].copy()
@@ -102,6 +125,66 @@ def reach_step(sim, target_xyz, gain=2.0, max_dq=0.03):
     return float(np.linalg.norm(err))
 
 
+class ArmBodyModel3D:
+    """The agent's LEARNED 3-D kinematics for the 3-motor arm.  The forward kinematics is
+    exactly LINEAR in the lifted feature set  Φ(θ) = [cosθ0·g, sinθ0·g, g]  with
+    g = [1, cosθ1, sinθ1, cos(θ1+θ2), sin(θ1+θ2)]  (base-yaw rotates the shoulder/elbow
+    plane), so a learned linear map  hand = W·[Φ;1]  recovers the kinematics by babbling
+    (the 3-D analogue of act12's linear-in-features body model).  Its finite-difference
+    Jacobian drives damped-least-squares reach control."""
+
+    NF = 22                                              # 3*7 features + bias
+
+    def __init__(self, rng=None):
+        self.rng = rng or np.random.default_rng(0)
+        self.W = np.zeros((self.NF, 3)); self.last_surprise = None
+
+    @staticmethod
+    def _feat(q3):
+        t0, t1, t2 = float(q3[0]), float(q3[1]), float(q3[2])
+        # base-yaw rotates the shoulder/elbow plane; the elbow axis is reversed + 90deg
+        # offsets, so include BOTH (θ1+θ2) and (θ1-θ2) — least-squares picks the right combo.
+        g = np.array([1.0, np.cos(t1), np.sin(t1),
+                      np.cos(t1 + t2), np.sin(t1 + t2), np.cos(t1 - t2), np.sin(t1 - t2)])
+        return np.concatenate([np.cos(t0) * g, np.sin(t0) * g, g])    # 21
+
+    def _aug(self, q3):
+        return np.append(self._feat(q3), 1.0)                          # +bias -> 22
+
+    def fk(self, q3):
+        return self._aug(q3) @ self.W
+
+    def babble(self, sim, steps):
+        rng3 = sim.arm3_range()
+        X = np.empty((steps, self.NF)); Y = np.empty((steps, 3))
+        for i in range(steps):
+            q3 = self.rng.uniform(rng3[:, 0], rng3[:, 1])
+            X[i] = self._aug(q3); Y[i] = sim.fk_truth(q3)
+        self.W = np.linalg.solve(X.T @ X + 1e-6 * np.eye(self.NF), X.T @ Y)   # ridge least squares
+
+    def observe(self, q3, hand_obs, lr=0.05):           # lifelong / vision refinement
+        a = self._aug(q3); err = a @ self.W - np.asarray(hand_obs, float)
+        s = float(np.linalg.norm(err))
+        self.last_surprise = s if self.last_surprise is None else 0.9 * self.last_surprise + 0.1 * s
+        self.W -= lr * np.outer(a, err)
+
+    def jacobian(self, q3, eps=1e-4):
+        J = np.zeros((3, 3))
+        for i in range(3):
+            dq = np.zeros(3); dq[i] = eps
+            J[:, i] = (self.fk(q3 + dq) - self.fk(q3 - dq)) / (2 * eps)
+        return J
+
+    def reach_velocity(self, q3, target, gain=2.0, max_dq=0.03, damp=0.02):
+        err = np.asarray(target, float) - self.fk(q3)
+        J = self.jacobian(q3)
+        dq = J.T @ np.linalg.solve(J @ J.T + damp * np.eye(3), gain * err)
+        m = float(np.max(np.abs(dq)))
+        if m > max_dq:
+            dq *= max_dq / m
+        return dq
+
+
 class CamViz:
     def __init__(self, cam):
         import matplotlib.pyplot as plt
@@ -119,15 +202,48 @@ class CamViz:
         self.plt.ioff(); self.plt.show()
 
 
+def run_learned_reach(sim, viz, CAM, HEADLESS):
+    """3-motor arm driven by the agent's LEARNED 3-D kinematics (babbled MLP FK + Jacobian).
+    Validates that the net can do the coupled base+shoulder+elbow kinematics WITH height by
+    reaching the grasp point to each cube on the table."""
+    body = ArmBodyModel3D(rng=np.random.default_rng(5))
+    print("  babbling the arm to learn its 3-D kinematics (linear-in-features, 4000 poses) ...")
+    body.babble(sim, 4000)
+    # FK accuracy on fresh random poses
+    rng3 = sim.arm3_range(); errs = []
+    for _ in range(400):
+        q = np.random.default_rng().uniform(rng3[:, 0], rng3[:, 1])
+        errs.append(np.linalg.norm(body.fk(q) - sim.fk_truth(q)))
+    print(f"  learned FK error: mean {np.mean(errs)*1000:.1f} mm  max {np.max(errs)*1000:.1f} mm")
+
+    results = []
+    for nm in ("obj_red", "obj_green", "obj_blue"):
+        sim.reset_home(); sim.target("joint_3", HOME["joint_3"]); sim.step(250)
+        tgt = sim.obj_pos(nm) + np.array([0.0, 0.0, 0.03])     # 3 cm above the cube
+        for k in range(700):
+            q3 = sim.arm3_angles()                              # joint encoders (felt)
+            dq = body.reach_velocity(q3, tgt)
+            sim.set_arm3_targets(q3 + dq); sim.step(2)
+            if viz is not None and k % 4 == 0:
+                e = np.linalg.norm(tgt - sim.grasp_pos())
+                viz.update(sim.render(CAM), f"reach {nm}  learned-kin  {e*1000:.0f} mm")
+        err_mm = np.linalg.norm(tgt - sim.grasp_pos()) * 1000
+        results.append((nm, err_mm)); print(f"  reach {nm}: {err_mm:.0f} mm  (grasp {np.round(sim.grasp_pos(),3)})")
+    print(f"  == learned-kinematics reach: mean {np.mean([r for _,r in results]):.0f} mm over {len(results)} cubes ==")
+    if viz is not None:
+        print("  [viz] close the window to exit."); viz.hold()
+
+
 def main():
     HEADLESS = os.environ.get("ACT14_HEADLESS", "0") == "1"
     CAM = os.environ.get("ACT14_CAM", "overview").lower()
     STEPS = int(os.environ.get("ACT14_STEPS", "1200"))
     TARGET = os.environ.get("ACT14_TARGET", "obj_red")
+    MODE = os.environ.get("ACT14_MODE", "demo").lower()        # demo (analytic) | learn (learned kin)
 
     print("act14 — real 5-DOF arm in MuJoCo (3-D gravity + contacts + overhead camera)")
     sim = BracketArmSim()
-    print(f"  model: nq={sim.m.nq} actuators={sim.m.nu} cameras={sim.m.ncam}  reaching '{TARGET}'")
+    print(f"  model: nq={sim.m.nq} actuators={sim.m.nu} cameras={sim.m.ncam}  mode={MODE}")
 
     viz = None
     if not HEADLESS:
@@ -137,6 +253,11 @@ def main():
         except Exception as e:
             print(f"  [viz] matplotlib unavailable ({e}); running headless"); HEADLESS = True
 
+    if MODE == "learn":
+        run_learned_reach(sim, viz, CAM, HEADLESS)
+        return
+
+    print(f"  analytic-Jacobian reach demo toward '{TARGET}'")
     sim.step(300)                                  # let the arm settle at home under gravity
     last = 1e9
     for k in range(STEPS):
