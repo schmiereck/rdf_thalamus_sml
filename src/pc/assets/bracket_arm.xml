@@ -1,0 +1,109 @@
+<!-- bracket_arm.xml — MuJoCo (MJCF) replica of the REAL 5-DOF arm + gripper.
+     Faithful to ba_arduino_controller_moveit_config / BAArduinoController/urdf/bracket_arm.urdf
+     (link lengths, joint axes/origins, [0,pi] servo limits).  Used by pc_act14.py.
+     Lengths in metres.  Note: MJCF box `size` is HALF-extents; URDF rpy (0,+-pi/2,0)
+     about Y is given here as the equivalent quaternion (w x y z). -->
+<mujoco model="bracket_arm">
+  <compiler angle="radian" autolimits="true"/>
+  <option gravity="0 0 -9.81" timestep="0.002" integrator="implicitfast"/>
+
+  <visual>
+    <headlight ambient="0.4 0.4 0.4" diffuse="0.5 0.5 0.5" specular="0.1 0.1 0.1"/>
+    <quality shadowsize="4096"/>
+  </visual>
+
+  <asset>
+    <texture name="grid" type="2d" builtin="checker" rgb1="0.18 0.18 0.20" rgb2="0.24 0.24 0.27"
+             width="512" height="512" mark="cross" markrgb="0.3 0.3 0.32"/>
+    <material name="table" texture="grid" texrepeat="8 8" reflectance="0.05"/>
+    <material name="silver" rgba="0.6 0.6 0.6 1"/>
+    <material name="green"  rgba="0.1 0.8 0.1 1"/>
+    <material name="cyan"   rgba="0.1 0.8 0.8 1"/>
+    <material name="blue"   rgba="0.15 0.3 0.9 1"/>
+    <material name="yellow" rgba="0.9 0.85 0.1 1"/>
+    <material name="orange" rgba="1 0.55 0.05 1"/>
+    <material name="white"  rgba="0.9 0.9 0.9 1"/>
+  </asset>
+
+  <default>
+    <joint damping="0.4" armature="0.01" frictionloss="0.002"/>
+    <geom friction="1.0 0.05 0.001"/>
+    <default class="arm">
+      <geom type="box" density="800"/>
+    </default>
+    <position kp="30" forcerange="-20 20"/>
+  </default>
+
+  <worldbody>
+    <light name="key"  pos="0.2 0.0 0.8" dir="-0.2 0.1 -1" directional="false" castshadow="true"
+           diffuse="0.8 0.8 0.8"/>
+    <light name="fill" pos="-0.3 0.4 0.6" dir="0.3 -0.4 -0.6" directional="false" castshadow="false"
+           diffuse="0.3 0.3 0.35"/>
+    <geom name="table" type="plane" size="0.8 0.8 0.01" material="table"/>
+
+    <!-- overhead cameras -->
+    <camera name="top" pos="0 0.13 0.55" euler="0 0 0" fovy="45"/>           <!-- straight down -->
+    <camera name="overview" pos="-0.16 0.17 0.34" mode="targetbody" target="ws_center" fovy="58"/>
+    <body name="ws_center" pos="0 0.13 0.02"><geom type="sphere" size="0.001" contype="0" conaffinity="0" rgba="1 1 1 0"/></body>
+
+    <!-- ===================== the arm ===================== -->
+    <body name="base_link" pos="0 0 0" childclass="arm">
+      <geom name="base_plate" type="box" size="0.075 0.075 0.0025" pos="0 0 0.0025" material="silver"/>
+      <body name="turret_link" pos="0 0 0.01">
+        <joint name="joint_0" type="hinge" axis="0 0 1" range="0 3.1416"/>
+        <geom name="turret" type="cylinder" size="0.056 0.041" pos="0 0 0.041" material="green"/>
+        <body name="upper_arm_link" pos="-0.008 0 0.082" quat="0.70711 0 -0.70711 0">
+          <joint name="joint_1" type="hinge" axis="0 1 0" range="0 3.1416"/>
+          <geom name="upper_arm" size="0.01 0.02 0.049" pos="0 0 0.049" material="cyan"/>
+          <body name="forearm_link" pos="0 0 0.098" quat="0.70711 0 0.70711 0">
+            <joint name="joint_2" type="hinge" axis="0 -1 0" range="0 3.1416"/>
+            <geom name="forearm" size="0.01 0.02 0.0325" pos="0 0 0.0325" material="blue"/>
+            <body name="wrist_link" pos="0 0 0.065" quat="0.70711 0 -0.70711 0">
+              <joint name="joint_3" type="hinge" axis="0 1 0" range="0 3.1416"/>
+              <geom name="wrist" size="0.02 0.01 0.035" pos="0 0 0.035" material="yellow"/>
+              <body name="gripper_base_link" pos="0 0 0.070">
+                <joint name="joint_4" type="hinge" axis="0 0 1" range="0 3.1416"/>
+                <geom name="gripper_base" size="0.015 0.015 0.015" pos="0 0 0.015" material="orange"/>
+                <!-- grasp reference (between the fingers), as in the URDF joint_grasp -->
+                <site name="grasp" pos="0 0.01 0.10" size="0.004" rgba="1 0 0 1"/>
+                <body name="finger_left" pos="-0.01 0.01 0.03">
+                  <joint name="joint_5" type="hinge" axis="0 -1 0" range="0 3.1416"/>
+                  <geom name="finger_left" size="0.01 0.005 0.035" pos="0 0 0.035" material="white"/>
+                </body>
+                <body name="finger_right" pos="0.01 0.01 0.03">
+                  <joint name="joint_5_mimic" type="hinge" axis="0 -1 0" range="-3.1416 0"/>
+                  <geom name="finger_right" size="0.01 0.005 0.035" pos="0 0 0.035" material="silver"/>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+
+    <!-- ===================== objects on the table ===================== -->
+    <body name="obj_red" pos="0.00 0.15 0.012">
+      <freejoint/><geom type="box" size="0.012 0.012 0.012" rgba="0.9 0.1 0.1 1" density="400"/>
+    </body>
+    <body name="obj_green" pos="-0.06 0.11 0.012">
+      <freejoint/><geom type="box" size="0.012 0.012 0.012" rgba="0.1 0.85 0.1 1" density="400"/>
+    </body>
+    <body name="obj_blue" pos="0.06 0.12 0.012">
+      <freejoint/><geom type="box" size="0.012 0.012 0.012" rgba="0.15 0.3 0.95 1" density="400"/>
+    </body>
+  </worldbody>
+
+  <equality>
+    <!-- right finger mimics the left (multiplier -1), as in the URDF -->
+    <joint joint1="joint_5_mimic" joint2="joint_5" polycoef="0 -1 0 0 0"/>
+  </equality>
+
+  <actuator>
+    <position name="m0" joint="joint_0" ctrlrange="0 3.1416"/>
+    <position name="m1" joint="joint_1" ctrlrange="0 3.1416"/>
+    <position name="m2" joint="joint_2" ctrlrange="0 3.1416"/>
+    <position name="m3" joint="joint_3" ctrlrange="0 3.1416"/>
+    <position name="m4" joint="joint_4" ctrlrange="0 3.1416"/>
+    <position name="m5" joint="joint_5" ctrlrange="0 3.1416" kp="8"/>
+  </actuator>
+</mujoco>
