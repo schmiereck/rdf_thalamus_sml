@@ -103,6 +103,12 @@
       <freejoint/><geom type="box" size="0.012 0.012 0.012" rgba="0.15 0.3 0.95 1" density="700"
                         friction="1.4 0.05 0.001"/>
     </body>
+
+    <!-- target marker: a flat disk on the table (mocap = kinematic, moved per episode),
+         no collision so it never disturbs the cubes; also a visible cue for the camera. -->
+    <body name="target_marker" mocap="true" pos="0 0.13 0.001">
+      <geom type="cylinder" size="0.016 0.0008" rgba="1 1 1 0.6" contype="0" conaffinity="0"/>
+    </body>
   </worldbody>
 
   <equality>

@@ -106,6 +106,10 @@ class BracketArmSim:
     def set_reach_site(self, name):
         self.reach_sid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_SITE, name)
 
+    def set_target_marker(self, xy, z=0.001):
+        bid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_BODY, "target_marker")
+        self.d.mocap_pos[self.m.body_mocapid[bid]] = [xy[0], xy[1], z]
+
     # ---- state ----
     def grasp_pos(self):
         return self.d.site_xpos[self.reach_sid].copy()
