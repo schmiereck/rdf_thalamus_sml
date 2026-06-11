@@ -65,14 +65,21 @@
                 <joint name="joint_4" type="hinge" axis="0 0 1" range="0 3.1416"/>
                 <geom name="gripper_base" size="0.015 0.015 0.015" pos="0 0 0.015" material="orange"/>
                 <!-- grasp reference (between the fingers), as in the URDF joint_grasp -->
-                <site name="grasp" pos="0 0.01 0.10" size="0.004" rgba="1 0 0 1"/>
+                <site name="grasp" pos="0 0.01 0.10" size="0.004" rgba="1 0 0 0"/>
+                <!-- CONTACT site at the claw notch (the point the claws actually push with) -->
+                <site name="contact" pos="0 0.01 0.082" size="0.004" rgba="1 0.5 0 0"/>
                 <body name="finger_left" pos="-0.01 0.01 0.03">
                   <joint name="joint_5" type="hinge" axis="0 -1 0" range="0 3.1416"/>
-                  <geom name="finger_left" size="0.01 0.005 0.035" pos="0 0 0.035" material="white"/>
+                  <geom name="finger_left" size="0.008 0.005 0.030" pos="0 0 0.030" material="white"/>
+                  <!-- inward-curved CLAW tip -> the two tips form a concave pushing pocket -->
+                  <geom name="claw_left" type="box" size="0.012 0.006 0.006" pos="0.009 0 0.060"
+                        euler="0 1.0 0" material="white"/>
                 </body>
                 <body name="finger_right" pos="0.01 0.01 0.03">
                   <joint name="joint_5_mimic" type="hinge" axis="0 -1 0" range="-3.1416 0"/>
-                  <geom name="finger_right" size="0.01 0.005 0.035" pos="0 0 0.035" material="silver"/>
+                  <geom name="finger_right" size="0.008 0.005 0.030" pos="0 0 0.030" material="silver"/>
+                  <geom name="claw_right" type="box" size="0.012 0.006 0.006" pos="-0.009 0 0.060"
+                        euler="0 -1.0 0" material="silver"/>
                 </body>
               </body>
             </body>
@@ -81,15 +88,20 @@
       </body>
     </body>
 
-    <!-- ===================== objects on the table ===================== -->
+    <!-- ===================== objects on the table =====================
+         Graspable cubes: the OPEN gripper lowers around a cube, CLOSES to grip it
+         (fingers squeeze the sides), lifts and carries it to the target. -->
     <body name="obj_red" pos="0.00 0.15 0.012">
-      <freejoint/><geom type="box" size="0.012 0.012 0.012" rgba="0.9 0.1 0.1 1" density="400"/>
+      <freejoint/><geom type="box" size="0.012 0.012 0.012" rgba="0.9 0.1 0.1 1" density="700"
+                        friction="1.4 0.05 0.001"/>
     </body>
     <body name="obj_green" pos="-0.06 0.11 0.012">
-      <freejoint/><geom type="box" size="0.012 0.012 0.012" rgba="0.1 0.85 0.1 1" density="400"/>
+      <freejoint/><geom type="box" size="0.012 0.012 0.012" rgba="0.1 0.85 0.1 1" density="700"
+                        friction="1.4 0.05 0.001"/>
     </body>
     <body name="obj_blue" pos="0.06 0.12 0.012">
-      <freejoint/><geom type="box" size="0.012 0.012 0.012" rgba="0.15 0.3 0.95 1" density="400"/>
+      <freejoint/><geom type="box" size="0.012 0.012 0.012" rgba="0.15 0.3 0.95 1" density="700"
+                        friction="1.4 0.05 0.001"/>
     </body>
   </worldbody>
 

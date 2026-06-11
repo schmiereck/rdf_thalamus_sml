@@ -43,6 +43,7 @@ class BracketArmSim:
         self.d = mujoco.MjData(self.m)
         self._renderer = mujoco.Renderer(self.m, height=render_wh[0], width=render_wh[1])
         self.grasp_sid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_SITE, "grasp")
+        self.reach_sid = self.grasp_sid                          # which site the FK/reach controls
         # qpos / dof addresses of the controllable arm joints (gripper handled separately)
         self.jqadr = {j: self.m.jnt_qposadr[self._jid(j)] for j in HOME}
         self.jdof = [self.m.jnt_dofadr[self._jid(j)] for j in ARM_JOINTS]
@@ -85,6 +86,13 @@ class BracketArmSim:
     def arm3_range(self):
         return np.array([self.m.jnt_range[self._jid(j)] for j in ARM3])   # (3,2)
 
+    def set_object(self, name, xy, z=0.008):
+        bid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_BODY, name)
+        jadr = self.m.body_jntadr[bid]; qadr = self.m.jnt_qposadr[jadr]; vadr = self.m.jnt_dofadr[jadr]
+        self.d.qpos[qadr:qadr + 3] = [xy[0], xy[1], z]
+        self.d.qpos[qadr + 3:qadr + 7] = [1, 0, 0, 0]
+        self.d.qvel[vadr:vadr + 6] = 0.0
+
     def fk_truth(self, q3):
         """Eye-hand 'observation': set the 3 joints (others fixed), forward kinematics ->
         grasp position.  In sim this is instant via mj_forward (no dynamics)."""
@@ -95,9 +103,12 @@ class BracketArmSim:
         mujoco.mj_forward(self.m, self.d)
         return self.grasp_pos()
 
+    def set_reach_site(self, name):
+        self.reach_sid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_SITE, name)
+
     # ---- state ----
     def grasp_pos(self):
-        return self.d.site_xpos[self.grasp_sid].copy()
+        return self.d.site_xpos[self.reach_sid].copy()
 
     def obj_pos(self, name):
         return self.d.xpos[mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_BODY, name)].copy()
@@ -175,7 +186,7 @@ class ArmBodyModel3D:
             J[:, i] = (self.fk(q3 + dq) - self.fk(q3 - dq)) / (2 * eps)
         return J
 
-    def reach_velocity(self, q3, target, gain=2.0, max_dq=0.03, damp=0.02):
+    def reach_velocity(self, q3, target, gain=2.0, max_dq=0.03, damp=0.04):
         err = np.asarray(target, float) - self.fk(q3)
         J = self.jacobian(q3)
         dq = J.T @ np.linalg.solve(J @ J.T + damp * np.eye(3), gain * err)
@@ -234,6 +245,85 @@ def run_learned_reach(sim, viz, CAM, HEADLESS):
         print("  [viz] close the window to exit."); viz.hold()
 
 
+REACH_XY = (np.array([-0.08, 0.09]), np.array([0.08, 0.19]))   # reachable table patch (x,y)
+
+
+def _rand_xy(rng):
+    return rng.uniform(REACH_XY[0], REACH_XY[1])
+
+
+J5_OPEN, J5_CLOSED = 1.8, 0.0      # gripper: OPEN = fingers spread+raised; CLOSED = together+low
+
+
+def run_carry_task(sim, body, viz, CAM, HEADLESS, episodes=12, cmd_name="obj_red"):
+    """Manipulation on the 3-motor arm + gripper with REAL contact physics: GRASP the COMMANDED
+    cube and CARRY it to a target on the table.  Reach uses the LEARNED kinematics; grasping is
+    genuine MuJoCo contact (the gripper squeezes the cube and friction holds it).  A small phase
+    machine: go above -> lower -> close -> lift -> carry -> place -> release.  Perception is
+    privileged sim state for now (camera = Step 2)."""
+    rng = np.random.default_rng(1)
+    objs = ["obj_red", "obj_green", "obj_blue"]
+    OVER_Z, GRIP_Z, CARRY_Z, NEAR, TOL, CAP = 0.07, 0.02, 0.11, 0.012, 0.030, 1600
+    deliveries = 0
+    for ep in range(episodes):
+        sim.reset_home(); sim.target("joint_3", HOME["joint_3"]); sim.target("joint_5", J5_OPEN)
+        pts = []
+        for nm in objs:
+            p = _rand_xy(rng)
+            while any(np.linalg.norm(p - q) < 0.07 for q in pts):
+                p = _rand_xy(rng)
+            pts.append(p); sim.set_object(nm, p)
+        c0 = pts[objs.index(cmd_name)]
+        tgt = _rand_xy(rng)
+        while np.linalg.norm(tgt - c0) < 0.06:
+            tgt = _rand_xy(rng)
+        mujoco.mj_forward(sim.m, sim.d); sim.step(150)
+        phase, dwell = "over", 0
+        for k in range(CAP):
+            c = sim.obj_pos(cmd_name)[:2]; h = sim.grasp_pos(); hxy = h[:2]; hz = h[2]
+            closed = phase in ("close", "lift", "carry", "place")
+            if phase == "over":
+                aim = np.array([c[0], c[1], OVER_Z])
+                if np.linalg.norm(hxy - c) < NEAR:
+                    phase = "lower"
+            elif phase == "lower":
+                aim = np.array([c[0], c[1], GRIP_Z])
+                if hz < GRIP_Z + 0.012:
+                    phase, dwell = "close", 0
+            elif phase == "close":
+                aim = np.array([c[0], c[1], GRIP_Z]); dwell += 1
+                if dwell > 90:
+                    phase = "lift"
+            elif phase == "lift":
+                aim = np.array([c[0], c[1], CARRY_Z])
+                if hz > CARRY_Z - 0.015:
+                    phase = "carry"
+            elif phase == "carry":
+                aim = np.array([tgt[0], tgt[1], CARRY_Z])
+                if np.linalg.norm(hxy - tgt) < NEAR:
+                    phase = "place"
+            elif phase == "place":
+                aim = np.array([tgt[0], tgt[1], GRIP_Z])
+                if hz < GRIP_Z + 0.015:
+                    phase, dwell = "release", 0
+            else:  # release
+                aim = np.array([tgt[0], tgt[1], GRIP_Z]); dwell += 1
+                if dwell > 60:
+                    break
+            sim.target("joint_5", J5_CLOSED if closed else J5_OPEN)
+            q3 = sim.arm3_angles(); sim.set_arm3_targets(q3 + body.reach_velocity(q3, aim)); sim.step(2)
+            if viz is not None and k % 5 == 0:
+                viz.update(sim.render(CAM), f"ep {ep} carry {cmd_name} [{phase}]"
+                                            f"  obj->tgt {np.linalg.norm(c-tgt)*1000:.0f}mm")
+        err = np.linalg.norm(sim.obj_pos(cmd_name)[:2] - tgt)
+        ok = err < TOL
+        deliveries += ok
+        print(f"  ep {ep:2d}: {'OK ' if ok else 'no '} obj->tgt {err*1000:.0f} mm")
+    print(f"  == carry task (real grasp+carry, learned 3-D kinematics): DELIVERED {deliveries}/{episodes} ==")
+    if viz is not None:
+        print("  [viz] close the window to exit."); viz.hold()
+
+
 def main():
     HEADLESS = os.environ.get("ACT14_HEADLESS", "0") == "1"
     CAM = os.environ.get("ACT14_CAM", "overview").lower()
@@ -255,6 +345,12 @@ def main():
 
     if MODE == "learn":
         run_learned_reach(sim, viz, CAM, HEADLESS)
+        return
+    if MODE in ("carry", "task", "push"):
+        body = ArmBodyModel3D(rng=np.random.default_rng(5))
+        print("  babbling the arm to learn its 3-D kinematics ..."); body.babble(sim, 4000)
+        run_carry_task(sim, body, viz, CAM, HEADLESS,
+                       episodes=int(os.environ.get("ACT14_EPISODES", "12")), cmd_name=TARGET)
         return
 
     print(f"  analytic-Jacobian reach demo toward '{TARGET}'")
