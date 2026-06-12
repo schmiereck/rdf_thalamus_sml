@@ -40,7 +40,7 @@ PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene be
 
 
 def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, perceive_fn=None,
-                 mixed=False, track_fn=None):
+                 mixed=False, track_fn=None, lifelong=False):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -185,6 +185,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             g, mdq = (1.3, 0.016) if gentle else (2.0, 0.026)
             q3 = sim.arm3_angles(); sim.set_arm3_targets(q3 + body.reach_velocity(q3, aim, gain=g, max_dq=mdq))
             sim.step(2)
+            if lifelong and k % 3 == 0:                       # LIFELONG: refine the learned kinematics
+                body.observe(sim.arm3_angles(), sim.grasp_pos(), lr=0.02)   # from the real (joints,hand)
             if viz is not None and k % 5 == 0:
                 viz.update(sim.render(CAM), f"ep {ep} {via} {cmd} [{phase}]"
                                             f"  obj->tgt {np.linalg.norm(c-tgt)*1000:.0f}mm")

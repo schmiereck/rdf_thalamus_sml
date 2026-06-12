@@ -29,7 +29,7 @@ import mujoco
 from pc import PCNode, SensorNode, PCNetwork
 from pc.connection import ConnType
 from pc.test_pc_act10 import F, com2d, hex_neighbors, fovea_gradient
-from pc.pc_act14 import BracketArmSim, ArmBodyModel3D, REACH_XY, _rand_xy
+from pc.pc_act14 import BracketArmSim, ArmBodyModel3D, REACH_XY, _rand_xy, ARM3
 import pc.pc_act16 as act16
 
 CMD_COLOR = {"obj_red": np.array([0.9, 0.1, 0.1]), "obj_green": np.array([0.1, 0.85, 0.1]),
@@ -231,6 +231,9 @@ def main():
     RES = int(os.environ.get("ACT18_RES", "240"))
     EPISODES = int(os.environ.get("ACT18_EPISODES", "12"))
     PERCEPT = os.environ.get("ACT18_PERCEPT", "0") == "1"
+    LIFELONG = os.environ.get("ACT18_LIFELONG", "1") == "1"     # Phase 2: refine kinematics online
+    PERTURB = float(os.environ.get("ACT18_PERTURB", "0.0"))     # lengthen the forearm (m) post-babble
+    TRACK = os.environ.get("ACT18_TRACK", "1") == "1"           # 0 = skip the (slow) fovea tracking
     rng = np.random.default_rng(0)
 
     print(f"act18 — learned hex-net camera fovea + error-driven following gaze  cam={CAM}")
@@ -238,6 +241,16 @@ def main():
     sim.set_reach_site("contact")
     body = ArmBodyModel3D(rng=np.random.default_rng(5)); body.babble(sim, 4000)
     fovea = HexFovea(K=8, rng=np.random.default_rng(7))
+
+    if PERTURB:                                                 # change the REAL arm AFTER babbling ->
+        wid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "wrist_link")   # learned FK now STALE
+        sim.m.body_pos[wid, 2] += PERTURB; mujoco.mj_forward(sim.m, sim.d)
+
+    def fk_err(n=200):
+        rng3 = sim.arm3_range(); g = np.random.default_rng(11); e = []
+        for _ in range(n):
+            q = g.uniform(rng3[:, 0], rng3[:, 1]); e.append(np.linalg.norm(body.fk(q) - sim.fk_truth(q)))
+        sim.reset_home(); return float(np.mean(e))
 
     perc_opt = mujoco.MjvOption(); perc_opt.geomgroup[1] = 0
 
@@ -320,9 +333,16 @@ def main():
                       "fovea follows (real view; gripper occludes -> memory)")
         return px_to_world(gaze) if found else None           # None when occluded -> grasp uses memory
 
+    if PERTURB:
+        print(f"  learned-kinematics FK error after perturb (+{PERTURB*1000:.0f}mm forearm): "
+              f"{fk_err()*1000:.1f} mm  ({'lifelong will adapt' if LIFELONG else 'frozen'})")
     # viz is driven by track() (live arm view + following fovea); don't let run_combined overwrite it
     act16.run_combined(sim, body, None if viz is not None else viz, CAM, episodes=EPISODES,
-                       cmd_fixed=CMD, perceive_fn=perceive, track_fn=track)
+                       cmd_fixed=CMD, perceive_fn=perceive, track_fn=(track if TRACK else None),
+                       lifelong=LIFELONG)
+    if PERTURB:
+        print(f"  learned-kinematics FK error after episodes ({'LIFELONG on' if LIFELONG else 'frozen'}):"
+              f" {fk_err()*1000:.1f} mm")
 
 
 if __name__ == "__main__":
