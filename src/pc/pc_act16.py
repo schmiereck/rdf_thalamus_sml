@@ -200,8 +200,14 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             if viz is not None and k % 5 == 0:
                 viz.update(sim.render(CAM), f"ep {ep} {via} {cmd} [{phase}]"
                                             f"  obj->tgt {np.linalg.norm(c-tgt)*1000:.0f}mm")
-        err = np.linalg.norm(sim.obj_pos(cmd)[:2] - tgt_true)   # measure against the TRUE target
-        ok = err < TOL
+        for _ in range(40):                                 # let the scene SETTLE before scoring:
+            sim.step(4)                                     # the cube may still be falling the last
+            if viz is not None and policy_fn is not None:   # few mm when "placed" was declared
+                viz.update(sim.render(CAM), f"ep {ep} {via} {cmd} [settling]")
+        cpos = sim.obj_pos(cmd)
+        err = np.linalg.norm(cpos[:2] - tgt_true)           # measure against the TRUE target
+        rested = cpos[2] < CUBE_HALF[2] + 0.010             # actually on the table, not held / mid-air
+        ok = err < TOL and rested
         deliveries += ok; n_grasp += (via == "grasp" and ok); n_push += (via == "push" and ok)
         if via == "grasp":
             grasp_tot += 1; grasp_ok += ok

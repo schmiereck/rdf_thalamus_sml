@@ -224,41 +224,20 @@ class HexFovea:
 
 
 # --------------------------------------------------------------------------- #
-def main():
-    HEADLESS = os.environ.get("ACT18_HEADLESS", "0") == "1"
-    CAM = os.environ.get("ACT18_CAM", "overview").lower()
-    CMD = os.environ.get("ACT18_CMD", "") or None
-    RES = int(os.environ.get("ACT18_RES", "240"))
-    EPISODES = int(os.environ.get("ACT18_EPISODES", "12"))
-    PERCEPT = os.environ.get("ACT18_PERCEPT", "0") == "1"
-    LIFELONG = os.environ.get("ACT18_LIFELONG", "1") == "1"     # Phase 2: refine kinematics online
-    PERTURB = float(os.environ.get("ACT18_PERTURB", "0.0"))     # lengthen the forearm (m) post-babble
-    TRACK = os.environ.get("ACT18_TRACK", "1") == "1"           # 0 = skip the (slow) fovea tracking
-    rng = np.random.default_rng(0)
-
-    print(f"act18 — learned hex-net camera fovea + error-driven following gaze  cam={CAM}")
-    sim = BracketArmSim(render_wh=(RES, RES))
-    sim.set_reach_site("contact")
-    body = ArmBodyModel3D(rng=np.random.default_rng(5)); body.babble(sim, 4000)
+def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=True):
+    """Factored-out act18 perception: a LEARNED hex-fovea PC-net that perceives the camera + an
+    error-driven FOLLOWING gaze, warmed up and calibrated (world<->px).  Returns a dict with
+    `perceive`/`track`/`viz` ready for act16.run_combined, plus `fovea`/`render_perc`/`grid`/
+    `px_to_world` for perception-only use.  This lets other acts (e.g. act19) reuse the FOLLOWING
+    fovea AND its live hex display instead of privileged sim-state perception."""
+    from pc.pc_act15 import detect_px
     fovea = HexFovea(K=8, rng=np.random.default_rng(7))
-
-    if PERTURB:                                                 # change the REAL arm AFTER babbling ->
-        wid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "wrist_link")   # learned FK now STALE
-        sim.m.body_pos[wid, 2] += PERTURB; mujoco.mj_forward(sim.m, sim.d)
-
-    def fk_err(n=200):
-        rng3 = sim.arm3_range(); g = np.random.default_rng(11); e = []
-        for _ in range(n):
-            q = g.uniform(rng3[:, 0], rng3[:, 1]); e.append(np.linalg.norm(body.fk(q) - sim.fk_truth(q)))
-        sim.reset_home(); return float(np.mean(e))
-
-    perc_opt = mujoco.MjvOption(); perc_opt.geomgroup[1] = 0
+    perc_opt = mujoco.MjvOption(); perc_opt.geomgroup[1] = 0       # hide the arm -> clean object colour
 
     def render_perc():
         sim._renderer.update_scene(sim.d, camera=CAM, scene_option=perc_opt); return sim._renderer.render()
 
-    # affine world<->px calibration (red cube at known spots)
-    from pc.pc_act15 import detect_px
+    # affine world<->px calibration (red cube at known spots, others parked aside)
     crng = np.random.default_rng(3); W, P = [], []
     sim.reset_home()
     for o in CMD_COLOR:
@@ -280,38 +259,23 @@ def main():
 
     def scatter_far():
         for o in CMD_COLOR:
-            sim.set_object(o, _rand_xy(crng));
+            sim.set_object(o, _rand_xy(crng))
         mujoco.mj_forward(sim.m, sim.d)
 
     viz = None
-    if not HEADLESS:
+    if not headless:
         try:
             viz = HexFoveaViz(CAM, RES)
         except Exception as e:
             print(f"  [viz] {e}")
 
-    print("  warming up the hex perception net on the camera ...")
+    if verbose:
+        print("  warming up the hex perception net on the camera ...")
     fovea.warmup(render_perc, 500, scatter_far, np.random.default_rng(9), viz=viz)
-    q = max(1, len(fovea.se) // 8)
-    print(f"  net sensor_error (camera scene): {np.mean(fovea.se[:q]):.3f} -> {np.mean(fovea.se[-q:]):.3f}")
+    if verbose:
+        q = max(1, len(fovea.se) // 8)
+        print(f"  net sensor_error (camera scene): {np.mean(fovea.se[:q]):.3f} -> {np.mean(fovea.se[-q:]):.3f}")
 
-    if PERCEPT:                                              # perception-only accuracy test
-        errs = 0.0; n = 0
-        for ep in range(EPISODES):
-            cmd = CMD or list(CMD_COLOR)[ep % 3]
-            for o in CMD_COLOR:
-                sim.set_object(o, _rand_xy(crng))
-            mujoco.mj_forward(sim.m, sim.d)
-            g = fovea.locate(render_perc, CMD_COLOR[cmd], np.array([RES / 2.0, RES / 2.0]), grid)
-            if g is not None:
-                w = px_to_world(g); e = np.linalg.norm(w - sim.obj_pos(cmd)[:2])
-                errs += e; n += 1
-                print(f"  ep {ep:2d} {cmd[4]}: follow-fovea loc err {e*1000:.0f} mm")
-        print(f"  == following-fovea localisation: {errs/max(1,n)*1000:.1f} mm  (found {n}/{EPISODES}) ==")
-        return
-
-    # ---- integrate with the grasp: the following fovea localises the object up front AND
-    # KEEPS FOLLOWING it during the action (track hook), with the gaze drawn on the live view ----
     state = {"gaze": np.array([RES / 2.0, RES / 2.0]), "rgb": CMD_COLOR["obj_red"]}
 
     def crop_rgb(arr):
@@ -333,6 +297,59 @@ def main():
                       "fovea follows (real view; gripper occludes -> memory)")
         return px_to_world(gaze) if found else None           # None when occluded -> grasp uses memory
 
+    return {"fovea": fovea, "perceive": perceive, "track": track, "viz": viz,
+            "render_perc": render_perc, "grid": grid, "px_to_world": px_to_world}
+
+
+# --------------------------------------------------------------------------- #
+def main():
+    HEADLESS = os.environ.get("ACT18_HEADLESS", "0") == "1"
+    CAM = os.environ.get("ACT18_CAM", "overview").lower()
+    CMD = os.environ.get("ACT18_CMD", "") or None
+    RES = int(os.environ.get("ACT18_RES", "240"))
+    EPISODES = int(os.environ.get("ACT18_EPISODES", "12"))
+    PERCEPT = os.environ.get("ACT18_PERCEPT", "0") == "1"
+    LIFELONG = os.environ.get("ACT18_LIFELONG", "1") == "1"     # Phase 2: refine kinematics online
+    PERTURB = float(os.environ.get("ACT18_PERTURB", "0.0"))     # lengthen the forearm (m) post-babble
+    TRACK = os.environ.get("ACT18_TRACK", "1") == "1"           # 0 = skip the (slow) fovea tracking
+    rng = np.random.default_rng(0)
+
+    print(f"act18 — learned hex-net camera fovea + error-driven following gaze  cam={CAM}")
+    sim = BracketArmSim(render_wh=(RES, RES))
+    sim.set_reach_site("contact")
+    body = ArmBodyModel3D(rng=np.random.default_rng(5)); body.babble(sim, 4000)
+
+    if PERTURB:                                                 # change the REAL arm AFTER babbling ->
+        wid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "wrist_link")   # learned FK now STALE
+        sim.m.body_pos[wid, 2] += PERTURB; mujoco.mj_forward(sim.m, sim.d)
+
+    def fk_err(n=200):
+        rng3 = sim.arm3_range(); g = np.random.default_rng(11); e = []
+        for _ in range(n):
+            q = g.uniform(rng3[:, 0], rng3[:, 1]); e.append(np.linalg.norm(body.fk(q) - sim.fk_truth(q)))
+        sim.reset_home(); return float(np.mean(e))
+
+    P = setup_following_fovea(sim, CAM, RES, headless=HEADLESS)
+    fovea = P["fovea"]; perceive = P["perceive"]; track = P["track"]; viz = P["viz"]
+    render_perc = P["render_perc"]; grid = P["grid"]; px_to_world = P["px_to_world"]
+
+    if PERCEPT:                                              # perception-only accuracy test
+        prng = np.random.default_rng(3); errs = 0.0; n = 0
+        for ep in range(EPISODES):
+            cmd = CMD or list(CMD_COLOR)[ep % 3]
+            for o in CMD_COLOR:
+                sim.set_object(o, _rand_xy(prng))
+            mujoco.mj_forward(sim.m, sim.d)
+            g = fovea.locate(render_perc, CMD_COLOR[cmd], np.array([RES / 2.0, RES / 2.0]), grid)
+            if g is not None:
+                w = px_to_world(g); e = np.linalg.norm(w - sim.obj_pos(cmd)[:2])
+                errs += e; n += 1
+                print(f"  ep {ep:2d} {cmd[4]}: follow-fovea loc err {e*1000:.0f} mm")
+        print(f"  == following-fovea localisation: {errs/max(1,n)*1000:.1f} mm  (found {n}/{EPISODES}) ==")
+        return
+
+    # the following fovea (perceive up front + track during the action) feeds the grasp; its live
+    # hex display is driven by perceive()/track() from setup_following_fovea
     if PERTURB:
         print(f"  learned-kinematics FK error after perturb (+{PERTURB*1000:.0f}mm forearm): "
               f"{fk_err()*1000:.1f} mm  ({'lifelong will adapt' if LIFELONG else 'frozen'})")

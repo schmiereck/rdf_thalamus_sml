@@ -74,9 +74,10 @@ def main():
     CAM = os.environ.get("ACT19_CAM", "overview").lower()
     COLLECT = int(os.environ.get("ACT19_COLLECT", "18"))
     EPISODES = int(os.environ.get("ACT19_EPISODES", "12"))
+    RES = int(os.environ.get("ACT19_RES", "240"))             # camera render size (for the fovea)
 
     print("act19 — Phase 3.1: a LEARNED action policy by imitation of the scripted choreography")
-    sim = BracketArmSim()
+    sim = BracketArmSim(render_wh=(RES, RES))
     sim.set_reach_site("contact")
     body = ArmBodyModel3D(rng=np.random.default_rng(5)); body.babble(sim, 4000)
 
@@ -137,16 +138,23 @@ def main():
             d, m = evaluate()
             print(f"  iter {it}: kept {len(buf['X'])} success-steps  ->  delivered {d}/{m}")
 
-    # 4) run with the NET deciding the sub-goals (FSM bypassed) — live view
+    # 4) run with the NET deciding the sub-goals (FSM bypassed), now COUPLED with the act18
+    #    LEARNED following-fovea perception (+ its live hex display) instead of privileged state
     print("  running with the LEARNED policy driving the actions ...")
-    viz = None
-    if not HEADLESS:
+    if HEADLESS:
+        act16.run_combined(sim, body, None, CAM, episodes=EPISODES, policy_fn=policy.predict)
+    else:
+        print("  (coupling the policy with the act18 learned following-fovea + live hex view)")
         try:
-            from pc.pc_act14 import CamViz
-            viz = CamViz(CAM)
+            from pc.pc_act18 import setup_following_fovea
+            P = setup_following_fovea(sim, CAM, RES, headless=False)
+            act16.run_combined(sim, body, None, CAM, episodes=EPISODES, policy_fn=policy.predict,
+                               perceive_fn=P["perceive"], track_fn=P["track"])
+            if P["viz"] is not None:
+                print("  [viz] close the window to exit."); P["viz"].hold()
         except Exception as e:
-            print(f"  [viz] {e}")
-    act16.run_combined(sim, body, viz, CAM, episodes=EPISODES, policy_fn=policy.predict)
+            print(f"  [viz/perception] {e}; falling back to privileged run")
+            act16.run_combined(sim, body, None, CAM, episodes=EPISODES, policy_fn=policy.predict)
 
 
 if __name__ == "__main__":
