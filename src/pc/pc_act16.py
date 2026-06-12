@@ -41,7 +41,7 @@ PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene be
 
 def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, perceive_fn=None,
                  mixed=False, track_fn=None, lifelong=False, log_fn=None, policy_fn=None,
-                 episode_end_fn=None, cap=CAP):
+                 episode_end_fn=None, cap=CAP, teacher_log_fn=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -186,6 +186,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             # state for a LEARNED action policy (Phase 3): hand, object, object-height, target, gripper
             state = np.array([h[0], h[1], h[2], c[0], c[1], cz, tgt[0], tgt[1],
                               sim.d.qpos[sim.jqadr["joint_5"]]], float)
+            if teacher_log_fn is not None:                    # DAgger: the FSM's sub-goal at the
+                teacher_log_fn(state, np.asarray(aim, float).copy(), float(j5))   # (policy-)VISITED state
             if policy_fn is not None:                         # LEARNED policy drives instead of the FSM
                 out = policy_fn(state); aim = np.asarray(out[:3], float); j5 = float(out[3]); via = "policy"
             if log_fn is not None:                            # log the EXECUTED (state -> subgoal)

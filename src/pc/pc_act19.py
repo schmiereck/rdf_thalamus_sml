@@ -72,6 +72,13 @@ class Policy:
         h = np.tanh(self.W1 @ xn + self.b1)
         return (self.W2 @ h + self.b2) * self.osd + self.omu
 
+    def snapshot(self):                                       # weights + normalisation, for keep-best
+        return tuple(a.copy() for a in (self.W1, self.b1, self.W2, self.b2,
+                                        self.imu, self.isd, self.omu, self.osd))
+
+    def restore(self, s):
+        self.W1, self.b1, self.W2, self.b2, self.imu, self.isd, self.omu, self.osd = (a.copy() for a in s)
+
 
 def main():
     HEADLESS = os.environ.get("ACT19_HEADLESS", "0") == "1"
@@ -108,6 +115,40 @@ def main():
 
     d0, m0 = evaluate()
     print(f"  imitation policy: delivered {d0}/{m0}")
+    best = {"score": d0 / max(1, m0), "snap": policy.snapshot(), "tag": "imitation"}
+
+    def consider(d, m, tag):                                  # keep the BEST policy seen, by eval score
+        sc = d / max(1, m)
+        if sc > best["score"]:
+            best.update(score=sc, snap=policy.snapshot(), tag=tag)
+
+    # 2b) DAgger: close the BEHAVIOR-CLONING gap.  A reactive BC policy drifts into states the
+    #     demos never covered and has no guidance there.  DAgger rolls the policy out, has the
+    #     teacher FSM LABEL its VISITED states (teacher_log_fn), and retrains on the AGGREGATED
+    #     dataset.  HONEST: this DEGRADES here -- the FSM teacher is NOT Markovian (hidden `phase`),
+    #     so its labels on policy-visited states are inconsistent and poison the set.  Off by
+    #     default; a reactive (stateless) teacher would be needed to make DAgger valid.  (Beyond
+    #     the teacher is blocked until we're AT it.)
+    DAGGER = os.environ.get("ACT19_DAGGER", "0") == "1"
+    RLCAP = int(os.environ.get("ACT19_RLCAP", "1200"))        # faster rollouts than the full place CAP
+    if DAGGER:
+        D_ITERS = int(os.environ.get("ACT19_DITERS", "4")); D_BATCH = int(os.environ.get("ACT19_DBATCH", "14"))
+        aggX, aggY = [X], [Y]
+        print("  DAgger: aggregate teacher labels on policy-visited states -> reach the teacher ...")
+        for it in range(D_ITERS):
+            dx, dy = [], []
+
+            def tlog(s, aim, j5, _x=dx, _y=dy):
+                _x.append(s.copy()); _y.append(np.array([aim[0], aim[1], aim[2], j5]))
+
+            act16.run_combined._quiet = True
+            act16.run_combined(sim, body, None, CAM, episodes=D_BATCH, policy_fn=policy.predict,
+                               teacher_log_fn=tlog, cap=RLCAP)
+            act16.run_combined._quiet = False
+            aggX.append(np.array(dx)); aggY.append(np.array(dy))
+            policy.fit(np.vstack(aggX), np.vstack(aggY), epochs=300, quiet=True)   # retrain on aggregate
+            d, m = evaluate(n=18); consider(d, m, f"dagger{it}")
+            print(f"  dagger {it}: +{len(dx)} teacher-labelled steps  ->  delivered {d}/{m}")
 
     # 3) BEYOND THE TEACHER: proper RL via ADVANTAGE-WEIGHTED REGRESSION (AWR).
     #    Explore sub-goals with decaying noise; score each rollout with a SHAPED reward
@@ -118,7 +159,6 @@ def main():
     SELF = os.environ.get("ACT19_SELF", "1") == "1"
     if SELF:
         N_ITERS = int(os.environ.get("ACT19_ITERS", "8")); BATCH = int(os.environ.get("ACT19_BATCH", "24"))
-        RLCAP = int(os.environ.get("ACT19_RLCAP", "1200"))    # faster rollouts than the full place CAP
         BETA = float(os.environ.get("ACT19_BETA", "1.0"))
         nrng = np.random.default_rng(3); baseX, baseY = X.copy(), Y.copy(); Vb = None
         print("  RL beyond the teacher (advantage-weighted regression) ...")
@@ -153,12 +193,14 @@ def main():
                 Xi = np.vstack([S, baseX]); Yi = np.vstack([Yr, baseY])         # explored + teacher anchor
                 wi = np.concatenate([w, np.full(len(baseX), float(w.mean()))])
                 policy.fit(Xi, Yi, epochs=150, set_norm=False, quiet=True, w=wi)
-            d, m = evaluate(n=18)
+            d, m = evaluate(n=18); consider(d, m, f"awr{it}")
             meanR = float(np.mean(eps["R"])) if eps["R"] else float("nan")
             print(f"  iter {it}: {len(eps['S'])} steps  meanR {meanR:+.2f}  ->  delivered {d}/{m}")
 
     # 4) run with the NET deciding the sub-goals (FSM bypassed), now COUPLED with the act18
     #    LEARNED following-fovea perception (+ its live hex display) instead of privileged state
+    policy.restore(best["snap"])                              # show the BEST policy found, not the last
+    print(f"  best policy: {best['tag']} (eval {best['score']:.2f})")
     print("  running with the LEARNED policy driving the actions ...")
     if HEADLESS:
         act16.run_combined(sim, body, None, CAM, episodes=EPISODES, policy_fn=policy.predict)
