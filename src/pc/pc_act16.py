@@ -39,7 +39,8 @@ STANDOFF, NEAR, TOL, CAP = 0.045, 0.02, 0.025, 2200
 PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene between episodes
 
 
-def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, perceive_fn=None):
+def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, perceive_fn=None,
+                 mixed=False):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -58,7 +59,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
     def scatter():
         pts = []
         for nm in OBJS:
-            wide = (perceive_fn is not None) and (rng.random() < 0.5)   # mixed types only in the (b) setup
+            wide = mixed and (rng.random() < 0.5)            # mixed cube/wide types only when asked
             obj_wide[nm] = wide
             half = WIDE_HALF if wide else CUBE_HALF
             sim.set_object_size(nm, half)

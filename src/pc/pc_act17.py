@@ -205,7 +205,7 @@ def main():
                   f"  width {w*1000:.0f}mm -> {mode}")
         return cube, tgt, mode
 
-    act16.run_combined(sim, body, viz, CAM, episodes=EPISODES, cmd_fixed=CMD, perceive_fn=perceive)
+    act16.run_combined(sim, body, viz, CAM, episodes=EPISODES, cmd_fixed=CMD, perceive_fn=perceive, mixed=True)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,235 @@
+r"""
+pc_act18.py — Phase 1 of porting the 1D LEARNING core back onto the MuJoCo arm:
+a LEARNED hex PC-net perceives the camera fovea, and the fovea FOLLOWS the commanded
+object error-drivenly (active-inference `fovea_gradient`), instead of the scripted scan.
+
+What this restores (lost in act14-17):
+  * a real PC perception NET (hex sensor sheet) that LEARNS the camera scene (net.step learn),
+    instead of hand-coded colour-COM;
+  * the fovea sensors are HEX-arranged (odd-r offset), so we SAMPLE the camera image at hex
+    positions (not a square grid) — matching the lateral hex wiring;
+  * an error-driven, object-FOLLOWING fovea (`-fovea_gradient` on the conditioned `sel`
+    channel) + saccadic search, instead of a one-shot scripted 5x5 scan.
+
+Kept: the learned 3-D kinematics + the act16 grasp pipeline (the perceived object/target feed it).
+
+  ACT18_HEADLESS=1   metrics   ACT18_PERCEPT=1   perception-only test (no grasping)
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+import numpy as np
+import mujoco
+
+from pc import PCNode, SensorNode, PCNetwork
+from pc.connection import ConnType
+from pc.test_pc_act10 import F, com2d, hex_neighbors, fovea_gradient
+from pc.pc_act14 import BracketArmSim, ArmBodyModel3D, REACH_XY, _rand_xy
+import pc.pc_act16 as act16
+
+CMD_COLOR = {"obj_red": np.array([0.9, 0.1, 0.1]), "obj_green": np.array([0.1, 0.85, 0.1]),
+             "obj_blue": np.array([0.15, 0.3, 0.95])}
+MAGENTA = np.array([1., 0, 1.])
+MATCH_TH = 0.86
+HEX_DY = 0.8660254              # row spacing of a hex lattice (sqrt(3)/2)
+
+
+# --------------------------------------------------------------------------- #
+def build_hexnet4(rng):
+    """Hex sensor sheet, cells dim 4 = [sel, R, G, B]  (sel = conditioned/commanded colour)."""
+    net = PCNetwork(eta_inf=0.05, n_relax=20, eps_tol=1e-5, eta_learn=0.006,
+                    gamma=0.3, w_clip=3.0, rng=rng)
+    cells = {}
+    for r in range(F):
+        for c in range(F):
+            cells[(r, c)] = net.add(SensorNode(f"s_{r}_{c}", dim=4))
+    for r in range(F):
+        for c in range(F):
+            for (rr, cc) in hex_neighbors(r, c, F, F):
+                net.connect(f"s_{r}_{c}", f"s_{rr}_{cc}", ConnType.LATERAL, pressure_scale=0.1)
+    h1 = []
+    for r in range(0, F, 2):
+        for c in range(0, F, 2):
+            nid = f"h1_{r}_{c}"
+            net.add(PCNode(nid, dim=12, activation="tanh", rng=rng)); h1.append(nid)
+            for (rr, cc) in [(r, c)] + hex_neighbors(r, c, F, F):
+                net.connect(nid, f"s_{rr}_{cc}", ConnType.UP, pressure_scale=1.0)
+    net.add(PCNode("top", dim=10, activation="tanh", rng=rng))
+    for nid in h1:
+        net.connect("top", nid, ConnType.UP, pressure_scale=0.3)
+    return net, cells, h1
+
+
+def patch_mean(img, cx, cy, half):
+    x0 = int(round(cx - half)); y0 = int(round(cy - half))
+    sub = img[max(0, y0):y0 + 2 * half + 1, max(0, x0):x0 + 2 * half + 1]
+    if sub.size == 0:
+        return np.zeros(3)
+    return sub.reshape(-1, 3).mean(0) / 255.0
+
+
+def hex_sample(img, gaze, K, cmd_rgb):
+    """Sample the camera image at the F×F HEX cell positions (odd rows offset half a cell) ->
+    F×F×4 [sel,R,G,B].  sel = luminance where the cell colour matches the commanded colour."""
+    out = np.zeros((F, F, 4)); cn = cmd_rgb / np.linalg.norm(cmd_rgb); half = max(1, K // 2)
+    for r in range(F):
+        cy = gaze[1] + (r - (F - 1) / 2) * K * HEX_DY
+        for c in range(F):
+            cx = gaze[0] + (c + 0.5 * (r & 1) - (F - 1) / 2) * K
+            rgb = patch_mean(img, cx, cy, half); out[r, c, 1:] = rgb
+            lum = rgb.sum()
+            if lum > 0.18 and float(rgb @ cn) / (np.linalg.norm(rgb) + 1e-6) > MATCH_TH:
+                out[r, c, 0] = lum
+    return out
+
+
+def set_sheet4(cells, arr):
+    for r in range(F):
+        for c in range(F):
+            cells[(r, c)].set_input(arr[r, c])
+
+
+# --------------------------------------------------------------------------- #
+class HexFovea:
+    """Learned hex PC-net on the camera fovea + an error-driven, object-following gaze."""
+    def __init__(self, K=8, rng=None):
+        self.K = K
+        self.net, self.cells, self.h1 = build_hexnet4(rng or np.random.default_rng(0))
+        self.se = []
+
+    def step(self, img, gaze, cmd_rgb, learn=True):
+        arr = hex_sample(img, gaze, self.K, cmd_rgb)
+        set_sheet4(self.cells, arr)
+        r = self.net.step(learn=learn); self.net.commit_step()
+        if np.isfinite(r["sensor_error"]):
+            self.se.append(r["sensor_error"])
+        return arr
+
+    def warmup(self, render_fn, scenes, scatter_fn, rng):
+        """Pre-train the net so its reconstruction (and thus fovea_gradient) is meaningful."""
+        cols = list(CMD_COLOR.values()) + [MAGENTA]
+        for i in range(scenes):
+            if i % 3 == 0:
+                scatter_fn()
+            img = render_fn()
+            gaze = rng.uniform([F * self.K, F * self.K], [img.shape[1] - F * self.K, img.shape[0] - F * self.K])
+            self.step(img, gaze, cols[i % len(cols)])
+
+    def locate(self, render_fn, cmd_rgb, gaze, grid, learn=True, viz=None, label=""):
+        """SEARCH (saccade over `grid`) then FOLLOW (error-driven) the commanded-colour object;
+        returns the foveated gaze (px) or None."""
+        import time
+        center = (F - 1) / 2.0; fov_v = np.zeros(2); seen = 0; saccade = 0
+        for it in range(60):
+            arr = self.step(render_fn(), gaze, cmd_rgb, learn)
+            com = com2d(arr[:, :, 0])                       # conditioned (commanded) object in cells
+            if com is not None:
+                drive = -fovea_gradient(self.cells)         # active-inference fovea (net-driven)
+                fov_v = 0.4 * fov_v + 0.6 * np.clip(drive * 6.0, -2, 2)
+                # error-driven follow: also pull the gaze so the object sits at the fovea centre
+                gaze = gaze + (com - center) * self.K + fov_v
+                seen = seen + 1 if np.linalg.norm(com - center) < 1.2 else 0
+                if seen >= 3:
+                    break
+            else:                                           # not in view -> saccadic search
+                gaze = grid[saccade % len(grid)].copy(); saccade += 1
+            gaze = np.clip(gaze, F * self.K, np.array([render_fn().shape[1], render_fn().shape[0]]) - F * self.K)
+            if viz is not None:
+                viz.fovea(render_fn(), gaze, self.K, np.clip(arr[:, :, 1:], 0, 1),
+                          f"follow {label}"); time.sleep(0.03)
+        return gaze if seen >= 1 or com is not None else None
+
+
+# --------------------------------------------------------------------------- #
+def main():
+    HEADLESS = os.environ.get("ACT18_HEADLESS", "0") == "1"
+    CAM = os.environ.get("ACT18_CAM", "overview").lower()
+    CMD = os.environ.get("ACT18_CMD", "") or None
+    RES = int(os.environ.get("ACT18_RES", "240"))
+    EPISODES = int(os.environ.get("ACT18_EPISODES", "12"))
+    PERCEPT = os.environ.get("ACT18_PERCEPT", "0") == "1"
+    rng = np.random.default_rng(0)
+
+    print(f"act18 — learned hex-net camera fovea + error-driven following gaze  cam={CAM}")
+    sim = BracketArmSim(render_wh=(RES, RES))
+    sim.set_reach_site("contact")
+    body = ArmBodyModel3D(rng=np.random.default_rng(5)); body.babble(sim, 4000)
+    fovea = HexFovea(K=8, rng=np.random.default_rng(7))
+
+    perc_opt = mujoco.MjvOption(); perc_opt.geomgroup[1] = 0
+
+    def render_perc():
+        sim._renderer.update_scene(sim.d, camera=CAM, scene_option=perc_opt); return sim._renderer.render()
+
+    # affine world<->px calibration (red cube at known spots)
+    from pc.pc_act15 import detect_px
+    crng = np.random.default_rng(3); W, P = [], []
+    sim.reset_home()
+    for o in CMD_COLOR:
+        if o != "obj_red":
+            sim.set_object(o, [0.33, 0.33])
+    for _ in range(16):
+        p = _rand_xy(crng); sim.set_object("obj_red", p); mujoco.mj_forward(sim.m, sim.d)
+        px = detect_px(render_perc(), CMD_COLOR["obj_red"])
+        if px is not None:
+            W.append([p[0], p[1], 1.0]); P.append(px)
+    W, P = np.array(W), np.array(P)
+    Hx = np.linalg.lstsq(W, P[:, 0], rcond=None)[0]; Hy = np.linalg.lstsq(W, P[:, 1], rcond=None)[0]
+    A = np.array([Hx[:2], Hy[:2]]); b = np.array([Hx[2], Hy[2]]); Ainv = np.linalg.inv(A)
+    px_to_world = lambda px: Ainv @ (np.asarray(px, float) - b)
+    corners = np.array([[REACH_XY[i][0], REACH_XY[j][1]] for i in (0, 1) for j in (0, 1)])
+    cpx = np.array([A @ c + b for c in corners])
+    pmin = np.maximum(cpx.min(0) - 10, F * 8).astype(float); pmax = np.minimum(cpx.max(0) + 10, RES - F * 8).astype(float)
+    grid = [np.array([x, y]) for y in np.linspace(pmin[1], pmax[1], 3) for x in np.linspace(pmin[0], pmax[0], 3)]
+
+    def scatter_far():
+        for o in CMD_COLOR:
+            sim.set_object(o, _rand_xy(crng));
+        mujoco.mj_forward(sim.m, sim.d)
+
+    print("  warming up the hex perception net on the camera ...")
+    fovea.warmup(render_perc, 600, scatter_far, np.random.default_rng(9))
+    q = max(1, len(fovea.se) // 8)
+    print(f"  net sensor_error (camera scene): {np.mean(fovea.se[:q]):.3f} -> {np.mean(fovea.se[-q:]):.3f}")
+
+    if PERCEPT:                                              # perception-only accuracy test
+        errs = 0.0; n = 0
+        for ep in range(EPISODES):
+            cmd = CMD or list(CMD_COLOR)[ep % 3]
+            for o in CMD_COLOR:
+                sim.set_object(o, _rand_xy(crng))
+            mujoco.mj_forward(sim.m, sim.d)
+            g = fovea.locate(render_perc, CMD_COLOR[cmd], np.array([RES / 2.0, RES / 2.0]), grid)
+            if g is not None:
+                w = px_to_world(g); e = np.linalg.norm(w - sim.obj_pos(cmd)[:2])
+                errs += e; n += 1
+                print(f"  ep {ep:2d} {cmd[4]}: follow-fovea loc err {e*1000:.0f} mm")
+        print(f"  == following-fovea localisation: {errs/max(1,n)*1000:.1f} mm  (found {n}/{EPISODES}) ==")
+        return
+
+    # ---- integrate with the grasp: the following fovea supplies cube + target ----
+    from pc.pc_act17 import Act17Viz
+    viz = None
+    if not HEADLESS:
+        try:
+            viz = Act17Viz(CAM, RES)
+        except Exception as e:
+            print(f"  [viz] {e}")
+
+    def perceive(cmd):
+        # Phase 1 focuses the LEARNED following-fovea on the commanded OBJECT; the target stays
+        # given (its thin marker is harder for the fovea — a thicker marker is a later step).
+        g = fovea.locate(render_perc, CMD_COLOR[cmd], np.array([RES / 2.0, RES / 2.0]), grid, viz=viz, label=cmd[4])
+        cube = px_to_world(g) if g is not None else sim.obj_pos(cmd)[:2]
+        return cube, None, "grasp"
+
+    act16.run_combined(sim, body, viz, CAM, episodes=EPISODES, cmd_fixed=CMD, perceive_fn=perceive)
+
+
+if __name__ == "__main__":
+    main()
