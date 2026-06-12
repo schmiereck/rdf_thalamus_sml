@@ -40,7 +40,7 @@ PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene be
 
 
 def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, perceive_fn=None,
-                 mixed=False):
+                 mixed=False, track_fn=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -113,6 +113,12 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         dwell = 0; via = "grasp"; done = False
         for k in range(CAP):
             c_true = sim.obj_pos(cmd)[:2]; cz = sim.obj_pos(cmd)[2]; h = sim.grasp_pos(); hxy = h[:2]; hz = h[2]
+            # FOLLOW the object live while approaching it; when it is occluded (gripper over it)
+            # the tracker returns None and we keep the last estimate (memory) — the act11 pattern.
+            if track_fn is not None and k % 4 == 0:           # follow live (drives gaze + viz)
+                t = track_fn()
+                if t is not None and phase in ("over", "lower"):
+                    cube_plan = t                            # update the estimate only while approaching
             # use the PERCEIVED cube position for the grasp approach (cube is static then); the
             # true position is used once the cube is grabbed / for the fallback and the measure.
             c = cube_plan if (cube_plan is not None and phase in ("over", "lower", "close")) else c_true

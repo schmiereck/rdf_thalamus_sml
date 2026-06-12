@@ -110,23 +110,42 @@ class HexFovea:
             self.se.append(r["sensor_error"])
         return arr
 
-    def warmup(self, render_fn, scenes, scatter_fn, rng):
+    def warmup(self, render_fn, scenes, scatter_fn, rng, viz=None):
         """Pre-train the net so its reconstruction (and thus fovea_gradient) is meaningful."""
-        cols = list(CMD_COLOR.values()) + [MAGENTA]
+        cols = list(CMD_COLOR.values())
         for i in range(scenes):
             if i % 3 == 0:
                 scatter_fn()
-            img = render_fn()
+            img = render_fn(); rgb = cols[i % len(cols)]
             gaze = rng.uniform([F * self.K, F * self.K], [img.shape[1] - F * self.K, img.shape[0] - F * self.K])
-            self.step(img, gaze, cols[i % len(cols)])
+            arr = self.step(img, gaze, rgb)
+            if i % 20 == 0:
+                se = np.mean(self.se[-30:]) if self.se else float("nan")
+                sys.stdout.write(f"\r\x1b[2K  [warmup hex-net] {i}/{scenes} ({100*i//scenes}%)  "
+                                 f"sensor_err {se:.2f}"); sys.stdout.flush()
+                if viz is not None:
+                    viz.fovea(img, gaze, self.K, np.clip(arr[:, :, 1:], 0, 1), f"warmup {i}/{scenes}")
+        sys.stdout.write("\r\x1b[2K"); sys.stdout.flush()
+
+    def track_step(self, img, gaze, cmd_rgb, learn=True):
+        """One frame: perceive, and (if the object is in view) drive the gaze to FOLLOW it.
+        Returns (new_gaze, found, cells_rgb).  found=False => object not in the fovea (occluded)."""
+        arr = self.step(img, gaze, cmd_rgb, learn)
+        com = com2d(arr[:, :, 0]); center = (F - 1) / 2.0
+        if com is None:
+            return gaze, False, arr
+        drive = -fovea_gradient(self.cells)                 # net active-inference drive
+        gaze = gaze + (com - center) * self.K + np.clip(drive * 6.0, -2, 2)
+        return gaze, True, arr
 
     def locate(self, render_fn, cmd_rgb, gaze, grid, learn=True, viz=None, label=""):
         """SEARCH (saccade over `grid`) then FOLLOW (error-driven) the commanded-colour object;
         returns the foveated gaze (px) or None."""
         import time
-        center = (F - 1) / 2.0; fov_v = np.zeros(2); seen = 0; saccade = 0
-        for it in range(60):
-            arr = self.step(render_fn(), gaze, cmd_rgb, learn)
+        center = (F - 1) / 2.0; fov_v = np.zeros(2); seen = 0; saccade = 0; com = None
+        for it in range(50):
+            img = render_fn()                               # render ONCE per iteration, reuse below
+            arr = self.step(img, gaze, cmd_rgb, learn)
             com = com2d(arr[:, :, 0])                       # conditioned (commanded) object in cells
             if com is not None:
                 drive = -fovea_gradient(self.cells)         # active-inference fovea (net-driven)
@@ -138,11 +157,11 @@ class HexFovea:
                     break
             else:                                           # not in view -> saccadic search
                 gaze = grid[saccade % len(grid)].copy(); saccade += 1
-            gaze = np.clip(gaze, F * self.K, np.array([render_fn().shape[1], render_fn().shape[0]]) - F * self.K)
+            gaze = np.clip(gaze, F * self.K, np.array([img.shape[1], img.shape[0]]) - F * self.K)
             if viz is not None:
-                viz.fovea(render_fn(), gaze, self.K, np.clip(arr[:, :, 1:], 0, 1),
-                          f"follow {label}"); time.sleep(0.03)
-        return gaze if seen >= 1 or com is not None else None
+                viz.fovea(img, gaze, self.K, np.clip(arr[:, :, 1:], 0, 1), f"search/follow {label}")
+                time.sleep(0.02)
+        return gaze if (seen >= 1 or com is not None) else None
 
 
 # --------------------------------------------------------------------------- #
@@ -192,8 +211,16 @@ def main():
             sim.set_object(o, _rand_xy(crng));
         mujoco.mj_forward(sim.m, sim.d)
 
+    from pc.pc_act17 import Act17Viz
+    viz = None
+    if not HEADLESS:
+        try:
+            viz = Act17Viz(CAM, RES)
+        except Exception as e:
+            print(f"  [viz] {e}")
+
     print("  warming up the hex perception net on the camera ...")
-    fovea.warmup(render_perc, 600, scatter_far, np.random.default_rng(9))
+    fovea.warmup(render_perc, 500, scatter_far, np.random.default_rng(9), viz=viz)
     q = max(1, len(fovea.se) // 8)
     print(f"  net sensor_error (camera scene): {np.mean(fovea.se[:q]):.3f} -> {np.mean(fovea.se[-q:]):.3f}")
 
@@ -212,23 +239,30 @@ def main():
         print(f"  == following-fovea localisation: {errs/max(1,n)*1000:.1f} mm  (found {n}/{EPISODES}) ==")
         return
 
-    # ---- integrate with the grasp: the following fovea supplies cube + target ----
-    from pc.pc_act17 import Act17Viz
-    viz = None
-    if not HEADLESS:
-        try:
-            viz = Act17Viz(CAM, RES)
-        except Exception as e:
-            print(f"  [viz] {e}")
+    # ---- integrate with the grasp: the following fovea localises the object up front AND
+    # KEEPS FOLLOWING it during the action (track hook), with the gaze drawn on the live view ----
+    state = {"gaze": np.array([RES / 2.0, RES / 2.0]), "rgb": CMD_COLOR["obj_red"]}
+
+    def crop_rgb(arr):
+        return np.clip(arr[:, :, 1:], 0, 1)
 
     def perceive(cmd):
-        # Phase 1 focuses the LEARNED following-fovea on the commanded OBJECT; the target stays
-        # given (its thin marker is harder for the fovea — a thicker marker is a later step).
         g = fovea.locate(render_perc, CMD_COLOR[cmd], np.array([RES / 2.0, RES / 2.0]), grid, viz=viz, label=cmd[4])
+        state["gaze"] = g if g is not None else np.array([RES / 2.0, RES / 2.0])
+        state["rgb"] = CMD_COLOR[cmd]
         cube = px_to_world(g) if g is not None else sim.obj_pos(cmd)[:2]
-        return cube, None, "grasp"
+        return cube, None, "grasp"                            # target stays given (thin marker)
 
-    act16.run_combined(sim, body, viz, CAM, episodes=EPISODES, cmd_fixed=CMD, perceive_fn=perceive)
+    def track():
+        gaze, found, arr = fovea.track_step(render_perc(), state["gaze"], state["rgb"], learn=True)
+        gaze = np.clip(gaze, F * fovea.K, RES - F * fovea.K); state["gaze"] = gaze
+        if viz is not None:                                   # show the LIVE arm view + fovea window
+            viz.fovea(sim.render(CAM), gaze, fovea.K, crop_rgb(arr), "fovea FOLLOWS the object")
+        return px_to_world(gaze) if found else None           # None when occluded -> grasp uses memory
+
+    # viz is driven by track() (live arm view + following fovea); don't let run_combined overwrite it
+    act16.run_combined(sim, body, None if viz is not None else viz, CAM, episodes=EPISODES,
+                       cmd_fixed=CMD, perceive_fn=perceive, track_fn=track)
 
 
 if __name__ == "__main__":
