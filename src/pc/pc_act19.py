@@ -40,10 +40,11 @@ class Policy:
         self.lr = lr
         self.imu = np.zeros(din); self.isd = np.ones(din); self.omu = np.zeros(dout); self.osd = np.ones(dout)
 
-    def fit(self, X, Y, epochs=500, bs=256, rng=None):
+    def fit(self, X, Y, epochs=500, bs=256, rng=None, set_norm=True, quiet=False):
         rng = rng or np.random.default_rng(1)
-        self.imu, self.isd = X.mean(0), X.std(0) + 1e-6
-        self.omu, self.osd = Y.mean(0), Y.std(0) + 1e-6
+        if set_norm:                                          # fine-tuning keeps the original norm
+            self.imu, self.isd = X.mean(0), X.std(0) + 1e-6
+            self.omu, self.osd = Y.mean(0), Y.std(0) + 1e-6
         Xn = (X - self.imu) / self.isd; Yn = (Y - self.omu) / self.osd
         n = len(Xn)
         for ep in range(epochs):
@@ -56,10 +57,11 @@ class Policy:
                 self.W2 -= self.lr * err @ h.T; self.b2 -= self.lr * err.sum(1)
                 dh = (self.W2.T @ err) * (1 - h ** 2)
                 self.W1 -= self.lr * dh @ xb; self.b1 -= self.lr * dh.sum(1)
-            if ep % 100 == 0:
+            if not quiet and ep % 100 == 0:
                 h = np.tanh(self.W1 @ Xn.T + self.b1[:, None]); yp = (self.W2 @ h + self.b2[:, None]).T
                 print(f"\r\x1b[2K  [train policy] {ep}/{epochs}  mse {np.mean((yp-Yn)**2):.4f}", end="")
-        print("\r\x1b[2K", end="")
+        if not quiet:
+            print("\r\x1b[2K", end="")
 
     def predict(self, x):
         xn = (np.asarray(x, float) - self.imu) / self.isd
@@ -89,11 +91,53 @@ def main():
     X, Y = np.array(Xs), np.array(Ys)
     print(f"  collected {len(X)} (state -> sub-goal) samples")
 
-    # 2) train the policy net
+    # 2) train the policy net (imitation -> capped at the teacher)
     policy = Policy(rng=np.random.default_rng(2))
     policy.fit(X, Y)
 
-    # 3) run with the NET deciding the sub-goals (FSM bypassed)
+    def evaluate(n=14):
+        act16.run_combined._quiet = True
+        d, m = act16.run_combined(sim, body, None, CAM, episodes=n, policy_fn=policy.predict)
+        act16.run_combined._quiet = False
+        return d, m
+
+    d0, m0 = evaluate()
+    print(f"  imitation policy: delivered {d0}/{m0}")
+
+    # 3) BEYOND THE TEACHER: self-improvement — explore sub-goals with noise, KEEP the
+    #    successful rollouts, and reinforce them (reward-driven self-imitation).
+    SELF = os.environ.get("ACT19_SELF", "1") == "1"
+    if SELF:
+        N_ITERS = int(os.environ.get("ACT19_ITERS", "6")); BATCH = int(os.environ.get("ACT19_BATCH", "16"))
+        nrng = np.random.default_rng(3); baseX, baseY = X.copy(), Y.copy()
+        print("  self-improvement (explore + keep successes) ...")
+        for it in range(N_ITERS):
+            sd = 0.010 * (1 - it / N_ITERS) + 0.003          # decaying exploration on the sub-goal
+            buf = {"cur": [], "X": [], "Y": []}
+
+            def noisy(s, _sd=sd):
+                return policy.predict(s) + nrng.normal(0, [_sd, _sd, _sd, _sd * 12])
+
+            def log(s, aim, j5, _b=buf):
+                _b["cur"].append((s.copy(), np.array([aim[0], aim[1], aim[2], j5])))
+
+            def ep_end(ep, ok, _b=buf):
+                if ok:
+                    for s, y in _b["cur"]:
+                        _b["X"].append(s); _b["Y"].append(y)
+                _b["cur"] = []
+
+            act16.run_combined._quiet = True
+            act16.run_combined(sim, body, None, CAM, episodes=BATCH, policy_fn=noisy,
+                               log_fn=log, episode_end_fn=ep_end)
+            act16.run_combined._quiet = False
+            if buf["X"]:                                       # fine-tune on own successes + anchor
+                Xi = np.vstack([np.array(buf["X"]), baseX]); Yi = np.vstack([np.array(buf["Y"]), baseY])
+                policy.fit(Xi, Yi, epochs=150, set_norm=False, quiet=True)
+            d, m = evaluate()
+            print(f"  iter {it}: kept {len(buf['X'])} success-steps  ->  delivered {d}/{m}")
+
+    # 4) run with the NET deciding the sub-goals (FSM bypassed) — live view
     print("  running with the LEARNED policy driving the actions ...")
     viz = None
     if not HEADLESS:

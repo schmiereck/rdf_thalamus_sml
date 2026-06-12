@@ -40,7 +40,8 @@ PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene be
 
 
 def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, perceive_fn=None,
-                 mixed=False, track_fn=None, lifelong=False, log_fn=None, policy_fn=None):
+                 mixed=False, track_fn=None, lifelong=False, log_fn=None, policy_fn=None,
+                 episode_end_fn=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -185,10 +186,10 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             # state for a LEARNED action policy (Phase 3): hand, object, object-height, target, gripper
             state = np.array([h[0], h[1], h[2], c[0], c[1], cz, tgt[0], tgt[1],
                               sim.d.qpos[sim.jqadr["joint_5"]]], float)
-            if log_fn is not None:                            # imitation data: FSM (state -> subgoal)
-                log_fn(state, np.asarray(aim, float), float(j5))
             if policy_fn is not None:                         # LEARNED policy drives instead of the FSM
                 out = policy_fn(state); aim = np.asarray(out[:3], float); j5 = float(out[3]); via = "policy"
+            if log_fn is not None:                            # log the EXECUTED (state -> subgoal)
+                log_fn(state, np.asarray(aim, float), float(j5))
             sim.target("joint_5", j5)
             gentle = via == "push" and phase == "push"           # gentle only during the actual push
             g, mdq = (1.3, 0.016) if gentle else (2.0, 0.026)
@@ -206,19 +207,24 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             grasp_tot += 1; grasp_ok += ok
         else:
             push_tot += 1; push_ok += ok
+        if episode_end_fn is not None:                       # self-improvement: keep/discard rollout
+            episode_end_fn(ep, bool(ok))
         typ = ("wide" if obj_wide.get(cmd, False) else "cube") if perceive_fn else ""
-        print(f"  ep {ep:2d}: {'OK ' if ok else 'no '} {typ:4s} via {via:5s}  obj->tgt {err*1000:.0f} mm")
-    print(f"  == combined grasp-then-push: DELIVERED {deliveries}/{episodes}  "
-          f"(by grasp {n_grasp}, by push {n_push}) ==")
-    if dec_n:
-        print(f"  AFFORDANCE decision (grasp cube / push wide) correct: {dec_ok}/{int(dec_n)}")
-        print(f"  per mode: grasp {grasp_ok}/{grasp_tot}, push {push_ok}/{push_tot}")
-    if perr_n:
-        print(f"  camera-perceived CUBE vs true: {perr_sum/perr_n*1000:.1f} mm  (over {int(perr_n)} eps)")
-    if terr_n:
-        print(f"  camera-perceived TARGET vs true: {terr_sum/terr_n*1000:.1f} mm  (over {int(terr_n)} eps)")
+        if not getattr(run_combined, "_quiet", False):
+            print(f"  ep {ep:2d}: {'OK ' if ok else 'no '} {typ:4s} via {via:5s}  obj->tgt {err*1000:.0f} mm")
+    if not getattr(run_combined, "_quiet", False):
+        print(f"  == combined grasp-then-push: DELIVERED {deliveries}/{episodes}  "
+              f"(by grasp {n_grasp}, by push {n_push}) ==")
+        if dec_n:
+            print(f"  AFFORDANCE decision (grasp cube / push wide) correct: {dec_ok}/{int(dec_n)}")
+            print(f"  per mode: grasp {grasp_ok}/{grasp_tot}, push {push_ok}/{push_tot}")
+        if perr_n:
+            print(f"  camera-perceived CUBE vs true: {perr_sum/perr_n*1000:.1f} mm  (over {int(perr_n)} eps)")
+        if terr_n:
+            print(f"  camera-perceived TARGET vs true: {terr_sum/terr_n*1000:.1f} mm  (over {int(terr_n)} eps)")
     if viz is not None:
         print("  [viz] close the window to exit."); viz.hold()
+    return deliveries, episodes
 
 
 def main():
