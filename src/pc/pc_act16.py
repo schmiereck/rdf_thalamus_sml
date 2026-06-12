@@ -39,6 +39,36 @@ STANDOFF, NEAR, TOL, CAP = 0.045, 0.02, 0.025, 2200
 PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene between episodes
 
 
+def reactive_subgoal(state):
+    """A REACTIVE (stateless) re-derivation of the grasp-and-place teacher: the sub-goal as a PURE
+    function of the observed state [hand xyz, obj xy, obj z, target xy, gripper].  Unlike the FSM
+    (hidden `phase`) this is MARKOVIAN, so it is a valid DAgger expert and BC target -- the phase is
+    INFERRED from geometry (gripper open/closed, cube on the table vs lifted, hand over cube/target).
+    Returns a flat [aim_x, aim_y, aim_z, gripper] (the same shape the policy emits)."""
+    hx, hy, hz, cx, cy, cz, tx, ty, j5 = state
+    hxy = np.array([hx, hy]); c = np.array([cx, cy]); t = np.array([tx, ty])
+    grasped = (cz > 0.028) and (j5 < 0.9)                  # cube lifted off the table AND gripper closed
+    if grasped:                                           # CARRY -> place -> release
+        if np.linalg.norm(hxy - t) > NEAR:               # carry over the target
+            return np.array([tx, ty, CARRY_Z, J5_GRIP])
+        if hz > GRASP_Z + 0.012:                          # lower onto the target
+            return np.array([tx, ty, GRASP_Z, J5_GRIP])
+        return np.array([tx, ty, GRASP_Z, J5_OPEN])       # release
+    # The gripper STATE disambiguates the two regimes that look alike in (hz): descending-to-grasp
+    # (gripper OPEN) vs ascending-with-cube (gripper CLOSED).  Splitting on j5 stops the open/close
+    # oscillation that flung the cube (the old code re-OPENED on the lower branch while lifting).
+    if j5 > 1.0:                                          # gripper OPEN -> APPROACH regime
+        if np.linalg.norm(hxy - c) > NEAR:               # move over the cube
+            return np.array([cx, cy, OVER_Z, J5_OPEN])
+        if hz > GRASP_Z + 0.012:                          # lower onto it, still open
+            return np.array([cx, cy, GRASP_Z, J5_OPEN])
+        return np.array([cx, cy, GRASP_Z, max(J5_GRIP, j5 - 0.2)])    # at pose -> begin closing gently
+    # gripper closing/closed (j5 <= 1.0): GRASP/LIFT regime -- commit, never re-open or re-approach
+    if j5 > 0.25:                                         # keep closing gently, holding the grasp pose
+        return np.array([cx, cy, GRASP_Z, max(J5_GRIP, j5 - 0.2)])    # (claws STALL ~0.18 on the cube)
+    return np.array([cx, cy, CARRY_Z, J5_GRIP])           # firm grip -> LIFT
+
+
 def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, perceive_fn=None,
                  mixed=False, track_fn=None, lifelong=False, log_fn=None, policy_fn=None,
                  episode_end_fn=None, cap=CAP, teacher_log_fn=None):

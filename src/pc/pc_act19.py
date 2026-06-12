@@ -3,11 +3,13 @@ pc_act19.py — Phase 3, step 1: a LEARNED action policy replaces the scripted c
 
 Until now the arm's high-level ACTIONS were a hand-coded finite-state machine (over -> lower ->
 close -> lift -> carry -> place -> release); only perception (act18) and kinematics (act14) were
-learned.  Here a small NET learns the choreography by IMITATION of the scripted FSM:
+learned.  Here a small NET learns the choreography from the REACTIVE teacher (act16.reactive_subgoal
+-- the same choreography re-derived as a MARKOVIAN, stateless function of the state, so it is a valid
+BC target and DAgger expert; it delivers 12/12, even above the FSM):
 
-    1. run the scripted FSM and LOG (state -> sub-goal): state = [hand xyz, object xy, object z,
+    1. run the reactive teacher and LOG (state -> sub-goal): state = [hand xyz, object xy, object z,
        target xy, gripper], sub-goal = (aim xyz, gripper target);
-    2. train a policy net  state -> sub-goal;
+    2. train a policy net  state -> sub-goal  (imitation), then DAgger to reach the teacher;
     3. run the arm with the NET deciding the sub-goals (the FSM is bypassed).
 
 A reactive policy suffices because the "phase" is recoverable from the state (gripper open/closed,
@@ -87,7 +89,7 @@ def main():
     EPISODES = int(os.environ.get("ACT19_EPISODES", "12"))
     RES = int(os.environ.get("ACT19_RES", "240"))             # camera render size (for the fovea)
 
-    print("act19 — Phase 3.1: a LEARNED action policy by imitation of the scripted choreography")
+    print("act19 — Phase 3: a LEARNED action policy (imitation + DAgger + AWR) of the REACTIVE teacher")
     sim = BracketArmSim(render_wh=(RES, RES))
     sim.set_reach_site("contact")
     body = ArmBodyModel3D(rng=np.random.default_rng(5)); body.babble(sim, 4000)
@@ -98,8 +100,8 @@ def main():
     def log(state, aim, j5):
         Xs.append(state.copy()); Ys.append(np.array([aim[0], aim[1], aim[2], j5]))
 
-    print(f"  collecting teacher demonstrations ({COLLECT} eps of the scripted grasp) ...")
-    act16.run_combined(sim, body, None, CAM, episodes=COLLECT, force="grasp", log_fn=log)
+    print(f"  collecting teacher demonstrations ({COLLECT} eps of the REACTIVE teacher) ...")
+    act16.run_combined(sim, body, None, CAM, episodes=COLLECT, policy_fn=act16.reactive_subgoal, log_fn=log)
     X, Y = np.array(Xs), np.array(Ys)
     print(f"  collected {len(X)} (state -> sub-goal) samples")
 
@@ -113,7 +115,7 @@ def main():
         act16.run_combined._quiet = False
         return d, m
 
-    d0, m0 = evaluate()
+    d0, m0 = evaluate(n=18)                                   # same n as DAgger/AWR -> fair keep-best
     print(f"  imitation policy: delivered {d0}/{m0}")
     best = {"score": d0 / max(1, m0), "snap": policy.snapshot(), "tag": "imitation"}
 
@@ -122,24 +124,23 @@ def main():
         if sc > best["score"]:
             best.update(score=sc, snap=policy.snapshot(), tag=tag)
 
-    # 2b) DAgger: close the BEHAVIOR-CLONING gap.  A reactive BC policy drifts into states the
-    #     demos never covered and has no guidance there.  DAgger rolls the policy out, has the
-    #     teacher FSM LABEL its VISITED states (teacher_log_fn), and retrains on the AGGREGATED
-    #     dataset.  HONEST: this DEGRADES here -- the FSM teacher is NOT Markovian (hidden `phase`),
-    #     so its labels on policy-visited states are inconsistent and poison the set.  Off by
-    #     default; a reactive (stateless) teacher would be needed to make DAgger valid.  (Beyond
-    #     the teacher is blocked until we're AT it.)
-    DAGGER = os.environ.get("ACT19_DAGGER", "0") == "1"
+    # 2b) DAgger: close the BEHAVIOR-CLONING gap.  A reactive BC policy drifts into states the demos
+    #     never covered and has no guidance there.  DAgger rolls the policy out, has the REACTIVE
+    #     teacher LABEL its VISITED states (teacher_log_fn -> reactive_subgoal), and retrains on the
+    #     AGGREGATED dataset -> the policy converges TO the teacher.  This is now VALID because the
+    #     reactive teacher is MARKOVIAN (a pure function of state); the old FSM teacher was not
+    #     (hidden phase) and DAgger degraded.  (Beyond the teacher is blocked until we're AT it.)
+    DAGGER = os.environ.get("ACT19_DAGGER", "1") == "1"
     RLCAP = int(os.environ.get("ACT19_RLCAP", "1200"))        # faster rollouts than the full place CAP
     if DAGGER:
         D_ITERS = int(os.environ.get("ACT19_DITERS", "4")); D_BATCH = int(os.environ.get("ACT19_DBATCH", "14"))
         aggX, aggY = [X], [Y]
-        print("  DAgger: aggregate teacher labels on policy-visited states -> reach the teacher ...")
+        print("  DAgger: aggregate REACTIVE-teacher labels on policy-visited states -> reach the teacher ...")
         for it in range(D_ITERS):
             dx, dy = [], []
 
-            def tlog(s, aim, j5, _x=dx, _y=dy):
-                _x.append(s.copy()); _y.append(np.array([aim[0], aim[1], aim[2], j5]))
+            def tlog(s, aim, j5, _x=dx, _y=dy):              # label the VISITED state with the teacher
+                r = act16.reactive_subgoal(s); _x.append(s.copy()); _y.append(r)
 
             act16.run_combined._quiet = True
             act16.run_combined(sim, body, None, CAM, episodes=D_BATCH, policy_fn=policy.predict,
