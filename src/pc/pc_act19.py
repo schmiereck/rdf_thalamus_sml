@@ -142,7 +142,7 @@ def main():
     viz = None
     if not HEADLESS:
         try:
-            from pc.pc_act17 import CamViz
+            from pc.pc_act14 import CamViz
             viz = CamViz(CAM)
         except Exception as e:
             print(f"  [viz] {e}")
