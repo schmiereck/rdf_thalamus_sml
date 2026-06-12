@@ -95,6 +95,59 @@ def set_sheet4(cells, arr):
 
 
 # --------------------------------------------------------------------------- #
+class HexFoveaViz:
+    """Left: real camera + the fovea window and its HEX sample points.  Right: the cells the
+    net sees, drawn in their HEX arrangement (odd rows offset half a cell)."""
+    def __init__(self, cam, res):
+        import matplotlib.pyplot as plt
+        from matplotlib.patches import Rectangle
+        self.plt = plt; self._Rect = Rectangle; plt.ion()
+        self.fig, (self.axI, self.axC) = plt.subplots(1, 2, figsize=(9.8, 5),
+                                                      gridspec_kw={"width_ratios": [3, 1.4]})
+        self.fig.patch.set_facecolor("#0e0e12")
+        self.axI.set_title(f"act18 — {cam} camera (real view)", color="w"); self.axI.axis("off")
+        self.axC.set_title("net sees (HEX cells)", color="w")
+        self.axC.set_facecolor("#0e0e12"); self.axC.set_xticks([]); self.axC.set_yticks([])
+        self.imI = self.axI.imshow(np.zeros((res, res, 3), np.uint8))
+        self.rect = self._Rect((0, 0), 10, 10, fill=False, ec="#33ccff", lw=1.5, ls="--")
+        self.axI.add_patch(self.rect)
+        (self.gz,) = self.axI.plot([], [], "+", ms=12, mew=2, color="#33ccff")
+        (self.dots,) = self.axI.plot([], [], ".", ms=2.5, color="#33ccff", alpha=0.6)
+        self.axC.set_xlim(-1, F + 0.5); self.axC.set_ylim(F * HEX_DY, -1); self.axC.set_aspect("equal")
+        self.cellp = [[self._Rect((c + 0.5 * (r % 2) - 0.5, r * HEX_DY - 0.5 * HEX_DY), 1.0, HEX_DY,
+                                  ec="#222", lw=0.3) for c in range(F)] for r in range(F)]
+        for row in self.cellp:
+            for p in row:
+                self.axC.add_patch(p)
+        self.txt = self.axI.text(0.02, 0.98, "", transform=self.axI.transAxes, va="top",
+                                 color="w", fontsize=9, family="monospace")
+
+    def fovea(self, frame, gaze, K, cells_rgb, txt):
+        self.imI.set_data(frame)
+        w, h = F * K, F * K * HEX_DY
+        self.rect.set_width(w); self.rect.set_height(h); self.rect.set_xy((gaze[0] - w / 2, gaze[1] - h / 2))
+        self.gz.set_data([gaze[0]], [gaze[1]])
+        xs, ys = [], []                                     # HEX sample points on the image
+        for r in range(F):
+            cy = gaze[1] + (r - (F - 1) / 2) * K * HEX_DY
+            for c in range(F):
+                xs.append(gaze[0] + (c + 0.5 * (r & 1) - (F - 1) / 2) * K); ys.append(cy)
+        self.dots.set_data(xs, ys)
+        for r in range(F):
+            for c in range(F):
+                self.cellp[r][c].set_facecolor(tuple(np.clip(cells_rgb[r, c], 0, 1)))
+        self.txt.set_text(txt)
+        self.fig.canvas.draw_idle(); self.fig.canvas.flush_events()
+
+    def update(self, frame, txt=""):
+        self.imI.set_data(frame); self.txt.set_text(txt)
+        self.fig.canvas.draw_idle(); self.fig.canvas.flush_events()
+
+    def hold(self):
+        self.plt.ioff(); self.plt.show()
+
+
+# --------------------------------------------------------------------------- #
 class HexFovea:
     """Learned hex PC-net on the camera fovea + an error-driven, object-following gaze."""
     def __init__(self, K=8, rng=None):
@@ -127,12 +180,18 @@ class HexFovea:
                     viz.fovea(img, gaze, self.K, np.clip(arr[:, :, 1:], 0, 1), f"warmup {i}/{scenes}")
         sys.stdout.write("\r\x1b[2K"); sys.stdout.flush()
 
-    def track_step(self, img, gaze, cmd_rgb, learn=True):
-        """One frame: perceive, and (if the object is in view) drive the gaze to FOLLOW it.
-        Returns (new_gaze, found, cells_rgb).  found=False => object not in the fovea (occluded)."""
+    def track_step(self, img, gaze, cmd_rgb, learn=True, min_sel=1.5):
+        """One frame: perceive, and (if the object is CONFIDENTLY in view) drive the gaze to
+        FOLLOW it.  Returns (new_gaze, found, cells_rgb).  found=False when the object is gone
+        OR only weakly visible (the gripper is occluding it) -> the caller keeps the last
+        estimate (memory) -- the act11 gaze-on-object + memory pattern, so a partial occlusion
+        never biases the estimate."""
         arr = self.step(img, gaze, cmd_rgb, learn)
-        com = com2d(arr[:, :, 0]); center = (F - 1) / 2.0
-        if com is None:
+        sel = arr[:, :, 0]; com = com2d(sel); center = (F - 1) / 2.0
+        if com is None or sel.sum() < min_sel:              # occluded / too weak -> memory
+            # still nudge the gaze toward the last seen blob if any (keeps it on the object)
+            if com is not None:
+                gaze = gaze + (com - center) * self.K * 0.5
             return gaze, False, arr
         drive = -fovea_gradient(self.cells)                 # net active-inference drive
         gaze = gaze + (com - center) * self.K + np.clip(drive * 6.0, -2, 2)
@@ -211,11 +270,10 @@ def main():
             sim.set_object(o, _rand_xy(crng));
         mujoco.mj_forward(sim.m, sim.d)
 
-    from pc.pc_act17 import Act17Viz
     viz = None
     if not HEADLESS:
         try:
-            viz = Act17Viz(CAM, RES)
+            viz = HexFoveaViz(CAM, RES)
         except Exception as e:
             print(f"  [viz] {e}")
 
@@ -254,10 +312,12 @@ def main():
         return cube, None, "grasp"                            # target stays given (thin marker)
 
     def track():
-        gaze, found, arr = fovea.track_step(render_perc(), state["gaze"], state["rgb"], learn=True)
+        img = sim.render(CAM)                                 # REAL view: the arm genuinely occludes
+        gaze, found, arr = fovea.track_step(img, state["gaze"], state["rgb"], learn=True)
         gaze = np.clip(gaze, F * fovea.K, RES - F * fovea.K); state["gaze"] = gaze
-        if viz is not None:                                   # show the LIVE arm view + fovea window
-            viz.fovea(sim.render(CAM), gaze, fovea.K, crop_rgb(arr), "fovea FOLLOWS the object")
+        if viz is not None:
+            viz.fovea(img, gaze, fovea.K, crop_rgb(arr),
+                      "fovea follows (real view; gripper occludes -> memory)")
         return px_to_world(gaze) if found else None           # None when occluded -> grasp uses memory
 
     # viz is driven by track() (live arm view + following fovea); don't let run_combined overwrite it
