@@ -145,6 +145,21 @@ def main():
     res = np.mean([np.linalg.norm(A @ w[:2] + b - p) for w, p in zip(W, P)])
     print(f"  calib world->px residual {res:.1f}px")
     px_to_world = lambda px: Ainv @ (np.asarray(px, float) - b)
+    px_scale = 0.5 * (np.linalg.norm(Ainv[:, 0]) + np.linalg.norm(Ainv[:, 1]))   # world metres per px
+
+    def measure_width(img, rgb, center_px):
+        """Apparent world width of the colour blob around center_px (for the grasp/push choice)."""
+        R = 36; x0 = int(center_px[0]) - R; y0 = int(center_px[1]) - R
+        reg = img[max(0, y0):y0 + 2 * R, max(0, x0):x0 + 2 * R].astype(float) / 255.0
+        if reg.size == 0:
+            return 0.0
+        n = rgb / np.linalg.norm(rgb)
+        lum = reg.sum(2); dot = (reg @ n) / (np.linalg.norm(reg, axis=2) + 1e-6)
+        mask = (lum > 0.18) & (dot > MATCH_TH)
+        if mask.sum() < 6:
+            return 0.0
+        ys, xs = np.nonzero(mask)
+        return max(xs.max() - xs.min(), ys.max() - ys.min()) * px_scale
     # fovea-search grid restricted to the TABLE patch (in px) so the arm/turret are excluded
     corners = np.array([[REACH_XY[i][0], REACH_XY[j][1]] for i in (0, 1) for j in (0, 1)])
     cpx = np.array([A @ c + b for c in corners])
@@ -179,12 +194,16 @@ def main():
         return px_to_world(gaze)
 
     def perceive(cmd):
-        img = render_perc()                                       # arm hidden -> only table+cubes+target
-        cube = locate(img, CMD_COLOR[cmd], f"cube '{cmd[4]}'")
+        img = render_perc()                                       # arm hidden -> only table+objects+target
+        cube = locate(img, CMD_COLOR[cmd], f"obj '{cmd[4]}'")
         tgt = locate(img, MAGENTA, "target")
+        # AFFORDANCE: measure the object's width from the camera and choose the mode
+        w = measure_width(img, CMD_COLOR[cmd], A @ cube + b)
+        mode = "push" if w > 0.042 else "grasp"                   # wider than the gripper -> push
         if os.environ.get("ACT17_DBG"):
-            print(f"  [dbg] {cmd} cube_loc {np.round(cube,3)} true {np.round(sim.obj_pos(cmd)[:2],3)}")
-        return cube, tgt
+            print(f"  [dbg] {cmd} loc {np.round(cube,3)} true {np.round(sim.obj_pos(cmd)[:2],3)}"
+                  f"  width {w*1000:.0f}mm -> {mode}")
+        return cube, tgt, mode
 
     act16.run_combined(sim, body, viz, CAM, episodes=EPISODES, cmd_fixed=CMD, perceive_fn=perceive)
 

@@ -102,6 +102,11 @@ class BracketArmSim:
         self.d.qpos[qadr + 3:qadr + 7] = [1, 0, 0, 0]
         self.d.qvel[vadr:vadr + 6] = 0.0
 
+    def set_object_size(self, name, half):
+        """Set a box object's half-extents at runtime (cube vs wide block) for affordances."""
+        bid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_BODY, name)
+        self.m.geom_size[self.m.body_geomadr[bid]] = np.asarray(half, float)
+
     def fk_truth(self, q3):
         """Eye-hand 'observation': set the 3 joints (others fixed), forward kinematics ->
         grasp position.  In sim this is instant via mj_forward (no dynamics)."""

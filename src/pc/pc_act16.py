@@ -27,9 +27,14 @@ import mujoco
 
 from pc.pc_act14 import BracketArmSim, ArmBodyModel3D, HOME, _rand_xy, CamViz, REACH_XY
 
-J5_OPEN, J5_GRIP, J5_PUSH = 1.8, 0.0, 0.12     # open / fully-closed (grip) / nearly-closed (push)
+J5_OPEN, J5_GRIP, J5_PUSH = 1.8, 0.0, 0.55     # open / fully-closed (grip) / partly-open
+#                              (push: claws spread ~40mm to contact a wide block's face at 2 points)
 OBJS = ["obj_red", "obj_green", "obj_blue"]
+CUBE_HALF = np.array([0.012, 0.012, 0.012])     # graspable cube
+WIDE_HALF = np.array([0.024, 0.024, 0.010])     # wide SQUARE block: too wide to grasp -> push
+#                                                 (square so the push direction doesn't matter)
 OVER_Z, GRASP_Z, CARRY_Z, PUSH_Z = 0.06, 0.014, 0.055, 0.016
+PUSH_LIFT_Z = 0.07                              # raise the claws to move behind an object (clear it)
 STANDOFF, NEAR, TOL, CAP = 0.045, 0.02, 0.025, 2200
 PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene between episodes
 
@@ -48,13 +53,19 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
     def clear(p, names, gap):
         return all(np.linalg.norm(p - sim.obj_pos(o)[:2]) > gap for o in names)
 
+    obj_wide = {}                                    # object affordance: wide block (push) vs cube (grasp)
+
     def scatter():
         pts = []
         for nm in OBJS:
+            wide = (perceive_fn is not None) and (rng.random() < 0.5)   # mixed types only in the (b) setup
+            obj_wide[nm] = wide
+            half = WIDE_HALF if wide else CUBE_HALF
+            sim.set_object_size(nm, half)
             p = _rand_xy(rng)
-            while any(np.linalg.norm(p - q) < 0.06 for q in pts):
+            while any(np.linalg.norm(p - q) < 0.08 for q in pts):
                 p = _rand_xy(rng)
-            pts.append(p); sim.set_object(nm, p)
+            pts.append(p); sim.set_object(nm, p, z=float(half[2]))
         mujoco.mj_forward(sim.m, sim.d); sim.step(150)
 
     def reposition_strays():
@@ -73,6 +84,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
     if PERSIST:
         sim.reset_home(); scatter()
     n_grasp = n_push = deliveries = 0; perr_sum = perr_n = terr_sum = terr_n = 0.0
+    dec_ok = dec_n = 0; grasp_ok = grasp_tot = push_ok = push_tot = 0
     for ep in range(episodes):
         if PERSIST:
             sim.arm_home(); reposition_strays()
@@ -85,14 +97,18 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         while np.linalg.norm(tgt - c0) < 0.06 or not clear(tgt, OBJS, 0.05):
             tgt = _rand_xy(rng)
         sim.set_target_marker(tgt); sim.step(40)
-        tgt_true = tgt.copy(); cube_plan = None                   # perceive cube + target (camera)
+        tgt_true = tgt.copy(); cube_plan = None; mode_perc = None  # perceive cube + target + mode
         if perceive_fn:
-            cube_plan, tgt_perc = perceive_fn(cmd)
+            cube_plan, tgt_perc, mode_perc = perceive_fn(cmd)
             if cube_plan is not None:
                 perr_sum += float(np.linalg.norm(cube_plan - sim.obj_pos(cmd)[:2])); perr_n += 1
             if tgt_perc is not None:
                 terr_sum += float(np.linalg.norm(tgt_perc - tgt_true)); terr_n += 1; tgt = tgt_perc
-        mode = force or "grasp"; phase = "over" if mode == "grasp" else "approach"
+            if mode_perc is not None:                             # affordance decision correctness
+                ideal = "push" if obj_wide.get(cmd, False) else "grasp"
+                dec_ok += int(mode_perc == ideal); dec_n += 1
+        mode = force or mode_perc or "grasp"
+        phase = "over" if mode == "grasp" else "approach"
         dwell = 0; via = "grasp"; done = False
         for k in range(CAP):
             c_true = sim.obj_pos(cmd)[:2]; cz = sim.obj_pos(cmd)[2]; h = sim.grasp_pos(); hxy = h[:2]; hz = h[2]
@@ -139,21 +155,26 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                     j5, aim, dwell = J5_OPEN, np.array([tgt[0], tgt[1], GRASP_Z]), dwell + 1
                     if dwell > 50:
                         break
-            else:  # push fallback (pre-closed claws, approach from behind, push)
+            else:  # PUSH: get behind the object (OVER it, since the arm can't go through), push
                 via = "push"
                 behind = c - d * STANDOFF
-                if phase == "approach":
+                if phase == "approach":                          # move behind the object, raised
+                    j5, aim = J5_PUSH, np.array([behind[0], behind[1], PUSH_LIFT_Z])
+                    if np.linalg.norm(hxy - behind) < NEAR:
+                        phase = "pdown"
+                elif phase == "pdown":                           # lower the claws behind it
                     j5, aim = J5_PUSH, np.array([behind[0], behind[1], PUSH_Z])
-                    if np.linalg.norm(hxy - behind) < NEAR and np.dot(hxy - c, d) < 0:
+                    if hz < PUSH_Z + 0.012:
                         phase = "push"
-                else:  # push
+                else:                                            # push the object toward the target
                     ahead = c + d * 0.02
                     j5, aim = J5_PUSH, np.array([ahead[0], ahead[1], PUSH_Z])
-                    if np.dot(hxy - c, d) > 0.02 or np.linalg.norm(hxy - c) > 0.06:
+                    if np.dot(hxy - c, d) > 0.025 or np.linalg.norm(hxy - c) > 0.08:
                         phase = "approach"
 
             sim.target("joint_5", j5)
-            g, mdq = (0.9, 0.010) if via == "push" else (2.0, 0.026)   # push gently (don't knock)
+            gentle = via == "push" and phase == "push"           # gentle only during the actual push
+            g, mdq = (1.3, 0.016) if gentle else (2.0, 0.026)
             q3 = sim.arm3_angles(); sim.set_arm3_targets(q3 + body.reach_velocity(q3, aim, gain=g, max_dq=mdq))
             sim.step(2)
             if viz is not None and k % 5 == 0:
@@ -162,9 +183,17 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         err = np.linalg.norm(sim.obj_pos(cmd)[:2] - tgt_true)   # measure against the TRUE target
         ok = err < TOL
         deliveries += ok; n_grasp += (via == "grasp" and ok); n_push += (via == "push" and ok)
-        print(f"  ep {ep:2d}: {'OK ' if ok else 'no '} via {via:5s}  obj->tgt {err*1000:.0f} mm")
+        if via == "grasp":
+            grasp_tot += 1; grasp_ok += ok
+        else:
+            push_tot += 1; push_ok += ok
+        typ = ("wide" if obj_wide.get(cmd, False) else "cube") if perceive_fn else ""
+        print(f"  ep {ep:2d}: {'OK ' if ok else 'no '} {typ:4s} via {via:5s}  obj->tgt {err*1000:.0f} mm")
     print(f"  == combined grasp-then-push: DELIVERED {deliveries}/{episodes}  "
           f"(by grasp {n_grasp}, by push {n_push}) ==")
+    if dec_n:
+        print(f"  AFFORDANCE decision (grasp cube / push wide) correct: {dec_ok}/{int(dec_n)}")
+        print(f"  per mode: grasp {grasp_ok}/{grasp_tot}, push {push_ok}/{push_tot}")
     if perr_n:
         print(f"  camera-perceived CUBE vs true: {perr_sum/perr_n*1000:.1f} mm  (over {int(perr_n)} eps)")
     if terr_n:
