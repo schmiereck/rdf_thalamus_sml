@@ -11,11 +11,12 @@ learned.  Here a small NET learns the choreography by IMITATION of the scripted 
     3. run the arm with the NET deciding the sub-goals (the FSM is bypassed).
 
 A reactive policy suffices because the "phase" is recoverable from the state (gripper open/closed,
-object on table vs lifted, hand near object vs target).  Perception is privileged here (Phase 1
-covers it) so this isolates the learned ACTION policy.  Next steps: improve beyond the teacher
-(RL/curiosity) + a hierarchical push-MPC.
+object on table vs lifted, hand near object vs target).  The non-headless final run COUPLES the
+policy with the act18 learned following-fovea perception (+ its live hex view).  Beyond imitation,
+an ADVANTAGE-WEIGHTED-REGRESSION (AWR) loop tries to improve past the teacher.
 
   ACT19_HEADLESS=1   metrics      ACT19_COLLECT / ACT19_EPISODES   teacher / test episodes
+  ACT19_SELF=0  skip RL    ACT19_ITERS / ACT19_BATCH / ACT19_RLCAP / ACT19_BETA   AWR knobs
 """
 
 from __future__ import annotations
@@ -40,20 +41,23 @@ class Policy:
         self.lr = lr
         self.imu = np.zeros(din); self.isd = np.ones(din); self.omu = np.zeros(dout); self.osd = np.ones(dout)
 
-    def fit(self, X, Y, epochs=500, bs=256, rng=None, set_norm=True, quiet=False):
+    def fit(self, X, Y, epochs=500, bs=256, rng=None, set_norm=True, quiet=False, w=None):
+        """Minibatch regression of state->sub-goal.  Optional per-sample weights `w` give
+        ADVANTAGE-WEIGHTED regression (AWR): samples from better-than-baseline rollouts pull
+        the policy more, worse-than-baseline ones less."""
         rng = rng or np.random.default_rng(1)
         if set_norm:                                          # fine-tuning keeps the original norm
             self.imu, self.isd = X.mean(0), X.std(0) + 1e-6
             self.omu, self.osd = Y.mean(0), Y.std(0) + 1e-6
         Xn = (X - self.imu) / self.isd; Yn = (Y - self.omu) / self.osd
-        n = len(Xn)
+        n = len(Xn); w = np.ones(n) if w is None else np.asarray(w, float)
         for ep in range(epochs):
             idx = rng.permutation(n)
             for s in range(0, n, bs):
-                b = idx[s:s + bs]; xb, yb = Xn[b], Yn[b]
+                b = idx[s:s + bs]; xb, yb, wb = Xn[b], Yn[b], w[b]
                 h = np.tanh(self.W1 @ xb.T + self.b1[:, None])          # hid x B
                 yp = self.W2 @ h + self.b2[:, None]                    # dout x B
-                err = (yp - yb.T) / len(b)
+                err = (yp - yb.T) * wb[None, :] / (wb.sum() + 1e-8)    # advantage-weighted residual
                 self.W2 -= self.lr * err @ h.T; self.b2 -= self.lr * err.sum(1)
                 dh = (self.W2.T @ err) * (1 - h ** 2)
                 self.W1 -= self.lr * dh @ xb; self.b1 -= self.lr * dh.sum(1)
@@ -105,38 +109,53 @@ def main():
     d0, m0 = evaluate()
     print(f"  imitation policy: delivered {d0}/{m0}")
 
-    # 3) BEYOND THE TEACHER: self-improvement — explore sub-goals with noise, KEEP the
-    #    successful rollouts, and reinforce them (reward-driven self-imitation).
+    # 3) BEYOND THE TEACHER: proper RL via ADVANTAGE-WEIGHTED REGRESSION (AWR).
+    #    Explore sub-goals with decaying noise; score each rollout with a SHAPED reward
+    #    R = 2*success - 8*residual-distance (signal even among failures); maintain a reward
+    #    BASELINE V (EMA); weight every explored (state->sub-goal) step by exp(beta*(R-V)) so
+    #    better-than-baseline rollouts pull the policy MORE and worse ones LESS (vs. the old
+    #    binary keep-successes self-imitation).  Anchored on the teacher demos to avoid drift.
     SELF = os.environ.get("ACT19_SELF", "1") == "1"
     if SELF:
-        N_ITERS = int(os.environ.get("ACT19_ITERS", "6")); BATCH = int(os.environ.get("ACT19_BATCH", "16"))
-        nrng = np.random.default_rng(3); baseX, baseY = X.copy(), Y.copy()
-        print("  self-improvement (explore + keep successes) ...")
+        N_ITERS = int(os.environ.get("ACT19_ITERS", "8")); BATCH = int(os.environ.get("ACT19_BATCH", "24"))
+        RLCAP = int(os.environ.get("ACT19_RLCAP", "1200"))    # faster rollouts than the full place CAP
+        BETA = float(os.environ.get("ACT19_BETA", "1.0"))
+        nrng = np.random.default_rng(3); baseX, baseY = X.copy(), Y.copy(); Vb = None
+        print("  RL beyond the teacher (advantage-weighted regression) ...")
+
+        def reward(ok, err):
+            return 2.0 * float(ok) - 8.0 * float(err)         # success bonus minus residual distance (m)
+
         for it in range(N_ITERS):
-            sd = 0.010 * (1 - it / N_ITERS) + 0.003          # decaying exploration on the sub-goal
-            buf = {"cur": [], "X": [], "Y": []}
+            sd = 0.010 * (1 - it / N_ITERS) + 0.003           # decaying sub-goal exploration
+            eps = {"cur": [], "S": [], "Y": [], "R": []}
 
             def noisy(s, _sd=sd):
                 return policy.predict(s) + nrng.normal(0, [_sd, _sd, _sd, _sd * 12])
 
-            def log(s, aim, j5, _b=buf):
-                _b["cur"].append((s.copy(), np.array([aim[0], aim[1], aim[2], j5])))
+            def log(s, aim, j5, _e=eps):
+                _e["cur"].append((s.copy(), np.array([aim[0], aim[1], aim[2], j5])))
 
-            def ep_end(ep, ok, _b=buf):
-                if ok:
-                    for s, y in _b["cur"]:
-                        _b["X"].append(s); _b["Y"].append(y)
-                _b["cur"] = []
+            def ep_end(ep, ok, err, _e=eps):                  # credit the whole rollout with its reward
+                R = reward(ok, err)
+                for s, y in _e["cur"]:
+                    _e["S"].append(s); _e["Y"].append(y); _e["R"].append(R)
+                _e["cur"] = []
 
             act16.run_combined._quiet = True
             act16.run_combined(sim, body, None, CAM, episodes=BATCH, policy_fn=noisy,
-                               log_fn=log, episode_end_fn=ep_end)
+                               log_fn=log, episode_end_fn=ep_end, cap=RLCAP)
             act16.run_combined._quiet = False
-            if buf["X"]:                                       # fine-tune on own successes + anchor
-                Xi = np.vstack([np.array(buf["X"]), baseX]); Yi = np.vstack([np.array(buf["Y"]), baseY])
-                policy.fit(Xi, Yi, epochs=150, set_norm=False, quiet=True)
-            d, m = evaluate()
-            print(f"  iter {it}: kept {len(buf['X'])} success-steps  ->  delivered {d}/{m}")
+            if eps["S"]:
+                S = np.array(eps["S"]); Yr = np.array(eps["Y"]); R = np.array(eps["R"])
+                Vb = R.mean() if Vb is None else 0.7 * Vb + 0.3 * R.mean()      # reward baseline (EMA)
+                w = np.exp(np.clip(BETA * (R - Vb) / (R.std() + 1e-6), -3, 3))  # advantage weights
+                Xi = np.vstack([S, baseX]); Yi = np.vstack([Yr, baseY])         # explored + teacher anchor
+                wi = np.concatenate([w, np.full(len(baseX), float(w.mean()))])
+                policy.fit(Xi, Yi, epochs=150, set_norm=False, quiet=True, w=wi)
+            d, m = evaluate(n=18)
+            meanR = float(np.mean(eps["R"])) if eps["R"] else float("nan")
+            print(f"  iter {it}: {len(eps['S'])} steps  meanR {meanR:+.2f}  ->  delivered {d}/{m}")
 
     # 4) run with the NET deciding the sub-goals (FSM bypassed), now COUPLED with the act18
     #    LEARNED following-fovea perception (+ its live hex display) instead of privileged state

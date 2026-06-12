@@ -41,7 +41,7 @@ PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene be
 
 def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, perceive_fn=None,
                  mixed=False, track_fn=None, lifelong=False, log_fn=None, policy_fn=None,
-                 episode_end_fn=None):
+                 episode_end_fn=None, cap=CAP):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -112,7 +112,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         mode = force or mode_perc or "grasp"
         phase = "over" if mode == "grasp" else "approach"
         dwell = 0; via = "grasp"; done = False
-        for k in range(CAP):
+        for k in range(cap):
             c_true = sim.obj_pos(cmd)[:2]; cz = sim.obj_pos(cmd)[2]; h = sim.grasp_pos(); hxy = h[:2]; hz = h[2]
             # FOLLOW the object live while approaching it; when it is occluded (gripper over it)
             # the tracker returns None and we keep the last estimate (memory) — the act11 pattern.
@@ -200,9 +200,10 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             if viz is not None and k % 5 == 0:
                 viz.update(sim.render(CAM), f"ep {ep} {via} {cmd} [{phase}]"
                                             f"  obj->tgt {np.linalg.norm(c-tgt)*1000:.0f}mm")
-        for _ in range(40):                                 # let the scene SETTLE before scoring:
-            sim.step(4)                                     # the cube may still be falling the last
-            if viz is not None and policy_fn is not None:   # few mm when "placed" was declared
+        sim.target("joint_5", J5_OPEN)                      # complete any placement: RELEASE, then let
+        for _ in range(40):                                 # the scene SETTLE before scoring (the cube
+            sim.step(4)                                     # may still be falling / just-released when
+            if viz is not None and policy_fn is not None:   # "placed" was declared)
                 viz.update(sim.render(CAM), f"ep {ep} {via} {cmd} [settling]")
         cpos = sim.obj_pos(cmd)
         err = np.linalg.norm(cpos[:2] - tgt_true)           # measure against the TRUE target
@@ -213,8 +214,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             grasp_tot += 1; grasp_ok += ok
         else:
             push_tot += 1; push_ok += ok
-        if episode_end_fn is not None:                       # self-improvement: keep/discard rollout
-            episode_end_fn(ep, bool(ok))
+        if episode_end_fn is not None:                       # self-improvement: reward = f(ok, err)
+            episode_end_fn(ep, bool(ok), float(err))
         typ = ("wide" if obj_wide.get(cmd, False) else "cube") if perceive_fn else ""
         if not getattr(run_combined, "_quiet", False):
             print(f"  ep {ep:2d}: {'OK ' if ok else 'no '} {typ:4s} via {via:5s}  obj->tgt {err*1000:.0f} mm")
