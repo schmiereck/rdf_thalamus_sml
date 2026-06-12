@@ -40,7 +40,7 @@ PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene be
 
 
 def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, perceive_fn=None,
-                 mixed=False, track_fn=None, lifelong=False):
+                 mixed=False, track_fn=None, lifelong=False, log_fn=None, policy_fn=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -125,6 +125,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             c = cube_plan if (cube_plan is not None and phase in ("over", "lower", "close")) else c_true
             if via == "push" and np.linalg.norm(c - tgt) < TOL:  # pushed home -> done
                 break
+            if policy_fn is not None and np.linalg.norm(c_true - tgt_true) < TOL and cz < 0.035:
+                break                                            # learned policy: object placed -> done
             d = tgt - c; n = np.linalg.norm(d); d = d / n if n > 1e-6 else np.array([1.0, 0.0])
 
             if mode == "grasp":
@@ -180,6 +182,13 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                     if np.dot(hxy - c, d) > 0.025 or np.linalg.norm(hxy - c) > 0.08:
                         phase = "approach"
 
+            # state for a LEARNED action policy (Phase 3): hand, object, object-height, target, gripper
+            state = np.array([h[0], h[1], h[2], c[0], c[1], cz, tgt[0], tgt[1],
+                              sim.d.qpos[sim.jqadr["joint_5"]]], float)
+            if log_fn is not None:                            # imitation data: FSM (state -> subgoal)
+                log_fn(state, np.asarray(aim, float), float(j5))
+            if policy_fn is not None:                         # LEARNED policy drives instead of the FSM
+                out = policy_fn(state); aim = np.asarray(out[:3], float); j5 = float(out[3]); via = "policy"
             sim.target("joint_5", j5)
             gentle = via == "push" and phase == "push"           # gentle only during the actual push
             g, mdq = (1.3, 0.016) if gentle else (2.0, 0.026)
