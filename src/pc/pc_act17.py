@@ -31,10 +31,29 @@ from pc.pc_act14 import BracketArmSim, ArmBodyModel3D, REACH_XY, _rand_xy
 from pc.pc_act15 import detect_px, sel_com
 import pc.pc_act16 as act16
 
-CMD_COLOR = {"obj_red": np.array([1., 0, 0]), "obj_green": np.array([0, 1., 0]),
-             "obj_blue": np.array([0, 0, 1.])}
+# match against the ACTUAL cube rgba (as in the MJCF) so lighting/ambient desaturation
+# doesn't push the colour-cosine below threshold (pure primaries were too strict)
+CMD_COLOR = {"obj_red": np.array([0.9, 0.1, 0.1]), "obj_green": np.array([0.1, 0.85, 0.1]),
+             "obj_blue": np.array([0.15, 0.3, 0.95])}
 MAGENTA = np.array([1., 0, 1.])
-PARK = {"joint_0": np.pi / 2, "joint_1": 2.7, "joint_2": 2.7}    # arm folded up, off the table
+MATCH_TH = 0.86
+
+
+def sel_lum(rgb_w, rgb):
+    """Per-cell luminance kept where the cell colour matches `rgb` (tolerant cosine)."""
+    out = np.zeros((F, F)); n = rgb / np.linalg.norm(rgb)
+    lum = rgb_w.sum(2)
+    dot = (rgb_w @ n) / (np.linalg.norm(rgb_w, axis=2) + 1e-6)
+    out[(lum > 0.18) & (dot > MATCH_TH)] = lum[(lum > 0.18) & (dot > MATCH_TH)]
+    return out
+
+
+def sel_com2(rgb_w, rgb):
+    sel = sel_lum(rgb_w, rgb); tot = sel.sum()
+    if tot < 1e-6:
+        return None
+    idx = np.arange(F)
+    return np.array([(sel.sum(0) * idx).sum() / tot, (sel.sum(1) * idx).sum() / tot])
 
 
 def crop_k(img, gaze, k):
@@ -100,19 +119,24 @@ def main():
     body = ArmBodyModel3D(rng=np.random.default_rng(5))
     print("  babbling the arm kinematics ..."); body.babble(sim, 4000)
 
-    def park_qpos(on):
-        for j in PARK:
-            sim.d.qpos[sim.jqadr[j]] = PARK[j] if on else act16.HOME[j]
+    # perception renders with the ARM HIDDEN (geom group 1 off) — equivalent to the arm being
+    # out of the camera's workspace view; removes all arm colour-clash and occlusion robustly.
+    perc_opt = mujoco.MjvOption()
+    perc_opt.geomgroup[1] = 0
 
-    # calibrate image<->world on the table plane (affine), arm parked, via the red cube
+    def render_perc():
+        sim._renderer.update_scene(sim.d, camera=CAM, scene_option=perc_opt)
+        return sim._renderer.render()
+
+    # calibrate image<->world on the table plane (affine), via the red cube
     crng = np.random.default_rng(3); W, P = [], []
-    sim.reset_home(); park_qpos(True)
+    sim.reset_home()
     for o in CMD_COLOR:
         if o != "obj_red":
             sim.set_object(o, [0.33, 0.33])
     for _ in range(16):
         p = _rand_xy(crng); sim.set_object("obj_red", p); mujoco.mj_forward(sim.m, sim.d)
-        px = detect_px(sim.render(CAM), CMD_COLOR["obj_red"])
+        px = detect_px(render_perc(), CMD_COLOR["obj_red"])
         if px is not None:
             W.append([p[0], p[1], 1.0]); P.append(px)
     W, P = np.array(W), np.array(P)
@@ -124,17 +148,10 @@ def main():
     # fovea-search grid restricted to the TABLE patch (in px) so the arm/turret are excluded
     corners = np.array([[REACH_XY[i][0], REACH_XY[j][1]] for i in (0, 1) for j in (0, 1)])
     cpx = np.array([A @ c + b for c in corners])
-    pmin = np.maximum(cpx.min(0) - 14, 0).astype(int)           # table-patch px box (+ cube margin)
-    pmax = np.minimum(cpx.max(0) + 14, RES).astype(int)
+    pmin = np.maximum(cpx.min(0) - 16, 0).astype(int)           # table-patch px box (scan grid range)
+    pmax = np.minimum(cpx.max(0) + 16, RES).astype(int)
     gx = np.linspace(pmin[0] + F * 4, pmax[0] - F * 4, 4)
     gy = np.linspace(pmin[1] + F * 4, pmax[1] - F * 4, 4)
-
-    def mask_patch(img):
-        """Keep only the table-patch region; the arm/turret (outside it) are blacked out so
-        the colour search can never lock onto them."""
-        m = np.zeros_like(img)
-        m[pmin[1]:pmax[1], pmin[0]:pmax[0]] = img[pmin[1]:pmax[1], pmin[0]:pmax[0]]
-        return m
 
     viz = None
     if not HEADLESS:
@@ -147,13 +164,13 @@ def main():
         best, gaze = 0.0, np.array([RES / 2.0, RES / 2.0])
         for y in gy:
             for x in gx:
-                rgb_w = crop_k(img, [x, y], 8); s = selected_lum(rgb_w, rgb).sum()
+                rgb_w = crop_k(img, [x, y], 8); s = sel_lum(rgb_w, rgb).sum()
                 if viz is not None:
                     viz.fovea(img, [x, y], 8, rgb_w, f"scan {label}"); time.sleep(DELAY * 0.4)
                 if s > best:
                     best, gaze = s, np.array([x, y])
         for k in (8, 8, 4, 3, 3):
-            rgb_w = crop_k(img, gaze, k); com = sel_com(rgb_w, rgb)
+            rgb_w = crop_k(img, gaze, k); com = sel_com2(rgb_w, rgb)
             if viz is not None:
                 viz.fovea(img, gaze, k, rgb_w, f"foveate {label} (zoom k={k})"); time.sleep(DELAY)
             if com is None:
@@ -162,14 +179,11 @@ def main():
         return px_to_world(gaze)
 
     def perceive(cmd):
-        park_qpos(True); mujoco.mj_forward(sim.m, sim.d)          # park arm (kinematic) for a clean view
-        img = mask_patch(sim.render(CAM))                         # keep only the table area
+        img = render_perc()                                       # arm hidden -> only table+cubes+target
         cube = locate(img, CMD_COLOR[cmd], f"cube '{cmd[4]}'")
         tgt = locate(img, MAGENTA, "target")
         if os.environ.get("ACT17_DBG"):
-            print(f"  [dbg] {cmd} cube_loc {np.round(cube,3)} true {np.round(sim.obj_pos(cmd)[:2],3)}"
-                  f"  green {np.round(sim.obj_pos('obj_green')[:2],3)} blue {np.round(sim.obj_pos('obj_blue')[:2],3)}")
-        park_qpos(False); mujoco.mj_forward(sim.m, sim.d)         # restore arm
+            print(f"  [dbg] {cmd} cube_loc {np.round(cube,3)} true {np.round(sim.obj_pos(cmd)[:2],3)}")
         return cube, tgt
 
     act16.run_combined(sim, body, viz, CAM, episodes=EPISODES, cmd_fixed=CMD, perceive_fn=perceive)

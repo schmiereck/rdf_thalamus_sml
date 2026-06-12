@@ -29,7 +29,7 @@
     <joint damping="0.4" armature="0.01" frictionloss="0.002"/>
     <geom friction="1.0 0.05 0.001"/>
     <default class="arm">
-      <geom type="box" density="800"/>
+      <geom type="box" density="800" group="1"/>     <!-- group 1 = the ARM; can be hidden for perception -->
     </default>
     <position kp="30" forcerange="-20 20"/>
   </default>
