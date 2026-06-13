@@ -139,14 +139,15 @@ def main():
                           planner=(ps["novelty"] if ps else None))
 
         d, m = act16.run_combined(sim, bm, None, CAM, episodes=EXPLORE, policy_fn=motor.predict,
-                                  goal_fn=goal_fn, lifelong=True, perceive_fn=perceive, track_fn=track_and_plot)
+                                  goal_fn=curiosity_goal, lifelong=True, perceive_fn=perceive, track_fn=track_and_plot)
         print(f"  explored+delivered {d}/{m} to self-dreamed goals; coverage {curio.coverage():.2f}")
         print("  [viz] close the windows to exit.")
         (vc.viz or sviz).hold()
     except Exception as e:
         import traceback; traceback.print_exc()
         print(f"  [viz/perception] {e}; falling back to privileged run")
-        measure(True, EXPLORE)
+        act16.run_combined(sim, bm, None, CAM, episodes=EXPLORE, policy_fn=motor.predict,
+                           goal_fn=curiosity_goal, lifelong=True)
 
 
 def _plot_metrics(rows, perturb, path):
