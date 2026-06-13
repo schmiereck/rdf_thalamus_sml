@@ -24,3 +24,6 @@ cache/
 *.pt
 *.pth
 *.ckpt
+
+# generated surprise-curve artifact
+src/pc/act19_surprise.png
