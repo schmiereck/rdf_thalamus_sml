@@ -28,7 +28,7 @@ import mujoco
 
 from pc import PCNode, SensorNode, PCNetwork
 from pc.connection import ConnType
-from pc.test_pc_act10 import F, com2d, hex_neighbors, fovea_gradient
+from pc.test_pc_act10 import com2d, hex_neighbors
 from pc.pc_act14 import BracketArmSim, ArmBodyModel3D, REACH_XY, _rand_xy, ARM3
 import pc.pc_act16 as act16
 
@@ -37,6 +37,18 @@ CMD_COLOR = {"obj_red": np.array([0.9, 0.1, 0.1]), "obj_green": np.array([0.1, 0
 MAGENTA = np.array([1., 0, 1.])
 MATCH_TH = 0.86
 HEX_DY = 0.8660254              # row spacing of a hex lattice (sqrt(3)/2)
+F = 16                          # fovea sheet is F×F cells (DOUBLED from act10's 8 for finer
+#   object recognition; paired with K=4 so the field of view stays the same but the sampling
+#   density doubles).  Defined locally (not imported) so it is decoupled from the act10 test.
+
+
+def fovea_gradient(cells):
+    """2-D active-inference fovea drive on the OBJECT (sel) channel: ∂E/∂(φx,φy)."""
+    e = np.array([[cells[(r, c)].epsilon[0] for c in range(F)] for r in range(F)])
+    pi = np.array([[cells[(r, c)].pi[0] for c in range(F)] for r in range(F)])
+    gx = (np.roll(pi, -1, 1) - np.roll(pi, 1, 1)) * 0.5
+    gy = (np.roll(pi, -1, 0) - np.roll(pi, 1, 0)) * 0.5
+    return np.array([float((e * gx).sum()), float((e * gy).sum())])
 
 
 # --------------------------------------------------------------------------- #
@@ -241,7 +253,7 @@ class SurpriseViz:
 # --------------------------------------------------------------------------- #
 class HexFovea:
     """Learned hex PC-net on the camera fovea + an error-driven, object-following gaze."""
-    def __init__(self, K=8, rng=None):
+    def __init__(self, K=4, rng=None):
         self.K = K
         self.net, self.cells, self.h1 = build_hexnet4(rng or np.random.default_rng(0))
         self.se = []
@@ -327,7 +339,7 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
     `px_to_world` for perception-only use.  This lets other acts (e.g. act19) reuse the FOLLOWING
     fovea AND its live hex display instead of privileged sim-state perception."""
     from pc.pc_act15 import detect_px
-    fovea = HexFovea(K=8, rng=np.random.default_rng(7))
+    fovea = HexFovea(K=4, rng=np.random.default_rng(7))
     perc_opt = mujoco.MjvOption(); perc_opt.geomgroup[1] = 0       # hide the arm -> clean object colour
 
     def render_perc():
@@ -350,7 +362,7 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
     px_to_world = lambda px: Ainv @ (np.asarray(px, float) - b)
     corners = np.array([[REACH_XY[i][0], REACH_XY[j][1]] for i in (0, 1) for j in (0, 1)])
     cpx = np.array([A @ c + b for c in corners])
-    pmin = np.maximum(cpx.min(0) - 10, F * 8).astype(float); pmax = np.minimum(cpx.max(0) + 10, RES - F * 8).astype(float)
+    pmin = np.maximum(cpx.min(0) - 10, F * fovea.K).astype(float); pmax = np.minimum(cpx.max(0) + 10, RES - F * fovea.K).astype(float)
     grid = [np.array([x, y]) for y in np.linspace(pmin[1], pmax[1], 3) for x in np.linspace(pmin[0], pmax[0], 3)]
 
     def scatter_far():
