@@ -85,18 +85,16 @@ def patch_mean(img, cx, cy, half):
     return sub.reshape(-1, 3).mean(0) / 255.0
 
 
-def hex_sample(img, gaze, K, cmd_rgb):
+def hex_sample(img, gaze, K):
     """Sample the camera image at the F×F HEX cell positions (odd rows offset half a cell) ->
-    F×F×4 [sel,R,G,B].  sel = luminance where the cell colour matches the commanded colour."""
-    out = np.zeros((F, F, 4)); cn = cmd_rgb / np.linalg.norm(cmd_rgb); half = max(1, K // 2)
+    F×F×4 [sel,R,G,B].  Channel 0 (sel) is left 0 here and filled by the LEARNED SelectionHead
+    (was a scripted cosine colour match — now encapsulated in `_match_target`, used only for training)."""
+    out = np.zeros((F, F, 4)); half = max(1, K // 2)
     for r in range(F):
         cy = gaze[1] + (r - (F - 1) / 2) * K * HEX_DY
         for c in range(F):
             cx = gaze[0] + (c + 0.5 * (r & 1) - (F - 1) / 2) * K
-            rgb = patch_mean(img, cx, cy, half); out[r, c, 1:] = rgb
-            lum = rgb.sum()
-            if lum > 0.18 and float(rgb @ cn) / (np.linalg.norm(rgb) + 1e-6) > MATCH_TH:
-                out[r, c, 0] = lum
+            out[r, c, 1:] = patch_mean(img, cx, cy, half)
     return out
 
 
@@ -111,6 +109,7 @@ def set_sheet4(cells, arr):
 # scripted cosine colour match.  The command carries NO colour — the head LEARNS code -> appearance.
 CMD_INDEX = {"obj_red": 0, "obj_green": 1, "obj_blue": 2}
 N_CMD = len(CMD_INDEX)
+LEARN_SEL = os.environ.get("ACT_LEARN_SEL", "1") == "1"   # 1 = learned selection head; 0 = scripted match
 
 
 def onehot_cmd(cmd):
@@ -312,12 +311,25 @@ class HexFovea:
     def __init__(self, K=4, rng=None):
         self.K = K
         self.net, self.cells, self.h1 = build_hexnet4(rng or np.random.default_rng(0))
+        self.sel_head = SelectionHead(rng=np.random.default_rng(4))   # LEARNED object selection
         self.se = []
         self.last_diag = None                                # most recent PC-step diagnostics
         self.hist = {"sensor": [], "state": [], "total": [], "relax": []}   # surprise time-series
 
-    def step(self, img, gaze, cmd_rgb, learn=True):
-        arr = hex_sample(img, gaze, self.K, cmd_rgb)
+    def _fill_sel(self, arr, cmd):
+        """Fill the sel channel: LEARNED head (command code -> selection) or the scripted match."""
+        if LEARN_SEL:
+            arr[:, :, 0] = self.sel_head.predict_sheet(arr, onehot_cmd(cmd))
+        else:
+            arr[:, :, 0] = _match_target(arr, CMD_COLOR[cmd])
+
+    def step(self, img, gaze, cmd, learn=True, train_sel=False):
+        """`cmd` is the object NAME (an abstract command); the sel channel is produced by the
+        LEARNED head from onehot(cmd).  train_sel=True (warmup) also fits the head to _match_target."""
+        arr = hex_sample(img, gaze, self.K)
+        if LEARN_SEL and train_sel:
+            self.sel_head.train_step(arr, onehot_cmd(cmd), _match_target(arr, CMD_COLOR[cmd]))
+        self._fill_sel(arr, cmd)
         set_sheet4(self.cells, arr)
         r = self.net.step(learn=learn); self.net.commit_step()
         self.last_diag = r                                   # expose surprise + relax for live plots
@@ -328,14 +340,15 @@ class HexFovea:
         return arr
 
     def warmup(self, render_fn, scenes, scatter_fn, rng, viz=None):
-        """Pre-train the net so its reconstruction (and thus fovea_gradient) is meaningful."""
-        cols = list(CMD_COLOR.values())
+        """Pre-train the PC net (the selection head is trained separately, before this, so the
+        sel channel the net reconstructs is already meaningful)."""
+        names = list(CMD_COLOR)
         for i in range(scenes):
             if i % 3 == 0:
                 scatter_fn()
-            img = render_fn(); rgb = cols[i % len(cols)]
+            img = render_fn(); cmd = names[i % len(names)]
             gaze = rng.uniform([F * self.K, F * self.K], [img.shape[1] - F * self.K, img.shape[0] - F * self.K])
-            arr = self.step(img, gaze, rgb)
+            arr = self.step(img, gaze, cmd)
             if i % 20 == 0:
                 se = np.mean(self.se[-30:]) if self.se else float("nan")
                 sys.stdout.write(f"\r\x1b[2K  [warmup hex-net] {i}/{scenes} ({100*i//scenes}%)  "
@@ -344,13 +357,38 @@ class HexFovea:
                     viz.fovea(img, gaze, self.K, np.clip(arr[:, :, 1:], 0, 1), f"warmup {i}/{scenes}")
         sys.stdout.write("\r\x1b[2K"); sys.stdout.flush()
 
-    def track_step(self, img, gaze, cmd_rgb, learn=True, min_sel=1.5):
+    def train_selection(self, render_fn, scatter_fn, px_of, names, rng, steps=6000, viz=None):
+        """Dedicated training of the command-conditioned SelectionHead on REAL camera crops.
+        Gazes are biased to CENTRE on the objects (guaranteed positive/negative examples per
+        command), since random-gaze warmup crops are mostly background.  Binary match target."""
+        K = self.K
+        for i in range(steps):
+            if i % 3 == 0:
+                scatter_fn()
+            img = render_fn()
+            cmd = names[int(rng.integers(len(names)))]
+            if rng.random() < 0.7:                          # centre on some object (positive/negative)
+                g = np.asarray(px_of(names[int(rng.integers(len(names)))]), float)
+            else:                                           # some random crops too
+                g = rng.uniform([F * K, F * K], [img.shape[1] - F * K, img.shape[0] - F * K])
+            g = np.clip(g, F * K, np.array([img.shape[1], img.shape[0]]) - F * K)
+            arr = hex_sample(img, g, K)
+            tgt = (_match_target(arr, CMD_COLOR[cmd]) > 0).astype(float)   # binary: cell of cmd-object?
+            self.sel_head.train_step(arr, onehot_cmd(cmd), tgt)
+            if viz is not None and i % 40 == 0:
+                self._fill_sel(arr, cmd)
+                viz.fovea(img, g, K, np.clip(arr[:, :, 1:], 0, 1), f"train selection {i}/{steps}")
+            if i % 200 == 0:
+                sys.stdout.write(f"\r\x1b[2K  [train selection head] {i}/{steps}"); sys.stdout.flush()
+        sys.stdout.write("\r\x1b[2K"); sys.stdout.flush()
+
+    def track_step(self, img, gaze, cmd, learn=True, min_sel=1.5):
         """One frame: perceive, and (if the object is CONFIDENTLY in view) drive the gaze to
         FOLLOW it.  Returns (new_gaze, found, cells_rgb).  found=False when the object is gone
         OR only weakly visible (the gripper is occluding it) -> the caller keeps the last
         estimate (memory) -- the act11 gaze-on-object + memory pattern, so a partial occlusion
         never biases the estimate."""
-        arr = self.step(img, gaze, cmd_rgb, learn)
+        arr = self.step(img, gaze, cmd, learn)
         sel = arr[:, :, 0]; com = com2d(sel); center = (F - 1) / 2.0
         if com is None or sel.sum() < min_sel:              # occluded / too weak -> memory
             # still nudge the gaze toward the last seen blob if any (keeps it on the object)
@@ -361,14 +399,14 @@ class HexFovea:
         gaze = gaze + (com - center) * self.K + np.clip(drive * 6.0, -2, 2)
         return gaze, True, arr
 
-    def locate(self, render_fn, cmd_rgb, gaze, grid, learn=True, viz=None, label=""):
-        """SEARCH (saccade over `grid`) then FOLLOW (error-driven) the commanded-colour object;
-        returns the foveated gaze (px) or None."""
+    def locate(self, render_fn, cmd, gaze, grid, learn=True, viz=None, label=""):
+        """SEARCH (saccade over `grid`) then FOLLOW (error-driven) the commanded object (by its
+        abstract code, via the learned selection head); returns the foveated gaze (px) or None."""
         import time
         center = (F - 1) / 2.0; fov_v = np.zeros(2); seen = 0; saccade = 0; com = None
         for it in range(50):
             img = render_fn()                               # render ONCE per iteration, reuse below
-            arr = self.step(img, gaze, cmd_rgb, learn)
+            arr = self.step(img, gaze, cmd, learn)
             com = com2d(arr[:, :, 0])                       # conditioned (commanded) object in cells
             if com is not None:
                 drive = -fovea_gradient(self.cells)         # active-inference fovea (net-driven)
@@ -433,6 +471,13 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
         except Exception as e:
             print(f"  [viz] {e}")
 
+    if LEARN_SEL:                                              # train the command-conditioned selection
+        if verbose:                                            # head FIRST (so the warmup net sees a
+            print("  training the command-conditioned selection head ...")   # meaningful sel channel)
+        px_of = lambda nm: A @ sim.obj_pos(nm)[:2] + b
+        fovea.train_selection(render_perc, scatter_far, px_of, list(CMD_COLOR),
+                              np.random.default_rng(13), steps=6000, viz=viz)
+
     if verbose:
         print("  warming up the hex perception net on the camera ...")
     fovea.warmup(render_perc, 500, scatter_far, np.random.default_rng(9), viz=viz)
@@ -440,21 +485,21 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
         q = max(1, len(fovea.se) // 8)
         print(f"  net sensor_error (camera scene): {np.mean(fovea.se[:q]):.3f} -> {np.mean(fovea.se[-q:]):.3f}")
 
-    state = {"gaze": np.array([RES / 2.0, RES / 2.0]), "rgb": CMD_COLOR["obj_red"]}
+    state = {"gaze": np.array([RES / 2.0, RES / 2.0]), "cmd": "obj_red"}
 
     def crop_rgb(arr):
         return np.clip(arr[:, :, 1:], 0, 1)
 
     def perceive(cmd):
-        g = fovea.locate(render_perc, CMD_COLOR[cmd], np.array([RES / 2.0, RES / 2.0]), grid, viz=viz, label=cmd[4])
+        g = fovea.locate(render_perc, cmd, np.array([RES / 2.0, RES / 2.0]), grid, viz=viz, label=cmd[4])
         state["gaze"] = g if g is not None else np.array([RES / 2.0, RES / 2.0])
-        state["rgb"] = CMD_COLOR[cmd]
+        state["cmd"] = cmd
         cube = px_to_world(g) if g is not None else sim.obj_pos(cmd)[:2]
         return cube, None, "grasp"                            # target stays given (thin marker)
 
     def track():
         img = sim.render(CAM)                                 # REAL view: the arm genuinely occludes
-        gaze, found, arr = fovea.track_step(img, state["gaze"], state["rgb"], learn=True)
+        gaze, found, arr = fovea.track_step(img, state["gaze"], state["cmd"], learn=True)
         gaze = np.clip(gaze, F * fovea.K, RES - F * fovea.K); state["gaze"] = gaze
         if viz is not None:
             viz.fovea(img, gaze, fovea.K, crop_rgb(arr),
@@ -463,7 +508,7 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
 
     return {"fovea": fovea, "perceive": perceive, "track": track, "viz": viz,
             "render_perc": render_perc, "grid": grid, "px_to_world": px_to_world,
-            "state": state}                                   # exposes the live gaze/rgb
+            "state": state}                                   # exposes the live gaze/cmd
 
 
 # --------------------------------------------------------------------------- #
@@ -505,7 +550,7 @@ def main():
             for o in CMD_COLOR:
                 sim.set_object(o, _rand_xy(prng))
             mujoco.mj_forward(sim.m, sim.d)
-            g = fovea.locate(render_perc, CMD_COLOR[cmd], np.array([RES / 2.0, RES / 2.0]), grid)
+            g = fovea.locate(render_perc, cmd, np.array([RES / 2.0, RES / 2.0]), grid)
             if g is not None:
                 w = px_to_world(g); e = np.linalg.norm(w - sim.obj_pos(cmd)[:2])
                 errs += e; n += 1
