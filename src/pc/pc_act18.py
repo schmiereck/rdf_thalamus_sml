@@ -387,7 +387,8 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
         return px_to_world(gaze) if found else None           # None when occluded -> grasp uses memory
 
     return {"fovea": fovea, "perceive": perceive, "track": track, "viz": viz,
-            "render_perc": render_perc, "grid": grid, "px_to_world": px_to_world}
+            "render_perc": render_perc, "grid": grid, "px_to_world": px_to_world,
+            "state": state}                                   # exposes the live gaze/rgb
 
 
 # --------------------------------------------------------------------------- #

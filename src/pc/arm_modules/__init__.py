@@ -5,5 +5,7 @@ self-contained `ArmModule`s with declared, typed ports, wired together by an `Ar
 Concrete module wrappers are added alongside `base` as they are implemented.
 """
 from .base import Port, ArmModule, ArmAgent
+from .visual_cortex import VisualCortexModule
+from .body_model import BodyModelModule
 
-__all__ = ["Port", "ArmModule", "ArmAgent"]
+__all__ = ["Port", "ArmModule", "ArmAgent", "VisualCortexModule", "BodyModelModule"]
