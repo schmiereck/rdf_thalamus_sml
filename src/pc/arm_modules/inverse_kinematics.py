@@ -69,6 +69,23 @@ class LearnedInverseKinematics:
         rec = [np.linalg.norm(fk(Q[i] + self.predict_dq(Q[i], V[i])) - fk(Q[i]) - V[i]) for i in chk]
         return float(np.mean(rec)) * 1000.0
 
+    def observe(self, q3, v, dq, lr: float = 5e-3, wd: float = 3e-2) -> None:
+        """LIFELONG: one online SGD step fitting M(q3)*v ≈ dq from a REAL observed motion
+        (v = actual hand displacement, dq = actual joint change).  Adapts the learned inverse
+        kinematics to the real arm as it moves — no analytic Jacobian, no babbling."""
+        if not self.trained:
+            return
+        qn = ((np.asarray(q3, float) - self.qmu) / self.qsd)[None, :]
+        vn = (np.asarray(v, float) / self.sv)[None, :]
+        dqn = (np.asarray(dq, float) / self.sd)[None, :]
+        M, h = self._M(qn)                                  # (1,3,3),(1,hid)
+        pred = np.einsum("bij,bj->bi", M, vn)               # (1,3)
+        e = pred - dqn                                      # (1,3)
+        dMf = (e[:, :, None] * vn[:, None, :]).reshape(1, 9)
+        self.W2 -= lr * (dMf.T @ h + wd * self.W2); self.b2 -= lr * dMf.sum(0)
+        dh = (dMf @ self.W2) * (1 - h ** 2)
+        self.W1 -= lr * (dh.T @ qn + wd * self.W1); self.b1 -= lr * dh.sum(0)
+
     # ------------------------------------------------------------------
     def predict_dq(self, q3, v):
         qn = (np.asarray(q3, float) - self.qmu) / self.qsd

@@ -29,6 +29,7 @@ class BodyModelModule(ArmModule):
         self.body = body if body is not None else ArmBodyModel3D(rng=rng)
         self.ik: LearnedInverseKinematics | None = None     # LEARNED reach (set via learn_inverse)
         self._surprise_mm = float("nan")
+        self._prev = None                                   # (q3, hand) for the IK lifelong differential
         (self.add_in("hand_target_xyz", 3, "desired hand position")
              .add_in("joint_angles", 3, "current 3-motor angles")
              .add_out("hand_xyz", 3, "predicted hand position fk(q3)")
@@ -68,9 +69,18 @@ class BodyModelModule(ArmModule):
         return self._surprise_mm
 
     def observe(self, q3, hand_obs, lr: float = 0.02) -> None:
-        """Lifelong refinement: adapt W toward the observed hand and update the surprise EMA."""
-        self.body.observe(q3, hand_obs, lr=lr)
-        self._surprise_mm = float(np.linalg.norm(self.body.fk(q3) - np.asarray(hand_obs, float))) * 1000.0
+        """LIFELONG refinement from a real (joints, hand) observation: adapts the FK (body.observe)
+        AND, from successive observations, the LEARNED inverse kinematics — using the actual motion
+        differential dq=q3-q3_prev, v=hand-hand_prev so the IK keeps fitting M(q3)*v ≈ dq online."""
+        q3 = np.asarray(q3, float); hand = np.asarray(hand_obs, float)
+        self.body.observe(q3, hand, lr=lr)                  # FK
+        self._surprise_mm = float(np.linalg.norm(self.body.fk(q3) - hand)) * 1000.0
+        if self.ik is not None and self.ik.trained and self._prev is not None:
+            qp, hp = self._prev
+            dq = q3 - qp; v = hand - hp                      # the REAL motion differential
+            if 1e-4 < np.linalg.norm(v) < 0.05 and np.max(np.abs(dq)) < 0.1:   # a sane local step
+                self.ik.observe(qp, v, dq)
+        self._prev = (q3, hand)
 
     def surprise(self) -> dict:
         return {"fk_mm": self._surprise_mm}
