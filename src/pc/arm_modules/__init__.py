@@ -11,7 +11,8 @@ from .planner import GoalModule2D, PlannerModule, rule_mirror, rule_centre
 from .motor import MotorModule
 from .inverse_kinematics import LearnedInverseKinematics
 from .curiosity import DistanceNovelty, CuriosityPlanner
+from .latent_goal import LatentGoalServo
 
 __all__ = ["Port", "ArmModule", "ArmAgent", "VisualCortexModule", "BodyModelModule",
            "GoalModule2D", "PlannerModule", "rule_mirror", "rule_centre", "MotorModule",
-           "LearnedInverseKinematics", "DistanceNovelty", "CuriosityPlanner"]
+           "LearnedInverseKinematics", "DistanceNovelty", "CuriosityPlanner", "LatentGoalServo"]
