@@ -233,10 +233,12 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 viz.update(sim.render(CAM), f"ep {ep} {via} {cmd} [{phase}]"
                                             f"  obj->tgt {np.linalg.norm(c-tgt)*1000:.0f}mm")
         sim.target("joint_5", J5_OPEN)                      # complete any placement: RELEASE, then let
-        for _ in range(40):                                 # the scene SETTLE before scoring (the cube
+        for s in range(40):                                 # the scene SETTLE before scoring (the cube
             sim.step(4)                                     # may still be falling / just-released when
-            if viz is not None and policy_fn is not None:   # "placed" was declared)
-                viz.update(sim.render(CAM), f"ep {ep} {via} {cmd} [settling]")
+            if track_fn is not None and s % 2 == 0:         # "placed" was declared).  KEEP the live
+                track_fn()                                  # fovea window updating through the settle
+            if viz is not None and policy_fn is not None:   # so the RELEASE + drop is actually SHOWN
+                viz.update(sim.render(CAM), f"ep {ep} {via} {cmd} [settling]")   # (else it freezes mid-air)
         cpos = sim.obj_pos(cmd)
         err = np.linalg.norm(cpos[:2] - tgt_true)           # measure against the TRUE target
         rested = cpos[2] < CUBE_HALF[2] + 0.010             # actually on the table, not held / mid-air
