@@ -116,9 +116,10 @@ def main():
         def track_and_plot():
             vc.track()
             bmm = bm.note_surprise(sim.arm3_angles(), sim.grasp_pos())
-            d = vc.surprise()
+            d = vc.surprise(); ps = planner.surprise()
             if d is not None:
-                sviz.push(d["sensor"], d["state"], d["total"], d["relax"], bmm)
+                sviz.push(d["sensor"], d["state"], d["total"], d["relax"], bmm,
+                          planner=(ps["sensor"] if ps else None))
 
         d, m = act16.run_combined(sim, bm.body, None, CAM, episodes=EPISODES,
                                   policy_fn=motor.predict, goal_fn=goal_fn,

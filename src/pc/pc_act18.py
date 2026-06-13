@@ -171,6 +171,7 @@ class SurpriseViz:
         self.fig.patch.set_facecolor("#0e0e12"); self.fig.suptitle(title, color="w")
         self._k = 0; self._redraw_every = max(1, int(redraw_every)); self._win = int(window)
         self.t = []; self.sensor = []; self.state = []; self.total = []; self.relax = []; self.body = []
+        self.planner = []                                   # Planner module surprise (act20; nan in act19)
         for ax in (self.axE, self.axR):
             ax.set_facecolor("#0e0e12"); ax.grid(True, color="#333", lw=0.4)
             ax.tick_params(colors="w"); [s.set_color("#555") for s in ax.spines.values()]
@@ -179,6 +180,7 @@ class SurpriseViz:
         (self.lS,) = self.axE.plot([], [], color="#ff5566", lw=1.4, label="sensor_error (SURPRISE)")
         (self.lT,) = self.axE.plot([], [], color="#ffaa33", lw=1.0, alpha=0.8, label="state_error")
         (self.lU,) = self.axE.plot([], [], color="#888", lw=0.8, alpha=0.6, label="total_error")
+        (self.lP,) = self.axE.plot([], [], color="#cc88ff", lw=1.2, ls="--", label="Planner sensor_error")
         self.axE.set_ylabel("squared error", color="w")
         self.axE.legend(loc="upper right", facecolor="#1a1a22", edgecolor="#444", labelcolor="w", fontsize=7)
         self.axR.set_title("MODULE: Körpermodell (ArmBodyModel3D)   +   VisualCortex relax effort",
@@ -193,28 +195,33 @@ class SurpriseViz:
         self.readout = self.fig.text(0.012, 0.012, "", color="w", fontsize=7.5, family="monospace", va="bottom")
         self.fig.tight_layout(rect=(0, 0.085, 1, 0.95))
 
-    def push(self, sensor, state, total, relax, body_mm=None):
+    def push(self, sensor, state, total, relax, body_mm=None, planner=None):
         self._k += 1
         self.t.append(self._k); self.sensor.append(float(sensor)); self.state.append(float(state))
         self.total.append(float(total)); self.relax.append(float(relax))
         self.body.append(float(body_mm) if body_mm is not None else np.nan)
+        self.planner.append(float(planner) if planner is not None else np.nan)
         if self._k % self._redraw_every == 0:
             self.redraw()
 
     def _readout_text(self):
         if not self.t:
             return ""
-        b = self.body[-1]
+        b = self.body[-1]; p = self.planner[-1]
+        planner_line = (f"  Planner       surprise(sensor)={p:7.3f}  (dreams the place target)"
+                        if np.isfinite(p) else
+                        "  Planner       — not instantiated in this loop (act19); live in act20")
         return ("current values per PC module\n"
                 f"  VisualCortex  surprise(sensor)={self.sensor[-1]:7.3f}  state={self.state[-1]:7.3f}"
                 f"  total={self.total[-1]:7.3f}  relax={self.relax[-1]:4.0f}\n"
                 f"  Körpermodell  FK surprise={b:6.1f} mm" + ("" if np.isfinite(b) else " (n/a)") + "\n"
-                "  Planner       — not instantiated in the act14–19 loop (1D-line module, not yet ported)")
+                + planner_line)
 
     def redraw(self):
         w = self._win; t = self.t[-w:]
         self.lS.set_data(t, self.sensor[-w:]); self.lT.set_data(t, self.state[-w:])
         self.lU.set_data(t, self.total[-w:]); self.lR.set_data(t, self.relax[-w:])
+        self.lP.set_data(t, self.planner[-w:])
         self.lB.set_data(t, self.body[-w:])
         for ax in (self.axE, self.axR, self.axRb):
             ax.relim(); ax.autoscale_view()
