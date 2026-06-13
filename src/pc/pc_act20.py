@@ -110,6 +110,7 @@ def main():
     # gain~1: tgt = obj + D@e is the full closed-loop GOAL ESTIMATE (re-read each carry step), not a
     # creeping increment; it converges as the hand nears the goal and stays robust to perception drift.
     place_servo = (lambda hxy: servo.servo(hxy, gain=1.0)) if servo is not None else None
+    OOD_RATE = float(os.environ.get("ACT20_OOD_RATE", "0"))   # generalization probe: novel size/shape rate
 
     # -------- headless: privileged perception, metrics only --------
     if HEADLESS:
@@ -121,7 +122,7 @@ def main():
                                         policy_fn=motor.predict, goal_fn=goal_fn)
             print(f"  [analytic Jacobian DLS] delivered {da}/{ma}")
         d, m = act16.run_combined(sim, reach_body, None, CAM, episodes=EPISODES,
-                                  policy_fn=motor.predict, goal_fn=goal_fn, place_servo_fn=place_servo)
+                                  policy_fn=motor.predict, goal_fn=goal_fn, place_servo_fn=place_servo, ood_rate=OOD_RATE)
         bm.note_surprise(sim.arm3_angles(), sim.grasp_pos())
         label = "LEARNED inverse kinematics" if LEARNED_IK else "analytic Jacobian DLS"
         place = "latent-servo place" if LATENT_PLACE else "coordinate place"
@@ -152,7 +153,7 @@ def main():
                           planner=(ps["sensor"] if ps else None))
 
         d, m = act16.run_combined(sim, reach_body, None, CAM, episodes=EPISODES,
-                                  policy_fn=motor.predict, goal_fn=goal_fn, place_servo_fn=place_servo,
+                                  policy_fn=motor.predict, goal_fn=goal_fn, place_servo_fn=place_servo, ood_rate=OOD_RATE,
                                   perceive_fn=perceive, track_fn=track_and_plot)
         print(f"  delivered {d}/{m} of the commanded cube to the DREAMED goal ('{rule_name}')")
         try:
@@ -166,7 +167,7 @@ def main():
         import traceback; traceback.print_exc()
         print(f"  [viz/perception] {e}; falling back to privileged run")
         d, m = act16.run_combined(sim, reach_body, None, CAM, episodes=EPISODES,
-                                  policy_fn=motor.predict, goal_fn=goal_fn, place_servo_fn=place_servo)
+                                  policy_fn=motor.predict, goal_fn=goal_fn, place_servo_fn=place_servo, ood_rate=OOD_RATE)
         print(f"  delivered {d}/{m} to the dreamed goal")
 
 

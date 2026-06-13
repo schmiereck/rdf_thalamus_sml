@@ -71,7 +71,8 @@ def reactive_subgoal(state):
 
 def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, perceive_fn=None,
                  mixed=False, track_fn=None, lifelong=False, log_fn=None, policy_fn=None,
-                 episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None):
+                 episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None,
+                 ood_rate=0.0, ood_rng=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -117,6 +118,9 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         sim.reset_home(); scatter()
     n_grasp = n_push = deliveries = 0; perr_sum = perr_n = terr_sum = terr_n = 0.0
     dec_ok = dec_n = 0; grasp_ok = grasp_tot = push_ok = push_tot = 0
+    base_ok = base_n = ood_ok = ood_n = 0                    # generalization-probe split
+    if ood_rate > 0 and ood_rng is None:
+        ood_rng = np.random.default_rng(123)
     for ep in range(episodes):
         if PERSIST:
             sim.arm_home(); reposition_strays()
@@ -125,6 +129,15 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         sim.target("joint_3", HOME["joint_3"]); sim.target("joint_5", J5_OPEN)
         cmd = cmd_fixed or OBJS[ep % len(OBJS)]               # cycle which cube to fetch
         c0 = sim.obj_pos(cmd)[:2]
+        cmd_half = CUBE_HALF                                  # base small cube (the standard eval set)
+        ood_ep = ood_rate > 0 and float(ood_rng.random()) < ood_rate
+        if ood_ep:                                            # GENERALIZATION PROBE: give the commanded
+            half = np.array([float(ood_rng.uniform(0.012, 0.018)),   # object a NOVEL size/aspect (still
+                             float(ood_rng.uniform(0.012, 0.018)),   # graspable; bigger/flat/tall),
+                             float(ood_rng.uniform(0.008, 0.022))])  # COLOUR unchanged -> selection ok
+            sim.set_object_size(cmd, half); sim.set_object(cmd, c0, z=float(half[2]))
+            mujoco.mj_forward(sim.m, sim.d); sim.step(60); cmd_half = half
+            c0 = sim.obj_pos(cmd)[:2]
         tgt = _rand_xy(rng)                                  # target: away from the cube AND not on any cube
         while np.linalg.norm(tgt - c0) < 0.06 or not clear(tgt, OBJS, 0.05):
             tgt = _rand_xy(rng)
@@ -248,21 +261,27 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 viz.update(sim.render(CAM), f"ep {ep} {via} {cmd} [settling]")   # (else it freezes mid-air)
         cpos = sim.obj_pos(cmd)
         err = np.linalg.norm(cpos[:2] - tgt_true)           # measure against the TRUE target
-        rested = cpos[2] < CUBE_HALF[2] + 0.010             # actually on the table, not held / mid-air
+        rested = cpos[2] < cmd_half[2] + 0.010              # rests on the table (uses the OBJECT's height)
         ok = err < TOL and rested
         deliveries += ok; n_grasp += (via == "grasp" and ok); n_push += (via == "push" and ok)
         if via == "grasp":
             grasp_tot += 1; grasp_ok += ok
         else:
             push_tot += 1; push_ok += ok
+        if ood_ep:
+            ood_n += 1; ood_ok += ok
+        else:
+            base_n += 1; base_ok += ok
         if episode_end_fn is not None:                       # self-improvement: reward = f(ok, err)
             episode_end_fn(ep, bool(ok), float(err))
-        typ = ("wide" if obj_wide.get(cmd, False) else "cube") if perceive_fn else ""
+        typ = "OOD " if ood_ep else (("wide" if obj_wide.get(cmd, False) else "cube") if perceive_fn else "")
         if not getattr(run_combined, "_quiet", False):
             print(f"  ep {ep:2d}: {'OK ' if ok else 'no '} {typ:4s} via {via:5s}  obj->tgt {err*1000:.0f} mm")
     if not getattr(run_combined, "_quiet", False):
         print(f"  == combined grasp-then-push: DELIVERED {deliveries}/{episodes}  "
               f"(by grasp {n_grasp}, by push {n_push}) ==")
+        if ood_n:                                            # generalization probe: keep base vs OOD apart
+            print(f"  GENERALIZATION: base small-cube {base_ok}/{base_n}  |  OOD novel size/shape {ood_ok}/{ood_n}")
         if dec_n:
             print(f"  AFFORDANCE decision (grasp cube / push wide) correct: {dec_ok}/{int(dec_n)}")
             print(f"  per mode: grasp {grasp_ok}/{grasp_tot}, push {push_ok}/{push_tot}")
