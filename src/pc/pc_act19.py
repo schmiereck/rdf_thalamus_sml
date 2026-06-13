@@ -208,12 +208,28 @@ def main():
     else:
         print("  (coupling the policy with the act18 learned following-fovea + live hex view)")
         try:
-            from pc.pc_act18 import setup_following_fovea
+            from pc.pc_act18 import setup_following_fovea, SurpriseViz
             P = setup_following_fovea(sim, CAM, RES, headless=False)
+            sviz = SurpriseViz()                              # live SURPRISE curves of the PC modules
+            fovea = P["fovea"]
+
+            def track_and_plot():                             # follow the object AND record surprise
+                P["track"]()
+                d = fovea.last_diag
+                q3 = sim.arm3_angles()                        # body-model FK surprise (read-only)
+                bmm = float(np.linalg.norm(body.fk(q3) - sim.grasp_pos())) * 1000.0
+                if d is not None:
+                    sviz.push(d["sensor_error"], d["state_error"], d["total_error"], d["relax_steps"], bmm)
+
             act16.run_combined(sim, body, None, CAM, episodes=EPISODES, policy_fn=policy.predict,
-                               perceive_fn=P["perceive"], track_fn=P["track"])
-            if P["viz"] is not None:
-                print("  [viz] close the window to exit."); P["viz"].hold()
+                               perceive_fn=P["perceive"], track_fn=track_and_plot)
+            try:
+                out_png = os.path.join(os.path.dirname(__file__), "act19_surprise.png")
+                sviz.save(out_png); print(f"  [viz] surprise curves saved -> {out_png}")
+            except Exception as e:
+                print(f"  [viz] could not save surprise plot: {e}")
+            print("  [viz] close the windows to exit.")
+            (P["viz"] or sviz).hold()                         # one blocking show covers all open figures
         except Exception as e:
             print(f"  [viz/perception] {e}; falling back to privileged run")
             act16.run_combined(sim, body, None, CAM, episodes=EPISODES, policy_fn=policy.predict)

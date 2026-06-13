@@ -147,6 +147,71 @@ class HexFoveaViz:
         self.plt.ioff(); self.plt.show()
 
 
+class SurpriseViz:
+    """Live curves of the PC modules' SURPRISE (prediction error) over time.
+
+    Top axis  — the PERCEPTION hex-net (a real PCNetwork): `sensor_error` is the SURPRISE
+                (squared prediction-vs-input error at the clamped sensor nodes), plus the
+                `state_error` (belief nodes) and their sum `total_error`.
+    Bottom    — `relax_steps` (how many relaxation iterations the net needed to settle — a
+                second 'surprise' proxy: a familiar scene settles fast) and, on a twin axis,
+                the BODY-MODEL kinematics surprise in mm (||predicted hand - observed hand||).
+
+    Call `push(...)` once per frame; it redraws (throttled) so you watch the curves grow."""
+
+    def __init__(self, title="PC modules — surprise over time", redraw_every=3, window=600):
+        import matplotlib.pyplot as plt
+        self.plt = plt; plt.ion()
+        self.fig, (self.axE, self.axR) = plt.subplots(2, 1, figsize=(7.6, 6.2), sharex=True)
+        self.fig.patch.set_facecolor("#0e0e12"); self.fig.suptitle(title, color="w")
+        self._k = 0; self._redraw_every = max(1, int(redraw_every)); self._win = int(window)
+        self.t = []; self.sensor = []; self.state = []; self.total = []; self.relax = []; self.body = []
+        for ax in (self.axE, self.axR):
+            ax.set_facecolor("#0e0e12"); ax.grid(True, color="#333", lw=0.4)
+            ax.tick_params(colors="w"); [s.set_color("#555") for s in ax.spines.values()]
+        self.axE.set_title("perception hex-net  (PCNetwork prediction error)", color="w", fontsize=9)
+        (self.lS,) = self.axE.plot([], [], color="#ff5566", lw=1.4, label="sensor_error (SURPRISE)")
+        (self.lT,) = self.axE.plot([], [], color="#ffaa33", lw=1.0, alpha=0.8, label="state_error")
+        (self.lU,) = self.axE.plot([], [], color="#888", lw=0.8, alpha=0.6, label="total_error")
+        self.axE.set_ylabel("squared error", color="w")
+        self.axE.legend(loc="upper right", facecolor="#1a1a22", edgecolor="#444", labelcolor="w", fontsize=7)
+        self.axR.set_title("relaxation effort  &  body-model kinematics surprise", color="w", fontsize=9)
+        (self.lR,) = self.axR.plot([], [], color="#33ccff", lw=1.2, label="relax_steps (perception)")
+        self.axR.set_ylabel("relax steps", color="#33ccff"); self.axR.set_xlabel("perception step", color="w")
+        self.axRb = self.axR.twinx(); self.axRb.tick_params(colors="#88ff88")
+        (self.lB,) = self.axRb.plot([], [], color="#88ff88", lw=1.2, label="body FK surprise (mm)")
+        self.axRb.set_ylabel("body FK error (mm)", color="#88ff88")
+        self.axR.legend(loc="upper left", facecolor="#1a1a22", edgecolor="#444", labelcolor="w", fontsize=7)
+        self.axRb.legend(loc="upper right", facecolor="#1a1a22", edgecolor="#444", labelcolor="w", fontsize=7)
+        self.fig.tight_layout(rect=(0, 0, 1, 0.96))
+
+    def push(self, sensor, state, total, relax, body_mm=None):
+        self._k += 1
+        self.t.append(self._k); self.sensor.append(float(sensor)); self.state.append(float(state))
+        self.total.append(float(total)); self.relax.append(float(relax))
+        self.body.append(float(body_mm) if body_mm is not None else np.nan)
+        if self._k % self._redraw_every == 0:
+            self.redraw()
+
+    def redraw(self):
+        w = self._win; t = self.t[-w:]
+        self.lS.set_data(t, self.sensor[-w:]); self.lT.set_data(t, self.state[-w:])
+        self.lU.set_data(t, self.total[-w:]); self.lR.set_data(t, self.relax[-w:])
+        self.lB.set_data(t, self.body[-w:])
+        for ax in (self.axE, self.axR, self.axRb):
+            ax.relim(); ax.autoscale_view()
+        try:
+            self.fig.canvas.draw_idle(); self.fig.canvas.flush_events()
+        except Exception:
+            pass
+
+    def save(self, path):
+        self.redraw(); self.fig.savefig(path, dpi=110, facecolor=self.fig.get_facecolor())
+
+    def hold(self):
+        self.plt.ioff(); self.plt.show()
+
+
 # --------------------------------------------------------------------------- #
 class HexFovea:
     """Learned hex PC-net on the camera fovea + an error-driven, object-following gaze."""
@@ -154,13 +219,18 @@ class HexFovea:
         self.K = K
         self.net, self.cells, self.h1 = build_hexnet4(rng or np.random.default_rng(0))
         self.se = []
+        self.last_diag = None                                # most recent PC-step diagnostics
+        self.hist = {"sensor": [], "state": [], "total": [], "relax": []}   # surprise time-series
 
     def step(self, img, gaze, cmd_rgb, learn=True):
         arr = hex_sample(img, gaze, self.K, cmd_rgb)
         set_sheet4(self.cells, arr)
         r = self.net.step(learn=learn); self.net.commit_step()
+        self.last_diag = r                                   # expose surprise + relax for live plots
         if np.isfinite(r["sensor_error"]):
             self.se.append(r["sensor_error"])
+            self.hist["sensor"].append(r["sensor_error"]); self.hist["state"].append(r["state_error"])
+            self.hist["total"].append(r["total_error"]); self.hist["relax"].append(r["relax_steps"])
         return arr
 
     def warmup(self, render_fn, scenes, scatter_fn, rng, viz=None):
