@@ -107,6 +107,62 @@ def set_sheet4(cells, arr):
 
 
 # --------------------------------------------------------------------------- #
+# Object selection: an ABSTRACT command code (one-hot object id) + a LEARNED head, replacing the
+# scripted cosine colour match.  The command carries NO colour — the head LEARNS code -> appearance.
+CMD_INDEX = {"obj_red": 0, "obj_green": 1, "obj_blue": 2}
+N_CMD = len(CMD_INDEX)
+
+
+def onehot_cmd(cmd):
+    v = np.zeros(N_CMD)
+    v[CMD_INDEX[cmd]] = 1.0
+    return v
+
+
+def _match_target(rgb_sheet, true_rgb):
+    """The OLD scripted cosine colour-match selection, kept ONLY as the SelectionHead's TRAINING
+    target: luminance where a cell's colour matches `true_rgb`, else 0.  (true_rgb is used to make
+    the target — the head's INPUT never sees it.)"""
+    cn = np.asarray(true_rgb, float); cn = cn / (np.linalg.norm(cn) + 1e-9)
+    rgb = rgb_sheet[:, :, 1:]                              # (F,F,3)
+    lum = rgb.sum(2)
+    cos = (rgb @ cn) / (np.linalg.norm(rgb, axis=2) + 1e-6)
+    return np.where((lum > 0.18) & (cos > MATCH_TH), lum, 0.0)   # (F,F)
+
+
+class SelectionHead:
+    """LEARNED, command-conditioned object selection.  Per cell:  sel = f([R,G,B], onehot(cmd)).
+    Replaces the scripted cosine colour match.  The command is an ABSTRACT one-hot code carrying NO
+    colour, so the head must LEARN which colour each code refers to (objects keep consistent colours).
+    Trained self-supervised in the warmup with `_match_target` (the true colour) as the target."""
+
+    def __init__(self, n_cmd=N_CMD, hid=32, lr=0.08, rng=None):
+        rng = rng or np.random.default_rng(0)
+        din = 3 + n_cmd
+        self.W1 = rng.normal(0, 1 / np.sqrt(din), (hid, din)); self.b1 = np.zeros(hid)
+        self.W2 = rng.normal(0, 1 / np.sqrt(hid), hid); self.b2 = 0.0
+        self.lr = lr; self.n_cmd = n_cmd
+
+    def _x(self, rgb_flat, code):
+        return np.concatenate([rgb_flat, np.tile(np.asarray(code, float), (len(rgb_flat), 1))], 1)
+
+    def predict_sheet(self, rgb_sheet, code):
+        rgb = rgb_sheet[:, :, 1:].reshape(-1, 3)
+        h = np.tanh(self._x(rgb, code) @ self.W1.T + self.b1)
+        return np.clip(h @ self.W2 + self.b2, 0.0, None).reshape(F, F)
+
+    def train_step(self, rgb_sheet, code, target):
+        rgb = rgb_sheet[:, :, 1:].reshape(-1, 3); X = self._x(rgb, code)
+        h = np.tanh(X @ self.W1.T + self.b1)
+        pred = h @ self.W2 + self.b2
+        e = (pred - target.reshape(-1)) / len(rgb)
+        self.W2 -= self.lr * (e @ h); self.b2 -= self.lr * float(e.sum())
+        dh = np.outer(e, self.W2) * (1 - h ** 2)
+        self.W1 -= self.lr * dh.T @ X; self.b1 -= self.lr * dh.sum(0)
+        return float(np.mean((pred - target.reshape(-1)) ** 2))
+
+
+# --------------------------------------------------------------------------- #
 class HexFoveaViz:
     """Left: real camera + the fovea window and its HEX sample points.  Right: the cells the
     net sees, drawn in their HEX arrangement (odd rows offset half a cell)."""
