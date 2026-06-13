@@ -76,6 +76,14 @@ def main():
     act16.run_combined(sim, bm.body, None, CAM, episodes=COLLECT, policy_fn=act16.reactive_subgoal, log_fn=log)
     motor.fit(np.array(Xs), np.array(Ys))
 
+    # ---- (a) LEARNED inverse kinematics: replaces the analytic Jacobian reach controller ----
+    LEARNED_IK = os.environ.get("ACT20_LEARNED_IK", "1") == "1"
+    if LEARNED_IK:
+        print("  training the LEARNED inverse kinematics (replaces the analytic Jacobian) ...")
+        rec = bm.learn_inverse(sim, rng=np.random.default_rng(11))
+        print(f"    IK babble reconstruction: {rec:.2f} mm")
+    reach_body = bm if LEARNED_IK else bm.body          # `bm` routes reach through the LEARNED IK
+
     # ---- assemble the agent: declare the modules and wire their ports ----
     agent = ArmAgent("arm-agent")
     for m in (planner, motor, bm):
@@ -91,11 +99,16 @@ def main():
     if HEADLESS:
         print(f"  conditioning flag={FLAG:.0f} -> rule '{rule_name}'")
         print(agent.summary())
-        print(f"  [VisualCortex runs privileged in headless]\n  running the assembly end-to-end ...")
-        d, m = act16.run_combined(sim, bm.body, None, CAM, episodes=EPISODES,
+        print("  [VisualCortex runs privileged in headless]")
+        if LEARNED_IK:                                  # honest A/B: analytic Jacobian vs learned IK
+            da, ma = act16.run_combined(sim, bm.body, None, CAM, episodes=EPISODES,
+                                        policy_fn=motor.predict, goal_fn=goal_fn)
+            print(f"  [analytic Jacobian DLS] delivered {da}/{ma}")
+        d, m = act16.run_combined(sim, reach_body, None, CAM, episodes=EPISODES,
                                   policy_fn=motor.predict, goal_fn=goal_fn)
         bm.note_surprise(sim.arm3_angles(), sim.grasp_pos())
-        print(f"  delivered {d}/{m} of the commanded cube to the DREAMED goal")
+        label = "LEARNED inverse kinematics" if LEARNED_IK else "analytic Jacobian DLS"
+        print(f"  [{label}] delivered {d}/{m} of the commanded cube to the DREAMED goal")
         print("  per-module surprise:", {k: v for k, v in agent.surprises().items()})
         return
 
@@ -121,7 +134,7 @@ def main():
                 sviz.push(d["sensor"], d["state"], d["total"], d["relax"], bmm,
                           planner=(ps["sensor"] if ps else None))
 
-        d, m = act16.run_combined(sim, bm.body, None, CAM, episodes=EPISODES,
+        d, m = act16.run_combined(sim, reach_body, None, CAM, episodes=EPISODES,
                                   policy_fn=motor.predict, goal_fn=goal_fn,
                                   perceive_fn=perceive, track_fn=track_and_plot)
         print(f"  delivered {d}/{m} of the commanded cube to the DREAMED goal ('{rule_name}')")
@@ -135,7 +148,7 @@ def main():
     except Exception as e:
         import traceback; traceback.print_exc()
         print(f"  [viz/perception] {e}; falling back to privileged run")
-        d, m = act16.run_combined(sim, bm.body, None, CAM, episodes=EPISODES,
+        d, m = act16.run_combined(sim, reach_body, None, CAM, episodes=EPISODES,
                                   policy_fn=motor.predict, goal_fn=goal_fn)
         print(f"  delivered {d}/{m} to the dreamed goal")
 

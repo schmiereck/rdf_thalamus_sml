@@ -19,6 +19,7 @@ import numpy as np
 
 from pc.pc_act14 import ArmBodyModel3D
 from .base import ArmModule
+from .inverse_kinematics import LearnedInverseKinematics
 
 
 class BodyModelModule(ArmModule):
@@ -26,15 +27,32 @@ class BodyModelModule(ArmModule):
                  rng=None) -> None:
         super().__init__(name)
         self.body = body if body is not None else ArmBodyModel3D(rng=rng)
+        self.ik: LearnedInverseKinematics | None = None     # LEARNED reach (set via learn_inverse)
         self._surprise_mm = float("nan")
         (self.add_in("hand_target_xyz", 3, "desired hand position")
              .add_in("joint_angles", 3, "current 3-motor angles")
              .add_out("hand_xyz", 3, "predicted hand position fk(q3)")
              .add_out("joint_dq", 3, "reach velocity toward the target"))
 
-    # -- training delegate (babbling), kept on the module so the agent owns it --
+    # -- training delegates (babbling), kept on the module so the agent owns it --
     def babble(self, sim, steps: int) -> None:
         self.body.babble(sim, steps)
+
+    def learn_inverse(self, sim, steps: int = 30000, rng=None) -> float:
+        """Train the LEARNED inverse kinematics from babbling through the learned fk; once set,
+        `reach_velocity` uses it instead of the analytic Jacobian.  Returns the babble error (mm)."""
+        rng3 = sim.arm3_range()
+        self.ik = LearnedInverseKinematics(rng=rng)
+        return self.ik.train(self.body.fk, rng3[:, 0], rng3[:, 1], steps=steps, rng=rng)
+
+    # -- drop-in `body` interface for run_combined: a LEARNED reach when self.ik is set --
+    def reach_velocity(self, q3, target, gain: float = 2.0, max_dq: float = 0.03, damp: float = 0.04):
+        if self.ik is not None and self.ik.trained:
+            return self.ik.reach_velocity(self.body.fk, q3, target, gain=gain, max_dq=max_dq)
+        return self.body.reach_velocity(q3, target, gain=gain, max_dq=max_dq, damp=damp)
+
+    def fk(self, q3):
+        return self.body.fk(q3)
 
     def step(self) -> None:
         q3 = self.get_in("joint_angles")

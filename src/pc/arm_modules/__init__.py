@@ -9,6 +9,8 @@ from .visual_cortex import VisualCortexModule
 from .body_model import BodyModelModule
 from .planner import GoalModule2D, PlannerModule, rule_mirror, rule_centre
 from .motor import MotorModule
+from .inverse_kinematics import LearnedInverseKinematics
 
 __all__ = ["Port", "ArmModule", "ArmAgent", "VisualCortexModule", "BodyModelModule",
-           "GoalModule2D", "PlannerModule", "rule_mirror", "rule_centre", "MotorModule"]
+           "GoalModule2D", "PlannerModule", "rule_mirror", "rule_centre", "MotorModule",
+           "LearnedInverseKinematics"]
