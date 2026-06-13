@@ -71,7 +71,7 @@ def reactive_subgoal(state):
 
 def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, perceive_fn=None,
                  mixed=False, track_fn=None, lifelong=False, log_fn=None, policy_fn=None,
-                 episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None):
+                 episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -217,6 +217,9 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                     if np.dot(hxy - c, d) > 0.025 or np.linalg.norm(hxy - c) > 0.08:
                         phase = "approach"
 
+            if place_servo_fn is not None:                    # (b) LATENT-DIFFERENCE place: while the
+                if cz > 0.028 and sim.d.qpos[sim.jqadr["joint_5"]] < 0.9:   # object is carried, drive
+                    tgt = np.asarray(place_servo_fn(hxy), float)  # the place target by the latent servo
             # state for a LEARNED action policy (Phase 3): hand, object, object-height, target, gripper
             state = np.array([h[0], h[1], h[2], c[0], c[1], cz, tgt[0], tgt[1],
                               sim.d.qpos[sim.jqadr["joint_5"]]], float)

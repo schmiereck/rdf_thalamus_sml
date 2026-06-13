@@ -28,7 +28,8 @@ import numpy as np
 from pc.pc_act14 import BracketArmSim
 import pc.pc_act16 as act16
 from pc.arm_modules import (ArmAgent, VisualCortexModule, BodyModelModule,
-                            GoalModule2D, PlannerModule, MotorModule, rule_mirror, rule_centre)
+                            GoalModule2D, PlannerModule, MotorModule, rule_mirror, rule_centre,
+                            LatentGoalServo)
 from pc.arm_modules.planner import LO, HI, SPAN
 
 
@@ -84,6 +85,14 @@ def main():
         print(f"    IK babble reconstruction: {rec:.2f} mm")
     reach_body = bm if LEARNED_IK else bm.body          # `bm` routes reach through the LEARNED IK
 
+    # ---- (b) LATENT-DIFFERENCE place: keep the goal as a latent, servo on it during placement ----
+    LATENT_PLACE = os.environ.get("ACT20_LATENT_PLACE", "0") == "1"
+    servo = None
+    if LATENT_PLACE:
+        print("  training the latent goal-servo (executes on the latent difference) ...")
+        servo = LatentGoalServo(gm, rng=np.random.default_rng(12))
+        print(f"    latent-inverse babble: {servo.train(steps=4000):.1f} mm")
+
     # ---- assemble the agent: declare the modules and wire their ports ----
     agent = ArmAgent("arm-agent")
     for m in (planner, motor, bm):
@@ -93,7 +102,14 @@ def main():
         """Planner dreams the place target from the (perceived) object — over its ports."""
         planner.set_in("object_xy", obj_xy); planner.set_in("conditioning_flag", [FLAG])
         planner.step()
-        return planner.get_out("goal_xy")
+        goal = planner.get_out("goal_xy")
+        if servo is not None:
+            servo.set_goal(goal)                            # hold the goal as a LATENT for the place servo
+        return goal
+
+    # gain~1: tgt = obj + D@e is the full closed-loop GOAL ESTIMATE (re-read each carry step), not a
+    # creeping increment; it converges as the hand nears the goal and stays robust to perception drift.
+    place_servo = (lambda hxy: servo.servo(hxy, gain=1.0)) if servo is not None else None
 
     # -------- headless: privileged perception, metrics only --------
     if HEADLESS:
@@ -105,10 +121,11 @@ def main():
                                         policy_fn=motor.predict, goal_fn=goal_fn)
             print(f"  [analytic Jacobian DLS] delivered {da}/{ma}")
         d, m = act16.run_combined(sim, reach_body, None, CAM, episodes=EPISODES,
-                                  policy_fn=motor.predict, goal_fn=goal_fn)
+                                  policy_fn=motor.predict, goal_fn=goal_fn, place_servo_fn=place_servo)
         bm.note_surprise(sim.arm3_angles(), sim.grasp_pos())
         label = "LEARNED inverse kinematics" if LEARNED_IK else "analytic Jacobian DLS"
-        print(f"  [{label}] delivered {d}/{m} of the commanded cube to the DREAMED goal")
+        place = "latent-servo place" if LATENT_PLACE else "coordinate place"
+        print(f"  [{label} + {place}] delivered {d}/{m} of the commanded cube to the DREAMED goal")
         print("  per-module surprise:", {k: v for k, v in agent.surprises().items()})
         return
 
@@ -135,7 +152,7 @@ def main():
                           planner=(ps["sensor"] if ps else None))
 
         d, m = act16.run_combined(sim, reach_body, None, CAM, episodes=EPISODES,
-                                  policy_fn=motor.predict, goal_fn=goal_fn,
+                                  policy_fn=motor.predict, goal_fn=goal_fn, place_servo_fn=place_servo,
                                   perceive_fn=perceive, track_fn=track_and_plot)
         print(f"  delivered {d}/{m} of the commanded cube to the DREAMED goal ('{rule_name}')")
         try:
@@ -149,7 +166,7 @@ def main():
         import traceback; traceback.print_exc()
         print(f"  [viz/perception] {e}; falling back to privileged run")
         d, m = act16.run_combined(sim, reach_body, None, CAM, episodes=EPISODES,
-                                  policy_fn=motor.predict, goal_fn=goal_fn)
+                                  policy_fn=motor.predict, goal_fn=goal_fn, place_servo_fn=place_servo)
         print(f"  delivered {d}/{m} to the dreamed goal")
 
 
