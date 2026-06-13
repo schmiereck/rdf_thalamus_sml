@@ -8,6 +8,7 @@ from .base import Port, ArmModule, ArmAgent
 from .visual_cortex import VisualCortexModule
 from .body_model import BodyModelModule
 from .planner import GoalModule2D, PlannerModule, rule_mirror, rule_centre
+from .motor import MotorModule
 
 __all__ = ["Port", "ArmModule", "ArmAgent", "VisualCortexModule", "BodyModelModule",
-           "GoalModule2D", "PlannerModule", "rule_mirror", "rule_centre"]
+           "GoalModule2D", "PlannerModule", "rule_mirror", "rule_centre", "MotorModule"]
