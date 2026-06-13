@@ -150,40 +150,48 @@ class HexFoveaViz:
 class SurpriseViz:
     """Live curves of the PC modules' SURPRISE (prediction error) over time.
 
-    Top axis  — the PERCEPTION hex-net (a real PCNetwork): `sensor_error` is the SURPRISE
-                (squared prediction-vs-input error at the clamped sensor nodes), plus the
-                `state_error` (belief nodes) and their sum `total_error`.
-    Bottom    — `relax_steps` (how many relaxation iterations the net needed to settle — a
-                second 'surprise' proxy: a familiar scene settles fast) and, on a twin axis,
-                the BODY-MODEL kinematics surprise in mm (||predicted hand - observed hand||).
+    Grouped explicitly BY PC MODULE (the act14–19 line keeps the 1D separation as classes,
+    not as registered PCModule ports):
+      * VisualCortex  — the perception hex-net, a real PCNetwork: `sensor_error` is the
+                        SURPRISE (squared prediction-vs-input error at the clamped sensor
+                        nodes), plus `state_error` (belief nodes), `total_error`, and
+                        `relax_steps` (a second surprise proxy: a familiar scene settles fast).
+      * Körpermodell  — ArmBodyModel3D (learned linear FK, not a PCNetwork): its surprise is
+                        the kinematics error in mm (||predicted hand - observed hand||).
+      * Planner       — NOT present in act14–19 (it lived only in the 1D line); shown as a
+                        labelled-but-empty channel so its absence is explicit, not a data gap.
 
-    Call `push(...)` once per frame; it redraws (throttled) so you watch the curves grow."""
+    A live numeric readout shows the CURRENT value per module.  Call `push(...)` once per
+    frame; it redraws (throttled) so you watch the curves grow."""
 
     def __init__(self, title="PC modules — surprise over time", redraw_every=3, window=600):
         import matplotlib.pyplot as plt
         self.plt = plt; plt.ion()
-        self.fig, (self.axE, self.axR) = plt.subplots(2, 1, figsize=(7.6, 6.2), sharex=True)
+        self.fig, (self.axE, self.axR) = plt.subplots(2, 1, figsize=(7.6, 6.6), sharex=True)
         self.fig.patch.set_facecolor("#0e0e12"); self.fig.suptitle(title, color="w")
         self._k = 0; self._redraw_every = max(1, int(redraw_every)); self._win = int(window)
         self.t = []; self.sensor = []; self.state = []; self.total = []; self.relax = []; self.body = []
         for ax in (self.axE, self.axR):
             ax.set_facecolor("#0e0e12"); ax.grid(True, color="#333", lw=0.4)
             ax.tick_params(colors="w"); [s.set_color("#555") for s in ax.spines.values()]
-        self.axE.set_title("perception hex-net  (PCNetwork prediction error)", color="w", fontsize=9)
+        self.axE.set_title("MODULE: VisualCortex  (perception hex-net — a real PCNetwork)",
+                           color="#ff8888", fontsize=9)
         (self.lS,) = self.axE.plot([], [], color="#ff5566", lw=1.4, label="sensor_error (SURPRISE)")
         (self.lT,) = self.axE.plot([], [], color="#ffaa33", lw=1.0, alpha=0.8, label="state_error")
         (self.lU,) = self.axE.plot([], [], color="#888", lw=0.8, alpha=0.6, label="total_error")
         self.axE.set_ylabel("squared error", color="w")
         self.axE.legend(loc="upper right", facecolor="#1a1a22", edgecolor="#444", labelcolor="w", fontsize=7)
-        self.axR.set_title("relaxation effort  &  body-model kinematics surprise", color="w", fontsize=9)
-        (self.lR,) = self.axR.plot([], [], color="#33ccff", lw=1.2, label="relax_steps (perception)")
+        self.axR.set_title("MODULE: Körpermodell (ArmBodyModel3D)   +   VisualCortex relax effort",
+                           color="#88ff88", fontsize=9)
+        (self.lR,) = self.axR.plot([], [], color="#33ccff", lw=1.2, label="relax_steps (VisualCortex)")
         self.axR.set_ylabel("relax steps", color="#33ccff"); self.axR.set_xlabel("perception step", color="w")
         self.axRb = self.axR.twinx(); self.axRb.tick_params(colors="#88ff88")
-        (self.lB,) = self.axRb.plot([], [], color="#88ff88", lw=1.2, label="body FK surprise (mm)")
+        (self.lB,) = self.axRb.plot([], [], color="#88ff88", lw=1.2, label="Körpermodell FK surprise (mm)")
         self.axRb.set_ylabel("body FK error (mm)", color="#88ff88")
         self.axR.legend(loc="upper left", facecolor="#1a1a22", edgecolor="#444", labelcolor="w", fontsize=7)
         self.axRb.legend(loc="upper right", facecolor="#1a1a22", edgecolor="#444", labelcolor="w", fontsize=7)
-        self.fig.tight_layout(rect=(0, 0, 1, 0.96))
+        self.readout = self.fig.text(0.012, 0.012, "", color="w", fontsize=7.5, family="monospace", va="bottom")
+        self.fig.tight_layout(rect=(0, 0.085, 1, 0.95))
 
     def push(self, sensor, state, total, relax, body_mm=None):
         self._k += 1
@@ -193,6 +201,16 @@ class SurpriseViz:
         if self._k % self._redraw_every == 0:
             self.redraw()
 
+    def _readout_text(self):
+        if not self.t:
+            return ""
+        b = self.body[-1]
+        return ("current values per PC module\n"
+                f"  VisualCortex  surprise(sensor)={self.sensor[-1]:7.3f}  state={self.state[-1]:7.3f}"
+                f"  total={self.total[-1]:7.3f}  relax={self.relax[-1]:4.0f}\n"
+                f"  Körpermodell  FK surprise={b:6.1f} mm" + ("" if np.isfinite(b) else " (n/a)") + "\n"
+                "  Planner       — not instantiated in the act14–19 loop (1D-line module, not yet ported)")
+
     def redraw(self):
         w = self._win; t = self.t[-w:]
         self.lS.set_data(t, self.sensor[-w:]); self.lT.set_data(t, self.state[-w:])
@@ -200,6 +218,7 @@ class SurpriseViz:
         self.lB.set_data(t, self.body[-w:])
         for ax in (self.axE, self.axR, self.axRb):
             ax.relim(); ax.autoscale_view()
+        self.readout.set_text(self._readout_text())
         try:
             self.fig.canvas.draw_idle(); self.fig.canvas.flush_events()
         except Exception:
