@@ -73,8 +73,10 @@ def main():
     def log(state, aim, j5):
         Xs.append(state.copy()); Ys.append(np.array([aim[0], aim[1], aim[2], j5]))
 
-    print(f"  collecting reactive-teacher demos ({COLLECT} eps) ...")
-    act16.run_combined(sim, bm.body, None, CAM, episodes=COLLECT, policy_fn=act16.reactive_subgoal, log_fn=log)
+    COLLECT_OOD = float(os.environ.get("ACT20_COLLECT_OOD", "0.0"))    # (c) demo on VARIED sizes so the
+    print(f"  collecting reactive-teacher demos ({COLLECT} eps, {COLLECT_OOD:.0%} novel-size) ...")  # policy
+    act16.run_combined(sim, bm.body, None, CAM, episodes=COLLECT, policy_fn=act16.reactive_subgoal,  # learns
+                       log_fn=log, ood_rate=COLLECT_OOD, ood_rng=np.random.default_rng(31))          # size->grasp
     motor.fit(np.array(Xs), np.array(Ys))
 
     # ---- (a) LEARNED inverse kinematics: replaces the analytic Jacobian reach controller ----
