@@ -109,9 +109,16 @@ class Forward2D:
         U = np.stack([mm * np.cos(aa), mm * np.sin(aa)], 1)
         X = np.array([self._x(p, u) for p, u in zip(P, U)])
         T = np.array([(true_step(p, u) - p) / UMAX for p, u in zip(P, U)])      # 2D displacement target
-        # ADAM: plain SGD parks in a "predict the mean magnitude in the action direction" plateau and never
-        # learns to GATE the magnitude by position (the spatial cap).  Adam's adaptive per-parameter steps
-        # escape that plateau -- the optimizer was the lever, not just depth.
+        self.fit_arrays(X, T, epochs, bs=bs, rng=rng)
+
+    def fit_arrays(self, X, T, epochs, bs=256, rng=None):
+        """ADAM training on a pre-built (feature, displacement-target) dataset.  Shared by the synthetic
+        1D-style task and the ARM lift (which supplies its own babbled data).  ADAM is essential: plain
+        SGD parks in a 'predict the mean magnitude in the action direction' plateau and never learns to
+        GATE the magnitude by position (the spatial speed cap) -- the optimizer was the lever, not just
+        depth."""
+        rng = rng or np.random.default_rng(1)
+        X = np.asarray(X, float); T = np.asarray(T, float); n = len(X)
         params = ["W1", "b1", "W2", "b2", "W3", "b3"]
         mom = {p: np.zeros_like(getattr(self, p)) for p in params}
         vel = {p: np.zeros_like(getattr(self, p)) for p in params}
