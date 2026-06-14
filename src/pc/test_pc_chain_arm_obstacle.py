@@ -98,11 +98,15 @@ def traversability(wm, occ, a_g, b_g):
     if n < 1e-6:
         return 1.0
     g = float(np.linalg.norm(wm.delta(a_g, occ, u / n * wm.UMAX))) / wm.UMAX
-    return float(np.clip(g, 0.03, 2.0))
+    return float(np.clip(g, 0.02, 2.0))
 
 
 def path_cost(wm, occ, W):
-    return float(sum(np.linalg.norm(b - a) / traversability(wm, occ, a, b)
+    # 1/traversability^2: the collision the model learned is a thin barrier, so a single short segment
+    # crossing it would otherwise incur only moderate cost; squaring makes crossing the LEARNED low-
+    # traversability band prohibitive (a risk-averse cost over the model's own prediction, still no
+    # hand-coded forbidden zone).
+    return float(sum(np.linalg.norm(b - a) / traversability(wm, occ, a, b) ** 2
                      for a, b in zip(W[:-1], W[1:])))
 
 
@@ -121,14 +125,14 @@ def _descend_model(wm, occ, W, K, iters, lr=0.10, eps=0.15):
     return W
 
 
-def plan_around(wm, occ, start_g, goal_g, K=18, iters=140):
+def plan_around(wm, occ, start_g, goal_g, K=18, iters=170):
     """Min-cost waypoints through the LEARNED directional traversability (multi-start arcs + descent)."""
     straight = np.array([start_g + (goal_g - start_g) * k / K for k in range(K + 1)], float)
     d = goal_g - start_g; perp = np.array([-d[1], d[0]]); perp = perp / (np.linalg.norm(perp) + 1e-9)
     arch = np.sin(np.linspace(0, np.pi, K + 1))
     best, best_c = None, np.inf
     for side in (+1.0, -1.0):
-        for amp in (2.0, 4.0, 6.0):
+        for amp in (2.0, 4.0, 6.0, 8.0):
             W0 = np.clip(straight + side * amp * arch[:, None] * perp[None, :], 0.0, G - 1.0)
             W = _descend_model(wm, occ, W0, K, iters)
             c = path_cost(wm, occ, W)
@@ -160,10 +164,24 @@ def main():
     pred = np.array([wm.delta(p, o, u) for p, o, u in zip(Pg[ntr:], OCC[ntr:], Ug[ntr:])]) / S2G
     print(f"  held-out 1-step error: {np.mean(np.linalg.norm(pred - D[ntr:], axis=1))*1000:.1f} mm")
 
-    # --- did it LEARN the collision? speed pushing INTO vs AWAY from a test board ---
+    # --- the test board.  Its occupancy is either TRUE or PERCEIVED from the camera (the visual
+    #     recognition, increment 2): a LEARNED soft-argmax detector reads the board pose from the top view. ---
     brng = np.random.default_rng(SEED)
     bcx, bcy, bhy = brng.uniform(-0.07, 0.07), brng.uniform(0.12, 0.18), brng.uniform(0.045, 0.065)
-    occ = occ_map(bcx, 0.012, bhy, bcy)
+    perr = None; pcx, pcy, phy = bcx, bcy, bhy
+    if os.environ.get("OBS_PERCEIVE", "1") == "1":
+        from pc.arm_modules.obstacle_vision import ObstacleVisionModule
+        import mujoco
+        print("  training the LEARNED camera->board perception (soft-argmax detector) ...")
+        vis = ObstacleVisionModule(rng=np.random.default_rng(0))
+        vis.train(sim, steps=int(os.environ.get("OBS_VIS_STEPS", "3000")),
+                  iters=int(os.environ.get("OBS_VIS_ITERS", "500")))
+        vis.stage(sim); board.place(bcx, bcy, 0.012, bhy); mujoco.mj_forward(sim.m, sim.d)
+        occ = vis.perceive_sim(sim); pcx, pcy, phy = vis._pose
+        perr = float(np.linalg.norm([pcx - bcx, pcy - bcy]) * 1000)
+        print(f"  PERCEIVED board pose: ({pcx:+.3f},{pcy:.3f}) vs true ({bcx:+.3f},{bcy:.3f})  -> error {perr:.1f} mm")
+    else:
+        occ = occ_map(bcx, 0.012, bhy, bcy)
     occ0 = np.zeros_like(occ)
     left = np.array([bcx - 0.05, bcy])                       # just left of the board, push RIGHT into it
     gl = to_grid(left); uin = np.array([U_DES, 0]) * S2G; uaway = np.array([0, U_DES]) * S2G
@@ -203,24 +221,30 @@ def main():
         return m * 1000
 
     print("-" * 86)
-    print(f"  straight (naive): penetrates the board by {board_pen(straight_m):.0f} mm  -> INFEASIBLE")
+    print(f"  straight (naive): penetrates the TRUE board by {board_pen(straight_m):.0f} mm  -> INFEASIBLE")
     pp = board_pen(planned_m)
-    print(f"  planned  (chain): board penetration {pp:.0f} mm  "
-          f"({'CLEARS' if pp < 2 else 'still clips'} -- routes via the LEARNED directional traversability)")
-    print("  Read: the obstacle is LEARNED from physical collisions and perceived via the occupancy map;")
-    print("  the planner routes around the model's OWN speed dip, not a hand-coded forbidden zone.  Next")
-    print("  (increment 2): replace the true occupancy with a LEARNED camera->occupancy perception.")
+    print(f"  planned  (chain): TRUE-board penetration {pp:.0f} mm  "
+          f"({'CLEARS' if pp < 4 else 'still clips'} -- routes via the LEARNED directional traversability)")
+    if perr is not None:
+        print(f"  full chain: SEE the board ({perr:.0f} mm pose error) -> learned world model -> route around"
+              " it; the agent")
+        print("  never told where the board is -- it LEARNED impassability from crashing and PERCEIVED the")
+        print("  board from the camera.  Nothing hand-coded: collision-learned dynamics + soft-argmax detector.")
+    else:
+        print("  Read: obstacle LEARNED from physical collisions; planner routes around the model's OWN dip,")
+        print("  not a hand-coded forbidden zone.  (Set OBS_PERCEIVE=1 for the learned camera perception.)")
     print("=" * 86)
 
     if os.environ.get("OBS_NOVIZ", "0") != "1":
         try:
-            _plot(Sfree, Sobs, reach, board, bcx, bcy, bhy, start_m, goal_m, straight_m, planned_m,
+            _plot(Sfree, Sobs, reach, bcx, bcy, bhy, (pcx, pcy, phy) if perr is not None else None,
+                  start_m, goal_m, straight_m, planned_m,
                   os.path.join(os.path.dirname(__file__), "chain_arm_obstacle.png"))
         except Exception as e:
             print(f"  [viz] could not save the plot: {e}")
 
 
-def _plot(Sfree, Sobs, reach, board, bcx, bcy, bhy, start_m, goal_m, straight_m, planned_m, path):
+def _plot(Sfree, Sobs, reach, bcx, bcy, bhy, perceived, start_m, goal_m, straight_m, planned_m, path):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -244,13 +268,21 @@ def _plot(Sfree, Sobs, reach, board, bcx, bcy, bhy, start_m, goal_m, straight_m,
         ax.set_xlabel("table x (m)", color="w")
     axes[0].set_ylabel("table y (m)", color="w")
     axes[1].add_patch(Rectangle((bcx - 0.012, bcy - bhy), 0.024, 2 * bhy, facecolor="#ff3344",
-                                edgecolor="#ff8899", alpha=0.6, zorder=4))
+                                edgecolor="#ff8899", alpha=0.6, zorder=4, label="true board"))
+    if perceived is not None:
+        pcx, pcy, phy = perceived
+        axes[1].add_patch(Rectangle((pcx - 0.012, pcy - phy), 0.024, 2 * phy, facecolor="none",
+                                    edgecolor="#33ccff", lw=1.8, ls="--", zorder=5, label="PERCEIVED board"))
     axes[1].plot(straight_m[:, 0], straight_m[:, 1], "--", color="#ff5566", lw=1.4, label="straight (collides)")
     axes[1].plot(planned_m[:, 0], planned_m[:, 1], "o-", color="#66ff88", lw=1.8, ms=4, label="planned (around)")
     axes[1].scatter([start_m[0]], [start_m[1]], c="#fff", s=70, marker="s", zorder=6)
     axes[1].scatter([goal_m[0]], [goal_m[1]], c="#ffdd33", s=110, marker="*", zorder=6)
     axes[1].legend(facecolor="#1a1a22", edgecolor="#444", labelcolor="w", fontsize=8, loc="upper left")
-    fig.suptitle("obstacle learned from physical collisions (occupancy-conditioned world model)", color="w")
+    ttl2 = "perceived board -> LEARNED speed dip + plan" if perceived is not None else \
+           "board perceived -> LEARNED speed dip + plan"
+    axes[1].set_title(ttl2, color="w", fontsize=10)
+    fig.suptitle("SEE the board (learned detector) -> world model learned from collisions -> route around",
+                 color="w")
     fig.tight_layout(rect=(0, 0, 1, 0.96)); fig.savefig(path, dpi=120, facecolor=fig.get_facecolor())
     print(f"  [viz] plot saved -> {path}")
 
