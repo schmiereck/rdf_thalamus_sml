@@ -36,43 +36,53 @@ WIDE_HALF = np.array([0.024, 0.024, 0.010])     # wide SQUARE block: too wide to
 OVER_Z, GRASP_Z, CARRY_Z, PUSH_Z = 0.06, 0.014, 0.055, 0.016
 PUSH_LIFT_Z = 0.07                              # raise the claws to move behind an object (clear it)
 STANDOFF, NEAR, TOL, CAP = 0.045, 0.02, 0.025, 2200
+GRASP_OFFSET = 0.002                            # grasp height = object_half_height + this (cube -> 0.014)
+GRASP_MAX_HALF = 0.016                          # footprint half above which an object is too wide to grasp
+SIZE_ADAPT = os.environ.get("ACT_SIZE_ADAPT", "1") == "1"    # (c) derive grasp heights from object size
 PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene between episodes
 
 
 def reactive_subgoal(state):
     """A REACTIVE (stateless) re-derivation of the grasp-and-place teacher: the sub-goal as a PURE
-    function of the observed state [hand xyz, obj xy, obj z, target xy, gripper].  Unlike the FSM
-    (hidden `phase`) this is MARKOVIAN, so it is a valid DAgger expert and BC target -- the phase is
-    INFERRED from geometry (gripper open/closed, cube on the table vs lifted, hand over cube/target).
+    function of the observed state [hand xyz, obj xy, obj z, target xy, gripper, OBJ_HEIGHT, OBJ_FOOTPRINT].
+    Unlike the FSM (hidden `phase`) this is MARKOVIAN, so it is a valid DAgger expert and BC target -- the
+    phase is INFERRED from geometry.  (c) SIZE-ADAPTIVE: the grasp/place/carry heights are derived from the
+    object's half-height (cube -> the old 0.014, flat/tall -> grasp at their own centre).
     Returns a flat [aim_x, aim_y, aim_z, gripper] (the same shape the policy emits)."""
-    hx, hy, hz, cx, cy, cz, tx, ty, j5 = state
+    hx, hy, hz, cx, cy, cz, tx, ty, j5, obj_h, obj_fp = state
     hxy = np.array([hx, hy]); c = np.array([cx, cy]); t = np.array([tx, ty])
-    grasped = (cz > 0.028) and (j5 < 0.9)                  # cube lifted off the table AND gripper closed
+    if SIZE_ADAPT:
+        grasp_z = obj_h + GRASP_OFFSET                    # grasp at the object's centre (cube -> 0.014)
+        carry_z = max(CARRY_Z, 2.0 * obj_h + 0.02)        # lift high enough to clear a TALL object
+        lift_thresh = obj_h + 0.014                       # "lifted off the table" relative to its height
+    else:
+        grasp_z, carry_z, lift_thresh = GRASP_Z, CARRY_Z, 0.028
+    grasped = (cz > lift_thresh) and (j5 < 0.9)           # object lifted off the table AND gripper closed
     if grasped:                                           # CARRY -> place -> release
         if np.linalg.norm(hxy - t) > NEAR:               # carry over the target
-            return np.array([tx, ty, CARRY_Z, J5_GRIP])
-        if hz > GRASP_Z + 0.012:                          # lower onto the target
-            return np.array([tx, ty, GRASP_Z, J5_GRIP])
-        return np.array([tx, ty, GRASP_Z, J5_OPEN])       # release
+            return np.array([tx, ty, carry_z, J5_GRIP])
+        if hz > grasp_z + 0.012:                          # lower onto the target
+            return np.array([tx, ty, grasp_z, J5_GRIP])
+        return np.array([tx, ty, grasp_z, J5_OPEN])       # release
     # The gripper STATE disambiguates the two regimes that look alike in (hz): descending-to-grasp
     # (gripper OPEN) vs ascending-with-cube (gripper CLOSED).  Splitting on j5 stops the open/close
     # oscillation that flung the cube (the old code re-OPENED on the lower branch while lifting).
     if j5 > 1.0:                                          # gripper OPEN -> APPROACH regime
         if np.linalg.norm(hxy - c) > NEAR:               # move over the cube
             return np.array([cx, cy, OVER_Z, J5_OPEN])
-        if hz > GRASP_Z + 0.012:                          # lower onto it, still open
-            return np.array([cx, cy, GRASP_Z, J5_OPEN])
-        return np.array([cx, cy, GRASP_Z, max(J5_GRIP, j5 - 0.2)])    # at pose -> begin closing gently
+        if hz > grasp_z + 0.012:                          # lower onto it, still open
+            return np.array([cx, cy, grasp_z, J5_OPEN])
+        return np.array([cx, cy, grasp_z, max(J5_GRIP, j5 - 0.2)])    # at pose -> begin closing gently
     # gripper closing/closed (j5 <= 1.0): GRASP/LIFT regime -- commit, never re-open or re-approach
     if j5 > 0.25:                                         # keep closing gently, holding the grasp pose
-        return np.array([cx, cy, GRASP_Z, max(J5_GRIP, j5 - 0.2)])    # (claws STALL ~0.18 on the cube)
-    return np.array([cx, cy, CARRY_Z, J5_GRIP])           # firm grip -> LIFT
+        return np.array([cx, cy, grasp_z, max(J5_GRIP, j5 - 0.2)])    # (claws STALL ~0.18 on the cube)
+    return np.array([cx, cy, carry_z, J5_GRIP])           # firm grip -> LIFT
 
 
 def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, perceive_fn=None,
                  mixed=False, track_fn=None, lifelong=False, log_fn=None, policy_fn=None,
                  episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None,
-                 ood_rate=0.0, ood_rng=None):
+                 ood_rate=0.0, ood_rng=None, size_fn=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -132,12 +142,17 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         cmd_half = CUBE_HALF                                  # base small cube (the standard eval set)
         ood_ep = ood_rate > 0 and float(ood_rng.random()) < ood_rate
         if ood_ep:                                            # GENERALIZATION PROBE: give the commanded
-            half = np.array([float(ood_rng.uniform(0.012, 0.018)),   # object a NOVEL size/aspect (still
-                             float(ood_rng.uniform(0.012, 0.018)),   # graspable; bigger/flat/tall),
-                             float(ood_rng.uniform(0.008, 0.022))])  # COLOUR unchanged -> selection ok
-            sim.set_object_size(cmd, half); sim.set_object(cmd, c0, z=float(half[2]))
-            mujoco.mj_forward(sim.m, sim.d); sim.step(60); cmd_half = half
+            fp = float(ood_rng.uniform(0.010, 0.015))         # object a NOVEL size — GRASPABLE footprint
+            half = np.array([fp, fp, float(ood_rng.uniform(0.008, 0.024))])   # but widely varied HEIGHT
+            sim.set_object_size(cmd, half); sim.set_object(cmd, c0, z=float(half[2]))   # (flat .. tall);
+            mujoco.mj_forward(sim.m, sim.d); sim.step(60); cmd_half = half             # COLOUR unchanged
             c0 = sim.obj_pos(cmd)[:2]
+        obj_h = float(cmd_half[2])                            # object size for the SIZE-ADAPTIVE grasp
+        obj_fp = float(np.mean(cmd_half[:2]))                 # (privileged; size_fn can override footprint)
+        if size_fn is not None:
+            fpp = size_fn(cmd)
+            if fpp is not None:
+                obj_fp = float(fpp)
         tgt = _rand_xy(rng)                                  # target: away from the cube AND not on any cube
         while np.linalg.norm(tgt - c0) < 0.06 or not clear(tgt, OBJS, 0.05):
             tgt = _rand_xy(rng)
@@ -233,9 +248,9 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             if place_servo_fn is not None:                    # (b) LATENT-DIFFERENCE place: while the
                 if cz > 0.028 and sim.d.qpos[sim.jqadr["joint_5"]] < 0.9:   # object is carried, drive
                     tgt = np.asarray(place_servo_fn(hxy), float)  # the place target by the latent servo
-            # state for a LEARNED action policy (Phase 3): hand, object, object-height, target, gripper
+            # state for a LEARNED action policy: hand, object, object-z, target, gripper, OBJ SIZE (c)
             state = np.array([h[0], h[1], h[2], c[0], c[1], cz, tgt[0], tgt[1],
-                              sim.d.qpos[sim.jqadr["joint_5"]]], float)
+                              sim.d.qpos[sim.jqadr["joint_5"]], obj_h, obj_fp], float)
             if teacher_log_fn is not None:                    # DAgger: the FSM's sub-goal at the
                 teacher_log_fn(state, np.asarray(aim, float).copy(), float(j5))   # (policy-)VISITED state
             if policy_fn is not None:                         # LEARNED policy drives instead of the FSM

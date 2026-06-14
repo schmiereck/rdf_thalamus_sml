@@ -21,7 +21,7 @@ class MotorModule(ArmModule):
         super().__init__(name)
         self.policy = policy if policy is not None else Policy(rng=rng)
         self._last_cost = float("nan")
-        (self.add_in("state", 9, "[hand xyz, object xy, object z, target xy, gripper]")
+        (self.add_in("state", 11, "[hand xyz, obj xy, obj z, target xy, gripper, obj_height, obj_footprint]")
              .add_out("subgoal", 4, "[aim_xyz, gripper target]"))
 
     # -- training / persistence delegates so the agent owns the policy --

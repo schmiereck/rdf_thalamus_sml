@@ -35,8 +35,9 @@ import pc.pc_act16 as act16
 
 
 class Policy:
-    """Small MLP  state(9) -> sub-goal(4)=[aim_xyz, gripper], with input/output normalisation."""
-    def __init__(self, din=9, dout=4, hid=96, lr=0.02, rng=None):
+    """Small MLP  state(11) -> sub-goal(4)=[aim_xyz, gripper], with input/output normalisation.
+    State = [hand xyz, obj xy, obj z, target xy, gripper, obj_height, obj_footprint] (size-adaptive)."""
+    def __init__(self, din=11, dout=4, hid=96, lr=0.02, rng=None):
         rng = rng or np.random.default_rng(0)
         self.W1 = rng.normal(0, 1 / np.sqrt(din), (hid, din)); self.b1 = np.zeros(hid)
         self.W2 = rng.normal(0, 1 / np.sqrt(hid), (dout, hid)); self.b2 = np.zeros(dout)
