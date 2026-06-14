@@ -42,15 +42,34 @@ SIZE_ADAPT = os.environ.get("ACT_SIZE_ADAPT", "1") == "1"    # (c) derive grasp 
 PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene between episodes
 
 
+def _push_subgoal(hxy, hz, c, t):
+    """MARKOVIAN push: get behind the object (relative to the target), lower, and follow-push it toward
+    the target.  Phase inferred from geometry (no hidden state); the gripper stays spread (J5_PUSH)."""
+    d = t - c; n = np.linalg.norm(d); d = d / n if n > 1e-6 else np.array([1.0, 0.0])
+    behind = c - d * STANDOFF                              # contact point on the far side from the target
+    proj = float(np.dot(hxy - c, d))                      # along the push dir: <0 behind, >0 past the object
+    perp = float(np.linalg.norm((hxy - c) - proj * d))    # lateral offset from the push line
+    low = hz < PUSH_Z + 0.012
+    on_line_behind = (proj < 0.02) and (perp < NEAR)      # hand behind/at the object, on the push line
+    if low and on_line_behind:                            # PUSH: follow-push the object toward the target
+        return np.array([c[0] + d[0] * 0.03, c[1] + d[1] * 0.03, PUSH_Z, J5_PUSH])   # (aim just ahead of it)
+    if on_line_behind and not low:                        # at the push line but raised -> LOWER
+        return np.array([behind[0], behind[1], PUSH_Z, J5_PUSH])
+    return np.array([behind[0], behind[1], PUSH_LIFT_Z, J5_PUSH])   # otherwise -> reposition behind, RAISED
+
+
 def reactive_subgoal(state):
     """A REACTIVE (stateless) re-derivation of the grasp-and-place teacher: the sub-goal as a PURE
     function of the observed state [hand xyz, obj xy, obj z, target xy, gripper, OBJ_HEIGHT, OBJ_FOOTPRINT].
     Unlike the FSM (hidden `phase`) this is MARKOVIAN, so it is a valid DAgger expert and BC target -- the
-    phase is INFERRED from geometry.  (c) SIZE-ADAPTIVE: the grasp/place/carry heights are derived from the
-    object's half-height (cube -> the old 0.014, flat/tall -> grasp at their own centre).
+    phase is INFERRED from geometry.  AFFORDANCE: a footprint wider than the gripper can grasp -> PUSH it;
+    else GRASP.  (c) SIZE-ADAPTIVE: the grasp/place/carry heights are derived from the object's half-height
+    (cube -> the old 0.014, flat/tall -> grasp at their own centre).
     Returns a flat [aim_x, aim_y, aim_z, gripper] (the same shape the policy emits)."""
     hx, hy, hz, cx, cy, cz, tx, ty, j5, obj_h, obj_fp = state
     hxy = np.array([hx, hy]); c = np.array([cx, cy]); t = np.array([tx, ty])
+    if obj_fp > GRASP_MAX_HALF:                           # AFFORDANCE: too wide to grasp -> push
+        return _push_subgoal(hxy, hz, c, t)
     if SIZE_ADAPT:
         grasp_z = obj_h + GRASP_OFFSET                    # grasp at the object's centre (cube -> 0.014)
         carry_z = max(CARRY_Z, 2.0 * obj_h + 0.02)        # lift high enough to clear a TALL object
@@ -96,6 +115,10 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
     def clear(p, names, gap):
         return all(np.linalg.norm(p - sim.obj_pos(o)[:2]) > gap for o in names)
 
+    def geom_half(nm):                               # the object's ACTUAL half-extents (cube/wide/OOD)
+        bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)
+        return sim.m.geom_size[sim.m.body_geomadr[bid]].copy()
+
     obj_wide = {}                                    # object affordance: wide block (push) vs cube (grasp)
 
     def scatter():
@@ -139,7 +162,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         sim.target("joint_3", HOME["joint_3"]); sim.target("joint_5", J5_OPEN)
         cmd = cmd_fixed or OBJS[ep % len(OBJS)]               # cycle which cube to fetch
         c0 = sim.obj_pos(cmd)[:2]
-        cmd_half = CUBE_HALF                                  # base small cube (the standard eval set)
+        cmd_half = geom_half(cmd)                             # ACTUAL size (cube, or a mixed WIDE block)
         ood_ep = ood_rate > 0 and float(ood_rng.random()) < ood_rate
         if ood_ep:                                            # GENERALIZATION PROBE: a NOVEL object for the
             fp = float(ood_rng.uniform(0.010, 0.015))         # VISUAL-recognition test — varied FOOTPRINT
@@ -258,8 +281,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             if log_fn is not None:                            # log the EXECUTED (state -> subgoal)
                 log_fn(state, np.asarray(aim, float), float(j5))
             sim.target("joint_5", j5)
-            gentle = via == "push" and phase == "push"           # gentle only during the actual push
-            g, mdq = (1.3, 0.016) if gentle else (2.0, 0.026)
+            gentle = abs(j5 - J5_PUSH) < 0.2 and aim[2] < PUSH_Z + 0.02   # spread gripper + low = a PUSH
+            g, mdq = (1.3, 0.016) if gentle else (2.0, 0.026)            # (derived from the sub-goal, so it
             q3 = sim.arm3_angles(); sim.set_arm3_targets(q3 + body.reach_velocity(q3, aim, gain=g, max_dq=mdq))
             sim.step(2)
             if lifelong and k % 3 == 0:                       # LIFELONG: refine the learned kinematics
