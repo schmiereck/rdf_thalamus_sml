@@ -101,12 +101,16 @@ def reactive_subgoal(state):
 def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, perceive_fn=None,
                  mixed=False, track_fn=None, lifelong=False, log_fn=None, policy_fn=None,
                  episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None,
-                 ood_rate=0.0, ood_rng=None, size_fn=None):
+                 ood_rate=0.0, ood_rng=None, size_fn=None, tol=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
     Closes the perception->action loop.  (target_xy may be None to keep the given target.)"""
     rng = np.random.default_rng(1)
+    tol = TOL if tol is None else float(tol)             # delivery tolerance (enlargeable target)
+    _tm = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "target_marker")
+    if _tm >= 0:                                          # show the disk at the scoring tolerance radius
+        sim.m.geom_size[sim.m.body_geomadr[_tm]][0] = tol
     STRAY_LO, STRAY_HI = REACH_XY[0] - 0.03, REACH_XY[1] + 0.03   # valid table area (patch + margin)
 
     def others(nm):
@@ -210,9 +214,9 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             # use the PERCEIVED cube position for the grasp approach (cube is static then); the
             # true position is used once the cube is grabbed / for the fallback and the measure.
             c = cube_plan if (cube_plan is not None and phase in ("over", "lower", "close")) else c_true
-            if via == "push" and np.linalg.norm(c - tgt) < TOL:  # pushed home -> done
+            if via == "push" and np.linalg.norm(c - tgt) < tol:  # pushed home -> done
                 break
-            if policy_fn is not None and np.linalg.norm(c_true - tgt_true) < TOL and cz < 0.035:
+            if policy_fn is not None and np.linalg.norm(c_true - tgt_true) < tol and cz < 0.035:
                 break                                            # learned policy: object placed -> done
             d = tgt - c; n = np.linalg.norm(d); d = d / n if n > 1e-6 else np.array([1.0, 0.0])
 
@@ -301,7 +305,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         cpos = sim.obj_pos(cmd)
         err = np.linalg.norm(cpos[:2] - tgt_true)           # measure against the TRUE target
         rested = cpos[2] < cmd_half[2] + 0.010              # rests on the table (uses the OBJECT's height)
-        ok = err < TOL and rested
+        ok = err < tol and rested
         deliveries += ok; n_grasp += (via == "grasp" and ok); n_push += (via == "push" and ok)
         if via == "grasp":
             grasp_tot += 1; grasp_ok += ok
