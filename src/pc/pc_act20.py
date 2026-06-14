@@ -74,9 +74,11 @@ def main():
         Xs.append(state.copy()); Ys.append(np.array([aim[0], aim[1], aim[2], j5]))
 
     COLLECT_OOD = float(os.environ.get("ACT20_COLLECT_OOD", "0.0"))    # (c) demo on VARIED sizes so the
-    print(f"  collecting reactive-teacher demos ({COLLECT} eps, {COLLECT_OOD:.0%} novel-size) ...")  # policy
-    act16.run_combined(sim, bm.body, None, CAM, episodes=COLLECT, policy_fn=act16.reactive_subgoal,  # learns
-                       log_fn=log, ood_rate=COLLECT_OOD, ood_rng=np.random.default_rng(31))          # size->grasp
+    WIDE = os.environ.get("ACT20_WIDE", "0") == "1"                    # affordance: mix in WIDE blocks ->
+    print(f"  collecting reactive-teacher demos ({COLLECT} eps, {COLLECT_OOD:.0%} novel-size"            # the
+          f"{', + wide blocks' if WIDE else ''}) ...")                 # policy learns grasp-vs-PUSH from it
+    act16.run_combined(sim, bm.body, None, CAM, episodes=COLLECT, policy_fn=act16.reactive_subgoal,
+                       log_fn=log, ood_rate=COLLECT_OOD, ood_rng=np.random.default_rng(31), mixed=WIDE)
     motor.fit(np.array(Xs), np.array(Ys))
 
     # ---- (a) LEARNED inverse kinematics: replaces the analytic Jacobian reach controller ----
@@ -124,7 +126,7 @@ def main():
                                         policy_fn=motor.predict, goal_fn=goal_fn)
             print(f"  [analytic Jacobian DLS] delivered {da}/{ma}")
         d, m = act16.run_combined(sim, reach_body, None, CAM, episodes=EPISODES,
-                                  policy_fn=motor.predict, goal_fn=goal_fn, place_servo_fn=place_servo, ood_rate=OOD_RATE)
+                                  policy_fn=motor.predict, goal_fn=goal_fn, place_servo_fn=place_servo, ood_rate=OOD_RATE, mixed=WIDE)
         bm.note_surprise(sim.arm3_angles(), sim.grasp_pos())
         label = "LEARNED inverse kinematics" if LEARNED_IK else "analytic Jacobian DLS"
         place = "latent-servo place" if LATENT_PLACE else "coordinate place"
@@ -155,7 +157,7 @@ def main():
                           planner=(ps["sensor"] if ps else None))
 
         d, m = act16.run_combined(sim, reach_body, None, CAM, episodes=EPISODES,
-                                  policy_fn=motor.predict, goal_fn=goal_fn, place_servo_fn=place_servo, ood_rate=OOD_RATE,
+                                  policy_fn=motor.predict, goal_fn=goal_fn, place_servo_fn=place_servo, ood_rate=OOD_RATE, mixed=WIDE,
                                   perceive_fn=perceive, track_fn=track_and_plot)
         print(f"  delivered {d}/{m} of the commanded cube to the DREAMED goal ('{rule_name}')")
         try:
@@ -169,7 +171,7 @@ def main():
         import traceback; traceback.print_exc()
         print(f"  [viz/perception] {e}; falling back to privileged run")
         d, m = act16.run_combined(sim, reach_body, None, CAM, episodes=EPISODES,
-                                  policy_fn=motor.predict, goal_fn=goal_fn, place_servo_fn=place_servo, ood_rate=OOD_RATE)
+                                  policy_fn=motor.predict, goal_fn=goal_fn, place_servo_fn=place_servo, ood_rate=OOD_RATE, mixed=WIDE)
         print(f"  delivered {d}/{m} to the dreamed goal")
 
 

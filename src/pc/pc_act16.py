@@ -152,6 +152,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
     n_grasp = n_push = deliveries = 0; perr_sum = perr_n = terr_sum = terr_n = 0.0
     dec_ok = dec_n = 0; grasp_ok = grasp_tot = push_ok = push_tot = 0
     base_ok = base_n = ood_ok = ood_n = 0                    # generalization-probe split
+    narrow_ok = narrow_n = wide_ok = wide_n = 0              # affordance split: grasp narrow / push wide
     if ood_rate > 0 and ood_rng is None:
         ood_rng = np.random.default_rng(123)
     for ep in range(episodes):
@@ -310,6 +311,10 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             ood_n += 1; ood_ok += ok
         else:
             base_n += 1; base_ok += ok
+        if obj_fp > GRASP_MAX_HALF:                           # affordance: this object should be PUSHED
+            wide_n += 1; wide_ok += ok
+        else:
+            narrow_n += 1; narrow_ok += ok
         if episode_end_fn is not None:                       # self-improvement: reward = f(ok, err)
             episode_end_fn(ep, bool(ok), float(err))
         typ = "OOD " if ood_ep else (("wide" if obj_wide.get(cmd, False) else "cube") if perceive_fn else "")
@@ -320,6 +325,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
               f"(by grasp {n_grasp}, by push {n_push}) ==")
         if ood_n:                                            # generalization probe: keep base vs OOD apart
             print(f"  GENERALIZATION: base small-cube {base_ok}/{base_n}  |  OOD novel size/shape {ood_ok}/{ood_n}")
+        if wide_n:                                            # affordance: grasp-narrow vs push-wide split
+            print(f"  AFFORDANCE: narrow->grasp {narrow_ok}/{narrow_n}  |  wide->push {wide_ok}/{wide_n}")
         if dec_n:
             print(f"  AFFORDANCE decision (grasp cube / push wide) correct: {dec_ok}/{int(dec_n)}")
             print(f"  per mode: grasp {grasp_ok}/{grasp_tot}, push {push_ok}/{push_tot}")
