@@ -49,38 +49,38 @@
 
     <!-- ===================== the arm ===================== -->
     <body name="base_link" pos="0 0 0" childclass="arm">
-      <geom name="base_plate" type="box" size="0.075 0.075 0.0025" pos="0 0 0.0025" material="silver"/>
+      <geom name="base_plate" type="box" size="0.075 0.075 0.0025" pos="0 0 0.0025" material="lightgray"/>
       <body name="turret_link" pos="0 0 0.01">
         <joint name="joint_0" type="hinge" axis="0 0 1" range="0 3.1416"/>
         <geom name="turret" type="cylinder" size="0.056 0.041" pos="0 0 0.041" material="lightgray"/>
         <body name="upper_arm_link" pos="-0.008 0 0.082" quat="0.70711 0 -0.70711 0">
           <joint name="joint_1" type="hinge" axis="0 1 0" range="0 3.1416"/>
-          <geom name="upper_arm" size="0.01 0.02 0.049" pos="0 0 0.049" material="cyan"/>
+          <geom name="upper_arm" size="0.01 0.02 0.049" pos="0 0 0.049" material="lightgray"/>
           <body name="forearm_link" pos="0 0 0.098" quat="0.70711 0 0.70711 0">
             <joint name="joint_2" type="hinge" axis="0 -1 0" range="0 3.1416"/>
-            <geom name="forearm" size="0.01 0.02 0.0325" pos="0 0 0.0325" material="blue"/>
+            <geom name="forearm" size="0.01 0.02 0.0325" pos="0 0 0.0325" material="lightgray"/>
             <body name="wrist_link" pos="0 0 0.065" quat="0.70711 0 -0.70711 0">
               <joint name="joint_3" type="hinge" axis="0 1 0" range="0 3.1416"/>
-              <geom name="wrist" size="0.02 0.01 0.035" pos="0 0 0.035" material="yellow"/>
+              <geom name="wrist" size="0.02 0.01 0.035" pos="0 0 0.035" material="lightgray"/>
               <body name="gripper_base_link" pos="0 0 0.070">
                 <joint name="joint_4" type="hinge" axis="0 0 1" range="0 3.1416"/>
-                <geom name="gripper_base" size="0.015 0.015 0.015" pos="0 0 0.015" material="orange"/>
+                <geom name="gripper_base" size="0.015 0.015 0.015" pos="0 0 0.015" material="lightgray"/>
                 <!-- grasp reference (between the fingers), as in the URDF joint_grasp -->
                 <site name="grasp" pos="0 0.01 0.10" size="0.004" rgba="1 0 0 0"/>
                 <!-- CONTACT site at the claw notch (the point the claws actually push with) -->
                 <site name="contact" pos="0 0.01 0.082" size="0.004" rgba="1 0.5 0 0"/>
                 <body name="finger_left" pos="-0.01 0.01 0.03">
                   <joint name="joint_5" type="hinge" axis="0 -1 0" range="0 3.1416"/>
-                  <geom name="finger_left" size="0.008 0.005 0.030" pos="0 0 0.030" material="white"/>
+                  <geom name="finger_left" size="0.008 0.005 0.030" pos="0 0 0.030" material="lightgray"/>
                   <!-- inward-curved CLAW tip -> the two tips form a concave pushing pocket -->
                   <geom name="claw_left" type="box" size="0.012 0.006 0.006" pos="0.009 0 0.060"
-                        euler="0 1.0 0" material="white"/>
+                        euler="0 1.0 0" material="lightgray"/>
                 </body>
                 <body name="finger_right" pos="0.01 0.01 0.03">
                   <joint name="joint_5_mimic" type="hinge" axis="0 -1 0" range="-3.1416 0"/>
-                  <geom name="finger_right" size="0.008 0.005 0.030" pos="0 0 0.030" material="silver"/>
+                  <geom name="finger_right" size="0.008 0.005 0.030" pos="0 0 0.030" material="lightgray"/>
                   <geom name="claw_right" type="box" size="0.012 0.006 0.006" pos="-0.009 0 0.060"
-                        euler="0 -1.0 0" material="silver"/>
+                        euler="0 -1.0 0" material="lightgray"/>
                 </body>
               </body>
             </body>
