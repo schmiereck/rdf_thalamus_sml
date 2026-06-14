@@ -56,24 +56,44 @@ def train_forward(rng, steps=12000):
     return cx.W.copy(), cu.W.copy()
 
 
-def plan(W_x, W_u, start, goal, K=4, n_relax=400, rng=None):
-    """Chain x0..xK with the shared forward model; clamp endpoints; relax; return the decoded STATE path."""
+def fwd(W_x, W_u, x_blob, u):
+    """One step of the SHARED learned forward model:  next_blob = W_x^T x + W_u^T u  (the framework's
+    prediction convention, identity activations)."""
+    return W_x.T @ x_blob + W_u.T @ np.array([u], float)
+
+
+def plan_chain(W_x, W_u, start, goal, K=4, n_relax=400, rng=None):
+    """The CHAINED-RELAXATION mechanism: chain state nodes with the shared forward model, ONE shared
+    action applied every step (constant velocity -> stable, no collapse, no latent<->latent loop), clamp
+    the endpoints, relax, read the states.  Stable + monotonic + meaningful actions (the first attempt's
+    failures fixed) -- but the spacing stays FRONT-LOADED (see the honest note in main)."""
     rng = rng or np.random.default_rng(0)
     net = PCNetwork(eta_inf=0.08, n_relax=n_relax, eps_tol=1e-8, rng=rng)
     xs = [net.add(PCNode(f"x{k}", dim=DIM, activation="identity", rng=rng)) for k in range(K + 1)]
-    us = [net.add(PCNode(f"u{k}", dim=1, activation="identity", rng=rng)) for k in range(K)]
-    UPS = float(os.environ.get("CH_UPS", "12.0"))          # action-connection pressure (overcomes the
-    for k in range(K):                                     # free-action self-regularisation toward 0)
-        net.connect(f"x{k}", f"x{k+1}", ConnType.UP).W = W_x   # shared transition weights
-        cu = net.connect(f"u{k}", f"x{k+1}", ConnType.UP); cu.W = W_u; cu.pressure_scale = UPS
+    u = net.add(PCNode("u", dim=1, activation="identity", rng=rng))
+    UPS = float(os.environ.get("CH_UPS", "12.0"))
+    for k in range(K):
+        net.connect(f"x{k}", f"x{k+1}", ConnType.UP).W = W_x
+        cu = net.connect("u", f"x{k+1}", ConnType.UP); cu.W = W_u; cu.pressure_scale = UPS
     xs[0].clamp(blob(start)); xs[K].clamp(blob(goal))
-    step0 = (goal - start) / K                              # the per-step displacement to reach the goal
-    for k in range(1, K):                                   # init states by interpolation
+    step0 = (goal - start) / K
+    for k in range(1, K):
         xs[k].mu = blob(start + k * step0)
-    for k in range(K):                                      # init actions toward the goal direction
-        us[k].mu = np.array([step0])
+    u.mu = np.array([step0])
     net.step(learn=False)
-    return [peak(x.mu) for x in xs], [float(u.mu[0]) for u in us]
+    return [peak(x.mu) for x in xs], [float(u.mu[0])] * K
+
+
+def plan_interp(W_x, W_u, start, goal, K=4):
+    """The CLEAN even sub-goals: interpolate in DECODED COORDINATE space (evenly spaced by construction),
+    and use the learned forward model only to CHECK one-step reachability (per-step prediction error).
+    For a simple planar move this is the right, front-loading-free choice; the latent chain (plan_chain)
+    is worth its distortion only when the dynamics are genuinely constrained."""
+    states = [start + k * (goal - start) / K for k in range(K + 1)]
+    delta = (goal - start) / K
+    reach_err = float(np.mean([np.linalg.norm(fwd(W_x, W_u, blob(states[k]), delta) - blob(states[k + 1]))
+                               for k in range(K)]))         # forward model verifies one-step feasibility
+    return states, [delta] * K, reach_err
 
 
 def main():
@@ -84,17 +104,22 @@ def main():
     W_x, W_u = train_forward(rng)
     print("=" * 76)
     for (s, g) in [(2.0, 6.0), (7.0, 3.0), (1.0, 8.0)]:
-        path, acts = plan(W_x, W_u, s, g, K=4, rng=rng)
         ideal = [s + k * (g - s) / 4 for k in range(5)]
-        err = float(np.mean(np.abs(np.array(path) - np.array(ideal))))
-        print(f"  {s:.0f} -> {g:.0f}:  states {[f'{p:.1f}' for p in path]}   ideal {[f'{p:.1f}' for p in ideal]}")
-        print(f"            actions {[f'{a:+.2f}' for a in acts]}   (ideal {(g-s)/4:+.2f})   path-err {err:.2f}")
+        pc, _ = plan_chain(W_x, W_u, s, g, K=4, rng=rng)
+        ip, _, reach = plan_interp(W_x, W_u, s, g, K=4)
+        ec = float(np.mean(np.abs(np.array(pc) - np.array(ideal))))
+        ei = float(np.mean(np.abs(np.array(ip) - np.array(ideal))))
+        print(f"  {s:.0f} -> {g:.0f}:  chain-relax {[f'{p:.1f}' for p in pc]}  (err {ec:.2f}, FRONT-LOADED)")
+        print(f"            interp      {[f'{p:.1f}' for p in ip]}  (err {ei:.2f}, even; model 1-step err {reach:.2f})")
     print("=" * 76)
-    print("  Read (honest): vs the failed first attempt (2->1->6->6->6, actions ~0.02), the chain now")
-    print("  plans a MONOTONIC goal-reaching path with MEANINGFUL signed actions (+0.3, correct sign).")
-    print("  Residual: the spacing is FRONT-LOADED (big early steps, then crawl) -- the clamped goal")
-    print("  dominates the relaxation; a bidirectional action-smoothness prior DIVERGES, so it is left out.")
-    print("  The intermediate states are still dense, goal-directed sub-goals (usable for the policy).")
+    print("  Read (honest): the chained-relaxation MECHANISM now works STABLY (vs the first attempt's")
+    print("  2->1->6->6->6 with ~0 actions): single shared action -> no collapse, no divergence, monotonic.")
+    print("  BUT the spacing stays FRONT-LOADED and could not be cleanly removed: action-smoothness /")
+    print("  shared-mean priors DIVERGE (latent<->latent loops), and a forward ROLLOUT also distorts because")
+    print("  the learned blob model is not a clean shift under multi-step autoregression.  ROOT: the latent")
+    print("  forward model's multi-step error + the goal's backward pull.  CLEAN even sub-goals come from")
+    print("  COORDINATE-space interpolation (small 1-step model error confirms feasibility); the latent")
+    print("  chain is only worth its distortion for genuinely CONSTRAINED dynamics, which this PoC lacks.")
 
 
 if __name__ == "__main__":
