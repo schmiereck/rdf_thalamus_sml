@@ -110,6 +110,14 @@
     <body name="target_marker" mocap="true" pos="0 0.13 0.001">
       <geom type="cylinder" size="0.016 0.0008" rgba="1 0 1 0.95" contype="0" conaffinity="0"/>
     </body>
+
+    <!-- STATIC board obstacle: a fixed wall (no joint => infinite mass / immovable) the arm physically
+         crashes into.  Moved/resized per episode by editing m.body_pos / m.geom_size + mj_forward.  The
+         agent must LEARN its impassability from collision and PERCEIVE it from the camera. -->
+    <body name="board" pos="0.0 0.30 0.06">
+      <geom name="board_geom" type="box" size="0.012 0.06 0.06" rgba="0.2 0.35 0.95 1"
+            friction="1.0 0.02 0.001"/>
+    </body>
   </worldbody>
 
   <equality>
