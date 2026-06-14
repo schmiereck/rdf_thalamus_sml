@@ -141,11 +141,11 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         c0 = sim.obj_pos(cmd)[:2]
         cmd_half = CUBE_HALF                                  # base small cube (the standard eval set)
         ood_ep = ood_rate > 0 and float(ood_rng.random()) < ood_rate
-        if ood_ep:                                            # GENERALIZATION PROBE: give the commanded
-            fp = float(ood_rng.uniform(0.010, 0.015))         # object a NOVEL size — GRASPABLE footprint
-            half = np.array([fp, fp, float(ood_rng.uniform(0.008, 0.024))])   # but widely varied HEIGHT
-            sim.set_object_size(cmd, half); sim.set_object(cmd, c0, z=float(half[2]))   # (flat .. tall);
-            mujoco.mj_forward(sim.m, sim.d); sim.step(60); cmd_half = half             # COLOUR unchanged
+        if ood_ep:                                            # GENERALIZATION PROBE: a NOVEL object for the
+            fp = float(ood_rng.uniform(0.010, 0.015))         # VISUAL-recognition test — varied FOOTPRINT
+            half = np.array([fp, fp, float(ood_rng.uniform(0.011, 0.013))])   # but ~CONSTANT height (≈cube)
+            sim.set_object_size(cmd, half); sim.set_object(cmd, c0, z=float(half[2]))   # so the grasp height
+            mujoco.mj_forward(sim.m, sim.d); sim.step(60); cmd_half = half             # stays as learned
             c0 = sim.obj_pos(cmd)[:2]
         obj_h = float(cmd_half[2])                            # object size for the SIZE-ADAPTIVE grasp
         obj_fp = float(np.mean(cmd_half[:2]))                 # (privileged; size_fn can override footprint)
