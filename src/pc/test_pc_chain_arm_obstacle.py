@@ -143,7 +143,7 @@ def plan_around(wm, occ, start_g, goal_g, K=18, iters=170):
 
 def main():
     rng = np.random.default_rng(0)
-    N = int(os.environ.get("OBS_N", "9000"))
+    N = int(os.environ.get("OBS_N", "11000"))
     EPOCHS = int(os.environ.get("OBS_EPOCHS", "80"))
     SEED = int(os.environ.get("OBS_SEED", "4"))
     print("=" * 86)
@@ -235,13 +235,97 @@ def main():
         print("  not a hand-coded forbidden zone.  (Set OBS_PERCEIVE=1 for the learned camera perception.)")
     print("=" * 86)
 
-    if os.environ.get("OBS_NOVIZ", "0") != "1":
+    if os.environ.get("OBS_EXEC", "0") == "1":
+        execute_live(sim, board, bcx, bcy, bhy, (pcx, pcy, phy), Sobs, reach, start_m, goal_m,
+                     straight_m, planned_m, board_pen)
+    elif os.environ.get("OBS_NOVIZ", "0") != "1":
         try:
             _plot(Sfree, Sobs, reach, bcx, bcy, bhy, (pcx, pcy, phy) if perr is not None else None,
                   start_m, goal_m, straight_m, planned_m,
                   os.path.join(os.path.dirname(__file__), "chain_arm_obstacle.png"))
         except Exception as e:
             print(f"  [viz] could not save the plot: {e}")
+
+
+def execute_live(sim, board, bcx, bcy, bhy, perceived, Sobs, reach, start_m, goal_m, straight_m,
+                 planned_m, board_pen, tol=0.03, max_steps=1100):
+    """Drive the arm along the planned route around the PHYSICAL board, live (pc_act21-style 2-panel view):
+    left = top-down learned speed field + perceived/true board + moving hand & trail; right = the MuJoCo
+    overhead camera with the real arm + the real board.  Physics servo (reach_step) -- the board is really
+    there, so a wrong plan would crash; the learned plan routes around it."""
+    import mujoco
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Rectangle
+    from pc.pc_act14 import reach_step
+    Z0 = float(os.environ.get("ARMCH_Z0", "0.05"))
+    ext = (ORG[0], ORG[0] + SPAN, ORG[1], ORG[1] + SPAN)
+    cmap = plt.cm.magma.copy(); cmap.set_bad("#0e0e12")
+    plt.ion()
+    fig, (axL, axR) = plt.subplots(1, 2, figsize=(12.6, 6.3)); fig.patch.set_facecolor("#0e0e12")
+    axL.set_facecolor("#0e0e12")
+    im = axL.imshow(np.ma.masked_where(~reach, Sobs) * 1000, origin="lower", extent=ext, cmap=cmap, aspect="equal")
+    cb = fig.colorbar(im, ax=axL, fraction=0.046, pad=0.04); cb.set_label("learned speed (mm/step)", color="w")
+    cb.ax.yaxis.set_tick_params(color="w"); plt.setp(cb.ax.get_yticklabels(), color="w")
+    axL.add_patch(Rectangle((bcx - 0.012, bcy - bhy), 0.024, 2 * bhy, facecolor="#ff3344",
+                            edgecolor="#ff8899", alpha=0.6, zorder=4, label="true board"))
+    pcx, pcy, phy = perceived
+    axL.add_patch(Rectangle((pcx - 0.012, pcy - phy), 0.024, 2 * phy, facecolor="none",
+                            edgecolor="#33ccff", lw=1.8, ls="--", zorder=5, label="perceived"))
+    axL.plot(straight_m[:, 0], straight_m[:, 1], "--", color="#ff5566", lw=1.2, alpha=0.7, label="straight (collides)")
+    axL.plot(planned_m[:, 0], planned_m[:, 1], "o-", color="#66ff88", lw=1.6, ms=3, label="planned route")
+    axL.scatter([start_m[0]], [start_m[1]], c="#fff", s=70, marker="s", zorder=6)
+    axL.scatter([goal_m[0]], [goal_m[1]], c="#ffdd33", s=110, marker="*", zorder=6)
+    trail_ln, = axL.plot([], [], "-", color="#33ccff", lw=2.0, zorder=7)
+    hand_pt, = axL.plot([], [], "o", color="#ffffff", ms=9, zorder=8)
+    axL.set_xlabel("table x (m)", color="w"); axL.set_ylabel("table y (m)", color="w")
+    axL.set_title("top-down: learned field + executed route", color="w", fontsize=10)
+    axL.tick_params(colors="w"); [sp.set_color("#555") for sp in axL.spines.values()]
+    axL.legend(facecolor="#1a1a22", edgecolor="#444", labelcolor="w", fontsize=8, loc="upper left")
+
+    def drive(target_xy, steps, render_each=False, trail=None):
+        nonlocal_pen = 0.0
+        for _ in range(steps):
+            reach_step(sim, [target_xy[0], target_xy[1], Z0], gain=3.0); sim.step(2)
+            hand = sim.grasp_pos()[:2]
+            dx = 0.012 - abs(hand[0] - bcx); dy = bhy - abs(hand[1] - bcy)
+            if dx > 0 and dy > 0:
+                nonlocal_pen = max(nonlocal_pen, min(dx, dy))
+            if trail is not None:
+                trail.append(hand.copy())
+            if render_each:
+                yield hand, nonlocal_pen
+        if not render_each:
+            yield sim.grasp_pos()[:2], nonlocal_pen
+
+    # reposition to start with the board PARKED (so repositioning never collides), then drop the real board
+    board.park()
+    for _ in drive(start_m, 200):
+        pass
+    board.place(bcx, bcy, 0.012, bhy); mujoco.mj_forward(sim.m, sim.d)
+    rimg = axR.imshow(sim.render("overview")); axR.axis("off")
+    axR.set_title("MuJoCo overhead: real arm + real board", color="w", fontsize=10)
+
+    trail = []; maxpen = 0.0; steps = 0; wp = 1; wp_steps = 0; BUDGET = 40
+    while wp < len(planned_m) and steps < max_steps:
+        for hand, pen in drive(planned_m[wp], 8, render_each=True, trail=trail):
+            steps += 1; wp_steps += 1; maxpen = max(maxpen, pen)
+        tr = np.array(trail); h = tr[-1]
+        trail_ln.set_data(tr[:, 0], tr[:, 1]); hand_pt.set_data([h[0]], [h[1]])
+        rimg.set_data(sim.render("overview"))
+        axR.set_title(f"MuJoCo overhead  (step {steps}, waypoint {wp}/{len(planned_m)-1})", color="w", fontsize=10)
+        plt.pause(0.001)
+        # drive TOWARD each waypoint (tracks the planned bow closely -> no corner-cutting into the board);
+        # advance on reaching it OR after a step budget (reach_step has a ~20 mm steady-state error so a
+        # strict tol alone would stick).
+        if np.linalg.norm(np.array(planned_m[wp]) - h) < tol or wp_steps >= BUDGET:
+            wp += 1; wp_steps = 0
+    print(f"  [exec] reached waypoint {wp}/{len(planned_m)-1} in {steps} servo steps; "
+          f"max board penetration {maxpen*1000:.1f} mm "
+          f"({'STAYED CLEAR' if maxpen*1000 < 4 else 'CLIPPED'})")
+    out = os.path.join(os.path.dirname(__file__), "chain_arm_obstacle_exec.png")
+    fig.tight_layout(); fig.savefig(out, dpi=110, facecolor=fig.get_facecolor())
+    print(f"  [viz] final frame saved -> {out}")
+    plt.ioff(); plt.show()
 
 
 def _plot(Sfree, Sobs, reach, bcx, bcy, bhy, perceived, start_m, goal_m, straight_m, planned_m, path):
