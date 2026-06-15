@@ -161,46 +161,60 @@ def plan_route(wm, occ, start_g, goal_g, K=12, iters=60):
 
 
 class ObstacleModule(ArmModule):
-    def __init__(self, rng=None, name="Obstacle"):
+    def __init__(self, board_tall=0.025, rng=None, name="Obstacle"):
         super().__init__(name)
         self.rng = rng or np.random.default_rng(0)
         self.vision = ObstacleVisionModule(rng=self.rng)
         self.wm: ObstacleWorldModel | None = None
         self.board = None                                  # BoardCtl, set on train
+        self.board_tall = float(board_tall)               # LOW board: blocks the carry, the arm clears it
         self.route = None; self._wp = 1; self._occ = None; self._pose = None
         self._wm_err = float("nan")
         self.add_out("occupancy", OCC_N * OCC_N, "perceived board occupancy")
 
     def train(self, sim, n_collide=11000, wm_epochs=80, vis_steps=2800, vis_iters=450,
               cache=None, quiet=False):
-        """Collect physical collisions -> fit the world model; train the perception; CACHE to disk."""
+        """World model: from physical collisions (occupancy is height-independent, so collected with a TALL
+        board for a strong block and REUSED).  Perception: trained for THIS board height (a low board looks
+        different from above).  Cached; the world model is reused, perception retrains only if the height
+        changed."""
         self.board = BoardCtl(sim)
         cache = cache or os.path.join(os.path.dirname(__file__), "..", "obstacle_cache.npz")
         self.wm = ObstacleWorldModel(occ_dim=OCC_N * OCC_N, rng=np.random.default_rng(0))
+        have_wm = False
         if os.path.exists(cache):
             d = np.load(cache, allow_pickle=True)
             self.wm.load({k: d[f"wm_{k}"] for k in ["W1", "b1", "W2", "b2", "W3", "b3"]})
-            self.vision._set(d["vis"]); self._wm_err = float(d["wm_err"])
+            self._wm_err = float(d["wm_err"]); have_wm = True
+            if ("vis_tall" in d.files and "vis_scene" in d.files
+                    and abs(float(d["vis_tall"]) - self.board_tall) < 1e-6 and str(d["vis_scene"]) == "home"):
+                self.vision._set(d["vis"])
+                if not quiet:
+                    print(f"  [obstacle] loaded cached world-model + perception; wm 1-step {self._wm_err:.1f} mm")
+                self.board.park(); return
             if not quiet:
-                print(f"  [obstacle] loaded cached world-model + perception ({cache}); wm 1-step {self._wm_err:.1f} mm")
-            self.board.park()
-            return
+                print(f"  [obstacle] loaded cached world-model; retraining perception for board half-height "
+                      f"{self.board_tall:.3f} m ...")
+        if not have_wm:
+            if not quiet:
+                print(f"  [obstacle] collecting {n_collide} physical collisions (the agent crashes into boards) ...")
+            XY, OCC, U, D = collect(sim, self.board, n_collide, self.rng)
+            Pg = np.array([to_grid(p) for p in XY]); Ug = U * S2G; Dg = D * S2G
+            X = np.array([self.wm._x(p, o, u) for p, o, u in zip(Pg, OCC, Ug)])
+            ntr = int(0.9 * len(X)); self.wm.fit(X[:ntr], Dg[:ntr] / self.wm.UMAX, wm_epochs)
+            pr = np.array([self.wm.delta(p, o, u) for p, o, u in zip(Pg[ntr:], OCC[ntr:], Ug[ntr:])]) / S2G
+            self._wm_err = float(np.mean(np.linalg.norm(pr - D[ntr:], axis=1)) * 1000)
+            if not quiet:
+                print(f"  [obstacle] world-model 1-step error {self._wm_err:.1f} mm")
         if not quiet:
-            print(f"  [obstacle] collecting {n_collide} physical collisions (the agent crashes into boards) ...")
-        XY, OCC, U, D = collect(sim, self.board, n_collide, self.rng)
-        Pg = np.array([to_grid(p) for p in XY]); Ug = U * S2G; Dg = D * S2G
-        X = np.array([self.wm._x(p, o, u) for p, o, u in zip(Pg, OCC, Ug)])
-        ntr = int(0.9 * len(X)); self.wm.fit(X[:ntr], Dg[:ntr] / self.wm.UMAX, wm_epochs)
-        pr = np.array([self.wm.delta(p, o, u) for p, o, u in zip(Pg[ntr:], OCC[ntr:], Ug[ntr:])]) / S2G
-        self._wm_err = float(np.mean(np.linalg.norm(pr - D[ntr:], axis=1)) * 1000)
-        if not quiet:
-            print(f"  [obstacle] world-model 1-step error {self._wm_err:.1f} mm; training perception (act21 scene) ...")
-        self.vision.train(sim, steps=vis_steps, iters=vis_iters, staging="scene", rng=np.random.default_rng(1))
-        np.savez(cache, vis=self.vision._get(), wm_err=self._wm_err,
+            print(f"  [obstacle] training perception (act21 scene, board half-height {self.board_tall:.3f} m) ...")
+        self.vision.train(sim, steps=vis_steps, iters=vis_iters, staging="scene",
+                          board_tall=self.board_tall, rng=np.random.default_rng(1))
+        np.savez(cache, vis=self.vision._get(), vis_tall=self.board_tall, wm_err=self._wm_err,
                  **{f"wm_{k}": v for k, v in self.wm.state().items()})
         self.board.park()
         if not quiet:
-            print(f"  [obstacle] trained + cached -> {cache}")
+            print(f"  [obstacle] cached -> {cache}")
 
     # -- per-episode interface --
     def place_random(self, obj_xy, goal_xy, hy=0.06, rng=None):

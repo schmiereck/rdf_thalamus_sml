@@ -90,17 +90,16 @@ def main():
         agent.add(obstacle)
 
     def place_board_clear(cmd):
-        """Lift the arm clear, drop the physical board in the central workspace (clear of the commanded
-        cube so the grasp approach stays free), then perceive it.  The board is TALL, so it must not spawn
-        into the arm."""
-        rng3 = sim.arm3_range()
-        sim.set_arm3_targets(np.array([0.0, rng3[1, 1] * 0.7, rng3[2, 0] * 0.5])); sim.step(70)
-        cobj = sim.obj_pos(cmd)[:2]; cx, cy = 0.0, 0.16
-        for _ in range(25):
-            cx = brng.uniform(-0.05, 0.05); cy = brng.uniform(0.14, 0.185)
-            if np.linalg.norm([cx - cobj[0], cy - cobj[1]]) > 0.075:
+        """Drop the LOW board (arm stays at HOME so the grasp is unperturbed).  The board is OFFSET in x so
+        its thin footprint never spawns into the central home gripper, and clear of the commanded cube so
+        the grasp approach is free.  Then perceive it."""
+        hg = sim.grasp_pos()[:2]; cobj = sim.obj_pos(cmd)[:2]; cx, cy = 0.05, 0.16
+        for _ in range(40):
+            cx = brng.uniform(-0.07, 0.07); cy = brng.uniform(0.12, 0.19)
+            free_arm = abs(cx - hg[0]) > 0.042 or abs(cy - hg[1]) > 0.075   # not under the home gripper
+            if free_arm and np.linalg.norm([cx - cobj[0], cy - cobj[1]]) > 0.07:
                 break
-        obstacle.board.place(cx, cy, 0.012, 0.055); sim.step(20)
+        obstacle.board.place(cx, cy, 0.012, 0.055, obstacle.board_tall); sim.step(20)
         obstacle.perceive_board(sim)
 
     ct_fn = (lambda hxy, goal: obstacle.carry_target(hxy, goal)) if OBSTACLE else None

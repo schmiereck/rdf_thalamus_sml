@@ -87,14 +87,16 @@ class ObstacleVisionModule(ArmModule):
             sim.set_object(nm, [rng.uniform(-0.11, 0.11), rng.uniform(0.08, 0.20)])
 
     def stage_scene(self, sim):
-        """act21 perceive pose: arm at HOME, cubes present (scattered) -> matches run_combined's perceive."""
+        """act21 perceive pose: arm at HOME (the grasp start the policy was trained from), cubes present
+        (scattered) -> matches run_combined's per-episode perceive scene."""
         sim.reset_home()
 
-    def train(self, sim, steps=2500, iters=400, cam="top", staging="park", rng=None):
+    def train(self, sim, steps=2500, iters=400, cam="top", staging="park", board_tall=0.06, rng=None):
         """Self-supervised: render random boards, fit image -> normalised board POSE (cx, cy, half-y).
         Numerical-gradient descent over the detector params (small + robust; no backprop through the
         soft-argmax).  staging='park' = bare board (cubes parked, arm retracted); staging='scene' = the
-        act21 scene (arm home + scattered cubes present each sample) so the detector ignores the cubes."""
+        act21 scene (arm home + scattered cubes present each sample) so the detector ignores the cubes.
+        board_tall = the board's HALF-height (a low board looks different from above -> retrain to match)."""
         rng = rng or np.random.default_rng(1)
         board = BoardCtl(sim)
         if staging == "scene":
@@ -106,7 +108,7 @@ class ObstacleVisionModule(ArmModule):
             if staging == "scene":
                 self.scatter_cubes(sim, rng)
             cx = rng.uniform(*CX_R); cy = rng.uniform(*CY_R); hy = rng.uniform(*HY_R)
-            board.place(cx, cy, 0.012, hy); mujoco.mj_forward(sim.m, sim.d)
+            board.place(cx, cy, 0.012, hy, board_tall); mujoco.mj_forward(sim.m, sim.d)
             X[i] = _downsample(sim.render(cam))
             Y[i] = (np.array([cx, cy, hy]) - _LO) / _SP * 2.0 - 1.0
 
