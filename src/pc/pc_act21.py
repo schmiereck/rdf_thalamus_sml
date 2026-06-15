@@ -37,7 +37,7 @@ def _perturb(sim, dz):
 def main():
     HEADLESS = os.environ.get("ACT21_HEADLESS", "0") == "1"
     CAM = os.environ.get("ACT21_CAM", "overview").lower()
-    COLLECT = int(os.environ.get("ACT21_COLLECT", "18"))
+    COLLECT = int(os.environ.get("ACT21_COLLECT", "30"))   # more teacher demos for the enlarged workspace
     EXPLORE = int(os.environ.get("ACT21_EPISODES", "24"))
     BASE = int(os.environ.get("ACT21_BASE", "10"))
     RES = int(os.environ.get("ACT21_RES", "240"))
