@@ -69,6 +69,8 @@ def collect(sim, board, n, rng, restart_every=24):
     """Physics random-walk -> (XY, OCC, U, D) arrays in METRES.  Re-places the board and restarts in a new
     spot periodically to cover the area; records the ACHIEVED displacement each step (blocked at the board)."""
     XY, OCC, U, D = [], [], [], []
+    for nm in ("obj_red", "obj_green", "obj_blue"):           # park the cubes: collisions must be with
+        sim.set_object(nm, [0.0, -0.55 - 0.03 * "rgb".index(nm[4])])   # the BOARD only, not stray cubes
     hand = sim.grasp_pos().copy()
     for i in range(n):
         if i % restart_every == 0:

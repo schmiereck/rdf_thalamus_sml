@@ -81,14 +81,30 @@ class ObstacleVisionModule(ArmModule):
         for _ in range(120):
             sim.step(2)
 
-    def train(self, sim, steps=2500, iters=400, cam="top", rng=None):
+    def scatter_cubes(self, sim, rng):
+        """Place the three cubes at random positions in the working region (the act21 perceive scene)."""
+        for nm in ("obj_red", "obj_green", "obj_blue"):
+            sim.set_object(nm, [rng.uniform(-0.11, 0.11), rng.uniform(0.08, 0.20)])
+
+    def stage_scene(self, sim):
+        """act21 perceive pose: arm at HOME, cubes present (scattered) -> matches run_combined's perceive."""
+        sim.reset_home()
+
+    def train(self, sim, steps=2500, iters=400, cam="top", staging="park", rng=None):
         """Self-supervised: render random boards, fit image -> normalised board POSE (cx, cy, half-y).
-        Numerical-gradient descent over the 16 detector params (small + robust; no backprop through the
-        soft-argmax needed)."""
+        Numerical-gradient descent over the detector params (small + robust; no backprop through the
+        soft-argmax).  staging='park' = bare board (cubes parked, arm retracted); staging='scene' = the
+        act21 scene (arm home + scattered cubes present each sample) so the detector ignores the cubes."""
         rng = rng or np.random.default_rng(1)
-        board = BoardCtl(sim); self.stage(sim)
+        board = BoardCtl(sim)
+        if staging == "scene":
+            self.stage_scene(sim)
+        else:
+            self.stage(sim)
         X = np.empty((steps, DS, DS, 3), np.float32); Y = np.empty((steps, 3), np.float32)
         for i in range(steps):
+            if staging == "scene":
+                self.scatter_cubes(sim, rng)
             cx = rng.uniform(*CX_R); cy = rng.uniform(*CY_R); hy = rng.uniform(*HY_R)
             board.place(cx, cy, 0.012, hy); mujoco.mj_forward(sim.m, sim.d)
             X[i] = _downsample(sim.render(cam))

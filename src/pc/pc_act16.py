@@ -101,7 +101,7 @@ def reactive_subgoal(state):
 def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, perceive_fn=None,
                  mixed=False, track_fn=None, lifelong=False, log_fn=None, policy_fn=None,
                  episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None,
-                 ood_rate=0.0, ood_rng=None, size_fn=None, tol=None):
+                 ood_rate=0.0, ood_rng=None, size_fn=None, tol=None, carry_target_fn=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -204,6 +204,11 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         dwell = 0; via = "grasp"; done = False
         for k in range(cap):
             c_true = sim.obj_pos(cmd)[:2]; cz = sim.obj_pos(cmd)[2]; h = sim.grasp_pos(); hxy = h[:2]; hz = h[2]
+            tgt_eff = tgt                                     # routed carry target (obstacle): once the
+            if carry_target_fn is not None and cz > 0.03:     # object is lifted, follow the planned route
+                _wp = carry_target_fn(hxy, tgt_true)          # AROUND the perceived board instead of going
+                if _wp is not None:                           # straight to the goal (goal still used for done)
+                    tgt_eff = np.array([_wp[0], _wp[1]], float)
             # FOLLOW the object live while approaching it; when it is occluded (gripper over it)
             # the tracker returns None and we keep the last estimate (memory) — the act11 pattern.
             if track_fn is not None and k % 4 == 0:           # follow live: drives the gaze + viz +
@@ -245,8 +250,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                         else:
                             mode, phase = "push", "approach"      # missed -> push fallback
                 elif phase == "carry":
-                    j5, aim = J5_GRIP, np.array([tgt[0], tgt[1], CARRY_Z])
-                    if np.linalg.norm(hxy - tgt) < NEAR:
+                    j5, aim = J5_GRIP, np.array([tgt_eff[0], tgt_eff[1], CARRY_Z])   # via the routed waypoint
+                    if np.linalg.norm(hxy - tgt_true) < NEAR:
                         phase = "place"
                 elif phase == "place":
                     j5, aim = J5_GRIP, np.array([tgt[0], tgt[1], GRASP_Z])
@@ -277,12 +282,15 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 if cz > 0.028 and sim.d.qpos[sim.jqadr["joint_5"]] < 0.9:   # object is carried, drive
                     tgt = np.asarray(place_servo_fn(hxy), float)  # the place target by the latent servo
             # state for a LEARNED action policy: hand, object, object-z, target, gripper, OBJ SIZE (c)
-            state = np.array([h[0], h[1], h[2], c[0], c[1], cz, tgt[0], tgt[1],
+            state = np.array([h[0], h[1], h[2], c[0], c[1], cz, tgt_eff[0], tgt_eff[1],
                               sim.d.qpos[sim.jqadr["joint_5"]], obj_h, obj_fp], float)
             if teacher_log_fn is not None:                    # DAgger: the FSM's sub-goal at the
                 teacher_log_fn(state, np.asarray(aim, float).copy(), float(j5))   # (policy-)VISITED state
-            if policy_fn is not None:                         # LEARNED policy drives instead of the FSM
+            route_carry = carry_target_fn is not None and phase == "carry"   # the routed carry follows the
+            if policy_fn is not None and not route_carry:     # planned waypoints (FSM servo); the LEARNED
                 out = policy_fn(state); aim = np.asarray(out[:3], float); j5 = float(out[3]); via = "policy"
+            elif route_carry:                                 # policy carries to a STATIC goal only, so it
+                via = "route"                                 # cannot follow side-waypoints -> servo the route
             if log_fn is not None:                            # log the EXECUTED (state -> subgoal)
                 log_fn(state, np.asarray(aim, float), float(j5))
             sim.target("joint_5", j5)

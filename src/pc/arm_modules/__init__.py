@@ -13,8 +13,9 @@ from .inverse_kinematics import LearnedInverseKinematics
 from .curiosity import DistanceNovelty, CuriosityPlanner
 from .latent_goal import LatentGoalServo
 from .obstacle_vision import ObstacleVisionModule
+from .obstacle import ObstacleModule
 
 __all__ = ["Port", "ArmModule", "ArmAgent", "VisualCortexModule", "BodyModelModule",
            "GoalModule2D", "PlannerModule", "rule_mirror", "rule_centre", "MotorModule",
            "LearnedInverseKinematics", "DistanceNovelty", "CuriosityPlanner", "LatentGoalServo",
-           "ObstacleVisionModule"]
+           "ObstacleVisionModule", "ObstacleModule"]

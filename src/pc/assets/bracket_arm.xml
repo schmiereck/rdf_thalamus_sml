@@ -117,7 +117,7 @@
          PARKED far below the floor so it is invisible / inert for every other script (pc_act21 etc.); only
          the obstacle script (chain_obstacle_data.BoardCtl) raises it into the workspace. -->
     <body name="board" pos="0.0 0.0 -0.6">
-      <geom name="board_geom" type="box" size="0.012 0.06 0.06" rgba="0.2 0.35 0.95 1"
+      <geom name="board_geom" type="box" size="0.012 0.06 0.06" rgba="0.05 0.85 0.8 1"
             friction="1.0 0.02 0.001"/>
     </body>
   </worldbody>

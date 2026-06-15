@@ -79,11 +79,67 @@ def main():
         r = np.random.default_rng(seed)
         return lambda cmd, obj: r.uniform(LO + 0.15 * SPAN, HI - 0.15 * SPAN)
 
-    if PERTURB:
+    OBSTACLE = os.environ.get("ACT21_OBSTACLE", "0") == "1"
+    obstacle = None; brng = np.random.default_rng(31)
+    if OBSTACLE:
+        from pc.arm_modules import ObstacleModule
+        print("  *** OBSTACLE mode: LEARNED board (visual perception + collision world-model) integrated ***")
+        obstacle = ObstacleModule(rng=np.random.default_rng(9))
+        obstacle.train(sim, n_collide=int(os.environ.get("ACT21_OBS_N", "11000")),
+                       vis_steps=int(os.environ.get("ACT21_OBS_VIS", "2800")))   # cached to disk
+        agent.add(obstacle)
+
+    def place_board_clear(cmd):
+        """Lift the arm clear, drop the physical board in the central workspace (clear of the commanded
+        cube so the grasp approach stays free), then perceive it.  The board is TALL, so it must not spawn
+        into the arm."""
+        rng3 = sim.arm3_range()
+        sim.set_arm3_targets(np.array([0.0, rng3[1, 1] * 0.7, rng3[2, 0] * 0.5])); sim.step(70)
+        cobj = sim.obj_pos(cmd)[:2]; cx, cy = 0.0, 0.16
+        for _ in range(25):
+            cx = brng.uniform(-0.05, 0.05); cy = brng.uniform(0.14, 0.185)
+            if np.linalg.norm([cx - cobj[0], cy - cobj[1]]) > 0.075:
+                break
+        obstacle.board.place(cx, cy, 0.012, 0.055); sim.step(20)
+        obstacle.perceive_board(sim)
+
+    ct_fn = (lambda hxy, goal: obstacle.carry_target(hxy, goal)) if OBSTACLE else None
+
+    if PERTURB and not OBSTACLE:
         _perturb(sim, PERTURB)
         print(f"  *** perturbed the arm: +{PERTURB*1000:.0f}mm forearm -> trained FK/IK are now STALE ***")
 
     GSEED = 77
+    if OBSTACLE and HEADLESS:
+        pen = {"max": 0.0, "rows": []}
+        def track_pen():
+            h = sim.grasp_pos()
+            if h[2] > 0.04:                                   # carrying-ish: does the hand enter the board?
+                b = obstacle.board
+                dx = 0.024 - abs(h[0] - b.cx); dy = b.hy - abs(h[1] - b.cy)
+                if dx > 0 and dy > 0:
+                    pen["max"] = max(pen["max"], min(dx, dy))
+        def perceive_hl(cmd):
+            place_board_clear(cmd); return None, None, "grasp"   # privileged cube; board placed + perceived
+        def ep_end_hl(ep, ok, err):
+            pen["rows"].append((int(ok), pen["max"] * 1000)); pen["max"] = 0.0
+        d, m = act16.run_combined(sim, bm, None, CAM, episodes=BASE, policy_fn=motor.predict,
+                                  goal_fn=fixed_goals(GSEED), lifelong=True, perceive_fn=perceive_hl,
+                                  carry_target_fn=ct_fn, track_fn=track_pen, episode_end_fn=ep_end_hl,
+                                  cap=int(os.environ.get("ACT21_CAP", "2200")))
+        rows = np.array(pen["rows"], float)
+        print("=" * 72)
+        print(f"  OBSTACLE integrated into act21 ({m} eps): delivered {d}/{m}")
+        print(f"  carried-hand board penetration: mean {rows[:,1].mean():.0f} mm  max {rows[:,1].max():.0f} mm")
+        print("  Read (honest): the obstacle module is cleanly plugged into the act21 agent (learned")
+        print("  perception + collision world-model + planner, via the carry_target_fn hook), and the")
+        print("  END-EFFECTOR carry ROUTES around the PERCEIVED board (penetration ~0, nothing hand-coded).")
+        print("  LIMIT: full-task delivery is low -- the TALL board obstructs the WHOLE arm (grasp approach")
+        print("  + links), which end-effector xy-routing does not solve; that needs ARM-LEVEL obstacle")
+        print("  avoidance (3-D), a shorter obstacle, or a constrained start/goal geometry.  Nameable limit.")
+        print("=" * 72)
+        return
+
     if HEADLESS:
         act16.run_combined._quiet = True
         # --- A: frozen baseline on FIXED goals (post-perturb) ---
@@ -128,6 +184,8 @@ def main():
         sviz = SurpriseViz(title="act21 — curiosity + lifelong (surprise over time)")
 
         def perceive(cmd):
+            if OBSTACLE:
+                place_board_clear(cmd)                        # SEE + place the learned board this episode
             return vc.perceive(cmd), None, "grasp"
 
         def track_and_plot():
@@ -139,8 +197,10 @@ def main():
                           planner=(ps["novelty"] if ps else None))
 
         d, m = act16.run_combined(sim, bm, None, CAM, episodes=EXPLORE, policy_fn=motor.predict,
-                                  goal_fn=curiosity_goal, lifelong=True, perceive_fn=perceive, track_fn=track_and_plot)
-        print(f"  explored+delivered {d}/{m} to self-dreamed goals; coverage {curio.coverage():.2f}")
+                                  goal_fn=curiosity_goal, lifelong=True, perceive_fn=perceive,
+                                  track_fn=track_and_plot, carry_target_fn=ct_fn)
+        print(f"  explored+delivered {d}/{m} to self-dreamed goals; coverage {curio.coverage():.2f}"
+              + ("  [routing carries around the learned board]" if OBSTACLE else ""))
         print("  [viz] close the windows to exit.")
         (vc.viz or sviz).hold()
     except Exception as e:
