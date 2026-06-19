@@ -106,16 +106,20 @@ class WristRollModule(ArmModule):
         return np.arctan2(out[:, 1], out[:, 0])
 
     # ---- inverse: which joint_4 gives the desired grip yaw, for a fixed positioning pose? ----
-    def wrist_for_yaw(self, q_pose, desired_yaw, j3=None):
+    def wrist_for_yaw(self, q_pose, desired_yaw, j3=None, mod180=False):
         """q_pose = [j0, j1, j2] (positioning joints); j3 = wrist-pitch (default HOME).  Returns the joint_4
-        that the LEARNED model says yields claw_yaw closest to desired_yaw (1-D search through the model)."""
+        that the LEARNED model says yields claw_yaw closest to desired_yaw (1-D search through the model).
+        mod180=True matches the UNDIRECTED axis (a symmetric two-finger GRIP is identical under a 180-deg
+        flip), so the desired yaw is always reachable within joint_4's limited swing -- otherwise a flipped
+        target falls outside the achievable band and the search returns a wildly tilted endpoint."""
         from pc.pc_act14 import HOME
         j3 = HOME["joint_3"] if j3 is None else j3
         j4s = np.linspace(self.J4_RANGE[0], self.J4_RANGE[1], 121)
         Q = np.column_stack([np.full(len(j4s), q_pose[0]), np.full(len(j4s), q_pose[1]),
                              np.full(len(j4s), q_pose[2]), np.full(len(j4s), j3), j4s])
         pr = self.predict_yaw(Q)
-        d = np.abs(np.arctan2(np.sin(pr - desired_yaw), np.cos(pr - desired_yaw)))
+        k = 2.0 if mod180 else 1.0                                # double angle = undirected axis match
+        d = np.abs(np.arctan2(np.sin(k * (pr - desired_yaw)), np.cos(k * (pr - desired_yaw))))
         return float(j4s[int(np.argmin(d))])
 
     def step(self):
