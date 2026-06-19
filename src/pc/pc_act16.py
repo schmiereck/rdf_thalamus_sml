@@ -83,6 +83,12 @@ def reactive_subgoal(state):
         if hz > grasp_z + 0.012:                          # lower onto the target
             return np.array([tx, ty, grasp_z, J5_GRIP])
         return np.array([tx, ty, grasp_z, J5_OPEN])       # release
+    # RETRY a MISSED grasp instead of dragging the cube to the foot (obs 4): if the gripper is closed and
+    # raised to carry height but the cube is STILL on the table, the grasp clearly missed -> re-OPEN above
+    # the cube and retry the approach.  Triggers only once the empty lift is COMPLETE (a real grasp would
+    # have raised the cube in lockstep, so cz>lift_thresh fires `grasped` first), so it never oscillates.
+    if (j5 < 0.25) and (hz > carry_z - 0.012):
+        return np.array([cx, cy, OVER_Z, J5_OPEN])        # missed -> reopen + re-approach (no push-to-foot)
     # The gripper STATE disambiguates the two regimes that look alike in (hz): descending-to-grasp
     # (gripper OPEN) vs ascending-with-cube (gripper CLOSED).  Splitting on j5 stops the open/close
     # oscillation that flung the cube (the old code re-OPENED on the lower branch while lifting).
@@ -205,7 +211,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             post_goal_fn(cmd, obj_now, tgt_true)              # (placed AFTER the goal so it can clear both ends)
         mode = force or mode_perc or "grasp"
         phase = "over" if mode == "grasp" else "approach"
-        dwell = 0; via = "grasp"; done = False
+        dwell = 0; via = "grasp"; done = False; grasp_retry = 0
         for k in range(cap):
             c_true = sim.obj_pos(cmd)[:2]; cz = sim.obj_pos(cmd)[2]; h = sim.grasp_pos(); hxy = h[:2]; hz = h[2]
             tgt_eff = tgt                                     # routed carry target (obstacle): once the
@@ -251,8 +257,10 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                     if hz > CARRY_Z - 0.015:
                         if cz > 0.030:                            # cube clearly lifted off the table
                             phase = "carry"                      # grasped!
+                        elif obj_fp <= GRASP_MAX_HALF and grasp_retry < 2:
+                            grasp_retry += 1; phase = "over"      # narrow: RETRY the grasp (no push-to-foot)
                         else:
-                            mode, phase = "push", "approach"      # missed -> push fallback
+                            mode, phase = "push", "approach"      # wide / retries spent -> push fallback
                 elif phase == "carry":
                     j5, aim = J5_GRIP, np.array([tgt_eff[0], tgt_eff[1], CARRY_Z])   # via the routed waypoint
                     if np.linalg.norm(hxy - tgt_true) < NEAR:
