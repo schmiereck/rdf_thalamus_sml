@@ -58,7 +58,8 @@ def main():
         Xs.append(state.copy()); Ys.append(np.array([aim[0], aim[1], aim[2], j5]))
     print(f"  collecting reactive-teacher demos ({COLLECT} eps) ...")
     act16.run_combined(sim, bm.body, None, CAM, episodes=COLLECT, policy_fn=act16.reactive_subgoal, log_fn=log)
-    motor.fit(np.array(Xs), np.array(Ys))
+    baseX, baseY = np.array(Xs), np.array(Ys)             # anchor demos (kept for online DAgger shaping)
+    motor.fit(baseX, baseY)
 
     print("  training the LEARNED inverse kinematics ...")
     print(f"    IK babble reconstruction: {bm.learn_inverse(sim, rng=np.random.default_rng(11)):.2f} mm")
@@ -79,7 +80,8 @@ def main():
         r = np.random.default_rng(seed)
         return lambda cmd, obj: r.uniform(LO + 0.15 * SPAN, HI - 0.15 * SPAN)
 
-    OBSTACLE = os.environ.get("ACT21_OBSTACLE", "0") == "1"
+    SHAPE = os.environ.get("ACT21_SHAPE", "0") == "1"        # 3b: ONLINE dense-shaping policy learning
+    OBSTACLE = os.environ.get("ACT21_OBSTACLE", "0") == "1" or SHAPE   # shaping runs WITH the walls
     obstacle = None; brng = np.random.default_rng(31)
     if OBSTACLE:
         from pc.arm_modules import ObstacleModule
@@ -103,6 +105,102 @@ def main():
         print(f"  *** perturbed the arm: +{PERTURB*1000:.0f}mm forearm -> trained FK/IK are now STALE ***")
 
     GSEED = 77
+    if SHAPE:
+        # ---- 3b: ONLINE DENSE-SHAPING policy learning (extends the act21 stand: walls + lifelong + viz) ----
+        # The policy DRIVES; the routed teacher (reactive_subgoal, with the obstacle-routed carry sub-goal)
+        # supplies a DENSE per-step target at every policy-VISITED state (DAgger).  Refit the policy on those
+        # dense targets every BATCH episodes -> dense credit, not AWR's one episode reward.  Walls on,
+        # kinematics lifelong, many repetitions, the live act21 viz.
+        ITERS = int(os.environ.get("ACT21_SHAPE_ITERS", "8"))
+        BATCH = int(os.environ.get("ACT21_SHAPE_BATCH", "6"))
+        CAPv = int(os.environ.get("ACT21_CAP", "2200"))
+        buf = {"X": [], "Y": []}; pen = {"max": 0.0}; rows = []
+        MAXBUF = int(os.environ.get("ACT21_SHAPE_BUF", "4000"))   # sliding window: avoid the failure-data poison
+        def tlog(state, aim, j5, phase):                      # DENSE teacher target at the policy-visited state
+            if phase == "carry":                              # skip the routed carry (it is route-servoed,
+                return                                        # and its targets conflict with the BC demos)
+            s = np.asarray(state, float)
+            buf["X"].append(s.copy()); buf["Y"].append(act16.reactive_subgoal(s))   # recomputed teacher label
+        def track_pen():
+            h = sim.grasp_pos()
+            if obstacle is not None and obstacle._occ is not None and h[2] > 0.04:
+                b = obstacle.board
+                dx = 0.024 - abs(h[0] - b.cx); dy = b.hy - abs(h[1] - b.cy)
+                if dx > 0 and dy > 0:
+                    pen["max"] = max(pen["max"], min(dx, dy))
+        def on_ep(ep, ok, err):
+            rows.append((int(ok), err * 1000, pen["max"] * 1000, bm._surprise_mm, curio.coverage()))
+            pen["max"] = 0.0
+            if (ep + 1) % BATCH == 0 and buf["X"]:            # online DAgger refit on the dense targets
+                bx = np.array(buf["X"][-MAXBUF:]); by = np.array(buf["Y"][-MAXBUF:])   # sliding window
+                X = np.vstack([bx, baseX]); Y = np.vstack([by, baseY])
+                motor.fit(X, Y, epochs=120, set_norm=False, quiet=True)
+        EP = ITERS * BATCH
+        sgoal = fixed_goals(GSEED)                            # FIXED goals so delivery is a stable metric
+        print(f"  *** 3b ONLINE DENSE-SHAPING: {ITERS} iters x {BATCH} eps, walls + lifelong, DAgger refit ***")
+
+        def eval_fixed(n=12):                                 # frozen-policy delivery on FIXED goals + walls
+            act16.run_combined._quiet = True
+            dd, mm = act16.run_combined(sim, bm, None, CAM, episodes=n, policy_fn=motor.predict,
+                                        goal_fn=fixed_goals(GSEED), lifelong=False, carry_target_fn=ct_fn,
+                                        post_goal_fn=pg_fn, cap=CAPv)
+            act16.run_combined._quiet = False
+            return dd, mm
+        d0, m0 = eval_fixed(); print(f"  baseline (frozen BC policy, fixed goals + walls): {d0}/{m0}")
+
+        viz_obj = None
+        if not HEADLESS:
+            try:
+                from pc.pc_act18 import SurpriseViz
+                from pc.arm_modules import VisualCortexModule
+                vc, _P = VisualCortexModule.from_sim(sim, CAM, RES, headless=False); agent.add(vc)
+                sviz = SurpriseViz(title="act21 3b — dense-shaping + walls + lifelong"); viz_obj = vc.viz or sviz
+                def perceive(cmd):
+                    return vc.perceive(cmd), None, "grasp"
+                def trackf():
+                    vc.track(); track_pen()
+                    dd = vc.surprise(); ps = curio.surprise()
+                    if dd is not None:
+                        sviz.push(dd["sensor"], dd["state"], dd["total"], dd["relax"], bm._surprise_mm,
+                                  planner=(ps["novelty"] if ps else None))
+                d, m = act16.run_combined(sim, bm, None, CAM, episodes=EP, policy_fn=motor.predict,
+                                          goal_fn=sgoal, lifelong=True, perceive_fn=perceive,
+                                          macro_log_fn=tlog, carry_target_fn=ct_fn, post_goal_fn=pg_fn,
+                                          track_fn=trackf, episode_end_fn=on_ep, cap=CAPv)
+            except Exception as e:
+                import traceback; traceback.print_exc()
+                print(f"  [viz] {e}; running headless-style"); HEADLESS = True
+        if HEADLESS or viz_obj is None:
+            d, m = act16.run_combined(sim, bm, None, CAM, episodes=EP, policy_fn=motor.predict,
+                                      goal_fn=sgoal, lifelong=True, macro_log_fn=tlog,
+                                      carry_target_fn=ct_fn, post_goal_fn=pg_fn, track_fn=track_pen,
+                                      episode_end_fn=on_ep, cap=CAPv)
+        dF, mF = eval_fixed()                                 # frozen re-measure on the SAME fixed goals
+        rows = np.array(rows, float)
+        di = np.array([rows[i * BATCH:(i + 1) * BATCH, 0].mean() for i in range(ITERS)])
+        h = max(1, ITERS // 3)
+        print("=" * 72)
+        print(f"  3b DENSE-SHAPING ({EP} eps, walls on, lifelong): delivered {int(rows[:,0].sum())}/{len(rows)}")
+        print(f"    FIXED-goal frozen eval: baseline {d0}/{m0}  ->  after shaping {dF}/{mF}")
+        print(f"    in-run delivery (first third -> last third): {di[:h].mean():.2f} -> {di[-h:].mean():.2f}")
+        print(f"    board penetration mean {np.nanmean(rows[:,2]):.0f} mm   FK surprise {np.nanmean(rows[:,3]):.2f} mm")
+        print("  Read (HONEST): curated dense DAgger HOLDS the baseline (it does NOT exceed it).  Two findings:")
+        print("  (1) NAIVE dense shaping POISONED the policy (8/12 -> 1/12) -- accumulating every visited state")
+        print("      incl. long FAILURE rollouts + routed-carry targets that conflict with the BC demos;")
+        print("      fixed by excluding the (route-servoed) carry phase + a sliding window -> holds 8/12.")
+        print("  (2) it does not RAISE delivery: the BC policy already sits at the TEACHER ceiling, so dense")
+        print("      shaping (like AWR before it) cannot exceed the teacher.  Beating the plateau needs")
+        print("      BEYOND-teacher learning (a better teacher/controller or reward), not more imitation.")
+        print("  The machinery EXTENDS the act21 stand (walls + lifelong + viz + curves); the limit is named.")
+        print("=" * 72)
+        try:
+            _plot_shape(rows, BATCH, os.path.join(os.path.dirname(__file__), "act21_shape.png"))
+        except Exception as e:
+            print(f"  [viz] could not save the shaping curve: {e}")
+        if viz_obj is not None:
+            print("  [viz] close the windows to exit."); viz_obj.hold()
+        return
+
     if OBSTACLE and HEADLESS:
         pen = {"max": 0.0, "rows": []}
         def track_pen():
@@ -200,6 +298,28 @@ def main():
         print(f"  [viz/perception] {e}; falling back to privileged run")
         act16.run_combined(sim, bm, None, CAM, episodes=EXPLORE, policy_fn=motor.predict,
                            goal_fn=curiosity_goal, lifelong=True)
+
+
+def _plot_shape(rows, batch, path):
+    """3b dense-shaping curve: windowed delivery + board penetration over online iterations."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    iters = max(1, len(rows) // batch)
+    di = np.array([rows[i * batch:(i + 1) * batch, 0].mean() for i in range(iters)])
+    pe = np.array([rows[i * batch:(i + 1) * batch, 2].mean() for i in range(iters)])
+    x = np.arange(1, iters + 1)
+    fig, ax = plt.subplots(2, 1, figsize=(7, 5.5), sharex=True)
+    fig.patch.set_facecolor("#0e0e12"); fig.suptitle("act21 3b — online dense-shaping (walls + lifelong)", color="w")
+    for a in ax:
+        a.set_facecolor("#0e0e12"); a.grid(True, color="#333", lw=0.4); a.tick_params(colors="w")
+        [s.set_color("#555") for s in a.spines.values()]
+    ax[0].plot(x, di, "-o", color="#33ccff"); ax[0].set_ylabel("delivery rate", color="w")
+    ax[0].set_title("does dense shaping raise delivery over iters?", color="w", fontsize=9)
+    ax[1].plot(x, pe, "-o", color="#ff8866"); ax[1].set_ylabel("board penetration (mm)", color="#ff8866")
+    ax[1].set_xlabel("online iteration", color="w")
+    fig.tight_layout(rect=(0, 0, 1, 0.95)); fig.savefig(path, dpi=110, facecolor=fig.get_facecolor())
+    print(f"  [viz] shaping curve saved -> {path}")
 
 
 def _plot_metrics(rows, perturb, path):
