@@ -108,7 +108,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                  mixed=False, track_fn=None, lifelong=False, log_fn=None, policy_fn=None,
                  episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None,
                  ood_rate=0.0, ood_rng=None, size_fn=None, tol=None, carry_target_fn=None,
-                 post_goal_fn=None):
+                 post_goal_fn=None, macro_log_fn=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -305,6 +305,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 via = "route"                                 # cannot follow side-waypoints -> servo the route
             if log_fn is not None:                            # log the EXECUTED (state -> subgoal)
                 log_fn(state, np.asarray(aim, float), float(j5))
+            if macro_log_fn is not None:                      # EXECUTED step + the FSM phase (for macro
+                macro_log_fn(state, np.asarray(aim, float), float(j5), phase)   # sub-goal segmentation)
             sim.target("joint_5", j5)
             gentle = abs(j5 - J5_PUSH) < 0.2 and aim[2] < PUSH_Z + 0.02   # spread gripper + low = a PUSH
             g, mdq = (1.3, 0.016) if gentle else (2.0, 0.026)            # (derived from the sub-goal, so it
