@@ -131,6 +131,16 @@ class BracketArmSim:
     def obj_pos(self, name):
         return self.d.xpos[mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_BODY, name)].copy()
 
+    def claw_yaw(self):
+        """Table-plane YAW (radians) of the finger-separation axis (the gripper's local x in world).
+        This is what joint_4 (wrist-roll) controls in the grasp pose; the orientation the claws grip along."""
+        x = self.d.site_xmat[self.grasp_sid].reshape(3, 3)[:, 0]    # finger-separation axis in world
+        return float(np.arctan2(x[1], x[0]))
+
+    def set_arm_wrist_targets(self, q3, j4, j3=None):
+        """Command the 3 positioning motors + the wrist-ROLL joint_4 (j3 = wrist-pitch, default HOME)."""
+        self.set_arm_targets([q3[0], q3[1], q3[2], HOME["joint_3"] if j3 is None else j3, j4])
+
     def site_jacobian(self):
         """3x5 position Jacobian of the grasp site w.r.t. the 5 arm joints."""
         jacp = np.zeros((3, self.m.nv))
