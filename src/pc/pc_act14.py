@@ -95,12 +95,17 @@ class BracketArmSim:
     def arm3_range(self):
         return np.array([self.m.jnt_range[self._jid(j)] for j in ARM3])   # (3,2)
 
-    def set_object(self, name, xy, z=0.008):
+    def set_object(self, name, xy, z=0.008, yaw=0.0):
         bid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_BODY, name)
         jadr = self.m.body_jntadr[bid]; qadr = self.m.jnt_qposadr[jadr]; vadr = self.m.jnt_dofadr[jadr]
         self.d.qpos[qadr:qadr + 3] = [xy[0], xy[1], z]
-        self.d.qpos[qadr + 3:qadr + 7] = [1, 0, 0, 0]
+        self.d.qpos[qadr + 3:qadr + 7] = [np.cos(yaw / 2), 0.0, 0.0, np.sin(yaw / 2)]   # z-rotation
         self.d.qvel[vadr:vadr + 6] = 0.0
+
+    def obj_yaw(self, name):
+        """The object's z-rotation (radians) from its body quaternion (long-axis orientation in the table)."""
+        q = self.d.xquat[mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_BODY, name)]
+        return float(np.arctan2(2.0 * (q[0] * q[3] + q[1] * q[2]), 1.0 - 2.0 * (q[2] ** 2 + q[3] ** 2)))
 
     def set_object_size(self, name, half):
         """Set a box object's half-extents at runtime (cube vs wide block) for affordances."""
