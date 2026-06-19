@@ -82,9 +82,10 @@ def main():
     subgoals = []
     subgoal_idx = 0
     final_goal = None
+    start_obj_xy = None
 
     def chained_policy(state):
-        nonlocal subgoals, subgoal_idx, final_goal
+        nonlocal subgoals, subgoal_idx, final_goal, start_obj_xy
         
         hand_xyz = state[0:3]
         obj_xy = state[3:5]
@@ -94,13 +95,15 @@ def main():
         # Detect target change (new episode or goal change)
         if final_goal is None or np.linalg.norm(tgt_in_state - final_goal) > 0.005:
             final_goal = tgt_in_state.copy()
+            start_obj_xy = obj_xy.copy()
             # Plan a sequence of subgoals from object position to final goal
             subgoals = chained_planner.plan(obj_xy, final_goal)
             subgoal_idx = 1
             
         # Determine if we are in the carrying or pushing phase
-        dist_hand_obj = np.linalg.norm(hand_xyz[:2] - obj_xy)
-        is_transporting = (obj_z > 0.028) or (dist_hand_obj < 0.06)
+        # Object is lifted or has physically moved by more than 5 mm
+        dist_moved = np.linalg.norm(obj_xy - start_obj_xy)
+        is_transporting = (obj_z > 0.028) or (dist_moved > 0.005)
         
         if is_transporting:
             # Advance subgoal if we are close to the current one
@@ -119,6 +122,7 @@ def main():
         mod_state = state.copy()
         mod_state[6:8] = curr_subgoal
         return motor.predict(mod_state)
+
 
 
     prev_explore_xy = None
