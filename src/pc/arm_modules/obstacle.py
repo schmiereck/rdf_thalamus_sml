@@ -234,6 +234,46 @@ class ObstacleModule(ArmModule):
         self.route = None; self._wp = 1
         return self._occ, self._pose
 
+    def clear_board(self):
+        """No board this episode: park it out of the way and drop the occupancy so the carry goes STRAIGHT
+        (otherwise the detector would still regress a phantom in-range board and route around nothing)."""
+        if self.board is not None:
+            self.board.park()
+        self._occ = None; self._pose = None; self.route = None; self._wp = 1
+
+    # board placement geometry (thin Y-wall, thin in x -> blocks an x-CROSSING carry)
+    HX = 0.012; HY = 0.05
+    CLR_OBJ = 0.075           # x-clearance from the object so the wide-open gripper never bumps the wall
+    CLR_GOAL = 0.06           # x-clearance from the target so the object is placeable AND visible (not under it)
+    CAM_XY = np.array([-0.16, 0.17])   # the overview camera (for the low-wall shadow check)
+
+    def place_blocking(self, sim, obj_xy, goal_xy, cam_clear=0.07):
+        """Drop the LOW board so it BLOCKS the object->goal carry, while keeping the three placement bugs out:
+        (1) never on the target (>=CLR_GOAL in x), (2) never in the camera's shadow of the target, (3) clear of
+        the open gripper at the object (>=CLR_OBJ in x).  The wall is thin in x, so a meaningful block needs
+        x-travel; if the geometry gives no clean blocking spot the board is PARKED (straight carry, honest)."""
+        o = np.asarray(obj_xy, float)[:2]; g = np.asarray(goal_xy, float)[:2]
+        dx = g[0] - o[0]
+        if abs(dx) < self.CLR_OBJ + self.CLR_GOAL:           # not enough x-travel for a clean blocking wall
+            self.clear_board(); return None
+        ztop = 2.0 * self.board_tall                         # low-wall top height (for the shadow length)
+        for t in (0.5, 0.45, 0.55, 0.4, 0.6, 0.35, 0.65):
+            cx = o[0] + t * dx; cy = o[1] + t * (g[1] - o[1])
+            cx = float(np.clip(cx, -0.10, 0.10)); cy = float(np.clip(cy, 0.11, 0.20))
+            if abs(cx - o[0]) < self.CLR_OBJ or abs(cx - g[0]) < self.CLR_GOAL:
+                continue
+            # camera-shadow: is the target BEHIND the low wall from the camera, within the cast shadow?
+            cam = self.CAM_XY; w = np.array([cx, cy])
+            to_w = w - cam; dist_w = float(np.linalg.norm(to_w)) + 1e-9
+            shadow = ztop / max(0.34 - ztop, 1e-3) * dist_w  # floor shadow length away from the camera
+            beh = float(np.dot(g - w, to_w / dist_w))        # target distance past the wall (away from cam)
+            if 0.0 < beh < shadow + cam_clear:
+                continue                                     # target would be occluded -> try another spot
+            self.board.place(cx, cy, self.HX, self.HY, self.board_tall); sim.step(20)
+            self.perceive_board(sim)
+            return (cx, cy)
+        self.clear_board(); return None
+
     def carry_target(self, hxy, goal_xy):
         """Look-ahead waypoint (metres) the carry follows.  Plans the route around the PERCEIVED board on
         the first call (start = where the carry begins, goal = the delivery target), then advances along it."""

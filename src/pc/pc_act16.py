@@ -101,7 +101,8 @@ def reactive_subgoal(state):
 def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, perceive_fn=None,
                  mixed=False, track_fn=None, lifelong=False, log_fn=None, policy_fn=None,
                  episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None,
-                 ood_rate=0.0, ood_rng=None, size_fn=None, tol=None, carry_target_fn=None):
+                 ood_rate=0.0, ood_rng=None, size_fn=None, tol=None, carry_target_fn=None,
+                 post_goal_fn=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -199,6 +200,9 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             obj_xy = cube_plan if cube_plan is not None else sim.obj_pos(cmd)[:2]   # perceived object
             tgt = np.asarray(goal_fn(cmd, obj_xy), float)     # -> commit to it (and SCORE against it)
             tgt_true = tgt.copy(); sim.set_target_marker(tgt); sim.step(20)   # also moves the visible marker
+        if post_goal_fn is not None:                          # now the COMMITTED goal is known: e.g. drop an
+            obj_now = cube_plan if cube_plan is not None else sim.obj_pos(cmd)[:2]   # obstacle on the carry path
+            post_goal_fn(cmd, obj_now, tgt_true)              # (placed AFTER the goal so it can clear both ends)
         mode = force or mode_perc or "grasp"
         phase = "over" if mode == "grasp" else "approach"
         dwell = 0; via = "grasp"; done = False
