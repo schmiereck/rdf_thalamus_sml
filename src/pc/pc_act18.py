@@ -464,6 +464,24 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
             sim.set_object(o, _rand_xy(crng))
         mujoco.mj_forward(sim.m, sim.d)
 
+    # TRAINING scenes mix ARM-HIDDEN (matches perceive()) with ARM-VISIBLE poses (matches track()), so the
+    # arm is IN-DISTRIBUTION and the selection net LEARNS to reject the arm segments instead of drifting onto
+    # them.  Without this the net only ever saw arm-hidden views and mis-fired on the arm at track time.
+    _av = {"v": False}; rng3 = sim.arm3_range()
+    def scatter_train():
+        for o in CMD_COLOR:
+            sim.set_object(o, _rand_xy(crng))
+        if crng.random() < 0.5:                                # ARM-VISIBLE sample: a random arm pose
+            q3 = crng.uniform(rng3[:, 0], rng3[:, 1])
+            for j, v in zip(ARM3, q3):
+                sim.d.qpos[sim.jqadr[j]] = float(v)            # kinematic pose (perception only)
+            _av["v"] = True
+        else:
+            _av["v"] = False                                   # ARM-HIDDEN sample (render_perc hides it)
+        mujoco.mj_forward(sim.m, sim.d)
+    def render_train():
+        return sim.render(CAM) if _av["v"] else render_perc()
+
     viz = None
     if not headless:
         try:
@@ -475,12 +493,12 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
         if verbose:                                            # head FIRST (so the warmup net sees a
             print("  training the command-conditioned selection head ...")   # meaningful sel channel)
         px_of = lambda nm: A @ sim.obj_pos(nm)[:2] + b
-        fovea.train_selection(render_perc, scatter_far, px_of, list(CMD_COLOR),
+        fovea.train_selection(render_train, scatter_train, px_of, list(CMD_COLOR),
                               np.random.default_rng(13), steps=6000, viz=viz)
 
     if verbose:
         print("  warming up the hex perception net on the camera ...")
-    fovea.warmup(render_perc, 500, scatter_far, np.random.default_rng(9), viz=viz)
+    fovea.warmup(render_train, 500, scatter_train, np.random.default_rng(9), viz=viz)
     if verbose:
         q = max(1, len(fovea.se) // 8)
         print(f"  net sensor_error (camera scene): {np.mean(fovea.se[:q]):.3f} -> {np.mean(fovea.se[-q:]):.3f}")
