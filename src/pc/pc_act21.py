@@ -82,6 +82,8 @@ def main():
 
     SHAPE = os.environ.get("ACT21_SHAPE", "0") == "1"        # 3b: ONLINE dense-shaping policy learning
     OBSTACLE = os.environ.get("ACT21_OBSTACLE", "0") == "1" or SHAPE   # shaping runs WITH the walls
+    SERVO = os.environ.get("ACT21_SERVO", "1") == "1"        # closed-loop: live fovea corrects the grasp
+    #   target belief during the approach (default on; ACT21_SERVO=0 for the frozen-snapshot baseline)
     obstacle = None; brng = np.random.default_rng(31)
     if OBSTACLE:
         from pc.arm_modules import ObstacleModule
@@ -158,15 +160,16 @@ def main():
                 def perceive(cmd):
                     return vc.perceive(cmd), None, "grasp"
                 def trackf():
-                    vc.track(); track_pen()
+                    obs = vc.track(); track_pen()             # (xy, conf) -> feeds the closed-loop servo
                     dd = vc.surprise(); ps = curio.surprise()
                     if dd is not None:
                         sviz.push(dd["sensor"], dd["state"], dd["total"], dd["relax"], bm._surprise_mm,
                                   planner=(ps["novelty"] if ps else None))
+                    return obs
                 d, m = act16.run_combined(sim, bm, None, CAM, episodes=EP, policy_fn=motor.predict,
                                           goal_fn=sgoal, lifelong=True, perceive_fn=perceive,
                                           macro_log_fn=tlog, carry_target_fn=ct_fn, post_goal_fn=pg_fn,
-                                          track_fn=trackf, episode_end_fn=on_ep, cap=CAPv)
+                                          track_fn=trackf, episode_end_fn=on_ep, cap=CAPv, servo=SERVO)
             except Exception as e:
                 import traceback; traceback.print_exc()
                 print(f"  [viz] {e}; running headless-style"); HEADLESS = True
@@ -279,16 +282,18 @@ def main():
             return vc.perceive(cmd), None, "grasp"            # board is placed POST-GOAL (on the carry path)
 
         def track_and_plot():
-            vc.track()
+            obs = vc.track()                                  # (xy, conf) -> feeds the closed-loop servo
             bmm = bm._surprise_mm
             d = vc.surprise(); ps = curio.surprise()
             if d is not None:
                 sviz.push(d["sensor"], d["state"], d["total"], d["relax"], bmm,
                           planner=(ps["novelty"] if ps else None))
+            return obs
 
         d, m = act16.run_combined(sim, bm, None, CAM, episodes=EXPLORE, policy_fn=motor.predict,
                                   goal_fn=curiosity_goal, lifelong=True, perceive_fn=perceive,
-                                  track_fn=track_and_plot, carry_target_fn=ct_fn, post_goal_fn=pg_fn)
+                                  track_fn=track_and_plot, carry_target_fn=ct_fn, post_goal_fn=pg_fn,
+                                  servo=SERVO)
         print(f"  explored+delivered {d}/{m} to self-dreamed goals; coverage {curio.coverage():.2f}"
               + ("  [routing carries around the learned board]" if OBSTACLE else ""))
         print("  [viz] close the windows to exit.")

@@ -278,8 +278,10 @@ def run_learned_reach(sim, viz, CAM, HEADLESS):
         print("  [viz] close the window to exit."); viz.hold()
 
 
-REACH_XY = (np.array([-0.11, 0.07]), np.array([0.11, 0.21]))   # reachable table patch (x,y): enlarged to
-#   the measured graspable footprint at grasp height (~2x the old 16x10cm patch; the arm reaches it fine)
+_RY0 = float(os.environ.get("ACT_REACH_Y0", "0.07"))           # near edge of the reachable table patch
+_RY1 = float(os.environ.get("ACT_REACH_Y1", "0.21"))           # far edge (env-overridable for A/B tuning)
+REACH_XY = (np.array([-0.11, _RY0]), np.array([0.11, _RY1]))   # reachable table patch (x,y): default is the
+#   measured graspable footprint at grasp height; near edge can be pushed out (away from the base) via env
 
 
 def _rand_xy(rng):
