@@ -89,9 +89,16 @@ def patch_mean(img, cx, cy, half):
 # The outer rings sample FURTHER OUT (expanded spacing) with proportionally LARGER pooling, so the
 # field of view grows WITHOUT extra cells and WITHOUT duplicating the centre (centres spread apart)
 # or leaving gaps (pooling fills the catchment).  px_offset(t) = K * (|t| + B*(|t|-D0)^2) for |t|>D0.
-FOVEA_GRADED = os.environ.get("ACT_FOVEA_GRADED", "0") == "1"   # off -> uniform sampling (baseline)
+FOVEA_GRADED = os.environ.get("ACT_FOVEA_GRADED", "1") == "1"   # DEFAULT ON; =0 -> uniform (baseline)
 FOVEA_D0 = float(os.environ.get("ACT_FOVEA_D0", "5.0"))        # cells from centre kept at full res
 FOVEA_B = float(os.environ.get("ACT_FOVEA_B", "1.0"))         # peripheral expansion strength
+# NET-STEERABLE ZOOM: the fovea can widen its sampling (up to 2x the AREA = sqrt(2)x linear) to get an
+# OVERVIEW when the net is uncertain where the commanded object is, then zoom back in for detail.  The
+# zoom is driven by the net's own localization CONFIDENCE (like the gaze is driven by fovea_gradient).
+ZOOM = os.environ.get("ACT_FOVEA_ZOOM", "0") == "1"            # DEFAULT OFF (A/B: hurt acquisition here --
+#   the overview rarely triggers in this small workspace, and the scale-invariant training it needs
+#   dilutes the z=1 precision; enable for a LARGER workspace where objects fall outside the FOV)
+ZOOM_MAX = float(os.environ.get("ACT_FOVEA_ZOOM_MAX", "1.4142"))   # max linear factor (area up to ~2x)
 
 
 def _warp(t):
@@ -357,11 +364,25 @@ class HexFovea:
     """Learned hex PC-net on the camera fovea + an error-driven, object-following gaze."""
     def __init__(self, K=4, rng=None):
         self.K = K
+        self.z = 1.0                                         # current zoom (1=detail .. ZOOM_MAX=overview)
         self.net, self.cells, self.h1 = build_hexnet4(rng or np.random.default_rng(0))
         self.sel_head = SelectionHead(rng=np.random.default_rng(4))   # LEARNED object selection
         self.se = []
         self.last_diag = None                                # most recent PC-step diagnostics
         self.hist = {"sensor": [], "state": [], "total": [], "relax": []}   # surprise time-series
+
+    def _ek(self):
+        """Effective cell spacing = base K x current zoom (wider sampling = overview)."""
+        return self.K * self.z
+
+    def _zoom_step(self, conf):
+        """Drive the zoom from the net's localization CONFIDENCE: low conf (object not found / not
+        centred / occluded) -> zoom OUT for an overview; confident lock -> zoom IN for detail.
+        Active-inference-style: widen the receptive field to resolve uncertainty, narrow to exploit."""
+        if not ZOOM:
+            return
+        z_target = 1.0 + (ZOOM_MAX - 1.0) * (1.0 - float(np.clip(conf, 0.0, 1.0)))
+        self.z = float(np.clip(self.z + 0.3 * (z_target - self.z), 1.0, ZOOM_MAX))
 
     def _fill_sel(self, arr, cmd):
         """Fill the sel channel: LEARNED head (command code -> selection) or the scripted match."""
@@ -373,7 +394,7 @@ class HexFovea:
     def step(self, img, gaze, cmd, learn=True, train_sel=False):
         """`cmd` is the object NAME (an abstract command); the sel channel is produced by the
         LEARNED head from onehot(cmd).  train_sel=True (warmup) also fits the head to _match_target."""
-        arr = hex_sample(img, gaze, self.K)
+        arr = hex_sample(img, gaze, self._ek())              # sample at the current zoom
         if LEARN_SEL and train_sel:
             self.sel_head.train_step(arr, onehot_cmd(cmd), _match_target(arr, CMD_COLOR[cmd]))
         self._fill_sel(arr, cmd)
@@ -394,6 +415,7 @@ class HexFovea:
             if i % 3 == 0:
                 scatter_fn()
             img = render_fn(); cmd = names[i % len(names)]
+            self.z = 1.0 + (ZOOM_MAX - 1.0) * rng.random() if ZOOM else 1.0   # learn scale-invariance
             gaze = rng.uniform([F * self.K, F * self.K], [img.shape[1] - F * self.K, img.shape[0] - F * self.K])
             arr = self.step(img, gaze, cmd)
             if i % 20 == 0:
@@ -401,7 +423,8 @@ class HexFovea:
                 sys.stdout.write(f"\r\x1b[2K  [warmup hex-net] {i}/{scenes} ({100*i//scenes}%)  "
                                  f"sensor_err {se:.2f}"); sys.stdout.flush()
                 if viz is not None:
-                    viz.fovea(img, gaze, self.K, np.clip(arr[:, :, 1:], 0, 1), f"warmup {i}/{scenes}")
+                    viz.fovea(img, gaze, self._ek(), np.clip(arr[:, :, 1:], 0, 1), f"warmup {i}/{scenes}")
+        self.z = 1.0
         sys.stdout.write("\r\x1b[2K"); sys.stdout.flush()
 
     def train_selection(self, render_fn, scatter_fn, px_of, names, rng, steps=6000, viz=None):
@@ -419,12 +442,13 @@ class HexFovea:
             else:                                           # some random crops too
                 g = rng.uniform([F * K, F * K], [img.shape[1] - F * K, img.shape[0] - F * K])
             g = np.clip(g, F * K, np.array([img.shape[1], img.shape[0]]) - F * K)
-            arr = hex_sample(img, g, K)
+            zk = K * (1.0 + (ZOOM_MAX - 1.0) * rng.random()) if ZOOM else K   # train across zoom levels
+            arr = hex_sample(img, g, zk)
             tgt = (_match_target(arr, CMD_COLOR[cmd]) > 0).astype(float)   # binary: cell of cmd-object?
             self.sel_head.train_step(arr, onehot_cmd(cmd), tgt)
             if viz is not None and i % 40 == 0:
                 self._fill_sel(arr, cmd)
-                viz.fovea(img, g, K, np.clip(arr[:, :, 1:], 0, 1), f"train selection {i}/{steps}")
+                viz.fovea(img, g, zk, np.clip(arr[:, :, 1:], 0, 1), f"train selection {i}/{steps}")
             if i % 200 == 0:
                 sys.stdout.write(f"\r\x1b[2K  [train selection head] {i}/{steps}"); sys.stdout.flush()
         sys.stdout.write("\r\x1b[2K"); sys.stdout.flush()
@@ -441,14 +465,16 @@ class HexFovea:
         if com is None or sel.sum() < min_sel:              # occluded / too weak -> memory
             # still nudge the gaze toward the last seen blob if any (keeps it on the object)
             if com is not None:
-                gaze = gaze + 0.5 * warp_gaze_delta(com, center, self.K)
+                gaze = gaze + 0.5 * warp_gaze_delta(com, center, self._ek())
+            self._zoom_step(0.0)                             # lost it -> zoom OUT for an overview
             return gaze, False, arr, 0.0
         # graded confidence: strong selection mass AND the blob sits near the fovea centre
         mass = float(np.clip(sel.sum() / 6.0, 0.0, 1.0))
         centrality = float(np.exp(-np.linalg.norm(com - center) / 4.0))
         conf = mass * centrality
+        self._zoom_step(conf)                               # confident lock -> zoom IN for detail
         drive = -fovea_gradient(self.cells)                 # net active-inference drive
-        gaze = gaze + warp_gaze_delta(com, center, self.K) + np.clip(drive * 6.0, -2, 2)
+        gaze = gaze + warp_gaze_delta(com, center, self._ek()) + np.clip(drive * 6.0, -2, 2)
         return gaze, True, arr, conf
 
     def locate(self, render_fn, cmd, gaze, grid, learn=True, viz=None, label=""):
@@ -456,24 +482,29 @@ class HexFovea:
         abstract code, via the learned selection head); returns the foveated gaze (px) or None."""
         import time
         center = (F - 1) / 2.0; fov_v = np.zeros(2); seen = 0; saccade = 0; com = None
+        self.z = 1.0                                         # fresh search starts at detail; zoom out if lost
         for it in range(50):
             img = render_fn()                               # render ONCE per iteration, reuse below
             arr = self.step(img, gaze, cmd, learn)
             com = com2d(arr[:, :, 0])                       # conditioned (commanded) object in cells
             if com is not None:
+                sel = arr[:, :, 0]                          # confidence -> drives the zoom (in on lock)
+                conf = float(np.clip(sel.sum() / 6.0, 0, 1)) * float(np.exp(-np.linalg.norm(com - center) / 4.0))
+                self._zoom_step(conf)
                 drive = -fovea_gradient(self.cells)         # active-inference fovea (net-driven)
                 fov_v = 0.4 * fov_v + 0.6 * np.clip(drive * 6.0, -2, 2)
                 # error-driven follow: also pull the gaze so the object sits at the fovea centre
                 # (warp_gaze_delta -> a peripheral blob produces a LARGE saccade toward it)
-                gaze = gaze + warp_gaze_delta(com, center, self.K) + fov_v
+                gaze = gaze + warp_gaze_delta(com, center, self._ek()) + fov_v
                 seen = seen + 1 if np.linalg.norm(com - center) < 1.2 else 0
                 if seen >= 3:
                     break
-            else:                                           # not in view -> saccadic search
+            else:                                           # not in view -> zoom OUT + saccadic search
+                self._zoom_step(0.0)
                 gaze = grid[saccade % len(grid)].copy(); saccade += 1
             gaze = np.clip(gaze, F * self.K, np.array([img.shape[1], img.shape[0]]) - F * self.K)
             if viz is not None:
-                viz.fovea(img, gaze, self.K, np.clip(arr[:, :, 1:], 0, 1), f"search/follow {label}")
+                viz.fovea(img, gaze, self._ek(), np.clip(arr[:, :, 1:], 0, 1), f"search/follow {label}")
                 time.sleep(0.02)
         return gaze if (seen >= 1 or com is not None) else None
 
@@ -573,7 +604,7 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
         gaze, found, arr, conf = fovea.track_step(img, state["gaze"], state["cmd"], learn=True)
         gaze = np.clip(gaze, F * fovea.K, RES - F * fovea.K); state["gaze"] = gaze
         if viz is not None:
-            viz.fovea(img, gaze, fovea.K, crop_rgb(arr),
+            viz.fovea(img, gaze, fovea._ek(), crop_rgb(arr),
                       "fovea follows (real view; gripper occludes -> memory)")
         # (world_xy, conf): conf>0 -> a usable observation for the closed-loop grasp-target belief;
         # conf=0 (occluded/weak) -> None, the belief holds (the act11 act-on-memory pattern)
