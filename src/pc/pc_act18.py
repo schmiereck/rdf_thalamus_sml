@@ -85,15 +85,53 @@ def patch_mean(img, cx, cy, half):
     return sub.reshape(-1, 3).mean(0) / 255.0
 
 
+# --- graded-spacing FOVEATION: sharp centre + coarse, wider periphery -------------------------- #
+# The outer rings sample FURTHER OUT (expanded spacing) with proportionally LARGER pooling, so the
+# field of view grows WITHOUT extra cells and WITHOUT duplicating the centre (centres spread apart)
+# or leaving gaps (pooling fills the catchment).  px_offset(t) = K * (|t| + B*(|t|-D0)^2) for |t|>D0.
+FOVEA_GRADED = os.environ.get("ACT_FOVEA_GRADED", "0") == "1"   # off -> uniform sampling (baseline)
+FOVEA_D0 = float(os.environ.get("ACT_FOVEA_D0", "5.0"))        # cells from centre kept at full res
+FOVEA_B = float(os.environ.get("ACT_FOVEA_B", "1.0"))         # peripheral expansion strength
+
+
+def _warp(t):
+    """Signed cell-offset t -> warped offset (in K units): identity within |t|<=D0 (sharp fovea),
+    quadratically expanding beyond (coarse periphery).  Identity when graded fovea is disabled."""
+    if not FOVEA_GRADED:
+        return t
+    a = abs(t)
+    return np.sign(t) * (a + FOVEA_B * max(0.0, a - FOVEA_D0) ** 2)
+
+
+def _warp_spacing(t):
+    """Local spacing (K units) at offset t = d/dt _warp = 1 + 2B(|t|-D0)+ ; drives the pooling size."""
+    if not FOVEA_GRADED:
+        return 1.0
+    return 1.0 + 2.0 * FOVEA_B * max(0.0, abs(t) - FOVEA_D0)
+
+
+def warp_gaze_delta(com, center, K):
+    """Cell-space COM offset -> px gaze move that CENTRES it, using the SAME fovea warp (so the
+    error-driven following stays calibrated when the periphery is expanded).  Also applies HEX_DY
+    on the y axis (the row spacing), which the old uniform follow had dropped."""
+    return np.array([_warp(com[0] - center) * K, _warp(com[1] - center) * K * HEX_DY])
+
+
 def hex_sample(img, gaze, K):
     """Sample the camera image at the F×F HEX cell positions (odd rows offset half a cell) ->
     F×F×4 [sel,R,G,B].  Channel 0 (sel) is left 0 here and filled by the LEARNED SelectionHead
-    (was a scripted cosine colour match — now encapsulated in `_match_target`, used only for training)."""
-    out = np.zeros((F, F, 4)); half = max(1, K // 2)
+    (was a scripted cosine colour match — now encapsulated in `_match_target`, used only for
+    training).  With FOVEA_GRADED the outer rings sample further out (warped) and pool a bigger
+    block (peripheral blur); with it off this is the original uniform K-spaced 5x5-pool sampler."""
+    out = np.zeros((F, F, 4)); ctr = (F - 1) / 2.0
     for r in range(F):
-        cy = gaze[1] + (r - (F - 1) / 2) * K * HEX_DY
+        ir = r - ctr
+        cy = gaze[1] + _warp(ir) * K * HEX_DY
+        sp_y = _warp_spacing(ir) * K * HEX_DY
         for c in range(F):
-            cx = gaze[0] + (c + 0.5 * (r & 1) - (F - 1) / 2) * K
+            ic = c + 0.5 * (r & 1) - ctr
+            cx = gaze[0] + _warp(ic) * K
+            half = max(1, int(round(0.25 * (_warp_spacing(ic) * K + sp_y))))   # ~ local spacing / 2
             out[r, c, 1:] = patch_mean(img, cx, cy, half)
     return out
 
@@ -199,14 +237,15 @@ class HexFoveaViz:
 
     def fovea(self, frame, gaze, K, cells_rgb, txt):
         self.imI.set_data(frame)
-        w, h = F * K, F * K * HEX_DY
+        ctr = (F - 1) / 2.0
+        w = 2 * _warp(ctr) * K; h = 2 * _warp(ctr) * K * HEX_DY        # warped extent (graded -> wider)
         self.rect.set_width(w); self.rect.set_height(h); self.rect.set_xy((gaze[0] - w / 2, gaze[1] - h / 2))
         self.gz.set_data([gaze[0]], [gaze[1]])
-        xs, ys = [], []                                     # HEX sample points on the image
+        xs, ys = [], []                                     # HEX sample points on the image (warped)
         for r in range(F):
-            cy = gaze[1] + (r - (F - 1) / 2) * K * HEX_DY
+            cy = gaze[1] + _warp(r - ctr) * K * HEX_DY
             for c in range(F):
-                xs.append(gaze[0] + (c + 0.5 * (r & 1) - (F - 1) / 2) * K); ys.append(cy)
+                xs.append(gaze[0] + _warp(c + 0.5 * (r & 1) - ctr) * K); ys.append(cy)
         self.dots.set_data(xs, ys)
         for r in range(F):
             for c in range(F):
@@ -402,14 +441,14 @@ class HexFovea:
         if com is None or sel.sum() < min_sel:              # occluded / too weak -> memory
             # still nudge the gaze toward the last seen blob if any (keeps it on the object)
             if com is not None:
-                gaze = gaze + (com - center) * self.K * 0.5
+                gaze = gaze + 0.5 * warp_gaze_delta(com, center, self.K)
             return gaze, False, arr, 0.0
         # graded confidence: strong selection mass AND the blob sits near the fovea centre
         mass = float(np.clip(sel.sum() / 6.0, 0.0, 1.0))
         centrality = float(np.exp(-np.linalg.norm(com - center) / 4.0))
         conf = mass * centrality
         drive = -fovea_gradient(self.cells)                 # net active-inference drive
-        gaze = gaze + (com - center) * self.K + np.clip(drive * 6.0, -2, 2)
+        gaze = gaze + warp_gaze_delta(com, center, self.K) + np.clip(drive * 6.0, -2, 2)
         return gaze, True, arr, conf
 
     def locate(self, render_fn, cmd, gaze, grid, learn=True, viz=None, label=""):
@@ -425,7 +464,8 @@ class HexFovea:
                 drive = -fovea_gradient(self.cells)         # active-inference fovea (net-driven)
                 fov_v = 0.4 * fov_v + 0.6 * np.clip(drive * 6.0, -2, 2)
                 # error-driven follow: also pull the gaze so the object sits at the fovea centre
-                gaze = gaze + (com - center) * self.K + fov_v
+                # (warp_gaze_delta -> a peripheral blob produces a LARGE saccade toward it)
+                gaze = gaze + warp_gaze_delta(com, center, self.K) + fov_v
                 seen = seen + 1 if np.linalg.norm(com - center) < 1.2 else 0
                 if seen >= 3:
                     break
