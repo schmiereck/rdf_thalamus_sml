@@ -59,13 +59,15 @@ class VisualCortexModule(ArmModule):
 
     def track(self):
         """One follow frame (real view; gripper occludes -> memory); refresh ports.  Returns
-        world xy or None when occluded (executor then acts on the last clean estimate)."""
-        xy = self._P["track"]()
+        (world_xy, conf): conf>0 = a usable observation for the closed-loop grasp-target belief;
+        xy=None / conf=0 when occluded (executor then acts on the last clean estimate)."""
+        tr = self._P["track"]()
+        xy, conf = tr if isinstance(tr, tuple) else (tr, 0.0)   # back-compat if track() returns xy
         self.set_out("object_in_view", [0.0 if xy is None else 1.0])
         self.set_out("gaze", self._P["state"]["gaze"])
         if xy is not None:
             self.set_out("object_xy", xy)
-        return xy
+        return xy, conf
 
     def step(self) -> None:
         """Standalone agent step = one follow frame."""

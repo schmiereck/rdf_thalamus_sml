@@ -392,20 +392,25 @@ class HexFovea:
 
     def track_step(self, img, gaze, cmd, learn=True, min_sel=1.5):
         """One frame: perceive, and (if the object is CONFIDENTLY in view) drive the gaze to
-        FOLLOW it.  Returns (new_gaze, found, cells_rgb).  found=False when the object is gone
-        OR only weakly visible (the gripper is occluding it) -> the caller keeps the last
+        FOLLOW it.  Returns (new_gaze, found, cells_rgb, conf).  found=False when the object is
+        gone OR only weakly visible (the gripper is occluding it) -> the caller keeps the last
         estimate (memory) -- the act11 gaze-on-object + memory pattern, so a partial occlusion
-        never biases the estimate."""
+        never biases the estimate.  conf in [0,1] = GRADED reliability (selection mass x fovea
+        centrality), so a closed-loop servo can precision-weight the correction."""
         arr = self.step(img, gaze, cmd, learn)
         sel = arr[:, :, 0]; com = com2d(sel); center = (F - 1) / 2.0
         if com is None or sel.sum() < min_sel:              # occluded / too weak -> memory
             # still nudge the gaze toward the last seen blob if any (keeps it on the object)
             if com is not None:
                 gaze = gaze + (com - center) * self.K * 0.5
-            return gaze, False, arr
+            return gaze, False, arr, 0.0
+        # graded confidence: strong selection mass AND the blob sits near the fovea centre
+        mass = float(np.clip(sel.sum() / 6.0, 0.0, 1.0))
+        centrality = float(np.exp(-np.linalg.norm(com - center) / 4.0))
+        conf = mass * centrality
         drive = -fovea_gradient(self.cells)                 # net active-inference drive
         gaze = gaze + (com - center) * self.K + np.clip(drive * 6.0, -2, 2)
-        return gaze, True, arr
+        return gaze, True, arr, conf
 
     def locate(self, render_fn, cmd, gaze, grid, learn=True, viz=None, label=""):
         """SEARCH (saccade over `grid`) then FOLLOW (error-driven) the commanded object (by its
@@ -525,12 +530,14 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
 
     def track():
         img = sim.render(CAM)                                 # REAL view: the arm genuinely occludes
-        gaze, found, arr = fovea.track_step(img, state["gaze"], state["cmd"], learn=True)
+        gaze, found, arr, conf = fovea.track_step(img, state["gaze"], state["cmd"], learn=True)
         gaze = np.clip(gaze, F * fovea.K, RES - F * fovea.K); state["gaze"] = gaze
         if viz is not None:
             viz.fovea(img, gaze, fovea.K, crop_rgb(arr),
                       "fovea follows (real view; gripper occludes -> memory)")
-        return px_to_world(gaze) if found else None           # None when occluded -> grasp uses memory
+        # (world_xy, conf): conf>0 -> a usable observation for the closed-loop grasp-target belief;
+        # conf=0 (occluded/weak) -> None, the belief holds (the act11 act-on-memory pattern)
+        return (px_to_world(gaze), conf) if found else (None, 0.0)
 
     return {"fovea": fovea, "perceive": perceive, "track": track, "viz": viz,
             "render_perc": render_perc, "grid": grid, "px_to_world": px_to_world,
@@ -548,7 +555,8 @@ def main():
     LIFELONG = os.environ.get("ACT18_LIFELONG", "1") == "1"     # Phase 2: refine kinematics online
     PERTURB = float(os.environ.get("ACT18_PERTURB", "0.0"))     # lengthen the forearm (m) post-babble
     TRACK = os.environ.get("ACT18_TRACK", "1") == "1"           # 0 = skip the (slow) fovea tracking
-    rng = np.random.default_rng(0)
+    SERVO = os.environ.get("ACT18_SERVO", "0") == "1"           # closed-loop: live fovea corrects the
+    rng = np.random.default_rng(0)                              # grasp-target belief (needs TRACK)
 
     print(f"act18 — learned hex-net camera fovea + error-driven following gaze  cam={CAM}")
     sim = BracketArmSim(render_wh=(RES, RES))
@@ -592,7 +600,7 @@ def main():
     # viz is driven by track() (live arm view + following fovea); don't let run_combined overwrite it
     act16.run_combined(sim, body, None if viz is not None else viz, CAM, episodes=EPISODES,
                        cmd_fixed=CMD, perceive_fn=perceive, track_fn=(track if TRACK else None),
-                       lifelong=LIFELONG)
+                       lifelong=LIFELONG, servo=SERVO)
     if PERTURB:
         print(f"  learned-kinematics FK error after episodes ({'LIFELONG on' if LIFELONG else 'frozen'}):"
               f" {fk_err()*1000:.1f} mm")

@@ -38,6 +38,8 @@ PUSH_LIFT_Z = 0.07                              # raise the claws to move behind
 STANDOFF, NEAR, TOL, CAP = 0.045, 0.02, 0.025, 2200
 GRASP_OFFSET = 0.002                            # grasp height = object_half_height + this (cube -> 0.014)
 GRASP_MAX_HALF = 0.016                          # footprint half above which an object is too wide to grasp
+SERVO_K, SERVO_CONF, SERVO_LOST = 0.5, 0.5, 6   # closed-loop grasp-target belief: correction gain,
+#   min track-confidence to update, frames of low confidence before a saccadic re-acquire
 SIZE_ADAPT = os.environ.get("ACT_SIZE_ADAPT", "1") == "1"    # (c) derive grasp heights from object size
 PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene between episodes
 
@@ -108,7 +110,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                  mixed=False, track_fn=None, lifelong=False, log_fn=None, policy_fn=None,
                  episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None,
                  ood_rate=0.0, ood_rng=None, size_fn=None, tol=None, carry_target_fn=None,
-                 post_goal_fn=None, macro_log_fn=None):
+                 post_goal_fn=None, macro_log_fn=None, servo=False):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -212,6 +214,10 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         mode = force or mode_perc or "grasp"
         phase = "over" if mode == "grasp" else "approach"
         dwell = 0; via = "grasp"; done = False; grasp_retry = 0
+        # closed-loop grasp-target BELIEF: starts at the up-front perception, then the live fovea
+        # CORRECTS it each frame (precision-weighted, occlusion-gated) instead of freezing the snapshot
+        obj_belief = (cube_plan.copy() if cube_plan is not None else None) if servo else None
+        servo_lost = 0
         for k in range(cap):
             c_true = sim.obj_pos(cmd)[:2]; cz = sim.obj_pos(cmd)[2]; h = sim.grasp_pos(); hxy = h[:2]; hz = h[2]
             tgt_eff = tgt                                     # routed carry target (obstacle): once the
@@ -222,13 +228,27 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             # FOLLOW the object live while approaching it; when it is occluded (gripper over it)
             # the tracker returns None and we keep the last estimate (memory) — the act11 pattern.
             if track_fn is not None and k % 4 == 0:           # follow live: drives the gaze + viz +
-                track_fn()                                   # lifelong net learning, and SHOWS the
-                #   real-view occlusion.  It does NOT overwrite the grasp estimate: the agent acts
-                #   on the clean up-front perception as MEMORY (the act11 act-on-memory pattern),
-                #   so a partial real-view occlusion never biases the grasp.
-            # use the PERCEIVED cube position for the grasp approach (cube is static then); the
-            # true position is used once the cube is grabbed / for the fallback and the measure.
-            c = cube_plan if (cube_plan is not None and phase in ("over", "lower", "close")) else c_true
+                tr = track_fn()                              # lifelong net learning, and SHOWS the
+                #   real-view occlusion.  WITHOUT servo it does NOT overwrite the grasp estimate (the
+                #   agent acts on the clean up-front perception as MEMORY, the act11 pattern).  WITH
+                #   servo the SAME observation CLOSES THE LOOP: it corrects the grasp-target belief.
+                if servo and obj_belief is not None and isinstance(tr, tuple) \
+                        and phase in ("over", "lower"):
+                    obs, conf = tr
+                    if obs is not None and conf >= SERVO_CONF:          # confident view -> correct
+                        obj_belief = obj_belief + SERVO_K * conf * (np.asarray(obs, float) - obj_belief)
+                        servo_lost = 0
+                    else:                                              # lost it (occluded/weak)
+                        servo_lost += 1
+                        if servo_lost >= SERVO_LOST and perceive_fn is not None:
+                            fresh, _, _ = perceive_fn(cmd)             # saccadic RE-ACQUIRE ("stochern")
+                            if fresh is not None:
+                                obj_belief = np.asarray(fresh, float)
+                            servo_lost = 0
+            # grasp approach aims at the BELIEF (servo: live-corrected) or the frozen perception;
+            # the true position is used once the cube is grabbed / for the fallback and the measure.
+            grasp_src = obj_belief if (servo and obj_belief is not None) else cube_plan
+            c = grasp_src if (grasp_src is not None and phase in ("over", "lower", "close")) else c_true
             if via == "push" and np.linalg.norm(c - tgt) < tol:  # pushed home -> done
                 break
             if policy_fn is not None and np.linalg.norm(c_true - tgt_true) < tol and cz < 0.035:
