@@ -135,15 +135,23 @@ class SelectionHead:
     colour, so the head must LEARN which colour each code refers to (objects keep consistent colours).
     Trained self-supervised in the warmup with `_match_target` (the true colour) as the target."""
 
-    def __init__(self, n_cmd=N_CMD, hid=32, lr=0.08, rng=None):
+    def __init__(self, n_cmd=N_CMD, hid=48, lr=0.08, rng=None):
         rng = rng or np.random.default_rng(0)
-        din = 3 + n_cmd
+        din = 6 + n_cmd                                   # raw RGB + chroma (RGB / luminance)
         self.W1 = rng.normal(0, 1 / np.sqrt(din), (hid, din)); self.b1 = np.zeros(hid)
         self.W2 = rng.normal(0, 1 / np.sqrt(hid), hid); self.b2 = 0.0
         self.lr = lr; self.n_cmd = n_cmd
 
+    def _feat(self, rgb_flat):
+        """Augment raw RGB with CHROMA (RGB normalised by luminance).  Under the scene lighting the
+        raw colours wash out (green renders near-grey, blue greenish) so raw RGB cannot separate
+        blue from green; the brightness-invariant chroma carries the HUE that does."""
+        s = rgb_flat.sum(1, keepdims=True) + 1e-6
+        return np.concatenate([rgb_flat, rgb_flat / s], 1)        # (N, 6)
+
     def _x(self, rgb_flat, code):
-        return np.concatenate([rgb_flat, np.tile(np.asarray(code, float), (len(rgb_flat), 1))], 1)
+        f = self._feat(rgb_flat)
+        return np.concatenate([f, np.tile(np.asarray(code, float), (len(f), 1))], 1)
 
     def predict_sheet(self, rgb_sheet, code):
         rgb = rgb_sheet[:, :, 1:].reshape(-1, 3)
@@ -494,7 +502,7 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
             print("  training the command-conditioned selection head ...")   # meaningful sel channel)
         px_of = lambda nm: A @ sim.obj_pos(nm)[:2] + b
         fovea.train_selection(render_train, scatter_train, px_of, list(CMD_COLOR),
-                              np.random.default_rng(13), steps=6000, viz=viz)
+                              np.random.default_rng(13), steps=9000, viz=viz)
 
     if verbose:
         print("  warming up the hex perception net on the camera ...")
