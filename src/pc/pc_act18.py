@@ -523,23 +523,34 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
     def render_perc():
         sim._renderer.update_scene(sim.d, camera=CAM, scene_option=perc_opt); return sim._renderer.render()
 
-    # affine world<->px calibration (red cube at known spots, others parked aside)
+    # PERSPECTIVE (homography) world<->px calibration: the panned, parallel-aligned camera has strong
+    # perspective the old AFFINE map could not capture (affine residual ~9mm/26mm -> homography 0.4mm).
+    # A planar homography is exact for the flat table plane under a pinhole camera (red cube at known
+    # spots, others parked aside).
     crng = np.random.default_rng(3); W, P = [], []
     sim.reset_home()
     for o in CMD_COLOR:
         if o != "obj_red":
             sim.set_object(o, [0.33, 0.33])
-    for _ in range(16):
+    for _ in range(40):
         p = _rand_xy(crng); sim.set_object("obj_red", p); mujoco.mj_forward(sim.m, sim.d)
         px = detect_px(render_perc(), CMD_COLOR["obj_red"])
         if px is not None:
-            W.append([p[0], p[1], 1.0]); P.append(px)
+            W.append([p[0], p[1]]); P.append([px[0], px[1]])
     W, P = np.array(W), np.array(P)
-    Hx = np.linalg.lstsq(W, P[:, 0], rcond=None)[0]; Hy = np.linalg.lstsq(W, P[:, 1], rcond=None)[0]
-    A = np.array([Hx[:2], Hy[:2]]); b = np.array([Hx[2], Hy[2]]); Ainv = np.linalg.inv(A)
-    px_to_world = lambda px: Ainv @ (np.asarray(px, float) - b)
+    Mh = []                                                   # DLT: solve the 8-DOF homography world-plane -> px
+    for (x, y), (u, v) in zip(W, P):
+        Mh.append([x, y, 1, 0, 0, 0, -u * x, -u * y, -u])
+        Mh.append([0, 0, 0, x, y, 1, -v * x, -v * y, -v])
+    Hmat = np.linalg.svd(np.array(Mh))[2][-1].reshape(3, 3); Hinv = np.linalg.inv(Hmat)
+
+    def world_to_px(w):
+        q = Hmat @ np.array([w[0], w[1], 1.0]); return q[:2] / q[2]
+
+    def px_to_world(px):
+        q = Hinv @ np.array([float(px[0]), float(px[1]), 1.0]); return q[:2] / q[2]
     corners = np.array([[REACH_XY[i][0], REACH_XY[j][1]] for i in (0, 1) for j in (0, 1)])
-    cpx = np.array([A @ c + b for c in corners])
+    cpx = np.array([world_to_px(c) for c in corners])
     pmin = np.maximum(cpx.min(0) - 10, F * fovea.K).astype(float); pmax = np.minimum(cpx.max(0) + 10, RES - F * fovea.K).astype(float)
     grid = [np.array([x, y]) for y in np.linspace(pmin[1], pmax[1], 3) for x in np.linspace(pmin[0], pmax[0], 3)]
 
@@ -576,7 +587,7 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
     if LEARN_SEL:                                              # train the command-conditioned selection
         if verbose:                                            # head FIRST (so the warmup net sees a
             print("  training the command-conditioned selection head ...")   # meaningful sel channel)
-        px_of = lambda nm: A @ sim.obj_pos(nm)[:2] + b
+        px_of = lambda nm: world_to_px(sim.obj_pos(nm)[:2])
         fovea.train_selection(render_train, scatter_train, px_of, list(CMD_COLOR),
                               np.random.default_rng(13), steps=9000, viz=viz)
 

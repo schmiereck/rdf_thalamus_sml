@@ -44,8 +44,10 @@
 
     <!-- overhead cameras -->
     <camera name="top" pos="0 0.13 0.55" euler="0 0 0" fovy="45"/>           <!-- straight down -->
-    <camera name="overview" pos="-0.16 0.17 0.34" mode="targetbody" target="ws_center" fovy="58"/>
-    <body name="ws_center" pos="0 0.13 0.02"><geom type="sphere" size="0.001" contype="0" conaffinity="0" rgba="1 1 1 0"/></body>
+    <!-- overview: panned to look PARALLEL to the work surface (aim y == camera y -> zero y in the view
+         direction), base nearly out to the right, wider fovy for the enlarged workspace -->
+    <camera name="overview" pos="-0.17 0.15 0.32" mode="targetbody" target="ws_center" fovy="64"/>
+    <body name="ws_center" pos="0 0.15 0.02"><geom type="sphere" size="0.001" contype="0" conaffinity="0" rgba="1 1 1 0"/></body>
 
     <!-- ===================== the arm ===================== -->
     <body name="base_link" pos="0 0 0" childclass="arm">

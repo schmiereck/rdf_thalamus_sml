@@ -278,10 +278,12 @@ def run_learned_reach(sim, viz, CAM, HEADLESS):
         print("  [viz] close the window to exit."); viz.hold()
 
 
+_RX0 = float(os.environ.get("ACT_REACH_X0", "-0.17"))          # LEFT edge: extended from -0.11 (arm reaches
+_RX1 = float(os.environ.get("ACT_REACH_X1", "0.12"))           #   to ~-0.24; -0.17 keeps ~7% reach margin)
 _RY0 = float(os.environ.get("ACT_REACH_Y0", "0.07"))           # near edge of the reachable table patch
-_RY1 = float(os.environ.get("ACT_REACH_Y1", "0.21"))           # far edge (env-overridable for A/B tuning)
-REACH_XY = (np.array([-0.11, _RY0]), np.array([0.11, _RY1]))   # reachable table patch (x,y): default is the
-#   measured graspable footprint at grasp height; near edge can be pushed out (away from the base) via env
+_RY1 = float(os.environ.get("ACT_REACH_Y1", "0.21"))           # far edge (all env-overridable for A/B tuning)
+REACH_XY = (np.array([_RX0, _RY0]), np.array([_RX1, _RY1]))    # reachable table patch (x,y): enlarged LEFT to
+#   match the physical workspace + the panned parallel camera (the arm reaches further than we used)
 
 
 def _rand_xy(rng):
