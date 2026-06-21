@@ -89,7 +89,9 @@ def patch_mean(img, cx, cy, half):
 # The outer rings sample FURTHER OUT (expanded spacing) with proportionally LARGER pooling, so the
 # field of view grows WITHOUT extra cells and WITHOUT duplicating the centre (centres spread apart)
 # or leaving gaps (pooling fills the catchment).  px_offset(t) = K * (|t| + B*(|t|-D0)^2) for |t|>D0.
-FOVEA_GRADED = os.environ.get("ACT_FOVEA_GRADED", "1") == "1"   # DEFAULT ON; =0 -> uniform (baseline)
+FOVEA_GRADED = os.environ.get("ACT_FOVEA_GRADED", "0") == "1"   # DEFAULT OFF: the periphery blur shrinks
+#   the SHARP centre (64px->40px) so the cube becomes a blob (its orientation is lost) and edge/marker/
+#   base/board mislocalizations rise; the cold-acquisition gain was masked by the servo in the loop.
 FOVEA_D0 = float(os.environ.get("ACT_FOVEA_D0", "5.0"))        # cells from centre kept at full res
 FOVEA_B = float(os.environ.get("ACT_FOVEA_B", "1.0"))         # peripheral expansion strength
 # NET-STEERABLE ZOOM: the fovea can widen its sampling (up to 2x the AREA = sqrt(2)x linear) to get an
