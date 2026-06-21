@@ -186,9 +186,13 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         keep = [cmd] + list(rng.choice(others(cmd), max(0, min(SCENE_N - 1, len(OBJS) - 1)), replace=False))
         for i, o in enumerate([o for o in OBJS if o not in keep]):
             sim.set_object(o, np.array([0.55 + 0.06 * i, 0.55]))   # parked far off-camera + out of reach
-        # occasionally MIX IN an elongated (2:1) object -- a shape variation in the data (mostly cubes)
-        if ELONG_RATE > 0 and float(rng.random()) < ELONG_RATE:
-            eo = str(rng.choice(keep))
+        # occasionally MIX IN an elongated (2:1) object -- a shape variation in the data (mostly cubes).
+        # DISTRACTOR ONLY (never the commanded target): the cube-trained policy can't grasp an elongated
+        # object across its short axis yet (the deferred orientation-grasp work) -- it would close the
+        # claw early / on the wrong axis.  As a distractor it just adds shape variety for perception.
+        distract = [o for o in keep if o != cmd]
+        if ELONG_RATE > 0 and distract and float(rng.random()) < ELONG_RATE:
+            eo = str(rng.choice(distract))
             sim.set_object_size(eo, ELONG_HALF)
             sim.set_object(eo, sim.obj_pos(eo)[:2], z=float(ELONG_HALF[2]), yaw=float(rng.uniform(0, np.pi)))
         mujoco.mj_forward(sim.m, sim.d); sim.step(40)
