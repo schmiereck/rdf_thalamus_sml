@@ -40,6 +40,9 @@ GRASP_OFFSET = 0.002                            # grasp height = object_half_hei
 GRASP_MAX_HALF = 0.016                          # footprint half above which an object is too wide to grasp
 SERVO_K, SERVO_CONF, SERVO_LOST = 0.5, 0.5, 6   # closed-loop grasp-target belief: correction gain,
 #   min track-confidence to update, frames of low confidence before a saccadic re-acquire
+MAX_REACQ = 2                                   # cap re-acquires per episode: a persistent track failure
+#   must not loop perceive() forever (the fovea visibly re-searching every few seconds) -- then hold
+PHASE_STALL = 500                               # steps in ONE phase before the episode gives up (stuck arm)
 SIZE_ADAPT = os.environ.get("ACT_SIZE_ADAPT", "1") == "1"    # (c) derive grasp heights from object size
 PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene between episodes
 SCENE_N = int(os.environ.get("ACT16_SCENE_N", "3"))         # objects PLACED per episode (cmd + distractors);
@@ -231,8 +234,13 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         # closed-loop grasp-target BELIEF: starts at the up-front perception, then the live fovea
         # CORRECTS it each frame (precision-weighted, occlusion-gated) instead of freezing the snapshot
         obj_belief = (cube_plan.copy() if cube_plan is not None else None) if servo else None
-        servo_lost = 0
+        servo_lost = 0; reacquires = 0
+        last_phase = phase; phase_age = 0                    # STALL-ESCAPE: don't hang in one phase forever
         for k in range(cap):
+            phase_age = phase_age + 1 if phase == last_phase else 0
+            last_phase = phase
+            if phase_age > PHASE_STALL:                       # stuck (e.g. can't reach the believed object)
+                break                                         # -> give up this episode instead of looping
             c_true = sim.obj_pos(cmd)[:2]; cz = sim.obj_pos(cmd)[2]; h = sim.grasp_pos(); hxy = h[:2]; hz = h[2]
             tgt_eff = tgt                                     # routed carry target (obstacle): once the
             if carry_target_fn is not None and cz > 0.03:     # object is lifted, follow the planned route
@@ -254,11 +262,11 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                         servo_lost = 0
                     else:                                              # lost it (occluded/weak)
                         servo_lost += 1
-                        if servo_lost >= SERVO_LOST and perceive_fn is not None:
+                        if servo_lost >= SERVO_LOST and perceive_fn is not None and reacquires < MAX_REACQ:
                             fresh, _, _ = perceive_fn(cmd)             # saccadic RE-ACQUIRE ("stochern")
                             if fresh is not None:
                                 obj_belief = np.asarray(fresh, float)
-                            servo_lost = 0
+                            servo_lost = 0; reacquires += 1           # bounded: then hold the belief
             # grasp approach aims at the BELIEF (servo: live-corrected) or the frozen perception;
             # the true position is used once the cube is grabbed / for the fallback and the measure.
             grasp_src = obj_belief if (servo and obj_belief is not None) else cube_plan
