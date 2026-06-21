@@ -29,7 +29,7 @@ from pc.pc_act14 import BracketArmSim, ArmBodyModel3D, HOME, _rand_xy, CamViz, R
 
 J5_OPEN, J5_GRIP, J5_PUSH = 1.8, 0.0, 0.55     # open / fully-closed (grip) / partly-open
 #                              (push: claws spread ~40mm to contact a wide block's face at 2 points)
-OBJS = ["obj_red", "obj_green", "obj_blue"]
+OBJS = ["obj_red", "obj_green", "obj_blue", "obj_yellow", "obj_cyan"]
 CUBE_HALF = np.array([0.012, 0.012, 0.012])     # graspable cube
 WIDE_HALF = np.array([0.024, 0.024, 0.010])     # wide SQUARE block: too wide to grasp -> push
 #                                                 (square so the push direction doesn't matter)

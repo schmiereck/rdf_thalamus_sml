@@ -33,7 +33,8 @@ from pc.pc_act14 import BracketArmSim, ArmBodyModel3D, REACH_XY, _rand_xy, ARM3
 import pc.pc_act16 as act16
 
 CMD_COLOR = {"obj_red": np.array([0.9, 0.1, 0.1]), "obj_green": np.array([0.1, 0.85, 0.1]),
-             "obj_blue": np.array([0.15, 0.3, 0.95])}
+             "obj_blue": np.array([0.15, 0.3, 0.95]), "obj_yellow": np.array([0.9, 0.85, 0.1]),
+             "obj_cyan": np.array([0.1, 0.8, 0.85])}
 MAGENTA = np.array([1., 0, 1.])
 MATCH_TH = 0.86
 HEX_DY = 0.8660254              # row spacing of a hex lattice (sqrt(3)/2)
@@ -152,7 +153,7 @@ def set_sheet4(cells, arr):
 # --------------------------------------------------------------------------- #
 # Object selection: an ABSTRACT command code (one-hot object id) + a LEARNED head, replacing the
 # scripted cosine colour match.  The command carries NO colour — the head LEARNS code -> appearance.
-CMD_INDEX = {"obj_red": 0, "obj_green": 1, "obj_blue": 2}
+CMD_INDEX = {"obj_red": 0, "obj_green": 1, "obj_blue": 2, "obj_yellow": 3, "obj_cyan": 4}
 N_CMD = len(CMD_INDEX)
 LEARN_SEL = os.environ.get("ACT_LEARN_SEL", "1") == "1"   # 1 = learned selection head; 0 = scripted match
 
@@ -164,14 +165,18 @@ def onehot_cmd(cmd):
 
 
 def _match_target(rgb_sheet, true_rgb):
-    """The OLD scripted cosine colour-match selection, kept ONLY as the SelectionHead's TRAINING
-    target: luminance where a cell's colour matches `true_rgb`, else 0.  (true_rgb is used to make
-    the target — the head's INPUT never sees it.)"""
+    """The scripted colour-match selection, the SelectionHead's TRAINING target: luminance where a
+    cell's colour matches `true_rgb`, else 0.  DISCRIMINATIVE (nearest-colour): a cell counts for
+    `true_rgb` only if `true_rgb` is the BEST-matching of ALL commanded colours -- a plain cosine
+    threshold cross-labelled adjacent colours (cos(red,yellow)~0.87 > 0.86 -> red cells were tagged
+    'yellow', and blue cells 'cyan'), which taught the head to conflate them."""
+    rgb = rgb_sheet[:, :, 1:]; lum = rgb.sum(2)           # (F,F,3), (F,F)
+    rn = rgb / (np.linalg.norm(rgb, axis=2, keepdims=True) + 1e-6)
+    cols = np.array([c / (np.linalg.norm(c) + 1e-9) for c in CMD_COLOR.values()])   # (K,3)
+    best = (rn @ cols.T).max(2)                            # best cosine to ANY commanded colour
     cn = np.asarray(true_rgb, float); cn = cn / (np.linalg.norm(cn) + 1e-9)
-    rgb = rgb_sheet[:, :, 1:]                              # (F,F,3)
-    lum = rgb.sum(2)
-    cos = (rgb @ cn) / (np.linalg.norm(rgb, axis=2) + 1e-6)
-    return np.where((lum > 0.18) & (cos > MATCH_TH), lum, 0.0)   # (F,F)
+    this = rn @ cn                                         # cosine to the queried colour
+    return np.where((lum > 0.18) & (this > MATCH_TH) & (this >= best - 1e-6), lum, 0.0)
 
 
 class SelectionHead:
@@ -180,11 +185,15 @@ class SelectionHead:
     colour, so the head must LEARN which colour each code refers to (objects keep consistent colours).
     Trained self-supervised in the warmup with `_match_target` (the true colour) as the target."""
 
-    def __init__(self, n_cmd=N_CMD, hid=48, lr=0.08, rng=None):
+    def __init__(self, n_cmd=N_CMD, hid=64, hid2=32, lr=0.08, rng=None):
         rng = rng or np.random.default_rng(0)
-        din = 6 + n_cmd                                   # raw RGB + chroma (RGB / luminance)
+        din = 6 + n_cmd + 3 * n_cmd                       # rgb + chroma + onehot + (onehot (x) chroma)
+        # TWO hidden layers: secondary colours (yellow=R+G, cyan=G+B) sit at the CENTROID of their
+        # primaries in feature space -> a single linear-ish layer responds to the components and cannot
+        # isolate them; a 2-layer MLP forms the localized "bump" detector that can.
         self.W1 = rng.normal(0, 1 / np.sqrt(din), (hid, din)); self.b1 = np.zeros(hid)
-        self.W2 = rng.normal(0, 1 / np.sqrt(hid), hid); self.b2 = 0.0
+        self.W2 = rng.normal(0, 1 / np.sqrt(hid), (hid2, hid)); self.b2 = np.zeros(hid2)
+        self.W3 = rng.normal(0, 1 / np.sqrt(hid2), hid2); self.b3 = 0.0
         self.lr = lr; self.n_cmd = n_cmd
 
     def _feat(self, rgb_flat):
@@ -195,22 +204,31 @@ class SelectionHead:
         return np.concatenate([rgb_flat, rgb_flat / s], 1)        # (N, 6)
 
     def _x(self, rgb_flat, code):
-        f = self._feat(rgb_flat)
-        return np.concatenate([f, np.tile(np.asarray(code, float), (len(f), 1))], 1)
+        f = self._feat(rgb_flat)                                  # (N,6) [rgb, chroma]
+        code = np.asarray(code, float)
+        codet = np.tile(code, (len(f), 1))                        # (N, K) the command
+        # MULTIPLICATIVE command (x) chroma interactions: lets the head directly weight "this command
+        # AND this hue", so 5 adjacent colours (yellow=R+G, cyan=G+B) stop collapsing to a bias
+        inter = (f[:, 3:, None] * code[None, None, :]).reshape(len(f), -1)   # (N, 3K)
+        return np.concatenate([f, codet, inter], 1)
 
     def predict_sheet(self, rgb_sheet, code):
         rgb = rgb_sheet[:, :, 1:].reshape(-1, 3)
-        h = np.tanh(self._x(rgb, code) @ self.W1.T + self.b1)
-        return np.clip(h @ self.W2 + self.b2, 0.0, None).reshape(F, F)
+        a1 = np.tanh(self._x(rgb, code) @ self.W1.T + self.b1)
+        a2 = np.tanh(a1 @ self.W2.T + self.b2)
+        return np.clip(a2 @ self.W3 + self.b3, 0.0, None).reshape(F, F)
 
     def train_step(self, rgb_sheet, code, target):
         rgb = rgb_sheet[:, :, 1:].reshape(-1, 3); X = self._x(rgb, code)
-        h = np.tanh(X @ self.W1.T + self.b1)
-        pred = h @ self.W2 + self.b2
-        e = (pred - target.reshape(-1)) / len(rgb)
-        self.W2 -= self.lr * (e @ h); self.b2 -= self.lr * float(e.sum())
-        dh = np.outer(e, self.W2) * (1 - h ** 2)
-        self.W1 -= self.lr * dh.T @ X; self.b1 -= self.lr * dh.sum(0)
+        a1 = np.tanh(X @ self.W1.T + self.b1)
+        a2 = np.tanh(a1 @ self.W2.T + self.b2)
+        pred = a2 @ self.W3 + self.b3
+        e = (pred - target.reshape(-1)) / len(rgb)                # (N,)
+        self.W3 -= self.lr * (e @ a2); self.b3 -= self.lr * float(e.sum())
+        d2 = np.outer(e, self.W3) * (1 - a2 ** 2)                 # (N, hid2)
+        self.W2 -= self.lr * d2.T @ a1; self.b2 -= self.lr * d2.sum(0)
+        d1 = (d2 @ self.W2) * (1 - a1 ** 2)                       # (N, hid)
+        self.W1 -= self.lr * d1.T @ X; self.b1 -= self.lr * d1.sum(0)
         return float(np.mean((pred - target.reshape(-1)) ** 2))
 
 
@@ -589,7 +607,7 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
             print("  training the command-conditioned selection head ...")   # meaningful sel channel)
         px_of = lambda nm: world_to_px(sim.obj_pos(nm)[:2])
         fovea.train_selection(render_train, scatter_train, px_of, list(CMD_COLOR),
-                              np.random.default_rng(13), steps=9000, viz=viz)
+                              np.random.default_rng(13), steps=14000, viz=viz)
 
     if verbose:
         print("  warming up the hex perception net on the camera ...")
@@ -662,7 +680,7 @@ def main():
     if PERCEPT:                                              # perception-only accuracy test
         prng = np.random.default_rng(3); errs = 0.0; n = 0
         for ep in range(EPISODES):
-            cmd = CMD or list(CMD_COLOR)[ep % 3]
+            cmd = CMD or list(CMD_COLOR)[ep % len(CMD_COLOR)]
             for o in CMD_COLOR:
                 sim.set_object(o, _rand_xy(prng))
             mujoco.mj_forward(sim.m, sim.d)
