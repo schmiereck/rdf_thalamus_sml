@@ -42,6 +42,10 @@ SERVO_K, SERVO_CONF, SERVO_LOST = 0.5, 0.5, 6   # closed-loop grasp-target belie
 #   min track-confidence to update, frames of low confidence before a saccadic re-acquire
 SIZE_ADAPT = os.environ.get("ACT_SIZE_ADAPT", "1") == "1"    # (c) derive grasp heights from object size
 PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene between episodes
+SCENE_N = int(os.environ.get("ACT16_SCENE_N", "3"))         # objects PLACED per episode (cmd + distractors);
+#   the rest of OBJS are parked off-table -- keeps the scene at ~3 like before despite 5 commandable colours
+ELONG_RATE = float(os.environ.get("ACT16_ELONG", "0.25"))   # fraction of episodes with ONE elongated (2:1)
+ELONG_HALF = np.array([0.024, 0.012, 0.012])                # object mixed into the data (a shape variation)
 
 
 def _push_subgoal(hxy, hz, c, t):
@@ -175,8 +179,18 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             sim.reset_home(); scatter()
         sim.target("joint_3", HOME["joint_3"]); sim.target("joint_5", J5_OPEN)
         cmd = cmd_fixed or OBJS[ep % len(OBJS)]               # cycle which cube to fetch
+        # SCENE DENSITY: place SCENE_N objects (the commanded one + distractors); park the rest off-table
+        keep = [cmd] + list(rng.choice(others(cmd), max(0, min(SCENE_N - 1, len(OBJS) - 1)), replace=False))
+        for i, o in enumerate([o for o in OBJS if o not in keep]):
+            sim.set_object(o, np.array([0.55 + 0.06 * i, 0.55]))   # parked far off-camera + out of reach
+        # occasionally MIX IN an elongated (2:1) object -- a shape variation in the data (mostly cubes)
+        if ELONG_RATE > 0 and float(rng.random()) < ELONG_RATE:
+            eo = str(rng.choice(keep))
+            sim.set_object_size(eo, ELONG_HALF)
+            sim.set_object(eo, sim.obj_pos(eo)[:2], z=float(ELONG_HALF[2]), yaw=float(rng.uniform(0, np.pi)))
+        mujoco.mj_forward(sim.m, sim.d); sim.step(40)
         c0 = sim.obj_pos(cmd)[:2]
-        cmd_half = geom_half(cmd)                             # ACTUAL size (cube, or a mixed WIDE block)
+        cmd_half = geom_half(cmd)                             # ACTUAL size (cube, or a mixed elongated block)
         ood_ep = ood_rate > 0 and float(ood_rng.random()) < ood_rate
         if ood_ep:                                            # GENERALIZATION PROBE: a NOVEL object for the
             fp = float(ood_rng.uniform(0.010, 0.015))         # VISUAL-recognition test — varied FOOTPRINT
