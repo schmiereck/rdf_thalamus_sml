@@ -53,28 +53,11 @@ def main():
     motor = MotorModule(rng=np.random.default_rng(2))
     curio = CuriosityPlanner(gm, rng=np.random.default_rng(1))
 
-    # CLOSE THE PERCEPTION LOOP IN TRAINING: set up the camera VisualCortex BEFORE the demos so the
-    # policy is TRAINED on the SAME camera-perceived (+ servo-corrected) positions it is TESTED on.
-    # Privileged-demo training vs camera test was a measured train/test MISMATCH (camera-test delivery
-    # 6/14 with privileged demos -> 9/14 with camera demos) -- the parallel camera amplified it.  All
-    # branches REUSE this one vc so demos and test always match.  ACT21_DEMO_CAM=0 = old privileged demos.
-    DEMO_CAM = os.environ.get("ACT21_DEMO_CAM", "1") == "1"
-    from pc.arm_modules import VisualCortexModule
-    vc, vcP = VisualCortexModule.from_sim(sim, CAM, RES, headless=HEADLESS)
-    def cam_perceive(cmd):
-        return vc.perceive(cmd), None, "grasp"
-    def cam_track():
-        return vc.track()
-
     Xs, Ys = [], []
     def log(state, aim, j5):
         Xs.append(state.copy()); Ys.append(np.array([aim[0], aim[1], aim[2], j5]))
-    print(f"  collecting reactive-teacher demos ({COLLECT} eps{', THROUGH the camera' if DEMO_CAM else ''}) ...")
-    if DEMO_CAM:                                           # demos through the camera + servo (match test)
-        act16.run_combined(sim, bm.body, None, CAM, episodes=COLLECT, policy_fn=act16.reactive_subgoal,
-                           log_fn=log, perceive_fn=cam_perceive, track_fn=cam_track, servo=True)
-    else:
-        act16.run_combined(sim, bm.body, None, CAM, episodes=COLLECT, policy_fn=act16.reactive_subgoal, log_fn=log)
+    print(f"  collecting reactive-teacher demos ({COLLECT} eps) ...")
+    act16.run_combined(sim, bm.body, None, CAM, episodes=COLLECT, policy_fn=act16.reactive_subgoal, log_fn=log)
     baseX, baseY = np.array(Xs), np.array(Ys)             # anchor demos (kept for online DAgger shaping)
     motor.fit(baseX, baseY)
 
@@ -82,7 +65,7 @@ def main():
     print(f"    IK babble reconstruction: {bm.learn_inverse(sim, rng=np.random.default_rng(11)):.2f} mm")
 
     agent = ArmAgent("researching-arm")
-    for m in (curio, motor, bm, vc):
+    for m in (curio, motor, bm):
         agent.add(m)
     print(agent.summary())
 
@@ -171,9 +154,11 @@ def main():
         if not HEADLESS:
             try:
                 from pc.pc_act18 import SurpriseViz
+                from pc.arm_modules import VisualCortexModule
+                vc, _P = VisualCortexModule.from_sim(sim, CAM, RES, headless=False); agent.add(vc)
                 sviz = SurpriseViz(title="act21 3b — dense-shaping + walls + lifelong"); viz_obj = vc.viz or sviz
                 def perceive(cmd):
-                    return cam_perceive(cmd)                   # REUSE the early vc (trained the demos)
+                    return vc.perceive(cmd), None, "grasp"
                 def trackf():
                     obs = vc.track(); track_pen()             # (xy, conf) -> feeds the closed-loop servo
                     dd = vc.surprise(); ps = curio.surprise()
@@ -252,19 +237,18 @@ def main():
 
     if HEADLESS:
         act16.run_combined._quiet = True
-        _cp = dict(perceive_fn=cam_perceive, track_fn=cam_track, servo=True) if DEMO_CAM else {}
         # --- A: frozen baseline on FIXED goals (post-perturb) ---
         dA, mA = act16.run_combined(sim, bm, None, CAM, episodes=BASE, policy_fn=motor.predict,
-                                    goal_fn=fixed_goals(GSEED), lifelong=False, **_cp)
+                                    goal_fn=fixed_goals(GSEED), lifelong=False)
         # --- B: LIFELONG exploration with the curiosity planner (adapt + explore), log per episode ---
         rows = []
         def ep_end(ep, ok, err):
             rows.append((int(ok), err, curio.coverage(), bm._surprise_mm))
         dB, mB = act16.run_combined(sim, bm, None, CAM, episodes=EXPLORE, policy_fn=motor.predict,
-                                    goal_fn=curiosity_goal, lifelong=True, episode_end_fn=ep_end, **_cp)
+                                    goal_fn=curiosity_goal, lifelong=True, episode_end_fn=ep_end)
         # --- C: frozen re-measure on the SAME FIXED goals as A (isolates lifelong recovery) ---
         dC, mC = act16.run_combined(sim, bm, None, CAM, episodes=BASE, policy_fn=motor.predict,
-                                    goal_fn=fixed_goals(GSEED), lifelong=False, **_cp)
+                                    goal_fn=fixed_goals(GSEED), lifelong=False)
         act16.run_combined._quiet = False
 
         rows = np.array(rows, float)
@@ -289,13 +273,16 @@ def main():
     print("  (coupling VisualCortex perception + CuriosityPlanner + lifelong; live fovea + surprise)")
     try:
         from pc.pc_act18 import SurpriseViz
+        from pc.arm_modules import VisualCortexModule
+        vc, P = VisualCortexModule.from_sim(sim, CAM, RES, headless=False)
+        agent.add(vc)
         sviz = SurpriseViz(title="act21 — curiosity + lifelong (surprise over time)")
 
         def perceive(cmd):
-            return cam_perceive(cmd)                          # REUSE the early vc (trained the demos)
+            return vc.perceive(cmd), None, "grasp"            # board is placed POST-GOAL (on the carry path)
 
         def track_and_plot():
-            obs = cam_track()                                 # (xy, conf) -> feeds the closed-loop servo
+            obs = vc.track()                                  # (xy, conf) -> feeds the closed-loop servo
             bmm = bm._surprise_mm
             d = vc.surprise(); ps = curio.surprise()
             if d is not None:
