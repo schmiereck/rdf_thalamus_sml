@@ -37,9 +37,9 @@ CMD_COLOR = {"obj_red": np.array([0.9, 0.1, 0.1]), "obj_green": np.array([0.1, 0
 MAGENTA = np.array([1., 0, 1.])
 MATCH_TH = 0.86
 HEX_DY = 0.8660254              # row spacing of a hex lattice (sqrt(3)/2)
-F = 16                          # fovea sheet is F×F cells (DOUBLED from act10's 8 for finer
-#   object recognition; paired with K=4 so the field of view stays the same but the sampling
-#   density doubles).  Defined locally (not imported) so it is decoupled from the act10 test.
+F = int(os.environ.get("ACT_FOVEA_F", "16"))   # fovea sheet is F×F cells; env-tunable to put MORE cells
+#   on the object (finer localization) when the camera shows objects small.  Paired with K (the px
+#   spacing, ACT_FOVEA_K, default 4): window = F*K px; smaller K = tighter window = more cells/object.
 
 
 def fovea_gradient(cells):
@@ -89,9 +89,10 @@ def patch_mean(img, cx, cy, half):
 # The outer rings sample FURTHER OUT (expanded spacing) with proportionally LARGER pooling, so the
 # field of view grows WITHOUT extra cells and WITHOUT duplicating the centre (centres spread apart)
 # or leaving gaps (pooling fills the catchment).  px_offset(t) = K * (|t| + B*(|t|-D0)^2) for |t|>D0.
-FOVEA_GRADED = os.environ.get("ACT_FOVEA_GRADED", "0") == "1"   # DEFAULT OFF: the periphery blur shrinks
-#   the SHARP centre (64px->40px) so the cube becomes a blob (its orientation is lost) and edge/marker/
-#   base/board mislocalizations rise; the cold-acquisition gain was masked by the servo in the loop.
+FOVEA_GRADED = os.environ.get("ACT_FOVEA_GRADED", "1") == "1"   # DEFAULT ON: MEASURED to cut the dominant
+#   DISTRACTOR-LOCK tail (the wider periphery catches the right object -> fewer wrong-object locks): at the
+#   physical-rig camera, localization good<20mm 17->20/30 and mean 47->32mm, median 6mm (so it localizes
+#   BETTER despite the blobbier DISPLAY).  =0 for a sharp uniform fovea (better to SEE orientation).
 FOVEA_D0 = float(os.environ.get("ACT_FOVEA_D0", "5.0"))        # cells from centre kept at full res
 FOVEA_B = float(os.environ.get("ACT_FOVEA_B", "1.0"))         # peripheral expansion strength
 # NET-STEERABLE ZOOM: the fovea can widen its sampling (up to 2x the AREA = sqrt(2)x linear) to get an
@@ -519,7 +520,7 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
     `px_to_world` for perception-only use.  This lets other acts (e.g. act19) reuse the FOLLOWING
     fovea AND its live hex display instead of privileged sim-state perception."""
     from pc.pc_act15 import detect_px
-    fovea = HexFovea(K=4, rng=np.random.default_rng(7))
+    fovea = HexFovea(K=int(os.environ.get("ACT_FOVEA_K", "4")), rng=np.random.default_rng(7))
     perc_opt = mujoco.MjvOption(); perc_opt.geomgroup[1] = 0       # hide the arm -> clean object colour
 
     def render_perc():
@@ -591,7 +592,7 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
             print("  training the command-conditioned selection head ...")   # meaningful sel channel)
         px_of = lambda nm: world_to_px(sim.obj_pos(nm)[:2])
         fovea.train_selection(render_train, scatter_train, px_of, list(CMD_COLOR),
-                              np.random.default_rng(13), steps=9000, viz=viz)
+                              np.random.default_rng(13), steps=int(os.environ.get("ACT_SEL_STEPS", "9000")), viz=viz)
 
     if verbose:
         print("  warming up the hex perception net on the camera ...")
