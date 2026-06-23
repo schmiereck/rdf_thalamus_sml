@@ -36,7 +36,9 @@ WIDE_HALF = np.array([0.024, 0.024, 0.010])     # wide SQUARE block: too wide to
 OVER_Z, GRASP_Z, CARRY_Z, PUSH_Z = 0.06, 0.014, 0.055, 0.016
 PUSH_LIFT_Z = 0.07                              # raise the claws to move behind an object (clear it)
 STANDOFF, NEAR, TOL, CAP = 0.045, 0.02, 0.025, 2200
-GRASP_OFFSET = 0.002                            # grasp height = object_half_height + this (cube -> 0.014)
+GRASP_OFFSET = float(os.environ.get("ACT16_GRASP_OFFSET", "0.006"))   # (#2) grasp height = obj_half + this
+#   (cube -> 0.018, was 0.014): the claw tips sit ~14mm below the contact site, so grasp_z=0.014 put them
+#   AT the floor and any overshoot was blocked/deflected; +4mm lifts them clear while still gripping the cube
 GRASP_MAX_HALF = 0.016                          # footprint half above which an object is too wide to grasp
 SERVO_K, SERVO_CONF, SERVO_LOST = 0.5, 0.5, 6   # closed-loop grasp-target belief: correction gain,
 #   min track-confidence to update, frames of low confidence before a saccadic re-acquire
