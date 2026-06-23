@@ -43,6 +43,9 @@ SERVO_K, SERVO_CONF, SERVO_LOST = 0.5, 0.5, 6   # closed-loop grasp-target belie
 MAX_REACQ = 2                                   # cap re-acquires per episode: a persistent track failure
 #   must not loop perceive() forever (the fovea visibly re-searching every few seconds) -- then hold
 PHASE_STALL = 500                               # steps in ONE phase before the episode gives up (stuck arm)
+BASE_CLEAR = float(os.environ.get("ACT16_BASE_CLEAR", "0.11"))  # (#1) keep objects + target this far from
+#   the base ORIGIN: the base plate is 0.075-half (a 15cm square at 0,0) and REACH starts at y=0.07, so
+#   objects/target could spawn ON the base (unreachable / the open gripper collides with the turret)
 SIZE_ADAPT = os.environ.get("ACT_SIZE_ADAPT", "1") == "1"    # (c) derive grasp heights from object size
 PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene between episodes
 SCENE_N = int(os.environ.get("ACT16_SCENE_N", "3"))         # objects PLACED per episode (cmd + distractors);
@@ -149,8 +152,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             half = WIDE_HALF if wide else CUBE_HALF
             sim.set_object_size(nm, half)
             p = _rand_xy(rng)
-            while any(np.linalg.norm(p - q) < 0.08 for q in pts):
-                p = _rand_xy(rng)
+            while any(np.linalg.norm(p - q) < 0.08 for q in pts) or np.linalg.norm(p) < BASE_CLEAR:
+                p = _rand_xy(rng)                            # (#1) clear of other objects AND off the base
             pts.append(p); sim.set_object(nm, p, z=float(half[2]))
         mujoco.mj_forward(sim.m, sim.d); sim.step(150)
 
@@ -211,8 +214,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             fpp = size_fn(cmd)
             if fpp is not None:
                 obj_fp = float(fpp)
-        tgt = _rand_xy(rng)                                  # target: away from the cube AND not on any cube
-        while np.linalg.norm(tgt - c0) < 0.06 or not clear(tgt, OBJS, 0.05):
+        tgt = _rand_xy(rng)                                  # target: away from the cube, off any cube, off base
+        while np.linalg.norm(tgt - c0) < 0.06 or not clear(tgt, OBJS, 0.05) or np.linalg.norm(tgt) < BASE_CLEAR:
             tgt = _rand_xy(rng)
         sim.set_target_marker(tgt); sim.step(40)
         tgt_true = tgt.copy(); cube_plan = None; mode_perc = None  # perceive cube + target + mode
@@ -228,6 +231,9 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         if goal_fn is not None:                               # PLANNER dreams the place target from the
             obj_xy = cube_plan if cube_plan is not None else sim.obj_pos(cmd)[:2]   # perceived object
             tgt = np.asarray(goal_fn(cmd, obj_xy), float)     # -> commit to it (and SCORE against it)
+            d = float(np.linalg.norm(tgt))                    # (#1) keep the DREAMED goal off the base too
+            if d < BASE_CLEAR:
+                tgt = tgt * (BASE_CLEAR / d) if d > 1e-6 else np.array([0.0, BASE_CLEAR])
             tgt_true = tgt.copy(); sim.set_target_marker(tgt); sim.step(20)   # also moves the visible marker
         if post_goal_fn is not None:                          # now the COMMITTED goal is known: e.g. drop an
             obj_now = cube_plan if cube_plan is not None else sim.obj_pos(cmd)[:2]   # obstacle on the carry path
