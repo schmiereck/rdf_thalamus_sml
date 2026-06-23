@@ -45,6 +45,8 @@ SERVO_K, SERVO_CONF, SERVO_LOST = 0.5, 0.5, 6   # closed-loop grasp-target belie
 MAX_REACQ = 2                                   # cap re-acquires per episode: a persistent track failure
 #   must not loop perceive() forever (the fovea visibly re-searching every few seconds) -- then hold
 PHASE_STALL = 500                               # steps in ONE phase before the episode gives up (stuck arm)
+HOVER_LIMIT = int(os.environ.get("ACT16_HOVER", "40"))   # (#4) steps the policy may hover OPEN+HIGH over
+#   the object before the GRASP REFLEX takes over the descend+close (it stalled instead of grasping)
 BASE_CLEAR = float(os.environ.get("ACT16_BASE_CLEAR", "0.11"))  # (#1) keep objects + target this far from
 #   the base ORIGIN: the base plate is 0.075-half (a 15cm square at 0,0) and REACH starts at y=0.07, so
 #   objects/target could spawn ON the base (unreachable / the open gripper collides with the turret)
@@ -255,7 +257,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         # closed-loop grasp-target BELIEF: starts at the up-front perception, then the live fovea
         # CORRECTS it each frame (precision-weighted, occlusion-gated) instead of freezing the snapshot
         obj_belief = (cube_plan.copy() if cube_plan is not None else None) if servo else None
-        servo_lost = 0; reacquires = 0
+        servo_lost = 0; reacquires = 0; hover = 0            # (#4) grasp-reflex hover counter
         last_phase = phase; phase_age = 0                    # STALL-ESCAPE: don't hang in one phase forever
         for k in range(cap):
             phase_age = phase_age + 1 if phase == last_phase else 0
@@ -366,6 +368,17 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 out = policy_fn(state); aim = np.asarray(out[:3], float); j5 = float(out[3]); via = "policy"
             elif route_carry:                                 # policy carries to a STATIC goal only, so it
                 via = "route"                                 # cannot follow side-waypoints -> servo the route
+            # (#4) GRASP REFLEX -- active-inference framing: once the hand is positioned OVER the object the
+            # agent EXPECTS to be grasping; hovering OPEN + HIGH instead is a sustained prediction error that
+            # drives a descend+close.  Fires ONLY on a stall (HOVER_LIMIT), so the learned policy still drives
+            # normally -- this just guarantees the grasp EXECUTES instead of the policy hovering forever (#4).
+            gz = obj_h + GRASP_OFFSET
+            if np.linalg.norm(hxy - c) < 0.03 and cz < 0.035 and j5 > 0.6 and hz > gz + 0.012:
+                hover += 1
+            else:
+                hover = 0
+            if hover > HOVER_LIMIT:
+                aim = np.array([c[0], c[1], gz]); j5 = max(J5_GRIP, j5 - 0.2); via = "reflex"
             if log_fn is not None:                            # log the EXECUTED (state -> subgoal)
                 log_fn(state, np.asarray(aim, float), float(j5))
             if macro_log_fn is not None:                      # EXECUTED step + the FSM phase (for macro
