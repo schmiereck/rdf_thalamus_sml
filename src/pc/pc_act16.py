@@ -231,9 +231,18 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         if goal_fn is not None:                               # PLANNER dreams the place target from the
             obj_xy = cube_plan if cube_plan is not None else sim.obj_pos(cmd)[:2]   # perceived object
             tgt = np.asarray(goal_fn(cmd, obj_xy), float)     # -> commit to it (and SCORE against it)
-            d = float(np.linalg.norm(tgt))                    # (#1) keep the DREAMED goal off the base too
-            if d < BASE_CLEAR:
-                tgt = tgt * (BASE_CLEAR / d) if d > 1e-6 else np.array([0.0, BASE_CLEAR])
+            for _ in range(8):                                # SANITIZE the dreamed goal: off objects + base
+                moved = False
+                for o in OBJS:                                # (#3) push it OFF any object it landed on
+                    dv = tgt - sim.obj_pos(o)[:2]; dn = float(np.linalg.norm(dv))
+                    if dn < 0.05:
+                        tgt = sim.obj_pos(o)[:2] + (dv / dn if dn > 1e-6 else np.array([1.0, 0.0])) * 0.05
+                        moved = True
+                d = float(np.linalg.norm(tgt))                # (#1) keep it off the base
+                if d < BASE_CLEAR:
+                    tgt = tgt * (BASE_CLEAR / d) if d > 1e-6 else np.array([0.0, BASE_CLEAR]); moved = True
+                if not moved:
+                    break
             tgt_true = tgt.copy(); sim.set_target_marker(tgt); sim.step(20)   # also moves the visible marker
         if post_goal_fn is not None:                          # now the COMMITTED goal is known: e.g. drop an
             obj_now = cube_plan if cube_plan is not None else sim.obj_pos(cmd)[:2]   # obstacle on the carry path
