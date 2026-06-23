@@ -430,27 +430,35 @@ class HexFovea:
         self.z = 1.0
         sys.stdout.write("\r\x1b[2K"); sys.stdout.flush()
 
-    def train_selection(self, render_fn, scatter_fn, px_of, names, rng, steps=6000, viz=None):
+    def train_selection(self, render_fn, scatter_fn, px_of, names, rng, steps=4000, viz=None):
         """Dedicated training of the command-conditioned SelectionHead on REAL camera crops.
-        Gazes are biased to CENTRE on the objects (guaranteed positive/negative examples per
-        command), since random-gaze warmup crops are mostly background.  Binary match target."""
+        CONTRASTIVE over command codes: at each object-centred gaze, train ALL command codes on the
+        SAME crop -- the centred object's code is the POSITIVE, the other codes are NEGATIVES on that
+        very object.  This was the fix for the ~33% distractor-locks: the old loop drew the command
+        INDEPENDENTLY of the centred object, so genuine positives (cell-on-object AND command matches
+        its colour) were rare (~1/3 of centred crops) -> the head was starved of positive,
+        command-conditioned gradient, under-fired, and its COM drifted onto a distractor.  The
+        scripted cosine teacher localises 100%; this makes the LEARNED head reproduce it (steps here
+        count GAZES; each centred gaze does len(names) train_steps, so compute ~ old 9000)."""
         K = self.K
         for i in range(steps):
             if i % 3 == 0:
                 scatter_fn()
             img = render_fn()
-            cmd = names[int(rng.integers(len(names)))]
-            if rng.random() < 0.7:                          # centre on some object (positive/negative)
+            centred = rng.random() < 0.7
+            if centred:                                     # centre on an object -> contrastive over codes
                 g = np.asarray(px_of(names[int(rng.integers(len(names)))]), float)
-            else:                                           # some random crops too
+            else:                                           # some random background crops too
                 g = rng.uniform([F * K, F * K], [img.shape[1] - F * K, img.shape[0] - F * K])
             g = np.clip(g, F * K, np.array([img.shape[1], img.shape[0]]) - F * K)
             zk = K * (1.0 + (ZOOM_MAX - 1.0) * rng.random()) if ZOOM else K   # train across zoom levels
             arr = hex_sample(img, g, zk)
-            tgt = (_match_target(arr, CMD_COLOR[cmd]) > 0).astype(float)   # binary: cell of cmd-object?
-            self.sel_head.train_step(arr, onehot_cmd(cmd), tgt)
+            cmds = list(names) if centred else [names[int(rng.integers(len(names)))]]
+            for cmd in cmds:                                # positive (matching code) + negatives (others)
+                tgt = (_match_target(arr, CMD_COLOR[cmd]) > 0).astype(float)   # binary: cell of cmd-object?
+                self.sel_head.train_step(arr, onehot_cmd(cmd), tgt)
             if viz is not None and i % 40 == 0:
-                self._fill_sel(arr, cmd)
+                self._fill_sel(arr, cmds[-1])
                 viz.fovea(img, g, zk, np.clip(arr[:, :, 1:], 0, 1), f"train selection {i}/{steps}")
             if i % 200 == 0:
                 sys.stdout.write(f"\r\x1b[2K  [train selection head] {i}/{steps}"); sys.stdout.flush()
@@ -592,7 +600,7 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
             print("  training the command-conditioned selection head ...")   # meaningful sel channel)
         px_of = lambda nm: world_to_px(sim.obj_pos(nm)[:2])
         fovea.train_selection(render_train, scatter_train, px_of, list(CMD_COLOR),
-                              np.random.default_rng(13), steps=int(os.environ.get("ACT_SEL_STEPS", "9000")), viz=viz)
+                              np.random.default_rng(13), steps=int(os.environ.get("ACT_SEL_STEPS", "4000")), viz=viz)
 
     if verbose:
         print("  warming up the hex perception net on the camera ...")
