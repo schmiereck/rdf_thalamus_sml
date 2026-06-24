@@ -50,12 +50,15 @@ HOVER_LIMIT = int(os.environ.get("ACT16_HOVER", "40"))   # (#4) steps the policy
 BASE_CLEAR = float(os.environ.get("ACT16_BASE_CLEAR", "0.11"))  # (#1) keep objects + target this far from
 #   the base ORIGIN: the base plate is 0.075-half (a 15cm square at 0,0) and REACH starts at y=0.07, so
 #   objects/target could spawn ON the base (unreachable / the open gripper collides with the turret)
-WRIST_ALIGN = os.environ.get("ACT16_WRIST", "0") == "1"      # (B) roll joint_4 so the claw aligns to the
-#   object's grip axis.  PROPRIOCEPTIVE (claw_yaw from FK, no camera); oriented while HIGH ("over"), then HELD
-#   through the descent so rotating the wrist never sweeps the low object.  OFF BY DEFAULT and a REAL-ROBOT
-#   feature: in sim it has no measurable effect -- light, free objects SELF-ALIGN in the claws (a misaligned
-#   grip just spins the object to fit), so sim delivery is orientation-insensitive (verified across cubes +
-#   elongated blocks).  Kept as infrastructure for the real arm, where the claws are less forgiving.
+WRIST_ALIGN = os.environ.get("ACT16_WRIST", "0") == "1"      # (B) roll joint_4 so the claw aligns to the object's
+#   grip axis.  PROPRIOCEPTIVE (claw_yaw from FK, no camera), re-applied EVERY step (set_arm3_targets resets
+#   joint_4 to HOME each step, AND claw_yaw is POSE-dependent, so it must keep correcting as the arm moves).
+#   FUNCTIONAL and orientation IS sensitive: forced-DIAGONAL cube grip slips (21/40 vs aligned 39/40), elongated
+#   LONG-axis 9/40.  But OFF BY DEFAULT: the privileged teacher tolerates it (39=39), yet in the PERCEPTION-driven
+#   coupled pipeline the continuous wrist rotation disturbs the already-marginal (~6mm) learned-policy grasps
+#   (C 9/10 -> 6/10).  Normal grasps already tolerate moderate misalignment / self-align, so the slip is rare.
+#   Kept as REAL-ROBOT infrastructure (claws less forgiving there).  Cube -> fixed WRIST_TGT mod 90deg (step B,
+#   no perception); elongated -> short axis mod pi.  Enable with ACT16_WRIST=1.
 WRIST_TGT = float(os.environ.get("ACT16_WRIST_TGT", "0.0"))  # world-frame grip yaw the claw aligns to (rad)
 SIZE_ADAPT = os.environ.get("ACT_SIZE_ADAPT", "1") == "1"    # (c) derive grasp heights from object size
 PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene between episodes
@@ -220,11 +223,11 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             mujoco.mj_forward(sim.m, sim.d); sim.step(60); cmd_half = half             # stays as learned
             c0 = sim.obj_pos(cmd)[:2]
         obj_h = float(cmd_half[2])                            # object size for the SIZE-ADAPTIVE grasp
-        obj_fp = float(np.mean(cmd_half[:2]))                 # (privileged; size_fn can override footprint)
-        # (B, real-robot infra) WRIST target: align the claw to the object's grip axis.  Elongated -> claw
-        # along the SHORT axis (mod pi: a rectangle has 180deg symmetry, the long axis is the WRONG grip);
-        # cube -> the static target (mod 90deg, any face).  OFF by default: sim grasps are orientation-
-        # insensitive (light free objects SELF-ALIGN in the claws), so this is for the real arm.
+        obj_fp = float(np.min(cmd_half[:2]))                  # SHORT-axis half: graspable across the NARROWEST
+        #   dimension (cube: =mean; elongated: the 12mm short axis -> graspable when the claw aligns to it)
+        # (B) WRIST target: align the claw to the object's grip axis.  Elongated -> the SHORT axis (mod pi: a
+        # rectangle has 180deg symmetry, the long axis is the WRONG grip, the finite-ish pads can't span 48mm);
+        # cube -> ACT16_WRIST_TGT mod 90deg.  Uses privileged obj_yaw for now (perception = step C).
         elong = abs(cmd_half[0] - cmd_half[1]) > 1e-4
         if elong:
             wrist_tgt = sim.obj_yaw(cmd) + (np.pi / 2 if cmd_half[0] > cmd_half[1] else 0.0)
@@ -401,14 +404,14 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             if macro_log_fn is not None:                      # EXECUTED step + the FSM phase (for macro
                 macro_log_fn(state, np.asarray(aim, float), float(j5), phase)   # sub-goal segmentation)
             sim.target("joint_5", j5)
-            if WRIST_ALIGN and phase in ("over", "approach"):  # (B) align the claw to the object's grip axis
-                cy = sim.claw_yaw()                            # while HIGH; HOLD it through lower/close (no sweep)
-                err = (cy - wrist_tgt + wrist_mod / 2) % wrist_mod - wrist_mod / 2   # mod 90deg cube / 180 elong
-                j4t = float(np.clip(sim.d.qpos[sim.jqadr["joint_4"]] + 0.6 * err, 0.0, np.pi))  # slope ~ -1
-                sim.target("joint_4", j4t)
             gentle = abs(j5 - J5_PUSH) < 0.2 and aim[2] < PUSH_Z + 0.02   # spread gripper + low = a PUSH
             g, mdq = (1.3, 0.016) if gentle else (2.0, 0.026)            # (derived from the sub-goal, so it
             q3 = sim.arm3_angles(); sim.set_arm3_targets(q3 + body.reach_velocity(q3, aim, gain=g, max_dq=mdq))
+            if WRIST_ALIGN:                                    # (B) align the claw to the object's grip axis,
+                cy = sim.claw_yaw()                            # re-applied EVERY step: set_arm3_targets resets
+                err = (cy - wrist_tgt + wrist_mod / 2) % wrist_mod - wrist_mod / 2   # joint_4 to HOME each step,
+                j4t = float(np.clip(sim.d.qpos[sim.jqadr["joint_4"]] + 0.6 * err, 0.0, np.pi))   # and claw_yaw is
+                sim.target("joint_4", j4t)                     # POSE-dependent so it must keep correcting (slope ~ -1)
             sim.step(2)
             if lifelong and k % 3 == 0:                       # LIFELONG: refine the learned kinematics
                 body.observe(sim.arm3_angles(), sim.grasp_pos(), lr=0.02)   # from the real (joints,hand)
