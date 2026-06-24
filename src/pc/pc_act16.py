@@ -50,15 +50,15 @@ HOVER_LIMIT = int(os.environ.get("ACT16_HOVER", "40"))   # (#4) steps the policy
 BASE_CLEAR = float(os.environ.get("ACT16_BASE_CLEAR", "0.11"))  # (#1) keep objects + target this far from
 #   the base ORIGIN: the base plate is 0.075-half (a 15cm square at 0,0) and REACH starts at y=0.07, so
 #   objects/target could spawn ON the base (unreachable / the open gripper collides with the turret)
-WRIST_ALIGN = os.environ.get("ACT16_WRIST", "0") == "1"      # (B) roll joint_4 so the claw aligns to the object's
-#   grip axis.  PROPRIOCEPTIVE (claw_yaw from FK, no camera), re-applied EVERY step (set_arm3_targets resets
-#   joint_4 to HOME each step, AND claw_yaw is POSE-dependent, so it must keep correcting as the arm moves).
-#   FUNCTIONAL and orientation IS sensitive: forced-DIAGONAL cube grip slips (21/40 vs aligned 39/40), elongated
-#   LONG-axis 9/40.  But OFF BY DEFAULT: the privileged teacher tolerates it (39=39), yet in the PERCEPTION-driven
-#   coupled pipeline the continuous wrist rotation disturbs the already-marginal (~6mm) learned-policy grasps
-#   (C 9/10 -> 6/10).  Normal grasps already tolerate moderate misalignment / self-align, so the slip is rare.
-#   Kept as REAL-ROBOT infrastructure (claws less forgiving there).  Cube -> fixed WRIST_TGT mod 90deg (step B,
-#   no perception); elongated -> short axis mod pi.  Enable with ACT16_WRIST=1.
+WRIST_ALIGN = os.environ.get("ACT16_WRIST", "1") == "1"      # (B, default ON) roll joint_4 so the claw aligns to
+#   the object's grip axis.  PROPRIOCEPTIVE (claw_yaw from FK, no camera), re-applied EVERY step (set_arm3_targets
+#   resets joint_4 to HOME each step, AND claw_yaw is POSE-dependent, so it must keep correcting as the arm moves).
+#   Orientation IS sensitive: forced-DIAGONAL cube grip slips (21/40 vs aligned 39/40), elongated LONG-axis 9/40.
+#   The user KEEPS it on -- it looks clean in the viz and aligns the grasp robustly.  A few coupled-pipeline
+#   grasps still regress (pc_act21 C 9/10 -> 6/10), but per the user's observation that is NOT the wrist: it is
+#   the UNDERTRAINED RECOVERY states (miss -> re-grasp -> carry; the policy sometimes re-grasps then "hangs" with
+#   the cube instead of carrying) -- rare in the teacher demos -> a TRAINING-coverage gap, addressed separately.
+#   Cube -> fixed WRIST_TGT mod 90deg (step B, no perception); elongated -> short axis mod pi.  Disable: ACT16_WRIST=0.
 WRIST_TGT = float(os.environ.get("ACT16_WRIST_TGT", "0.0"))  # world-frame grip yaw the claw aligns to (rad)
 SIZE_ADAPT = os.environ.get("ACT_SIZE_ADAPT", "1") == "1"    # (c) derive grasp heights from object size
 PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene between episodes
