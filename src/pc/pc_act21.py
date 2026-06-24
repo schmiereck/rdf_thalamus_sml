@@ -64,6 +64,34 @@ def main():
     print("  training the LEARNED inverse kinematics ...")
     print(f"    IK babble reconstruction: {bm.learn_inverse(sim, rng=np.random.default_rng(11)):.2f} mm")
 
+    # RECOVERY-DAgger polish (default ON): the BC policy occasionally grasps beside the cube, RE-grasps, then
+    # HANGS with it instead of carrying -- those recovery states are rare in the teacher demos, so plain BC
+    # hangs there.  Run the policy PRIVILEGED, let the teacher label the policy-VISITED states (incl the
+    # carry/hang phase = "carry to goal"), refit every RBATCH eps.  In-distribution polish so the explore/viz
+    # policy no longer hangs (headless: privileged delivery ~7/12 -> ~11/12).  Disable with ACT21_RECOVER=0.
+    if os.environ.get("ACT21_RECOVER", "1") == "1" and os.environ.get("ACT21_SHAPE", "0") != "1":  # (SHAPE
+        from pc.arm_modules.planner import LO as _LO, HI as _HI, SPAN as _SPAN          # does its own DAgger)
+        RN = int(os.environ.get("ACT21_RECOVER_EPS", "30")); RBATCH = 6; rbuf = {"X": [], "Y": []}
+        def _fg(seed):                                        # FIXED goal sequence (matches the explore A/C eval)
+            r = np.random.default_rng(seed)
+            return lambda cmd, obj: r.uniform(_LO + 0.15 * _SPAN, _HI - 0.15 * _SPAN)
+        def _rlog(state, aim, j5, phase):
+            s = np.asarray(state, float); rbuf["X"].append(s.copy()); rbuf["Y"].append(act16.reactive_subgoal(s))
+        def _rfit(ep, ok, err):
+            if (ep + 1) % RBATCH == 0 and rbuf["X"]:          # sliding-window DAgger refit (+ anchor BC demos)
+                bx = np.array(rbuf["X"][-4000:]); by = np.array(rbuf["Y"][-4000:])
+                motor.fit(np.vstack([bx, baseX]), np.vstack([by, baseY]), epochs=120, set_norm=False, quiet=True)
+        act16.run_combined._quiet = True
+        d0, _ = act16.run_combined(sim, bm.body, None, CAM, episodes=12, policy_fn=motor.predict,
+                                   goal_fn=_fg(77), lifelong=False)               # eval on FIXED goals
+        act16.run_combined(sim, bm.body, None, CAM, episodes=RN, policy_fn=motor.predict,
+                           macro_log_fn=_rlog, episode_end_fn=_rfit, lifelong=False)   # train on DIVERSE goals
+        d1, _ = act16.run_combined(sim, bm.body, None, CAM, episodes=12, policy_fn=motor.predict,
+                                   goal_fn=_fg(77), lifelong=False)
+        act16.run_combined._quiet = False
+        print(f"  recovery-DAgger polish ({RN} eps, teacher labels visited states incl carry): "
+              f"frozen FIXED-goal delivery {d0}/12 -> {d1}/12")
+
     agent = ArmAgent("researching-arm")
     for m in (curio, motor, bm):
         agent.add(m)
