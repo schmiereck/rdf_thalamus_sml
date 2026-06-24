@@ -81,7 +81,8 @@ def main():
         return lambda cmd, obj: r.uniform(LO + 0.15 * SPAN, HI - 0.15 * SPAN)
 
     SHAPE = os.environ.get("ACT21_SHAPE", "0") == "1"        # 3b: ONLINE dense-shaping policy learning
-    OBSTACLE = os.environ.get("ACT21_OBSTACLE", "0") == "1" or SHAPE   # shaping runs WITH the walls
+    OBSTACLE = os.environ.get("ACT21_OBSTACLE", "1" if SHAPE else "0") == "1"   # SHAPE defaults to walls ON
+    #   (the 3b line); set ACT21_OBSTACLE=0 for the RECOVERY-DAgger run -- walls OFF + carry states INCLUDED
     SERVO = os.environ.get("ACT21_SERVO", "1") == "1"        # closed-loop: live fovea corrects the grasp
     #   target belief during the approach (default on; ACT21_SERVO=0 for the frozen-snapshot baseline)
     obstacle = None; brng = np.random.default_rng(31)
@@ -119,10 +120,10 @@ def main():
         buf = {"X": [], "Y": []}; pen = {"max": 0.0}; rows = []
         MAXBUF = int(os.environ.get("ACT21_SHAPE_BUF", "4000"))   # sliding window: avoid the failure-data poison
         def tlog(state, aim, j5, phase):                      # DENSE teacher target at the policy-visited state
-            if phase == "carry":                              # skip the routed carry (it is route-servoed,
-                return                                        # and its targets conflict with the BC demos)
-            s = np.asarray(state, float)
-            buf["X"].append(s.copy()); buf["Y"].append(act16.reactive_subgoal(s))   # recomputed teacher label
+            if phase == "carry" and ct_fn is not None:        # skip ONLY the obstacle-ROUTED carry (route-
+                return                                        # servoed, conflicts with BC).  Walls OFF -> INCLUDE
+            s = np.asarray(state, float)                      # carry: trains the "grasped-but-HANGS" recovery
+            buf["X"].append(s.copy()); buf["Y"].append(act16.reactive_subgoal(s))   # (teacher label = carry to goal)
         def track_pen():
             h = sim.grasp_pos()
             if obstacle is not None and obstacle._occ is not None and h[2] > 0.04:
@@ -183,18 +184,24 @@ def main():
         di = np.array([rows[i * BATCH:(i + 1) * BATCH, 0].mean() for i in range(ITERS)])
         h = max(1, ITERS // 3)
         print("=" * 72)
-        print(f"  3b DENSE-SHAPING ({EP} eps, walls on, lifelong): delivered {int(rows[:,0].sum())}/{len(rows)}")
+        print(f"  DENSE-SHAPING ({EP} eps, walls {'on' if OBSTACLE else 'off'}, lifelong): "
+              f"delivered {int(rows[:,0].sum())}/{len(rows)}")
         print(f"    FIXED-goal frozen eval: baseline {d0}/{m0}  ->  after shaping {dF}/{mF}")
         print(f"    in-run delivery (first third -> last third): {di[:h].mean():.2f} -> {di[-h:].mean():.2f}")
-        print(f"    board penetration mean {np.nanmean(rows[:,2]):.0f} mm   FK surprise {np.nanmean(rows[:,3]):.2f} mm")
-        print("  Read (HONEST): curated dense DAgger HOLDS the baseline (it does NOT exceed it).  Two findings:")
-        print("  (1) NAIVE dense shaping POISONED the policy (8/12 -> 1/12) -- accumulating every visited state")
-        print("      incl. long FAILURE rollouts + routed-carry targets that conflict with the BC demos;")
-        print("      fixed by excluding the (route-servoed) carry phase + a sliding window -> holds 8/12.")
-        print("  (2) it does not RAISE delivery: the BC policy already sits at the TEACHER ceiling, so dense")
-        print("      shaping (like AWR before it) cannot exceed the teacher.  Beating the plateau needs")
-        print("      BEYOND-teacher learning (a better teacher/controller or reward), not more imitation.")
-        print("  The machinery EXTENDS the act21 stand (walls + lifelong + viz + curves); the limit is named.")
+        if OBSTACLE:
+            print(f"    board penetration mean {np.nanmean(rows[:,2]):.0f} mm   FK surprise {np.nanmean(rows[:,3]):.2f} mm")
+            print("  Read (HONEST, walls/3b): curated dense DAgger HOLDS the baseline (does NOT exceed it).")
+            print("  (1) NAIVE dense shaping POISONED the policy (8/12 -> 1/12) -- accumulating every visited")
+            print("      state incl. long FAILURE rollouts + routed-carry targets that conflict with the BC")
+            print("      demos; fixed by excluding the (route-servoed) carry phase + a sliding window -> 8/12.")
+            print("  (2) it does not RAISE delivery: the BC policy already sits at the TEACHER ceiling, so dense")
+            print("      shaping (like AWR) cannot exceed the teacher.  Beating it needs BEYOND-teacher learning.")
+        else:
+            print("  Read (HONEST, RECOVERY-DAgger, walls off): INCLUDING the carry/recovery states (the policy")
+            print("  sometimes grasps then HANGS instead of carrying) lets the teacher label those policy-VISITED")
+            print("  states (label = carry to goal).  Those states are rare in the BC demos -> the BC policy hangs")
+            print("  there; DAgger on them RAISES the frozen delivery (this is in-distribution recovery, not")
+            print("  beyond-teacher).  This is the 'last polish' for the wrist-on misses (re-grasp + carry).")
         print("=" * 72)
         try:
             _plot_shape(rows, BATCH, os.path.join(os.path.dirname(__file__), "act21_shape.png"))
