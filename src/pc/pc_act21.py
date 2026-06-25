@@ -386,117 +386,172 @@ def _plot_metrics(rows, perturb, path):
     print(f"  [viz] metrics curves saved -> {path}")
 
 
-class CommandCoordinator:
+class CommandState:
+    """GUI-free state of a COMMAND to the net: which OBJECT (an abstract code -- the net localizes it
+    itself via the fovea/selection head), which ACTION (grasp/push), which named TARGET marker.  Exposes
+    the cmd_fn/force_fn/goal_fn hooks run_combined consumes, so the same state drives both the graphical
+    panel and the headless self-test.  Targets are the mocap markers target_marker[/_2/_3]; goal_fn
+    returns the SELECTED marker's table xy."""
+
+    OBJECTS = [("rot", "obj_red"), ("grün", "obj_green"), ("blau", "obj_blue")]
+    MARKERS = ["target_marker", "target_marker_2", "target_marker_3"]
+
     def __init__(self, sim):
         self.sim = sim
-        self.current_cmd = None
-        self.current_action = None
-        self.current_target = None
-        self.last_parsed = None
+        self.obj = "obj_red"          # commanded object (abstract code)
+        self.action = "grasp"         # "grasp" or "push"
+        self.target_idx = 0           # which named marker is the goal
+        self.go = False               # the user pressed "Ausführen"
+        self.exit = False             # the user pressed "Beenden"
 
-    def get_command(self):
-        while True:
-            try:
-                cmd_str = input("\nBefehl eingeben (<was> <action> <ziel>) oder 'exit': ").strip()
-                if not cmd_str:
-                    continue
-                if cmd_str.lower() == 'exit':
-                    return None
-                parts = cmd_str.lower().split()
-                if len(parts) != 3:
-                    print("Fehler: Befehl muss die Form <was> <action> <ziel> haben (z.B. 'red grasp blue' oder 'green push magenta').")
-                    continue
-                
-                was_color, action, ziel_color = parts
-                
-                # Validate <was>
-                if was_color not in ("red", "green", "blue"):
-                    print(f"Fehler: Unbekanntes Objekt '{was_color}'. Erlaubt: red, green, blue")
-                    continue
-                obj_name = f"obj_{was_color}"
-                
-                # Validate <action>
-                if action not in ("grasp", "push", "pick", "carry"):
-                    print(f"Fehler: Unbekannte Aktion '{action}'. Erlaubt: grasp, push")
-                    continue
-                force_mode = "push" if action == "push" else "grasp"
-                
-                # Validate <ziel>
-                if ziel_color in ("magenta", "target", "marker"):
-                    target_pos = None # will resolve to target_marker
-                elif ziel_color in ("red", "green", "blue"):
-                    target_pos = self.sim.obj_pos(f"obj_{ziel_color}")[:2].copy()
-                else:
-                    print(f"Fehler: Unbekanntes Ziel '{ziel_color}'. Erlaubt: red, green, blue, magenta")
-                    continue
-                
-                self.current_cmd = obj_name
-                self.current_action = force_mode
-                self.current_target = target_pos
-                self.last_parsed = cmd_str
-                return True
-            except KeyboardInterrupt:
-                return None
-            except Exception as e:
-                print(f"Fehler beim Parsen: {e}")
+    def marker_xy(self, idx):
+        bid = mujoco.mj_name2id(self.sim.m, mujoco.mjtObj.mjOBJ_BODY, self.MARKERS[idx])
+        return self.sim.d.mocap_pos[self.sim.m.body_mocapid[bid]][:2].copy()
 
+    # ---- run_combined hooks (the command, fed to the net) ----
     def cmd_fn(self, ep):
-        return self.current_cmd
+        return self.obj                                   # abstract object code; net FINDS it via perception
 
     def force_fn(self, cmd):
-        return self.current_action
+        return self.action
 
     def goal_fn(self, cmd, obj_xy):
-        if self.current_target is not None:
-            return self.current_target
-        bid = mujoco.mj_name2id(self.sim.m, mujoco.mjtObj.mjOBJ_BODY, "target_marker")
-        return self.sim.d.mocap_pos[self.sim.m.body_mocapid[bid]][:2].copy()
+        return self.marker_xy(self.target_idx)            # the selected named target marker
+
+    def label(self):
+        col = next(c for c, nm in self.OBJECTS if nm == self.obj)
+        act = "Greifen" if self.action == "grasp" else "Schieben"
+        return f"{col} | {act} | Ziel {self.target_idx + 1}"
+
+
+class CommandPanel:
+    """Graphical command interface (matplotlib widgets): pick the OBJECT by colour button, the TARGET by
+    a named-marker button, toggle grasp/push, then Ausführen.  Doubles as the run_combined `viz` (update/
+    hold) so the same window shows the arm executing the command."""
+
+    OBJ_COL = {"obj_red": "#d23030", "obj_green": "#2fae40", "obj_blue": "#3358d2"}
+
+    def __init__(self, state, cam, res):
+        import matplotlib.pyplot as plt
+        from matplotlib.widgets import Button
+        self.plt = plt; self.state = state; plt.ion()
+        self.fig = plt.figure(figsize=(6.4, 7.6)); self.fig.patch.set_facecolor("#0e0e12")
+        self.axI = self.fig.add_axes([0.04, 0.36, 0.92, 0.60]); self.axI.axis("off")
+        self.axI.set_title(f"Befehls-Schnittstelle — {cam} Kamera", color="w")
+        self.im = self.axI.imshow(np.zeros((res, res, 3), np.uint8))
+        self.status = self.fig.text(0.5, 0.325, "", ha="center", color="w", fontsize=11, family="monospace")
+        self._obj_btns = {}; self._tgt_btns = {}
+        for i, (lbl, nm) in enumerate(state.OBJECTS):       # object colour buttons
+            ax = self.fig.add_axes([0.055 + 0.31 * i, 0.225, 0.27, 0.065])
+            b = Button(ax, lbl.capitalize(), color=self.OBJ_COL[nm], hovercolor=self.OBJ_COL[nm])
+            b.on_clicked(lambda _e, nm=nm: self._set_obj(nm)); self._obj_btns[nm] = b
+        for i in range(len(state.MARKERS)):                 # named target buttons
+            ax = self.fig.add_axes([0.055 + 0.31 * i, 0.150, 0.27, 0.060])
+            b = Button(ax, f"Ziel {i + 1}", color="#3a3a44", hovercolor="#55556a")
+            b.on_clicked(lambda _e, i=i: self._set_tgt(i)); self._tgt_btns[i] = b
+        axA = self.fig.add_axes([0.055, 0.03, 0.27, 0.07])  # action toggle / go / exit
+        self.bA = Button(axA, "Modus: Greifen", color="#555", hovercolor="#777"); self.bA.on_clicked(self._toggle)
+        axG = self.fig.add_axes([0.365, 0.03, 0.27, 0.07])
+        self.bG = Button(axG, "Ausführen", color="#1f8a5b", hovercolor="#27a96f"); self.bG.on_clicked(self._go)
+        axX = self.fig.add_axes([0.675, 0.03, 0.27, 0.07])
+        self.bX = Button(axX, "Beenden", color="#8a3030", hovercolor="#a94040"); self.bX.on_clicked(self._exit)
+        self.fig.canvas.mpl_connect("close_event", lambda _e: setattr(self.state, "exit", True))
+        self._refresh()
+
+    def _set_obj(self, nm): self.state.obj = nm; self._refresh()
+    def _set_tgt(self, i): self.state.target_idx = i; self._refresh()
+    def _go(self, _e): self.state.go = True
+    def _exit(self, _e): self.state.exit = True
+
+    def _toggle(self, _e):
+        self.state.action = "push" if self.state.action == "grasp" else "grasp"
+        self.bA.label.set_text("Modus: " + ("Schieben" if self.state.action == "push" else "Greifen"))
+        self._refresh()
+
+    def _refresh(self):
+        labels = {nm: lbl.capitalize() for lbl, nm in self.state.OBJECTS}
+        for nm, b in self._obj_btns.items():                # highlight selected: marker + bright target colour
+            b.label.set_text(("● " if nm == self.state.obj else "") + labels[nm])
+        for i, b in self._tgt_btns.items():
+            b.color = "#c050c0" if i == self.state.target_idx else "#3a3a44"; b.ax.set_facecolor(b.color)
+        self.status.set_text("Befehl:  " + self.state.label())
+        self.fig.canvas.draw_idle()
+
+    # ---- run_combined viz interface ----
+    def update(self, frame, txt=""):
+        self.im.set_data(frame)
+        if txt:
+            self.axI.set_title(txt, color="w")
+        self.fig.canvas.draw_idle(); self.fig.canvas.flush_events()
+
+    def wait(self):
+        """Pump the GUI event loop until the user presses Ausführen or Beenden."""
+        while not (self.state.go or self.state.exit):
+            self.plt.pause(0.05)
+        return "exit" if self.state.exit else "go"
+
+    def hold(self):
+        self.plt.ioff(); self.plt.show()
+
+
+def _steer_perceive(vc):
+    """perceive_fn for steering: the net LOCALIZES the commanded object itself (fovea + selection head);
+    mode is left to the action toggle (force_fn), target stays the chosen marker (given, not perceived)."""
+    def perceive(cmd):
+        return vc.perceive(cmd), None, None
+    return perceive
 
 
 def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
-    print("\n" + "=" * 72)
-    print("  COMMAND STEERING INTERRUPT ACTIVE")
-    print("  Geben Sie Befehle im Format '<was> <action> <ziel>' ein.")
-    print("  Beispiele:")
-    print("    'red grasp magenta' (Greife roten Block, bringe ihn zum lila Kreis)")
-    print("    'green push blue'   (Schiebe grünen Block zum blauen Block)")
-    print("    'blue grasp red'    (Greife blauen Block, bringe ihn zum roten Block)")
-    print("  Beenden mit 'exit'")
-    print("=" * 72)
-    
-    viz = None
-    if not HEADLESS:
-        from pc.pc_act14 import CamViz
-        viz = CamViz(CAM)
-        
-    coordinator = CommandCoordinator(sim)
-    
-    # Enable persistence so objects are not reset between runs
-    os.environ["ACT16_PERSIST"] = "1"
+    """A clean interface to COMMAND the net: choose object (colour) + target (named marker) + action,
+    and the net localizes the object via its OWN perception (VisualCortexModule fovea/selection head)
+    then delivers it.  Graphical panel when a display is available; a scripted self-test when headless."""
     import pc.pc_act16 as act16
-    act16.PERSIST = True
-    
+    from pc.arm_modules import VisualCortexModule
+    print("  building the net's perception (fovea + selection head) for the command interface ...")
+    vc, _P = VisualCortexModule.from_sim(sim, CAM, RES, headless=True)   # panel is the view; no extra fovea window
+    perceive = _steer_perceive(vc)
+    state = CommandState(sim)
+
+    def run_one(tag):
+        print(f"  [{tag}] Befehl: {state.label()} -> Netz lokalisiert {state.obj} und liefert ...")
+        viz = run_one.panel
+        d, m = act16.run_combined(sim, bm, viz, CAM, episodes=1, cmd_fixed=state.cmd_fn,
+                                  force=state.force_fn, goal_fn=state.goal_fn, perceive_fn=perceive,
+                                  track_fn=vc.track, policy_fn=motor.predict, lifelong=True,
+                                  tol=act16.TOL, servo=True)
+        return d
+    run_one.panel = None
+
+    if HEADLESS:                                              # headless self-test of the full command->net path
+        print("\n" + "=" * 72)
+        print("  COMMAND STEERING — headless self-test (no GUI): cycle objects to named targets via the NET")
+        print("=" * 72)
+        act16.PERSIST = False                                 # fair eval: a FRESH scatter per episode
+        objs = [nm for _l, nm in state.OBJECTS]
+        d, m = act16.run_combined(sim, bm, None, CAM, episodes=12,
+                                  cmd_fixed=lambda ep: objs[ep % 3], force=state.force_fn,
+                                  goal_fn=lambda c, o: state.marker_xy(0), perceive_fn=perceive,
+                                  track_fn=vc.track, policy_fn=motor.predict, lifelong=True,
+                                  tol=act16.TOL, servo=True)
+        print(f"  command-steering self-test (12 eps, object commanded -> net localizes -> deliver): {d}/{m}")
+        return
+
+    os.environ["ACT16_PERSIST"] = "1"; act16.PERSIST = True   # GUI: scene persists between commands
+    print("\n" + "=" * 72)
+    print("  COMMAND STEERING — grafische Schnittstelle")
+    print("  Objekt (Farbe) + Ziel (Marker) + Modus wählen, dann 'Ausführen'.  'Beenden' schließt.")
+    print("=" * 72)
+    panel = CommandPanel(state, CAM, RES); run_one.panel = panel
+    panel.update(sim.render(CAM), "bereit — Befehl wählen und Ausführen")
     ep = 0
-    while True:
-        res = coordinator.get_command()
-        if res is None:
-            break
-        
-        print(f"\n[Episode {ep}] Führe aus: {coordinator.last_parsed} ...")
-        
-        # We run exactly 1 episode of run_combined
-        # Note: we pass bm (the BodyModelModule) as body, not bm.body, so that online lifelong adaptation works.
-        act16.run_combined(
-            sim, bm, viz, CAM, episodes=1,
-            cmd_fixed=coordinator.cmd_fn,
-            force=coordinator.force_fn,
-            goal_fn=coordinator.goal_fn,
-            policy_fn=motor.predict,
-            lifelong=True,
-            tol=act16.TOL
-        )
-        print(f"[Episode {ep}] Ausführung beendet.")
+    while panel.wait() != "exit":
+        state.go = False
+        run_one(f"Befehl {ep}")
+        panel.update(sim.render(CAM), f"fertig: {state.label()}")
         ep += 1
+    print("  Steering beendet.")
+    panel.hold()
 
 
 if __name__ == "__main__":
