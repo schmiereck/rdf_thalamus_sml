@@ -198,7 +198,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         else:
             sim.reset_home(); scatter()
         sim.target("joint_3", HOME["joint_3"]); sim.target("joint_5", J5_OPEN)
-        cmd = cmd_fixed or OBJS[ep % len(OBJS)]               # cycle which cube to fetch
+        cmd = cmd_fixed(ep) if callable(cmd_fixed) else (cmd_fixed or OBJS[ep % len(OBJS)])               # cycle which cube to fetch
         # SCENE DENSITY: place SCENE_N objects (the commanded one + distractors); park the rest off-table
         keep = [cmd] + list(rng.choice(others(cmd), max(0, min(SCENE_N - 1, len(OBJS) - 1)), replace=False))
         for i, o in enumerate([o for o in OBJS if o not in keep]):
@@ -271,7 +271,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         if post_goal_fn is not None:                          # now the COMMITTED goal is known: e.g. drop an
             obj_now = cube_plan if cube_plan is not None else sim.obj_pos(cmd)[:2]   # obstacle on the carry path
             post_goal_fn(cmd, obj_now, tgt_true)              # (placed AFTER the goal so it can clear both ends)
-        mode = force or mode_perc or "grasp"
+        mode = (force(cmd) if callable(force) else force) or mode_perc or "grasp"
         phase = "over" if mode == "grasp" else "approach"
         dwell = 0; via = "grasp"; done = False; grasp_retry = 0
         # closed-loop grasp-target BELIEF: starts at the up-front perception, then the live fovea

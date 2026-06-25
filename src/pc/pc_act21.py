@@ -97,6 +97,10 @@ def main():
         agent.add(m)
     print(agent.summary())
 
+    if os.environ.get("ACT21_STEER", "0") == "1":
+        run_command_steering(sim, bm, motor, CAM, RES, HEADLESS)
+        return
+
     from pc.arm_modules.planner import LO, HI, SPAN
 
     def curiosity_goal(cmd, obj_xy):
@@ -380,6 +384,119 @@ def _plot_metrics(rows, perturb, path):
     ax[2].set_title("cumulative delivery to dreamed goals", color="w", fontsize=9); ax[2].set_xlabel("episode", color="w")
     fig.tight_layout(rect=(0, 0, 1, 0.96)); fig.savefig(path, dpi=110, facecolor=fig.get_facecolor())
     print(f"  [viz] metrics curves saved -> {path}")
+
+
+class CommandCoordinator:
+    def __init__(self, sim):
+        self.sim = sim
+        self.current_cmd = None
+        self.current_action = None
+        self.current_target = None
+        self.last_parsed = None
+
+    def get_command(self):
+        while True:
+            try:
+                cmd_str = input("\nBefehl eingeben (<was> <action> <ziel>) oder 'exit': ").strip()
+                if not cmd_str:
+                    continue
+                if cmd_str.lower() == 'exit':
+                    return None
+                parts = cmd_str.lower().split()
+                if len(parts) != 3:
+                    print("Fehler: Befehl muss die Form <was> <action> <ziel> haben (z.B. 'red grasp blue' oder 'green push magenta').")
+                    continue
+                
+                was_color, action, ziel_color = parts
+                
+                # Validate <was>
+                if was_color not in ("red", "green", "blue"):
+                    print(f"Fehler: Unbekanntes Objekt '{was_color}'. Erlaubt: red, green, blue")
+                    continue
+                obj_name = f"obj_{was_color}"
+                
+                # Validate <action>
+                if action not in ("grasp", "push", "pick", "carry"):
+                    print(f"Fehler: Unbekannte Aktion '{action}'. Erlaubt: grasp, push")
+                    continue
+                force_mode = "push" if action == "push" else "grasp"
+                
+                # Validate <ziel>
+                if ziel_color in ("magenta", "target", "marker"):
+                    target_pos = None # will resolve to target_marker
+                elif ziel_color in ("red", "green", "blue"):
+                    target_pos = self.sim.obj_pos(f"obj_{ziel_color}")[:2].copy()
+                else:
+                    print(f"Fehler: Unbekanntes Ziel '{ziel_color}'. Erlaubt: red, green, blue, magenta")
+                    continue
+                
+                self.current_cmd = obj_name
+                self.current_action = force_mode
+                self.current_target = target_pos
+                self.last_parsed = cmd_str
+                return True
+            except KeyboardInterrupt:
+                return None
+            except Exception as e:
+                print(f"Fehler beim Parsen: {e}")
+
+    def cmd_fn(self, ep):
+        return self.current_cmd
+
+    def force_fn(self, cmd):
+        return self.current_action
+
+    def goal_fn(self, cmd, obj_xy):
+        if self.current_target is not None:
+            return self.current_target
+        bid = mujoco.mj_name2id(self.sim.m, mujoco.mjtObj.mjOBJ_BODY, "target_marker")
+        return self.sim.d.mocap_pos[self.sim.m.body_mocapid[bid]][:2].copy()
+
+
+def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
+    print("\n" + "=" * 72)
+    print("  COMMAND STEERING INTERRUPT ACTIVE")
+    print("  Geben Sie Befehle im Format '<was> <action> <ziel>' ein.")
+    print("  Beispiele:")
+    print("    'red grasp magenta' (Greife roten Block, bringe ihn zum lila Kreis)")
+    print("    'green push blue'   (Schiebe grünen Block zum blauen Block)")
+    print("    'blue grasp red'    (Greife blauen Block, bringe ihn zum roten Block)")
+    print("  Beenden mit 'exit'")
+    print("=" * 72)
+    
+    viz = None
+    if not HEADLESS:
+        from pc.pc_act14 import CamViz
+        viz = CamViz(CAM)
+        
+    coordinator = CommandCoordinator(sim)
+    
+    # Enable persistence so objects are not reset between runs
+    os.environ["ACT16_PERSIST"] = "1"
+    import pc.pc_act16 as act16
+    act16.PERSIST = True
+    
+    ep = 0
+    while True:
+        res = coordinator.get_command()
+        if res is None:
+            break
+        
+        print(f"\n[Episode {ep}] Führe aus: {coordinator.last_parsed} ...")
+        
+        # We run exactly 1 episode of run_combined
+        # Note: we pass bm (the BodyModelModule) as body, not bm.body, so that online lifelong adaptation works.
+        act16.run_combined(
+            sim, bm, viz, CAM, episodes=1,
+            cmd_fixed=coordinator.cmd_fn,
+            force=coordinator.force_fn,
+            goal_fn=coordinator.goal_fn,
+            policy_fn=motor.predict,
+            lifelong=True,
+            tol=act16.TOL
+        )
+        print(f"[Episode {ep}] Ausführung beendet.")
+        ep += 1
 
 
 if __name__ == "__main__":
