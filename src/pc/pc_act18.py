@@ -158,6 +158,14 @@ def set_sheet4(cells, arr):
 CMD_INDEX = {"obj_red": 0, "obj_green": 1, "obj_blue": 2}
 N_CMD = len(CMD_INDEX)
 LEARN_SEL = os.environ.get("ACT_LEARN_SEL", "1") == "1"   # 1 = learned selection head; 0 = scripted match
+# DISTRACTOR-LOCK verification (the perception TAIL): the rare large errors are 100% distractor-locks
+# (fovea centres on the WRONG-colour object), never localization drift.  At a converged lock the
+# COMMANDED code lights the fovea CENTRE only weakly (center-weighted winning mass < ~3 vs > ~4 on a
+# true fixation).  So after the follow converges, RE-CHECK with the SAME learned head (no scripted
+# colour match): the commanded code must WIN the centre AND clear a confidence floor; else re-search.
+VERIFY = os.environ.get("ACT_VERIFY", "1") == "1"
+VERIFY_FLOOR = float(os.environ.get("ACT_VERIFY_FLOOR", "2.5"))   # min commanded centre-mass to accept
+CONTRAST_SEL = os.environ.get("ACT_CONTRAST_SEL", "1") == "1"     # contrastive sel read (suppress other-code cells)
 
 
 def onehot_cmd(cmd):
@@ -388,9 +396,19 @@ class HexFovea:
         self.z = float(np.clip(self.z + 0.3 * (z_target - self.z), 1.0, ZOOM_MAX))
 
     def _fill_sel(self, arr, cmd):
-        """Fill the sel channel: LEARNED head (command code -> selection) or the scripted match."""
+        """Fill the sel channel: LEARNED head (command code -> selection) or the scripted match.
+        CONTRAST_SEL: read the head CONTRASTIVELY -- keep only cells the COMMANDED code claims OVER its
+        competitors (zero a cell where another code scores higher).  A distractor-lock is the head
+        mis-firing the commanded code on the WRONG object; but THAT object's OWN code scores even higher
+        there, so the contrastive gate zeroes it -> the fovea no longer locks onto it (fixes the tail at
+        the source, not by re-search)."""
         if LEARN_SEL:
-            arr[:, :, 0] = self.sel_head.predict_sheet(arr, onehot_cmd(cmd))
+            s = self.sel_head.predict_sheet(arr, onehot_cmd(cmd))
+            if CONTRAST_SEL and N_CMD > 1:
+                others = np.maximum.reduce([self.sel_head.predict_sheet(arr, onehot_cmd(nm))
+                                            for nm in CMD_INDEX if nm != cmd])
+                s = np.where(s >= others, s, 0.0)
+            arr[:, :, 0] = s
         else:
             arr[:, :, 0] = _match_target(arr, CMD_COLOR[cmd])
 
@@ -488,13 +506,38 @@ class HexFovea:
         gaze = gaze + warp_gaze_delta(com, center, self._ek()) + np.clip(drive * 6.0, -2, 2)
         return gaze, True, arr, conf
 
+    def verify(self, img, gaze, cmd):
+        """LEARNED distractor-lock check at `gaze`: is the FIXATED (centre) object best explained by
+        the COMMANDED code?  Uses the SAME selection head (NO scripted colour match): a CENTRE-weighted
+        sel-mass per command code; the commanded code must WIN the centre AND clear VERIFY_FLOOR.  A
+        wrong/empty lock lights the centre weakly under the commanded code -> returns ok=False.  Returns
+        (ok, commanded_centre_mass)."""
+        if not (LEARN_SEL and VERIFY):
+            return True, VERIFY_FLOOR
+        arr = hex_sample(img, gaze, self._ek())
+        ctr = (F - 1) / 2.0
+        yy, xx = np.mgrid[0:F, 0:F]
+        w = np.exp(-((xx - ctr) ** 2 + (yy - ctr) ** 2) / 8.0)        # sigma=2 cells: weight the centre
+        m = {nm: float((self.sel_head.predict_sheet(arr, onehot_cmd(nm)) * w).sum()) for nm in CMD_INDEX}
+        win = max(m, key=m.get)
+        return (win == cmd and m[cmd] >= VERIFY_FLOOR), m[cmd]
+
+    def _next_saccade(self, grid, blacklist, saccade):
+        """Pick the next search gaze: the grid point FARTHEST from every rejected (distractor) lock, so
+        the re-search explores away from the wrong object instead of re-converging onto it."""
+        if not blacklist:
+            return grid[saccade % len(grid)].copy()
+        return max(grid, key=lambda g: min(np.linalg.norm(g - b) for b in blacklist)).copy()
+
     def locate(self, render_fn, cmd, gaze, grid, learn=True, viz=None, label=""):
         """SEARCH (saccade over `grid`) then FOLLOW (error-driven) the commanded object (by its
         abstract code, via the learned selection head); returns the foveated gaze (px) or None."""
         import time
         center = (F - 1) / 2.0; fov_v = np.zeros(2); seen = 0; saccade = 0; com = None
         self.z = 1.0                                         # fresh search starts at detail; zoom out if lost
-        for it in range(50):
+        blacklist = []                                       # px of rejected distractor-locks (re-search away)
+        best = None                                          # (commanded centre-mass, gaze) least-bad fallback
+        for it in range(60):                                 # a few extra iters to afford a lock re-search
             img = render_fn()                               # render ONCE per iteration, reuse below
             arr = self.step(img, gaze, cmd, learn)
             com = com2d(arr[:, :, 0])                       # conditioned (commanded) object in cells
@@ -509,14 +552,25 @@ class HexFovea:
                 gaze = gaze + warp_gaze_delta(com, center, self._ek()) + fov_v
                 seen = seen + 1 if np.linalg.norm(com - center) < 1.2 else 0
                 if seen >= 3:
-                    break
+                    ok, wm = self.verify(img, gaze, cmd)    # LEARNED distractor-lock re-check at the lock
+                    if best is None or wm > best[0]:
+                        best = (wm, gaze.copy())            # remember the most commanded-looking fixation
+                    if ok:
+                        break                                # verified the commanded object -> accept
+                    blacklist.append(gaze.copy())            # distractor-lock -> re-search away from it
+                    seen = 0; self._zoom_step(0.0)           # zoom OUT for a fresh overview (if zoom on)
+                    gaze = self._next_saccade(grid, blacklist, saccade); saccade += 1
             else:                                           # not in view -> zoom OUT + saccadic search
                 self._zoom_step(0.0)
-                gaze = grid[saccade % len(grid)].copy(); saccade += 1
+                gaze = self._next_saccade(grid, blacklist, saccade); saccade += 1
             gaze = np.clip(gaze, F * self.K, np.array([img.shape[1], img.shape[0]]) - F * self.K)
             if viz is not None:
                 viz.fovea(img, gaze, self._ek(), np.clip(arr[:, :, 1:], 0, 1), f"search/follow {label}")
                 time.sleep(0.02)
+        if seen >= 3:                                        # accepted a verified fixation this iteration
+            return gaze
+        if best is not None:                                 # never verified -> return the least-bad lock
+            return best[1]
         return gaze if (seen >= 1 or com is not None) else None
 
 
