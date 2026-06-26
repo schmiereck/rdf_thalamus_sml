@@ -37,12 +37,14 @@ def _perturb(sim, dz):
 def main():
     HEADLESS = os.environ.get("ACT21_HEADLESS", "0") == "1"
     CAM = os.environ.get("ACT21_CAM", "overview").lower()
-    COLLECT = int(os.environ.get("ACT21_COLLECT", "30"))   # more teacher demos for the enlarged workspace
+    COLLECT = int(os.environ.get("ACT21_COLLECT", "90"))   # more teacher demos for the enlarged workspace
     EXPLORE = int(os.environ.get("ACT21_EPISODES", "24"))
     BASE = int(os.environ.get("ACT21_BASE", "10"))
     RES = int(os.environ.get("ACT21_RES", "240"))
     PERTURB = float(os.environ.get("ACT21_PERTURB", "0.02"))
     GM_STEPS = int(os.environ.get("ACT21_GM_STEPS", "8000"))
+    GSEED = int(os.environ.get("ACT21_GSEED", "77"))
+
 
     print("act21 — researching agent: CuriosityPlanner (no rule) + lifelong FK/IK, observed")
     sim = BracketArmSim(render_wh=(RES, RES)); sim.set_reach_site("contact")
@@ -57,7 +59,11 @@ def main():
     def log(state, aim, j5):
         Xs.append(state.copy()); Ys.append(np.array([aim[0], aim[1], aim[2], j5]))
     print(f"  collecting reactive-teacher demos ({COLLECT} eps) ...")
-    act16.run_combined(sim, bm.body, None, CAM, episodes=COLLECT, policy_fn=act16.reactive_subgoal, log_fn=log)
+    orig_seed = os.environ.get("ACT16_SEED", "1")
+    for ep in range(COLLECT):
+        os.environ["ACT16_SEED"] = str(1000 + ep)
+        act16.run_combined(sim, bm.body, None, CAM, episodes=1, policy_fn=act16.reactive_subgoal, log_fn=log)
+    os.environ["ACT16_SEED"] = orig_seed
     baseX, baseY = np.array(Xs), np.array(Ys)             # anchor demos (kept for online DAgger shaping)
     motor.fit(baseX, baseY)
 
@@ -83,11 +89,11 @@ def main():
                 motor.fit(np.vstack([bx, baseX]), np.vstack([by, baseY]), epochs=120, set_norm=False, quiet=True)
         act16.run_combined._quiet = True
         d0, _ = act16.run_combined(sim, bm.body, None, CAM, episodes=12, policy_fn=motor.predict,
-                                   goal_fn=_fg(77), lifelong=False)               # eval on FIXED goals
+                                   goal_fn=_fg(GSEED), lifelong=False)               # eval on FIXED goals
         act16.run_combined(sim, bm.body, None, CAM, episodes=RN, policy_fn=motor.predict,
                            macro_log_fn=_rlog, episode_end_fn=_rfit, lifelong=False)   # train on DIVERSE goals
         d1, _ = act16.run_combined(sim, bm.body, None, CAM, episodes=12, policy_fn=motor.predict,
-                                   goal_fn=_fg(77), lifelong=False)
+                                   goal_fn=_fg(GSEED), lifelong=False)
         act16.run_combined._quiet = False
         print(f"  recovery-DAgger polish ({RN} eps, teacher labels visited states incl carry): "
               f"frozen FIXED-goal delivery {d0}/12 -> {d1}/12")
@@ -139,7 +145,7 @@ def main():
         _perturb(sim, PERTURB)
         print(f"  *** perturbed the arm: +{PERTURB*1000:.0f}mm forearm -> trained FK/IK are now STALE ***")
 
-    GSEED = 77
+    # GSEED already defined at the top of main()
     if SHAPE:
         # ---- 3b: ONLINE DENSE-SHAPING policy learning (extends the act21 stand: walls + lifelong + viz) ----
         # The policy DRIVES; the routed teacher (reactive_subgoal, with the obstacle-routed carry sub-goal)

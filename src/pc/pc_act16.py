@@ -145,7 +145,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
     Closes the perception->action loop.  (target_xy may be None to keep the given target.)"""
-    rng = np.random.default_rng(1)
+    rng = np.random.default_rng(int(os.environ.get("ACT16_SEED", "1")))
     tol = TOL if tol is None else float(tol)             # delivery tolerance (enlargeable target)
     _tm = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "target_marker")
     if _tm >= 0:                                          # show the disk at the scoring tolerance radius
