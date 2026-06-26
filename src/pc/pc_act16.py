@@ -134,7 +134,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                  mixed=False, track_fn=None, lifelong=False, log_fn=None, policy_fn=None,
                  episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None,
                  ood_rate=0.0, ood_rng=None, size_fn=None, tol=None, carry_target_fn=None,
-                 post_goal_fn=None, macro_log_fn=None, servo=False):
+                 post_goal_fn=None, macro_log_fn=None, servo=False, rescatter=True):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -184,8 +184,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         if moved:
             mujoco.mj_forward(sim.m, sim.d); sim.step(80)
 
-    if PERSIST:
-        sim.reset_home(); scatter()
+    if PERSIST and rescatter:        # rescatter=False -> reuse the scene already on the table (e.g. the
+        sim.reset_home(); scatter()  #   command interface places it ONCE at startup, keeps it across commands)
     n_grasp = n_push = deliveries = 0; perr_sum = perr_n = terr_sum = terr_n = 0.0
     dec_ok = dec_n = 0; grasp_ok = grasp_tot = push_ok = push_tot = 0
     base_ok = base_n = ood_ok = ood_n = 0                    # generalization-probe split
@@ -461,9 +461,9 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             print(f"  camera-perceived CUBE vs true: {perr_sum/perr_n*1000:.1f} mm  (over {int(perr_n)} eps)")
         if terr_n:
             print(f"  camera-perceived TARGET vs true: {terr_sum/terr_n*1000:.1f} mm  (over {int(terr_n)} eps)")
-    if viz is not None:
-        print("  [viz] close the window to exit."); viz.hold()
-    return deliveries, episodes
+    if viz is not None and not getattr(run_combined, "_quiet", False):   # _quiet -> caller owns the viz
+        print("  [viz] close the window to exit."); viz.hold()           #   lifecycle (e.g. interactive
+    return deliveries, episodes                                          #   command steering keeps it open)
 
 
 def main():

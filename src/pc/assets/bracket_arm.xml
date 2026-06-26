@@ -109,18 +109,22 @@
 
     <!-- target marker: a flat disk on the table (mocap = kinematic, moved per episode),
          no collision so it never disturbs the cubes; also a visible cue for the camera.
-         target_marker is the ACTIVE-goal disk that run_combined snaps onto the chosen target;
-         target_marker_2/_3 are extra NAMED, selectable goal locations for the command interface
-         (graphical steering).  All magenta so the perception net treats them identically (the
-         single magenta disk was already in-distribution during warmup). -->
-    <body name="target_marker" mocap="true" pos="-0.06 0.18 0.001">
+         target_marker is the ACTIVE-goal disk run_combined snaps onto the committed goal each episode.
+         target_sel_1/_2/_3 are FIXED, NAMED, selectable goal locations for the command interface
+         (graphical steering) -- kept SEPARATE from target_marker so the active disk moving to show the
+         delivery never drags a selectable marker (Ziel N stays put).  All magenta so the perception net
+         treats them identically (the single magenta disk was already in-distribution during warmup). -->
+    <body name="target_marker" mocap="true" pos="0.0 0.13 0.001">
       <geom type="cylinder" size="0.016 0.0008" rgba="1 0 1 0.95" contype="0" conaffinity="0"/>
     </body>
-    <body name="target_marker_2" mocap="true" pos="0.0 0.13 0.001">
-      <geom type="cylinder" size="0.016 0.0008" rgba="1 0 1 0.6" contype="0" conaffinity="0"/>
+    <body name="target_sel_1" mocap="true" pos="-0.07 0.17 0.001">
+      <geom type="cylinder" size="0.014 0.0006" rgba="1 0 1 0.5" contype="0" conaffinity="0"/>
     </body>
-    <body name="target_marker_3" mocap="true" pos="0.06 0.18 0.001">
-      <geom type="cylinder" size="0.016 0.0008" rgba="1 0 1 0.6" contype="0" conaffinity="0"/>
+    <body name="target_sel_2" mocap="true" pos="0.0 0.20 0.001">
+      <geom type="cylinder" size="0.014 0.0006" rgba="1 0 1 0.5" contype="0" conaffinity="0"/>
+    </body>
+    <body name="target_sel_3" mocap="true" pos="0.07 0.17 0.001">
+      <geom type="cylinder" size="0.014 0.0006" rgba="1 0 1 0.5" contype="0" conaffinity="0"/>
     </body>
 
     <!-- STATIC board obstacle: a fixed wall (no joint => infinite mass / immovable) the arm physically

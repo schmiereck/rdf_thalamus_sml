@@ -394,7 +394,7 @@ class CommandState:
     returns the SELECTED marker's table xy."""
 
     OBJECTS = [("rot", "obj_red"), ("grün", "obj_green"), ("blau", "obj_blue")]
-    MARKERS = ["target_marker", "target_marker_2", "target_marker_3"]
+    MARKERS = ["target_sel_1", "target_sel_2", "target_sel_3"]   # fixed, selectable named goals
 
     def __init__(self, sim):
         self.sim = sim
@@ -515,11 +515,12 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
 
     def run_one(tag):
         print(f"  [{tag}] Befehl: {state.label()} -> Netz lokalisiert {state.obj} und liefert ...")
-        viz = run_one.panel
-        d, m = act16.run_combined(sim, bm, viz, CAM, episodes=1, cmd_fixed=state.cmd_fn,
+        # rescatter=False: reuse the scene already on the table (placed ONCE at startup, kept across
+        # commands) so the positions the user SEES are the ones executed.
+        d, m = act16.run_combined(sim, bm, run_one.panel, CAM, episodes=1, cmd_fixed=state.cmd_fn,
                                   force=state.force_fn, goal_fn=state.goal_fn, perceive_fn=perceive,
                                   track_fn=vc.track, policy_fn=motor.predict, lifelong=True,
-                                  tol=act16.TOL, servo=True)
+                                  tol=act16.TOL, servo=True, rescatter=False)
         return d
     run_one.panel = None
 
@@ -538,18 +539,22 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
         return
 
     os.environ["ACT16_PERSIST"] = "1"; act16.PERSIST = True   # GUI: scene persists between commands
+    act16.run_combined._quiet = True                          # the steering loop OWNS the viz lifecycle
+    #   (so run_combined does NOT block on viz.hold() after each command -> the buttons keep responding)
+    act16.run_combined(sim, bm, None, CAM, episodes=0)        # place the scene ONCE (scatter, 0 episodes)
     print("\n" + "=" * 72)
     print("  COMMAND STEERING — grafische Schnittstelle")
     print("  Objekt (Farbe) + Ziel (Marker) + Modus wählen, dann 'Ausführen'.  'Beenden' schließt.")
     print("=" * 72)
     panel = CommandPanel(state, CAM, RES); run_one.panel = panel
-    panel.update(sim.render(CAM), "bereit — Befehl wählen und Ausführen")
+    panel.update(sim.render(CAM), "bereit — Befehl wählen und Ausführen")   # the scene that WILL be used
     ep = 0
     while panel.wait() != "exit":
         state.go = False
         run_one(f"Befehl {ep}")
         panel.update(sim.render(CAM), f"fertig: {state.label()}")
         ep += 1
+    act16.run_combined._quiet = False
     print("  Steering beendet.")
     panel.hold()
 
