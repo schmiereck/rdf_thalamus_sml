@@ -39,9 +39,9 @@ class VisualCortexModule(ArmModule):
              .add_out("gaze", 2, "fovea centre (px)"))
 
     @classmethod
-    def from_sim(cls, sim, CAM="overview", RES=240, headless=False, name="VisualCortex"):
+    def from_sim(cls, sim, CAM="overview", RES=240, headless=False, name="VisualCortex", viz=None):
         from pc.pc_act18 import CMD_COLOR
-        P = setup_following_fovea(sim, CAM, RES, headless=headless)
+        P = setup_following_fovea(sim, CAM, RES, headless=headless, viz=viz)
         return cls(P, CMD_COLOR, name=name), P
 
     @property

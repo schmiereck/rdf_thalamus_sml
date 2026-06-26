@@ -452,39 +452,54 @@ class CommandState:
 
 
 class CommandPanel:
-    """Graphical command interface (matplotlib widgets): pick the OBJECT by colour button, the TARGET by
-    a named-marker button, toggle grasp/push, 'Ziel neu' re-randomizes the selected target, then Ausführen.
-    Doubles as the run_combined `viz` (update/hold) so the same window shows the arm executing.  Needs the
-    cam + an rng to render selection feedback and to place targets."""
+    """Graphical command interface in ONE window: the arm-execution camera (left), the net's FOVEA view
+    (real camera + the foveated window + the HEX cells the net sees) and the PC-module SURPRISE curves
+    (right) -- so everything is on one screen -- plus the command buttons (object colour, named target,
+    grasp/push, 'Ziel neu', Ausführen, Beenden).  Doubles as the run_combined `viz` (update/hold) for the
+    arm view, hosts an embedded HexFoveaViz (self.fov_viz) + SurpriseViz (self.surp_viz) on its own axes."""
 
     OBJ_COL = {"obj_red": "#d23030", "obj_green": "#2fae40", "obj_blue": "#3358d2"}
 
     def __init__(self, state, cam, res, rng=None):
         import matplotlib.pyplot as plt
         from matplotlib.widgets import Button
+        from pc.pc_act18 import HexFoveaViz, SurpriseViz
         self.plt = plt; self.state = state; self._cam = cam
         self._rng = rng if rng is not None else np.random.default_rng(0); plt.ion()
-        self.fig = plt.figure(figsize=(6.4, 8.0)); self.fig.patch.set_facecolor("#0e0e12")
-        self.axI = self.fig.add_axes([0.04, 0.42, 0.92, 0.55]); self.axI.axis("off")
-        self.axI.set_title(f"Befehls-Schnittstelle — {cam} Kamera", color="w")
-        self.im = self.axI.imshow(np.zeros((res, res, 3), np.uint8))
-        self.status = self.fig.text(0.5, 0.385, "", ha="center", color="w", fontsize=11, family="monospace")
+        # default sized to fit a 1920x1200 @125% screen (logical ~1536x960); env ACT21_FIGSIZE to change
+        fw, fh = (float(x) for x in os.environ.get("ACT21_FIGSIZE", "12.0,7.5").split(","))
+        self.fig = plt.figure(figsize=(fw, fh)); self.fig.patch.set_facecolor("#0e0e12")
+        self.fig.canvas.manager.set_window_title("Befehls-Schnittstelle — Netz steuern")
+        # --- plot band (top): arm camera | fovea (real + hex cells) | surprise curves ---
+        self.axCam = self.fig.add_axes([0.035, 0.30, 0.38, 0.63]); self.axCam.axis("off")
+        self.axCam.set_title(f"Arm — {cam} Kamera", color="w", fontsize=10)
+        self.imCam = self.axCam.imshow(np.zeros((res, res, 3), np.uint8))
+        axFovI = self.fig.add_axes([0.44, 0.62, 0.24, 0.31])
+        axFovC = self.fig.add_axes([0.44, 0.30, 0.21, 0.26])
+        self.fov_viz = HexFoveaViz(cam, res, axI=axFovI, axC=axFovC)        # net's fovea, in THIS window
+        axE = self.fig.add_axes([0.715, 0.635, 0.27, 0.295])
+        axR = self.fig.add_axes([0.715, 0.30, 0.27, 0.235])
+        self.surp_viz = SurpriseViz(axE=axE, axR=axR, show_readout=False)   # PC-module surprise, in THIS window
+        self.status = self.fig.text(0.5, 0.255, "", ha="center", color="w", fontsize=11, family="monospace")
+        self.live = self.fig.text(0.225, 0.285, "", ha="center", color="#9fb4c8", fontsize=8.5,
+                                  family="monospace")        # live arm-execution status under the camera
+        # --- buttons (bottom): two rows ---
         self._obj_btns = {}; self._tgt_btns = {}
         for i, (lbl, nm) in enumerate(state.OBJECTS):       # object colour buttons
-            ax = self.fig.add_axes([0.055 + 0.31 * i, 0.305, 0.27, 0.06])
+            ax = self.fig.add_axes([0.035 + 0.13 * i, 0.150, 0.12, 0.055])
             b = Button(ax, lbl.capitalize(), color=self.OBJ_COL[nm], hovercolor=self.OBJ_COL[nm])
             b.on_clicked(lambda _e, nm=nm: self._set_obj(nm)); self._obj_btns[nm] = b
         for i in range(len(state.MARKERS)):                 # named target buttons
-            ax = self.fig.add_axes([0.055 + 0.31 * i, 0.225, 0.27, 0.06])
+            ax = self.fig.add_axes([0.55 + 0.13 * i, 0.150, 0.12, 0.055])
             b = Button(ax, f"Ziel {i + 1}", color="#3a3a44", hovercolor="#55556a")
             b.on_clicked(lambda _e, i=i: self._set_tgt(i)); self._tgt_btns[i] = b
-        axA = self.fig.add_axes([0.055, 0.130, 0.42, 0.06])   # mid row: action toggle + place-target
+        axA = self.fig.add_axes([0.035, 0.04, 0.20, 0.07])    # action toggle + place-target
         self.bA = Button(axA, "Modus: Greifen", color="#555", hovercolor="#777"); self.bA.on_clicked(self._toggle)
-        axP = self.fig.add_axes([0.525, 0.130, 0.42, 0.06])
+        axP = self.fig.add_axes([0.25, 0.04, 0.20, 0.07])
         self.bP = Button(axP, "Ziel neu (Zufall)", color="#7a5cae", hovercolor="#9a78d0"); self.bP.on_clicked(self._place)
-        axG = self.fig.add_axes([0.055, 0.04, 0.42, 0.07])    # bottom row: go + exit
+        axG = self.fig.add_axes([0.58, 0.04, 0.18, 0.07])     # go + exit
         self.bG = Button(axG, "Ausführen", color="#1f8a5b", hovercolor="#27a96f"); self.bG.on_clicked(self._go)
-        axX = self.fig.add_axes([0.525, 0.04, 0.42, 0.07])
+        axX = self.fig.add_axes([0.77, 0.04, 0.18, 0.07])
         self.bX = Button(axX, "Beenden", color="#8a3030", hovercolor="#a94040"); self.bX.on_clicked(self._exit)
         self.fig.canvas.mpl_connect("close_event", lambda _e: setattr(self.state, "exit", True))
         self._refresh()
@@ -518,9 +533,9 @@ class CommandPanel:
 
     # ---- run_combined viz interface ----
     def update(self, frame, txt=""):
-        self.im.set_data(frame)
+        self.imCam.set_data(frame)
         if txt:
-            self.axI.set_title(txt, color="w")
+            self.live.set_text(txt)
         self.fig.canvas.draw_idle(); self.fig.canvas.flush_events()
 
     def wait(self):
@@ -544,26 +559,16 @@ def _steer_perceive(vc):
 def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
     """A clean interface to COMMAND the net: choose object (colour) + target (named marker) + action,
     and the net localizes the object via its OWN perception (VisualCortexModule fovea/selection head)
-    then delivers it.  Graphical panel when a display is available; a scripted self-test when headless."""
+    then delivers it.  ONE graphical window (arm camera + the net's fovea view + the PC-module surprise
+    curves + the buttons) when a display is available; a scripted self-test when headless."""
     import pc.pc_act16 as act16
     from pc.arm_modules import VisualCortexModule
-    print("  building the net's perception (fovea + selection head) for the command interface ...")
-    vc, _P = VisualCortexModule.from_sim(sim, CAM, RES, headless=True)   # panel is the view; no extra fovea window
-    perceive = _steer_perceive(vc)
     state = CommandState(sim)
 
-    def run_one(tag):
-        print(f"  [{tag}] Befehl: {state.label()} -> Netz lokalisiert {state.obj} und liefert ...")
-        # rescatter=False: reuse the scene already on the table (placed ONCE at startup, kept across
-        # commands) so the positions the user SEES are the ones executed.
-        d, m = act16.run_combined(sim, bm, run_one.panel, CAM, episodes=1, cmd_fixed=state.cmd_fn,
-                                  force=state.force_fn, goal_fn=state.goal_fn, perceive_fn=perceive,
-                                  track_fn=vc.track, policy_fn=motor.predict, lifelong=True,
-                                  tol=act16.TOL, servo=True, rescatter=False)
-        return d
-    run_one.panel = None
-
     if HEADLESS:                                              # headless self-test of the full command->net path
+        print("  building the net's perception (fovea + selection head) ...")
+        vc, _P = VisualCortexModule.from_sim(sim, CAM, RES, headless=True)
+        perceive = _steer_perceive(vc)
         print("\n" + "=" * 72)
         print("  COMMAND STEERING — headless self-test (no GUI): cycle objects to named targets via the NET")
         print("=" * 72)
@@ -578,21 +583,46 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
         return
 
     os.environ["ACT16_PERSIST"] = "1"; act16.PERSIST = True   # GUI: scene persists between commands
-    act16.run_combined._quiet = True                          # the steering loop OWNS the viz lifecycle
-    #   (so run_combined does NOT block on viz.hold() after each command -> the buttons keep responding)
-    act16.run_combined(sim, bm, None, CAM, episodes=0)        # place the scene ONCE (scatter, 0 episodes)
-    state.sync_active()                                       # bright goal disk starts on the selected marker
+    act16.run_combined._quiet = True                          # the steering loop OWNS the viz lifecycle (so
+    #   run_combined does NOT block on viz.hold() / print after each command -> the buttons keep responding)
     print("\n" + "=" * 72)
-    print("  COMMAND STEERING — grafische Schnittstelle")
+    print("  COMMAND STEERING — grafische Schnittstelle (Kamera + Fovea + Surprise-Kurven in EINEM Fenster)")
     print("  Objekt (Farbe) + Ziel (Marker) + Modus + 'Ziel neu' (Zufalls-Ziel), dann 'Ausführen'.")
     print("=" * 72)
-    panel = CommandPanel(state, CAM, RES, rng=np.random.default_rng(7)); run_one.panel = panel
+    panel = CommandPanel(state, CAM, RES, rng=np.random.default_rng(7))
+    panel.update(sim.render(CAM), "Wahrnehmung des Netzes wird trainiert ...")
+    # build the perception with the fovea drawing INTO the panel (so the fovea view is in the same window)
+    vc, _P = VisualCortexModule.from_sim(sim, CAM, RES, headless=True, viz=panel.fov_viz)
+    perceive = _steer_perceive(vc)
+    act16.run_combined(sim, bm, None, CAM, episodes=0)        # place the scene ONCE (scatter, 0 episodes)
+    state.sync_active()                                       # bright goal disk starts on the selected marker
     panel.update(sim.render(CAM), "bereit — Befehl wählen und Ausführen")   # the scene that WILL be used
+
+    def track_and_plot():                                     # one follow frame + push the surprise curves
+        obs = vc.track()
+        s = vc.surprise()
+        if s is not None:
+            panel.surp_viz.push(s["sensor"], s["state"], s["total"], s["relax"],
+                                getattr(bm, "_surprise_mm", None))
+        return obs
+
+    res = {}
+    def ep_end(ep, ok, err): res["ok"] = bool(ok); res["err"] = float(err)
+
     ep = 0
     while panel.wait() != "exit":
         state.go = False
-        run_one(f"Befehl {ep}")
-        panel.update(sim.render(CAM), f"fertig: {state.label()}")
+        print(f"  [Befehl {ep}] {state.label()} -> Netz lokalisiert {state.obj} und liefert ...")
+        # rescatter=False: reuse the scene already on the table (placed ONCE at startup, kept across
+        # commands) so the positions the user SEES are the ones executed.
+        act16.run_combined(sim, bm, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
+                           goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_and_plot,
+                           policy_fn=motor.predict, lifelong=True, tol=act16.TOL, servo=True,
+                           rescatter=False, episode_end_fn=ep_end)
+        ok = res.get("ok", False); err_mm = res.get("err", float("nan")) * 1000.0
+        line = f"[Befehl {ep}] {'GELIEFERT' if ok else 'NICHT geliefert'}  |  Abstand zum Ziel {err_mm:.0f} mm"
+        print("  " + line)
+        panel.update(sim.render(CAM), line)
         ep += 1
     act16.run_combined._quiet = False
     print("  Steering beendet.")

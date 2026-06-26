@@ -229,15 +229,20 @@ class SelectionHead:
 class HexFoveaViz:
     """Left: real camera + the fovea window and its HEX sample points.  Right: the cells the
     net sees, drawn in their HEX arrangement (odd rows offset half a cell)."""
-    def __init__(self, cam, res):
+    def __init__(self, cam, res, axI=None, axC=None):
         import matplotlib.pyplot as plt
         from matplotlib.patches import Rectangle
-        self.plt = plt; self._Rect = Rectangle; plt.ion()
-        self.fig, (self.axI, self.axC) = plt.subplots(1, 2, figsize=(9.8, 5),
-                                                      gridspec_kw={"width_ratios": [3, 1.4]})
-        self.fig.patch.set_facecolor("#0e0e12")
-        self.axI.set_title(f"act18 — {cam} camera (real view)", color="w"); self.axI.axis("off")
-        self.axC.set_title("net sees (HEX cells)", color="w")
+        self.plt = plt; self._Rect = Rectangle
+        self._embedded = axI is not None and axC is not None   # draw into a PARENT figure's axes (one window)
+        if self._embedded:
+            self.axI, self.axC = axI, axC; self.fig = axI.figure
+        else:
+            plt.ion()
+            self.fig, (self.axI, self.axC) = plt.subplots(1, 2, figsize=(9.8, 5),
+                                                          gridspec_kw={"width_ratios": [3, 1.4]})
+            self.fig.patch.set_facecolor("#0e0e12")
+        self.axI.set_title(f"{cam} Kamera (Fovea)", color="w", fontsize=9); self.axI.axis("off")
+        self.axC.set_title("Netz sieht (HEX)", color="w", fontsize=9)
         self.axC.set_facecolor("#0e0e12"); self.axC.set_xticks([]); self.axC.set_yticks([])
         self.imI = self.axI.imshow(np.zeros((res, res, 3), np.uint8))
         self.rect = self._Rect((0, 0), 10, 10, fill=False, ec="#33ccff", lw=1.5, ls="--")
@@ -276,6 +281,8 @@ class HexFoveaViz:
         self.fig.canvas.draw_idle(); self.fig.canvas.flush_events()
 
     def hold(self):
+        if self._embedded:
+            return                                            # the parent window owns the lifecycle
         self.plt.ioff(); self.plt.show()
 
 
@@ -296,18 +303,25 @@ class SurpriseViz:
     A live numeric readout shows the CURRENT value per module.  Call `push(...)` once per
     frame; it redraws (throttled) so you watch the curves grow."""
 
-    def __init__(self, title="PC modules — surprise over time", redraw_every=3, window=600):
+    def __init__(self, title="PC modules — surprise over time", redraw_every=3, window=600,
+                 axE=None, axR=None, show_readout=True):
         import matplotlib.pyplot as plt
-        self.plt = plt; plt.ion()
-        self.fig, (self.axE, self.axR) = plt.subplots(2, 1, figsize=(7.6, 6.6), sharex=True)
-        self.fig.patch.set_facecolor("#0e0e12"); self.fig.suptitle(title, color="w")
+        self.plt = plt
+        self._embedded = axE is not None and axR is not None   # draw into a PARENT figure's axes (one window)
+        if self._embedded:
+            self.axE, self.axR = axE, axR; self.fig = axE.figure
+        else:
+            plt.ion()
+            self.fig, (self.axE, self.axR) = plt.subplots(2, 1, figsize=(7.6, 6.6), sharex=True)
+            self.fig.patch.set_facecolor("#0e0e12"); self.fig.suptitle(title, color="w")
         self._k = 0; self._redraw_every = max(1, int(redraw_every)); self._win = int(window)
         self.t = []; self.sensor = []; self.state = []; self.total = []; self.relax = []; self.body = []
         self.planner = []                                   # Planner module surprise (act20; nan in act19)
         for ax in (self.axE, self.axR):
             ax.set_facecolor("#0e0e12"); ax.grid(True, color="#333", lw=0.4)
             ax.tick_params(colors="w"); [s.set_color("#555") for s in ax.spines.values()]
-        self.axE.set_title("MODULE: VisualCortex  (perception hex-net — a real PCNetwork)",
+        self.axE.set_title("VisualCortex — Wahrnehmungs-Surprise" if self._embedded else
+                           "MODULE: VisualCortex  (perception hex-net — a real PCNetwork)",
                            color="#ff8888", fontsize=9)
         (self.lS,) = self.axE.plot([], [], color="#ff5566", lw=1.4, label="sensor_error (SURPRISE)")
         (self.lT,) = self.axE.plot([], [], color="#ffaa33", lw=1.0, alpha=0.8, label="state_error")
@@ -315,7 +329,8 @@ class SurpriseViz:
         (self.lP,) = self.axE.plot([], [], color="#cc88ff", lw=1.2, ls="--", label="Planner sensor_error")
         self.axE.set_ylabel("squared error", color="w")
         self.axE.legend(loc="upper right", facecolor="#1a1a22", edgecolor="#444", labelcolor="w", fontsize=7)
-        self.axR.set_title("MODULE: Körpermodell (ArmBodyModel3D)   +   VisualCortex relax effort",
+        self.axR.set_title("Körpermodell FK-Fehler  +  Relax-Aufwand" if self._embedded else
+                           "MODULE: Körpermodell (ArmBodyModel3D)   +   VisualCortex relax effort",
                            color="#88ff88", fontsize=9)
         (self.lR,) = self.axR.plot([], [], color="#33ccff", lw=1.2, label="relax_steps (VisualCortex)")
         self.axR.set_ylabel("relax steps", color="#33ccff"); self.axR.set_xlabel("perception step", color="w")
@@ -324,8 +339,10 @@ class SurpriseViz:
         self.axRb.set_ylabel("body FK error (mm)", color="#88ff88")
         self.axR.legend(loc="upper left", facecolor="#1a1a22", edgecolor="#444", labelcolor="w", fontsize=7)
         self.axRb.legend(loc="upper right", facecolor="#1a1a22", edgecolor="#444", labelcolor="w", fontsize=7)
-        self.readout = self.fig.text(0.012, 0.012, "", color="w", fontsize=7.5, family="monospace", va="bottom")
-        self.fig.tight_layout(rect=(0, 0.085, 1, 0.95))
+        self.readout = (self.fig.text(0.012, 0.012, "", color="w", fontsize=7.5, family="monospace",
+                                      va="bottom") if show_readout else None)
+        if not self._embedded:
+            self.fig.tight_layout(rect=(0, 0.085, 1, 0.95))
 
     def push(self, sensor, state, total, relax, body_mm=None, planner=None):
         self._k += 1
@@ -357,7 +374,10 @@ class SurpriseViz:
         self.lB.set_data(t, self.body[-w:])
         for ax in (self.axE, self.axR, self.axRb):
             ax.relim(); ax.autoscale_view()
-        self.readout.set_text(self._readout_text())
+        if self.readout is not None:
+            self.readout.set_text(self._readout_text())
+        if self._embedded:                                    # the parent panel batches the redraw
+            return
         try:
             self.fig.canvas.draw_idle(); self.fig.canvas.flush_events()
         except Exception:
@@ -367,6 +387,8 @@ class SurpriseViz:
         self.redraw(); self.fig.savefig(path, dpi=110, facecolor=self.fig.get_facecolor())
 
     def hold(self):
+        if self._embedded:
+            return                                            # the parent window owns the lifecycle
         self.plt.ioff(); self.plt.show()
 
 
@@ -575,7 +597,7 @@ class HexFovea:
 
 
 # --------------------------------------------------------------------------- #
-def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=True):
+def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=True, viz=None):
     """Factored-out act18 perception: a LEARNED hex-fovea PC-net that perceives the camera + an
     error-driven FOLLOWING gaze, warmed up and calibrated (world<->px).  Returns a dict with
     `perceive`/`track`/`viz` ready for act16.run_combined, plus `fovea`/`render_perc`/`grid`/
@@ -642,8 +664,7 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
     def render_train():
         return sim.render(CAM) if _av["v"] else render_perc()
 
-    viz = None
-    if not headless:
+    if viz is None and not headless:                          # caller may inject an EMBEDDED viz (one window)
         try:
             viz = HexFoveaViz(CAM, RES)
         except Exception as e:
