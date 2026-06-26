@@ -390,8 +390,9 @@ class CommandState:
     """GUI-free state of a COMMAND to the net: which OBJECT (an abstract code -- the net localizes it
     itself via the fovea/selection head), which ACTION (grasp/push), which named TARGET marker.  Exposes
     the cmd_fn/force_fn/goal_fn hooks run_combined consumes, so the same state drives both the graphical
-    panel and the headless self-test.  Targets are the mocap markers target_marker[/_2/_3]; goal_fn
-    returns the SELECTED marker's table xy."""
+    panel and the headless self-test.  Targets are the fixed mocap markers target_sel_1/_2/_3; goal_fn
+    returns the SELECTED marker's table xy.  The target is NEVER re-placed automatically -- only by the
+    user (selecting another marker, or 'Ziel neu' = place_selected_random)."""
 
     OBJECTS = [("rot", "obj_red"), ("grün", "obj_green"), ("blau", "obj_blue")]
     MARKERS = ["target_sel_1", "target_sel_2", "target_sel_3"]   # fixed, selectable named goals
@@ -404,9 +405,35 @@ class CommandState:
         self.go = False               # the user pressed "Ausführen"
         self.exit = False             # the user pressed "Beenden"
 
+    def _mocap(self, name):
+        return self.sim.m.body_mocapid[mujoco.mj_name2id(self.sim.m, mujoco.mjtObj.mjOBJ_BODY, name)]
+
     def marker_xy(self, idx):
-        bid = mujoco.mj_name2id(self.sim.m, mujoco.mjtObj.mjOBJ_BODY, self.MARKERS[idx])
-        return self.sim.d.mocap_pos[self.sim.m.body_mocapid[bid]][:2].copy()
+        return self.sim.d.mocap_pos[self._mocap(self.MARKERS[idx])][:2].copy()
+
+    def set_marker_xy(self, idx, xy):
+        self.sim.d.mocap_pos[self._mocap(self.MARKERS[idx])][:2] = xy
+
+    def sync_active(self):
+        """Keep the BRIGHT active-goal disk (target_marker, which run_combined snaps to the committed
+        goal each episode) sitting on the SELECTED marker, so the goal never appears to jump/reset --
+        it only moves on a user action (selecting another marker or pressing Ziel neu)."""
+        self.sim.d.mocap_pos[self._mocap("target_marker")][:2] = self.marker_xy(self.target_idx)
+        mujoco.mj_forward(self.sim.m, self.sim.d)
+
+    def place_selected_random(self, rng):
+        """Ziel neu: re-place the SELECTED marker at a fresh random VALID table position (clear of the
+        objects, off the base), between episodes, on demand.  Nothing re-places the target otherwise."""
+        from pc.pc_act14 import _rand_xy
+        from pc.pc_act16 import BASE_CLEAR
+        objs = [nm for _l, nm in self.OBJECTS]
+        p = _rand_xy(rng)
+        for _ in range(200):
+            if float(np.linalg.norm(p)) >= BASE_CLEAR and all(
+                    float(np.linalg.norm(p - self.sim.obj_pos(o)[:2])) > 0.05 for o in objs):
+                break
+            p = _rand_xy(rng)
+        self.set_marker_xy(self.target_idx, p); self.sync_active()
 
     # ---- run_combined hooks (the command, fed to the net) ----
     def cmd_fn(self, ep):
@@ -426,42 +453,54 @@ class CommandState:
 
 class CommandPanel:
     """Graphical command interface (matplotlib widgets): pick the OBJECT by colour button, the TARGET by
-    a named-marker button, toggle grasp/push, then Ausführen.  Doubles as the run_combined `viz` (update/
-    hold) so the same window shows the arm executing the command."""
+    a named-marker button, toggle grasp/push, 'Ziel neu' re-randomizes the selected target, then Ausführen.
+    Doubles as the run_combined `viz` (update/hold) so the same window shows the arm executing.  Needs the
+    cam + an rng to render selection feedback and to place targets."""
 
     OBJ_COL = {"obj_red": "#d23030", "obj_green": "#2fae40", "obj_blue": "#3358d2"}
 
-    def __init__(self, state, cam, res):
+    def __init__(self, state, cam, res, rng=None):
         import matplotlib.pyplot as plt
         from matplotlib.widgets import Button
-        self.plt = plt; self.state = state; plt.ion()
-        self.fig = plt.figure(figsize=(6.4, 7.6)); self.fig.patch.set_facecolor("#0e0e12")
-        self.axI = self.fig.add_axes([0.04, 0.36, 0.92, 0.60]); self.axI.axis("off")
+        self.plt = plt; self.state = state; self._cam = cam
+        self._rng = rng if rng is not None else np.random.default_rng(0); plt.ion()
+        self.fig = plt.figure(figsize=(6.4, 8.0)); self.fig.patch.set_facecolor("#0e0e12")
+        self.axI = self.fig.add_axes([0.04, 0.42, 0.92, 0.55]); self.axI.axis("off")
         self.axI.set_title(f"Befehls-Schnittstelle — {cam} Kamera", color="w")
         self.im = self.axI.imshow(np.zeros((res, res, 3), np.uint8))
-        self.status = self.fig.text(0.5, 0.325, "", ha="center", color="w", fontsize=11, family="monospace")
+        self.status = self.fig.text(0.5, 0.385, "", ha="center", color="w", fontsize=11, family="monospace")
         self._obj_btns = {}; self._tgt_btns = {}
         for i, (lbl, nm) in enumerate(state.OBJECTS):       # object colour buttons
-            ax = self.fig.add_axes([0.055 + 0.31 * i, 0.225, 0.27, 0.065])
+            ax = self.fig.add_axes([0.055 + 0.31 * i, 0.305, 0.27, 0.06])
             b = Button(ax, lbl.capitalize(), color=self.OBJ_COL[nm], hovercolor=self.OBJ_COL[nm])
             b.on_clicked(lambda _e, nm=nm: self._set_obj(nm)); self._obj_btns[nm] = b
         for i in range(len(state.MARKERS)):                 # named target buttons
-            ax = self.fig.add_axes([0.055 + 0.31 * i, 0.150, 0.27, 0.060])
+            ax = self.fig.add_axes([0.055 + 0.31 * i, 0.225, 0.27, 0.06])
             b = Button(ax, f"Ziel {i + 1}", color="#3a3a44", hovercolor="#55556a")
             b.on_clicked(lambda _e, i=i: self._set_tgt(i)); self._tgt_btns[i] = b
-        axA = self.fig.add_axes([0.055, 0.03, 0.27, 0.07])  # action toggle / go / exit
+        axA = self.fig.add_axes([0.055, 0.130, 0.42, 0.06])   # mid row: action toggle + place-target
         self.bA = Button(axA, "Modus: Greifen", color="#555", hovercolor="#777"); self.bA.on_clicked(self._toggle)
-        axG = self.fig.add_axes([0.365, 0.03, 0.27, 0.07])
+        axP = self.fig.add_axes([0.525, 0.130, 0.42, 0.06])
+        self.bP = Button(axP, "Ziel neu (Zufall)", color="#7a5cae", hovercolor="#9a78d0"); self.bP.on_clicked(self._place)
+        axG = self.fig.add_axes([0.055, 0.04, 0.42, 0.07])    # bottom row: go + exit
         self.bG = Button(axG, "Ausführen", color="#1f8a5b", hovercolor="#27a96f"); self.bG.on_clicked(self._go)
-        axX = self.fig.add_axes([0.675, 0.03, 0.27, 0.07])
+        axX = self.fig.add_axes([0.525, 0.04, 0.42, 0.07])
         self.bX = Button(axX, "Beenden", color="#8a3030", hovercolor="#a94040"); self.bX.on_clicked(self._exit)
         self.fig.canvas.mpl_connect("close_event", lambda _e: setattr(self.state, "exit", True))
         self._refresh()
 
     def _set_obj(self, nm): self.state.obj = nm; self._refresh()
-    def _set_tgt(self, i): self.state.target_idx = i; self._refresh()
     def _go(self, _e): self.state.go = True
     def _exit(self, _e): self.state.exit = True
+
+    def _set_tgt(self, i):
+        self.state.target_idx = i; self.state.sync_active()   # bright goal disk follows the selection (no jump)
+        self.update(self.state.sim.render(self._cam), f"Ziel {i + 1} gewählt"); self._refresh()
+
+    def _place(self, _e):
+        self.state.place_selected_random(self._rng)           # re-randomize the SELECTED target on demand
+        self.update(self.state.sim.render(self._cam), f"Ziel {self.state.target_idx + 1} neu platziert")
+        self._refresh()
 
     def _toggle(self, _e):
         self.state.action = "push" if self.state.action == "grasp" else "grasp"
@@ -542,11 +581,12 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
     act16.run_combined._quiet = True                          # the steering loop OWNS the viz lifecycle
     #   (so run_combined does NOT block on viz.hold() after each command -> the buttons keep responding)
     act16.run_combined(sim, bm, None, CAM, episodes=0)        # place the scene ONCE (scatter, 0 episodes)
+    state.sync_active()                                       # bright goal disk starts on the selected marker
     print("\n" + "=" * 72)
     print("  COMMAND STEERING — grafische Schnittstelle")
-    print("  Objekt (Farbe) + Ziel (Marker) + Modus wählen, dann 'Ausführen'.  'Beenden' schließt.")
+    print("  Objekt (Farbe) + Ziel (Marker) + Modus + 'Ziel neu' (Zufalls-Ziel), dann 'Ausführen'.")
     print("=" * 72)
-    panel = CommandPanel(state, CAM, RES); run_one.panel = panel
+    panel = CommandPanel(state, CAM, RES, rng=np.random.default_rng(7)); run_one.panel = panel
     panel.update(sim.render(CAM), "bereit — Befehl wählen und Ausführen")   # the scene that WILL be used
     ep = 0
     while panel.wait() != "exit":
