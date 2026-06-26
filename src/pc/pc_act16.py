@@ -33,7 +33,13 @@ OBJS = ["obj_red", "obj_green", "obj_blue"]
 CUBE_HALF = np.array([0.012, 0.012, 0.012])     # graspable cube
 WIDE_HALF = np.array([0.024, 0.024, 0.010])     # wide SQUARE block: too wide to grasp -> push
 #                                                 (square so the push direction doesn't matter)
-OVER_Z, GRASP_Z, CARRY_Z, PUSH_Z = 0.06, 0.014, 0.055, 0.016
+OVER_Z, GRASP_Z, PUSH_Z = 0.06, 0.014, 0.016
+CARRY_Z = float(os.environ.get("ACT16_CARRY_Z", "0.09"))   # hand height while CARRYING a grasped object.
+#   Raised 0.055 -> 0.09 so the carried object is transported clearly OVER other cubes instead of through
+#   them: at 0.055 the carried cube's BOTTOM sat ~16mm up (measured), BELOW a 24mm cube's top, so the
+#   transport rammed any cube on the path and knocked the object loose (deliberate cube-on-path test:
+#   distractor knocked 3/6 -> 0/6 at 0.09; carried-cube bottom mean 16mm -> 50mm, clears a 24mm cube 15%
+#   -> 86% of carry steps).  Still within reach; the size-adaptive carry_z floors on this.  env: ACT16_CARRY_Z.
 PUSH_LIFT_Z = 0.07                              # raise the claws to move behind an object (clear it)
 STANDOFF, NEAR, TOL, CAP = 0.045, 0.02, 0.025, 2200
 GRASP_OFFSET = float(os.environ.get("ACT16_GRASP_OFFSET", "0.006"))   # (#2) grasp height = obj_half + this
