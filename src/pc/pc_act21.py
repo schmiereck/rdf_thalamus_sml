@@ -573,7 +573,10 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
     ELONG = os.environ.get("ACT21_ELONG_CMD", "0") == "1"     # opt-in DEMO: the commanded object is elongated;
     if ELONG:                                                 # the net PERCEIVES its long axis (step C) and aligns
         act16.ELONG_CMD = True                                 # the wrist to the SHORT axis during the approach.
-        print("  [ACT21_ELONG_CMD] commanded object ELONGATED -> perceived-orientation wrist grip (step C)")
+        if "ACT16_J5_OPEN" not in os.environ:                  # narrower open ONLY here (the wrist turns far on an
+            act16.J5_OPEN = 1.08                               # elongated object -> the wide claw would hit the base)
+        print(f"  [ACT21_ELONG_CMD] commanded object ELONGATED -> perceived-orientation wrist grip "
+              f"(step C); gripper open {act16.J5_OPEN}")
 
     if HEADLESS:                                              # headless self-test of the full command->net path
         print("  building the net's perception (fovea + selection head) ...")
