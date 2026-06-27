@@ -27,7 +27,9 @@ import mujoco
 
 from pc.pc_act14 import BracketArmSim, ArmBodyModel3D, HOME, _rand_xy, CamViz, REACH_XY
 
-J5_OPEN, J5_GRIP, J5_PUSH = 1.8, 0.0, 0.55     # open / fully-closed (grip) / partly-open
+J5_OPEN = float(os.environ.get("ACT16_J5_OPEN", "1.08"))   # gripper OPEN angle (was 1.8; 60% -> 1.08 so the
+J5_GRIP, J5_PUSH = 0.0, 0.55                    # open claw does not splay so wide it hits the base on a turn)
+#   J5_GRIP = fully-closed (grip); J5_PUSH = partly-open (push)
 #                              (push: claws spread ~40mm to contact a wide block's face at 2 points)
 OBJS = ["obj_red", "obj_green", "obj_blue"]
 CUBE_HALF = np.array([0.012, 0.012, 0.012])     # graspable cube
@@ -66,8 +68,11 @@ WRIST_ALIGN = os.environ.get("ACT16_WRIST", "1") == "1"      # (B, default ON) r
 #   the cube instead of carrying) -- rare in the teacher demos -> a TRAINING-coverage gap, addressed separately.
 #   Cube -> fixed WRIST_TGT mod 90deg (step B, no perception); elongated -> short axis mod pi.  Disable: ACT16_WRIST=0.
 WRIST_TGT = float(os.environ.get("ACT16_WRIST_TGT", "0.0"))  # world-frame grip yaw the claw aligns to (rad)
-WRIST_FREEZE_GRIP = os.environ.get("ACT16_WRIST_FREEZE", "0") == "1"   # stop correcting joint_4 once the gripper
-#   has CLOSED (j5 low): continuing to roll the wrist while holding the object can twist a gripped object loose.
+WRIST_APPROACH_R = float(os.environ.get("ACT16_WRIST_APPROACH_R", "0.07"))   # align the wrist ONLY once the hand
+#   is within this horizontal radius of the object (the APPROACH) -- NOT in the initial/home pose (looks odd +
+#   collides with arm/base).  Once the hand has descended to the grip (WRIST_LOCK_MARGIN) the angle is HELD
+#   (re-asserted, NOT re-corrected) so the wrist does not suddenly roll and twist the object out at contact.
+WRIST_LOCK_MARGIN = float(os.environ.get("ACT16_WRIST_LOCK", "0.012"))   # lock the wrist this far above grip z
 SIZE_ADAPT = os.environ.get("ACT_SIZE_ADAPT", "1") == "1"    # (c) derive grasp heights from object size
 PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene between episodes
 SCENE_N = int(os.environ.get("ACT16_SCENE_N", "3"))         # objects PLACED per episode (cmd + distractors);
@@ -300,6 +305,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         # CORRECTS it each frame (precision-weighted, occlusion-gated) instead of freezing the snapshot
         obj_belief = (cube_plan.copy() if cube_plan is not None else None) if servo else None
         servo_lost = 0; reacquires = 0; hover = 0            # (#4) grasp-reflex hover counter
+        wrist_hold = None                                    # last aligned joint_4 (held through the grip)
         last_phase = phase; phase_age = 0                    # STALL-ESCAPE: don't hang in one phase forever
         for k in range(cap):
             phase_age = phase_age + 1 if phase == last_phase else 0
@@ -429,11 +435,17 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             gentle = abs(j5 - J5_PUSH) < 0.2 and aim[2] < PUSH_Z + 0.02   # spread gripper + low = a PUSH
             g, mdq = (1.3, 0.016) if gentle else (2.0, 0.026)            # (derived from the sub-goal, so it
             q3 = sim.arm3_angles(); sim.set_arm3_targets(q3 + body.reach_velocity(q3, aim, gain=g, max_dq=mdq))
-            if WRIST_ALIGN and not (WRIST_FREEZE_GRIP and j5 < J5_GRIP + 0.4):   # freeze once gripped (no twist)
-                cy = sim.claw_yaw()                            # re-applied EVERY step: set_arm3_targets resets
-                err = (cy - wrist_tgt + wrist_mod / 2) % wrist_mod - wrist_mod / 2   # joint_4 to HOME each step,
-                j4t = float(np.clip(sim.d.qpos[sim.jqadr["joint_4"]] + 0.6 * err, 0.0, np.pi))   # and claw_yaw is
-                sim.target("joint_4", j4t)                     # POSE-dependent so it must keep correcting (slope ~ -1)
+            if WRIST_ALIGN:                                    # (B) align the claw to the object's grip axis --
+                near = np.linalg.norm(hxy - c) < WRIST_APPROACH_R      # ONLY during the APPROACH (near the
+                gripping = j5 < J5_GRIP + 0.4                  #   object), and only while still open + above the
+                descended = hz <= gz + WRIST_LOCK_MARGIN       #   grip.  set_arm3_targets resets joint_4 to HOME
+                if near and not gripping and not descended:    #   each step + claw_yaw is POSE-dependent, so it
+                    cy = sim.claw_yaw()                        #   keeps CORRECTING here (slope ~ -1) as the arm moves
+                    err = (cy - wrist_tgt + wrist_mod / 2) % wrist_mod - wrist_mod / 2
+                    wrist_hold = float(np.clip(sim.d.qpos[sim.jqadr["joint_4"]] + 0.6 * err, 0.0, np.pi))
+                    sim.target("joint_4", wrist_hold)
+                elif wrist_hold is not None:                   # descended/gripping -> HOLD the aligned angle (no
+                    sim.target("joint_4", wrist_hold)          #   sudden roll at contact; re-assert vs the home reset)
             sim.step(2)
             if lifelong and k % 3 == 0:                       # LIFELONG: refine the learned kinematics
                 body.observe(sim.arm3_angles(), sim.grasp_pos(), lr=0.02)   # from the real (joints,hand)

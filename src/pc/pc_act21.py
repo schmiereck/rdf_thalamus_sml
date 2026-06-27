@@ -572,7 +572,7 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
     state = CommandState(sim)
     ELONG = os.environ.get("ACT21_ELONG_CMD", "0") == "1"     # opt-in DEMO: the commanded object is elongated;
     if ELONG:                                                 # the net PERCEIVES its long axis (step C) and aligns
-        act16.ELONG_CMD = True; act16.WRIST_FREEZE_GRIP = True   # the wrist to the SHORT axis (freeze once gripped).
+        act16.ELONG_CMD = True                                 # the wrist to the SHORT axis during the approach.
         print("  [ACT21_ELONG_CMD] commanded object ELONGATED -> perceived-orientation wrist grip (step C)")
 
     if HEADLESS:                                              # headless self-test of the full command->net path
