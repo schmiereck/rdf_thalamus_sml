@@ -29,9 +29,14 @@ from pc.pc_act14 import BracketArmSim, ArmBodyModel3D, HOME, _rand_xy, CamViz, R
 
 J5_OPEN = float(os.environ.get("ACT16_J5_OPEN", "1.08"))   # gripper OPEN angle (was 1.8; user set 60% -> 1.08 so
 J5_GRIP, J5_PUSH = 0.0, 0.55                    # the open claw does not splay so wide it hits the base on a turn).
-#   NOTE (deterministic check): globally 1.08 costs the perturbed POLICY pipeline grasp clearance -> more
-#   knock-offs (default B lifelong+curiosity 22/24 -> 11/24); the user accepts this to observe the failures.
-#   Restore the old wide open via ACT16_J5_OPEN=1.8.  J5_GRIP = fully-closed (grip); J5_PUSH = partly-open (push).
+#   J5_GRIP = fully-closed (grip); J5_PUSH = partly-open (push).  Restore the old wide open via ACT16_J5_OPEN=1.8.
+# Gripper-regime thresholds SCALE with J5_OPEN (calibrated to reproduce the old fixed values at open=1.8) -- a
+# fixed 1.0/0.9/0.6 sat right at the TOP of a narrowed (1.08) range, so the "descend-while-open then close"
+# choreography collapsed (the policy began closing ~30mm too HIGH; measured: gripper closed at hand_z ~60mm vs a
+# 24mm object).  Scaling keeps a clean descend-while-open margin at any open width.
+J5_OPEN_TH = 0.5556 * J5_OPEN                   # OPEN/approach regime boundary (= 1.0 at open 1.8)
+J5_CLOSED_TH = 0.5 * J5_OPEN                    # "closed enough to count as gripping"      (= 0.9 at open 1.8)
+J5_REFLEX_TH = 0.3333 * J5_OPEN                 # grasp-reflex: gripper still openish        (= 0.6 at open 1.8)
 #                              (push: claws spread ~40mm to contact a wide block's face at 2 points)
 OBJS = ["obj_red", "obj_green", "obj_blue"]
 CUBE_HALF = np.array([0.012, 0.012, 0.012])     # graspable cube
@@ -119,7 +124,7 @@ def reactive_subgoal(state):
         lift_thresh = obj_h + 0.014                       # "lifted off the table" relative to its height
     else:
         grasp_z, carry_z, lift_thresh = GRASP_Z, CARRY_Z, 0.028
-    grasped = (cz > lift_thresh) and (j5 < 0.9)           # object lifted off the table AND gripper closed
+    grasped = (cz > lift_thresh) and (j5 < J5_CLOSED_TH)  # object lifted off the table AND gripper closed
     if grasped:                                           # CARRY -> place -> release
         if np.linalg.norm(hxy - t) > NEAR:               # carry over the target
             return np.array([tx, ty, carry_z, J5_GRIP])
@@ -135,13 +140,13 @@ def reactive_subgoal(state):
     # The gripper STATE disambiguates the two regimes that look alike in (hz): descending-to-grasp
     # (gripper OPEN) vs ascending-with-cube (gripper CLOSED).  Splitting on j5 stops the open/close
     # oscillation that flung the cube (the old code re-OPENED on the lower branch while lifting).
-    if j5 > 1.0:                                          # gripper OPEN -> APPROACH regime
+    if j5 > J5_OPEN_TH:                                   # gripper OPEN -> APPROACH regime
         if np.linalg.norm(hxy - c) > NEAR:               # move over the cube
             return np.array([cx, cy, OVER_Z, J5_OPEN])
         if hz > grasp_z + 0.012:                          # lower onto it, still open
             return np.array([cx, cy, grasp_z, J5_OPEN])
         return np.array([cx, cy, grasp_z, max(J5_GRIP, j5 - 0.2)])    # at pose -> begin closing gently
-    # gripper closing/closed (j5 <= 1.0): GRASP/LIFT regime -- commit, never re-open or re-approach
+    # gripper closing/closed (j5 <= J5_OPEN_TH): GRASP/LIFT regime -- commit, never re-open or re-approach
     if j5 > 0.25:                                         # keep closing gently, holding the grasp pose
         return np.array([cx, cy, grasp_z, max(J5_GRIP, j5 - 0.2)])    # (claws STALL ~0.18 on the cube)
     return np.array([cx, cy, carry_z, J5_GRIP])           # firm grip -> LIFT
@@ -406,7 +411,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                         phase = "approach"
 
             if place_servo_fn is not None:                    # (b) LATENT-DIFFERENCE place: while the
-                if cz > 0.028 and sim.d.qpos[sim.jqadr["joint_5"]] < 0.9:   # object is carried, drive
+                if cz > 0.028 and sim.d.qpos[sim.jqadr["joint_5"]] < J5_CLOSED_TH:   # object carried, drive
                     tgt = np.asarray(place_servo_fn(hxy), float)  # the place target by the latent servo
             # state for a LEARNED action policy: hand, object, object-z, target, gripper, OBJ SIZE (c)
             state = np.array([h[0], h[1], h[2], c[0], c[1], cz, tgt_eff[0], tgt_eff[1],
@@ -423,7 +428,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             # drives a descend+close.  Fires ONLY on a stall (HOVER_LIMIT), so the learned policy still drives
             # normally -- this just guarantees the grasp EXECUTES instead of the policy hovering forever (#4).
             gz = obj_h + GRASP_OFFSET
-            if np.linalg.norm(hxy - c) < 0.03 and cz < 0.035 and j5 > 0.6 and hz > gz + 0.012:
+            if np.linalg.norm(hxy - c) < 0.03 and cz < 0.035 and j5 > J5_REFLEX_TH and hz > gz + 0.012:
                 hover += 1
             else:
                 hover = 0

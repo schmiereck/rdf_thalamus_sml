@@ -586,11 +586,26 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
         print("=" * 72)
         act16.PERSIST = False                                 # fair eval: a FRESH scatter per episode
         objs = [nm for _l, nm in state.OBJECTS]
+        dbg = os.environ.get("ACT21_STEER_DEBUG", "0") == "1"  # diagnose the grasp aim vs the TRUE object
+        mlog = None
+        if dbg:
+            cur = {"cmd": None}
+            _ocmd = lambda ep: objs[ep % 3]
+            def cmd_dbg(ep):
+                cur["cmd"] = _ocmd(ep); return cur["cmd"]
+            def mlog(st, aim, j5, phase):
+                if phase not in ("over", "lower", "close"):
+                    return
+                ot = sim.obj_pos(cur["cmd"])                   # st: h(0:3) c_believed(3:5) cz(5) t(6:8) j5(8) obj_h(9)
+                top = float(st[5]) + float(st[9])              # true object TOP = obj z + half-height
+                bxy_err = float(np.linalg.norm(np.array([st[3], st[4]]) - ot[:2])) * 1000   # believed vs TRUE
+                print(f"    [dbg] {phase:5s} believed-xy err {bxy_err:5.1f}mm  aim_z {aim[2]*1000:5.1f}mm  "
+                      f"obj_top {top*1000:5.1f}mm  hand_z {st[2]*1000:5.1f}mm  j5 {j5:.2f}")
         d, m = act16.run_combined(sim, bm, None, CAM, episodes=12,
-                                  cmd_fixed=lambda ep: objs[ep % 3], force=state.force_fn,
+                                  cmd_fixed=(cmd_dbg if dbg else (lambda ep: objs[ep % 3])), force=state.force_fn,
                                   goal_fn=lambda c, o: state.marker_xy(0), perceive_fn=perceive,
                                   track_fn=vc.track, policy_fn=motor.predict, lifelong=True,
-                                  tol=act16.TOL, servo=True, orient_fn=orient)
+                                  tol=act16.TOL, servo=True, orient_fn=orient, macro_log_fn=mlog)
         print(f"  command-steering self-test (12 eps, object commanded -> net localizes -> deliver): {d}/{m}")
         return
 
