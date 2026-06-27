@@ -60,6 +60,8 @@ SERVO_K, SERVO_CONF, SERVO_LOST = 0.5, 0.5, 6   # closed-loop grasp-target belie
 MAX_REACQ = 2                                   # cap re-acquires per episode: a persistent track failure
 #   must not loop perceive() forever (the fovea visibly re-searching every few seconds) -- then hold
 PHASE_STALL = 500                               # steps in ONE phase before the episode gives up (stuck arm)
+REFLEX = os.environ.get("ACT16_REFLEX", "1") == "1"      # (#4) hand-coded grasp reflex (close on a hover-stall);
+#   another RUNTIME rule -- toggle off to test whether the NET closes on its own (ACT16_REFLEX=0).
 HOVER_LIMIT = int(os.environ.get("ACT16_HOVER", "40"))   # (#4) steps the policy may hover OPEN+HIGH over
 #   the object before the GRASP REFLEX takes over the descend+close (it stalled instead of grasping)
 BASE_CLEAR = float(os.environ.get("ACT16_BASE_CLEAR", "0.11"))  # (#1) keep objects + target this far from
@@ -438,7 +440,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 hover += 1
             else:
                 hover = 0
-            if hover > HOVER_LIMIT:
+            if REFLEX and hover > HOVER_LIMIT:
                 aim = np.array([c[0], c[1], gz]); j5 = max(J5_GRIP, j5 - 0.2); via = "reflex"
             if CLOSE_GUARD and mode == "grasp" and cz < obj_h + 0.014:   # PROGRESS-aware close guard: keep the
                 if hz < guard_minz - 0.0008:                  # claw OPEN while the hand is still DESCENDING toward

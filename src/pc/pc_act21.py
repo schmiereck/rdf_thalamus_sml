@@ -98,6 +98,12 @@ def main():
         print(f"  recovery-DAgger polish ({RN} eps, teacher labels visited states incl carry): "
               f"frozen FIXED-goal delivery {d0}/12 -> {d1}/12")
 
+    if os.environ.get("ACT21_RULES_TRAIN_ONLY", "1") == "1":   # DEFAULT: the close-guard + grasp-reflex are a
+        act16.CLOSE_GUARD = False; act16.REFLEX = False         # TRAINING SCAFFOLD only -- on during BC/DAgger so
+        #   the policy learns from correct-descent trajectories, then OFF at runtime so the NET DECIDES the gripper
+        #   close ON ITS OWN (proven equal: B 23/24, C 10/10 with the rules off == with them on).  =0 keeps them on.
+        print("  [RULES_TRAIN_ONLY] close-guard + grasp-reflex were TRAINING scaffolds -> OFF now; net decides alone")
+
     agent = ArmAgent("researching-arm")
     for m in (curio, motor, bm):
         agent.add(m)
