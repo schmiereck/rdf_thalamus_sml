@@ -472,11 +472,11 @@ class CommandPanel:
 
     OBJ_COL = {"obj_red": "#d23030", "obj_green": "#2fae40", "obj_blue": "#3358d2"}
 
-    def __init__(self, state, cam, res, rng=None):
+    def __init__(self, state, cam, res, rng=None, randomize_fn=None):
         import matplotlib.pyplot as plt
         from matplotlib.widgets import Button
         from pc.pc_act18 import HexFoveaViz, SurpriseViz
-        self.plt = plt; self.state = state; self._cam = cam
+        self.plt = plt; self.state = state; self._cam = cam; self._randomize_fn = randomize_fn
         self._rng = rng if rng is not None else np.random.default_rng(0); plt.ion()
         # default sized to fit a 1920x1200 @125% screen (logical ~1536x960); env ACT21_FIGSIZE to change
         fw, fh = (float(x) for x in os.environ.get("ACT21_FIGSIZE", "12.0,7.5").split(","))
@@ -507,8 +507,10 @@ class CommandPanel:
             b.on_clicked(lambda _e, i=i: self._set_tgt(i)); self._tgt_btns[i] = b
         axA = self.fig.add_axes([0.035, 0.04, 0.20, 0.07])    # action toggle + place-target
         self.bA = Button(axA, "Modus: Greifen", color="#555", hovercolor="#777"); self.bA.on_clicked(self._toggle)
-        axP = self.fig.add_axes([0.25, 0.04, 0.20, 0.07])
-        self.bP = Button(axP, "Ziel neu (Zufall)", color="#7a5cae", hovercolor="#9a78d0"); self.bP.on_clicked(self._place)
+        axP = self.fig.add_axes([0.25, 0.04, 0.16, 0.07])
+        self.bP = Button(axP, "Ziel neu", color="#7a5cae", hovercolor="#9a78d0"); self.bP.on_clicked(self._place)
+        axO = self.fig.add_axes([0.415, 0.04, 0.155, 0.07])   # re-roll the OBJECTS (positions + which one is long)
+        self.bO = Button(axO, "Objekte neu", color="#5c7aae", hovercolor="#78a0d0"); self.bO.on_clicked(self._objects)
         axG = self.fig.add_axes([0.58, 0.04, 0.18, 0.07])     # go + exit
         self.bG = Button(axG, "Ausführen", color="#1f8a5b", hovercolor="#27a96f"); self.bG.on_clicked(self._go)
         axX = self.fig.add_axes([0.77, 0.04, 0.18, 0.07])
@@ -527,6 +529,13 @@ class CommandPanel:
     def _place(self, _e):
         self.state.place_selected_random(self._rng)           # re-randomize the SELECTED target on demand
         self.update(self.state.sim.render(self._cam), f"Ziel {self.state.target_idx + 1} neu platziert")
+        self._refresh()
+
+    def _objects(self, _e):
+        if self._randomize_fn is None:
+            return
+        self._randomize_fn()                                  # fresh positions/sizes (one random object long)
+        self.update(self.state.sim.render(self._cam), "Objekte neu gewürfelt")
         self._refresh()
 
     def _toggle(self, _e):
@@ -576,13 +585,14 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
     import pc.pc_act16 as act16
     from pc.arm_modules import VisualCortexModule
     state = CommandState(sim)
-    ELONG = os.environ.get("ACT21_ELONG_CMD", "0") == "1"     # opt-in DEMO: the commanded object is elongated;
-    if ELONG:                                                 # the net PERCEIVES its long axis (step C) and aligns
-        act16.ELONG_CMD = True                                 # the wrist to the SHORT axis during the approach.
-        print(f"  [ACT21_ELONG_CMD] commanded object ELONGATED -> perceived-orientation wrist grip "
-              f"(step C); gripper open {act16.J5_OPEN}")
+    ELONG = os.environ.get("ACT21_ELONG_CMD", "0") == "1"     # opt-in DEMO: ONE random object is elongated (the
+    if ELONG:                                                 # scene stays MIXED -- cubes + one long); the net
+        print(f"  [ACT21_ELONG_CMD] one random object ELONGATED -> perceived-orientation wrist grip "
+              f"(step C) when that one is commanded; gripper open {act16.J5_OPEN}")
 
     if HEADLESS:                                              # headless self-test of the full command->net path
+        if ELONG:                                             # the self-test commands the SAME object every ep, so
+            act16.ELONG_CMD = True                            # here force the COMMANDED one elongated (tests step C)
         print("  building the net's perception (fovea + selection head) ...")
         vc, _P = VisualCortexModule.from_sim(sim, CAM, RES, headless=True)
         perceive = _steer_perceive(vc)
@@ -620,16 +630,25 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
     #   run_combined does NOT block on viz.hold() / print after each command -> the buttons keep responding)
     print("\n" + "=" * 72)
     print("  COMMAND STEERING — grafische Schnittstelle (Kamera + Fovea + Surprise-Kurven in EINEM Fenster)")
-    print("  Objekt (Farbe) + Ziel (Marker) + Modus + 'Ziel neu' (Zufalls-Ziel), dann 'Ausführen'.")
+    print("  Objekt (Farbe) + Ziel (Marker) + Modus + 'Ziel neu' / 'Objekte neu', dann 'Ausführen'.")
     print("=" * 72)
-    panel = CommandPanel(state, CAM, RES, rng=np.random.default_rng(7))
+    obj_rng = np.random.default_rng(123)
+    def randomize_objects():                                  # fresh positions + sizes; the scene stays MIXED with
+        os.environ["ACT16_SEED"] = str(int(obj_rng.integers(1, 10 ** 6)))   # fresh seed -> NEW scatter positions
+        act16.run_combined(sim, bm, None, CAM, episodes=0)    # ONE random object long (NOT the commanded one).
+        if ELONG:                                             # re-scatter places all as cubes -> elongate one
+            o = str(obj_rng.choice(act16.OBJS))
+            sim.set_object_size(o, act16.ELONG_HALF)
+            sim.set_object(o, sim.obj_pos(o)[:2], z=float(act16.ELONG_HALF[2]), yaw=float(obj_rng.uniform(0, np.pi)))
+            mujoco.mj_forward(sim.m, sim.d)
+        state.sync_active()                                   # keep the bright goal disk on the selected marker
+    panel = CommandPanel(state, CAM, RES, rng=np.random.default_rng(7), randomize_fn=randomize_objects)
     panel.update(sim.render(CAM), "Wahrnehmung des Netzes wird trainiert ...")
     # build the perception with the fovea drawing INTO the panel (so the fovea view is in the same window)
     vc, _P = VisualCortexModule.from_sim(sim, CAM, RES, headless=True, viz=panel.fov_viz)
     perceive = _steer_perceive(vc)
     orient = _P["orient"] if ELONG else None                 # perceive the commanded object's long axis (step C)
-    act16.run_combined(sim, bm, None, CAM, episodes=0)        # place the scene ONCE (scatter, 0 episodes)
-    state.sync_active()                                       # bright goal disk starts on the selected marker
+    randomize_objects()                                       # place the scene ONCE (mixed: one random object long)
     panel.update(sim.render(CAM), "bereit — Befehl wählen und Ausführen")   # the scene that WILL be used
 
     def track_and_plot():                                     # one follow frame + push the surprise curves
