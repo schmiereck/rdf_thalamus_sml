@@ -544,6 +544,31 @@ class HexFovea:
         win = max(m, key=m.get)
         return (win == cmd and m[cmd] >= VERIFY_FLOOR), m[cmd]
 
+    def perceive_long_axis(self, render_fn, gaze, cmd, px_to_world):
+        """PERCEIVE the commanded object's world-frame LONG-axis yaw (mod pi) -- step C, orientation.
+        Weighted PCA (sel mass) over the lit sel cells, each mapped to WORLD via `px_to_world` (so the
+        homography/perspective is handled exactly).  Returns the angle in [0,pi) or None if too few
+        cells lit.  Validated median ~5deg vs privileged obj_yaw on the 48mm block (rare ~70deg flip
+        on a near-square foveal view)."""
+        arr = hex_sample(render_fn(), gaze, self._ek())
+        self._fill_sel(arr, cmd)
+        sel = arr[:, :, 0]; mask = sel > 0
+        if float(sel[mask].sum()) < 1.0 or int(mask.sum()) < 3:
+            return None
+        ctr = (F - 1) / 2.0; pts = []; w = []
+        for r in range(F):
+            cy = gaze[1] + _warp(r - ctr) * self._ek() * HEX_DY
+            for c in range(F):
+                if not mask[r, c]:
+                    continue
+                cx = gaze[0] + _warp(c + 0.5 * (r & 1) - ctr) * self._ek()
+                pts.append(px_to_world([cx, cy])); w.append(float(sel[r, c]))
+        pts = np.array(pts); w = np.array(w)
+        mu = np.average(pts, axis=0, weights=w); d = pts - mu
+        C = (d * w[:, None]).T @ d / w.sum()
+        v = np.linalg.eigh(C)[1][:, -1]                  # largest eigenvalue -> long axis
+        return float(np.arctan2(v[1], v[0]) % np.pi)
+
     def _next_saccade(self, grid, blacklist, saccade):
         """Pick the next search gaze: the grid point FARTHEST from every rejected (distractor) lock, so
         the re-search explores away from the wrong object instead of re-converging onto it."""
@@ -696,6 +721,13 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
         cube = px_to_world(g) if g is not None else sim.obj_pos(cmd)[:2]
         return cube, None, "grasp"                            # target stays given (thin marker)
 
+    def perceive_orientation(cmd):
+        """Step C: locate the commanded object, then PERCEIVE its world-frame long-axis yaw (mod pi).
+        Self-contained (runs its own locate) so it works with or without a prior perceive()."""
+        g = fovea.locate(render_perc, cmd, np.array([RES / 2.0, RES / 2.0]), grid, viz=viz, label=cmd[4])
+        state["gaze"] = g if g is not None else state["gaze"]
+        return None if g is None else fovea.perceive_long_axis(render_perc, g, cmd, px_to_world)
+
     def track():
         img = sim.render(CAM)                                 # REAL view: the arm genuinely occludes
         gaze, found, arr, conf = fovea.track_step(img, state["gaze"], state["cmd"], learn=True)
@@ -708,6 +740,7 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
         return (px_to_world(gaze), conf) if found else (None, 0.0)
 
     return {"fovea": fovea, "perceive": perceive, "track": track, "viz": viz,
+            "orient": perceive_orientation,                   # step C: perceived object long-axis (mod pi)
             "render_perc": render_perc, "grid": grid, "px_to_world": px_to_world,
             "state": state}                                   # exposes the live gaze/cmd
 

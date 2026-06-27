@@ -66,12 +66,16 @@ WRIST_ALIGN = os.environ.get("ACT16_WRIST", "1") == "1"      # (B, default ON) r
 #   the cube instead of carrying) -- rare in the teacher demos -> a TRAINING-coverage gap, addressed separately.
 #   Cube -> fixed WRIST_TGT mod 90deg (step B, no perception); elongated -> short axis mod pi.  Disable: ACT16_WRIST=0.
 WRIST_TGT = float(os.environ.get("ACT16_WRIST_TGT", "0.0"))  # world-frame grip yaw the claw aligns to (rad)
+WRIST_FREEZE_GRIP = os.environ.get("ACT16_WRIST_FREEZE", "0") == "1"   # stop correcting joint_4 once the gripper
+#   has CLOSED (j5 low): continuing to roll the wrist while holding the object can twist a gripped object loose.
 SIZE_ADAPT = os.environ.get("ACT_SIZE_ADAPT", "1") == "1"    # (c) derive grasp heights from object size
 PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene between episodes
 SCENE_N = int(os.environ.get("ACT16_SCENE_N", "3"))         # objects PLACED per episode (cmd + distractors);
 #   the rest of OBJS are parked off-table -- keeps the scene at ~3 like before despite 5 commandable colours
 ELONG_RATE = float(os.environ.get("ACT16_ELONG", "0.25"))   # fraction of episodes with ONE elongated (2:1)
 ELONG_HALF = np.array([0.024, 0.012, 0.012])                # object mixed into the data (a shape variation)
+ELONG_CMD = os.environ.get("ACT16_ELONG_CMD", "0") == "1"   # the COMMANDED object is elongated (orientation-grasp
+#   test, step C): the net must FIND it, PERCEIVE its long axis, and align the wrist to the SHORT axis to grip.
 
 
 def _push_subgoal(hxy, hz, c, t):
@@ -140,7 +144,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                  mixed=False, track_fn=None, lifelong=False, log_fn=None, policy_fn=None,
                  episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None,
                  ood_rate=0.0, ood_rng=None, size_fn=None, tol=None, carry_target_fn=None,
-                 post_goal_fn=None, macro_log_fn=None, servo=False, rescatter=True):
+                 post_goal_fn=None, macro_log_fn=None, servo=False, rescatter=True, orient_fn=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -209,6 +213,9 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         keep = [cmd] + list(rng.choice(others(cmd), max(0, min(SCENE_N - 1, len(OBJS) - 1)), replace=False))
         for i, o in enumerate([o for o in OBJS if o not in keep]):
             sim.set_object(o, np.array([0.55 + 0.06 * i, 0.55]))   # parked far off-camera + out of reach
+        if ELONG_CMD:                                        # COMMAND an elongated (2:1) object: orientation-grasp
+            sim.set_object_size(cmd, ELONG_HALF)             # test (step C) -- a random yaw the net must perceive
+            sim.set_object(cmd, sim.obj_pos(cmd)[:2], z=float(ELONG_HALF[2]), yaw=float(rng.uniform(0, np.pi)))
         # occasionally MIX IN an elongated (2:1) object -- a shape variation in the data (mostly cubes).
         # DISTRACTOR ONLY (never the commanded target): the cube-trained policy can't grasp an elongated
         # object across its short axis yet (the deferred orientation-grasp work) -- it would close the
@@ -236,7 +243,14 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         # cube -> ACT16_WRIST_TGT mod 90deg.  Uses privileged obj_yaw for now (perception = step C).
         elong = abs(cmd_half[0] - cmd_half[1]) > 1e-4
         if elong:
-            wrist_tgt = sim.obj_yaw(cmd) + (np.pi / 2 if cmd_half[0] > cmd_half[1] else 0.0)
+            if orient_fn is not None:                         # (C) PERCEIVED long axis -> grip the SHORT axis
+                long_axis = orient_fn(cmd)                    # world-frame long-axis yaw (mod pi), or None
+                if long_axis is not None:
+                    wrist_tgt = float(long_axis) + np.pi / 2
+                else:                                         # perception failed -> fall back to privileged
+                    wrist_tgt = sim.obj_yaw(cmd) + (np.pi / 2 if cmd_half[0] > cmd_half[1] else 0.0)
+            else:                                             # privileged orientation (no perception)
+                wrist_tgt = sim.obj_yaw(cmd) + (np.pi / 2 if cmd_half[0] > cmd_half[1] else 0.0)
             wrist_mod = np.pi
         else:
             wrist_tgt, wrist_mod = WRIST_TGT, np.pi / 2
@@ -413,7 +427,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             gentle = abs(j5 - J5_PUSH) < 0.2 and aim[2] < PUSH_Z + 0.02   # spread gripper + low = a PUSH
             g, mdq = (1.3, 0.016) if gentle else (2.0, 0.026)            # (derived from the sub-goal, so it
             q3 = sim.arm3_angles(); sim.set_arm3_targets(q3 + body.reach_velocity(q3, aim, gain=g, max_dq=mdq))
-            if WRIST_ALIGN:                                    # (B) align the claw to the object's grip axis,
+            if WRIST_ALIGN and not (WRIST_FREEZE_GRIP and j5 < J5_GRIP + 0.4):   # freeze once gripped (no twist)
                 cy = sim.claw_yaw()                            # re-applied EVERY step: set_arm3_targets resets
                 err = (cy - wrist_tgt + wrist_mod / 2) % wrist_mod - wrist_mod / 2   # joint_4 to HOME each step,
                 j4t = float(np.clip(sim.d.qpos[sim.jqadr["joint_4"]] + 0.6 * err, 0.0, np.pi))   # and claw_yaw is
