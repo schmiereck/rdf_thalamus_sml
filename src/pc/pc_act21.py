@@ -570,11 +570,16 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
     import pc.pc_act16 as act16
     from pc.arm_modules import VisualCortexModule
     state = CommandState(sim)
+    ELONG = os.environ.get("ACT21_ELONG_CMD", "0") == "1"     # opt-in DEMO: the commanded object is elongated;
+    if ELONG:                                                 # the net PERCEIVES its long axis (step C) and aligns
+        act16.ELONG_CMD = True; act16.WRIST_FREEZE_GRIP = True   # the wrist to the SHORT axis (freeze once gripped).
+        print("  [ACT21_ELONG_CMD] commanded object ELONGATED -> perceived-orientation wrist grip (step C)")
 
     if HEADLESS:                                              # headless self-test of the full command->net path
         print("  building the net's perception (fovea + selection head) ...")
         vc, _P = VisualCortexModule.from_sim(sim, CAM, RES, headless=True)
         perceive = _steer_perceive(vc)
+        orient = _P["orient"] if ELONG else None              # perceive the long axis (own locate + PCA)
         print("\n" + "=" * 72)
         print("  COMMAND STEERING — headless self-test (no GUI): cycle objects to named targets via the NET")
         print("=" * 72)
@@ -584,7 +589,7 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
                                   cmd_fixed=lambda ep: objs[ep % 3], force=state.force_fn,
                                   goal_fn=lambda c, o: state.marker_xy(0), perceive_fn=perceive,
                                   track_fn=vc.track, policy_fn=motor.predict, lifelong=True,
-                                  tol=act16.TOL, servo=True)
+                                  tol=act16.TOL, servo=True, orient_fn=orient)
         print(f"  command-steering self-test (12 eps, object commanded -> net localizes -> deliver): {d}/{m}")
         return
 
@@ -600,6 +605,7 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
     # build the perception with the fovea drawing INTO the panel (so the fovea view is in the same window)
     vc, _P = VisualCortexModule.from_sim(sim, CAM, RES, headless=True, viz=panel.fov_viz)
     perceive = _steer_perceive(vc)
+    orient = _P["orient"] if ELONG else None                 # perceive the commanded object's long axis (step C)
     act16.run_combined(sim, bm, None, CAM, episodes=0)        # place the scene ONCE (scatter, 0 episodes)
     state.sync_active()                                       # bright goal disk starts on the selected marker
     panel.update(sim.render(CAM), "bereit — Befehl wählen und Ausführen")   # the scene that WILL be used
@@ -624,7 +630,7 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
         act16.run_combined(sim, bm, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_and_plot,
                            policy_fn=motor.predict, lifelong=True, tol=act16.TOL, servo=True,
-                           rescatter=False, episode_end_fn=ep_end)
+                           rescatter=False, episode_end_fn=ep_end, orient_fn=orient)
         ok = res.get("ok", False); err_mm = res.get("err", float("nan")) * 1000.0
         line = f"[Befehl {ep}] {'GELIEFERT' if ok else 'NICHT geliefert'}  |  Abstand zum Ziel {err_mm:.0f} mm"
         print("  " + line)

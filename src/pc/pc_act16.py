@@ -214,8 +214,10 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         for i, o in enumerate([o for o in OBJS if o not in keep]):
             sim.set_object(o, np.array([0.55 + 0.06 * i, 0.55]))   # parked far off-camera + out of reach
         if ELONG_CMD:                                        # COMMAND an elongated (2:1) object: orientation-grasp
-            sim.set_object_size(cmd, ELONG_HALF)             # test (step C) -- a random yaw the net must perceive
-            sim.set_object(cmd, sim.obj_pos(cmd)[:2], z=float(ELONG_HALF[2]), yaw=float(rng.uniform(0, np.pi)))
+            already = abs(geom_half(cmd)[0] - geom_half(cmd)[1]) > 1e-4   # test (step C) -- the net must perceive
+            yaw = sim.obj_yaw(cmd) if (PERSIST and already) else float(rng.uniform(0, np.pi))   # the yaw and align
+            sim.set_object_size(cmd, ELONG_HALF)             # the wrist to the SHORT axis.  Under PERSIST keep the
+            sim.set_object(cmd, sim.obj_pos(cmd)[:2], z=float(ELONG_HALF[2]), yaw=yaw)   # shown yaw (what runs)
         # occasionally MIX IN an elongated (2:1) object -- a shape variation in the data (mostly cubes).
         # DISTRACTOR ONLY (never the commanded target): the cube-trained policy can't grasp an elongated
         # object across its short axis yet (the deferred orientation-grasp work) -- it would close the
