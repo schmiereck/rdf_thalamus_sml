@@ -27,12 +27,11 @@ import mujoco
 
 from pc.pc_act14 import BracketArmSim, ArmBodyModel3D, HOME, _rand_xy, CamViz, REACH_XY
 
-J5_OPEN = float(os.environ.get("ACT16_J5_OPEN", "1.8"))    # gripper OPEN angle (env-tunable).  Kept at 1.8 for
-J5_GRIP, J5_PUSH = 0.0, 0.55                    # the DEFAULT pipeline: a narrower open (1.08) splays less and
-#   avoids the base on a big wrist turn, BUT halves the policy pipeline's delivery under the arm perturbation
-#   (less grasp clearance -> more knock-offs; default B 22/24 -> 11/24).  So the narrow open is applied ONLY in
-#   the wrist-turning ELONGATED demo (pc_act21 ACT21_ELONG_CMD), where the splay-into-base actually happens.
-#   J5_GRIP = fully-closed (grip); J5_PUSH = partly-open (push).
+J5_OPEN = float(os.environ.get("ACT16_J5_OPEN", "1.08"))   # gripper OPEN angle (was 1.8; user set 60% -> 1.08 so
+J5_GRIP, J5_PUSH = 0.0, 0.55                    # the open claw does not splay so wide it hits the base on a turn).
+#   NOTE (deterministic check): globally 1.08 costs the perturbed POLICY pipeline grasp clearance -> more
+#   knock-offs (default B lifelong+curiosity 22/24 -> 11/24); the user accepts this to observe the failures.
+#   Restore the old wide open via ACT16_J5_OPEN=1.8.  J5_GRIP = fully-closed (grip); J5_PUSH = partly-open (push).
 #                              (push: claws spread ~40mm to contact a wide block's face at 2 points)
 OBJS = ["obj_red", "obj_green", "obj_blue"]
 CUBE_HALF = np.array([0.012, 0.012, 0.012])     # graspable cube
