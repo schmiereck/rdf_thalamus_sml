@@ -80,6 +80,11 @@ WRIST_APPROACH_R = float(os.environ.get("ACT16_WRIST_APPROACH_R", "0.07"))   # a
 #   collides with arm/base).  Once the hand has descended to the grip (WRIST_LOCK_MARGIN) the angle is HELD
 #   (re-asserted, NOT re-corrected) so the wrist does not suddenly roll and twist the object out at contact.
 WRIST_LOCK_MARGIN = float(os.environ.get("ACT16_WRIST_LOCK", "0.012"))   # lock the wrist this far above grip z
+CLOSE_GUARD = os.environ.get("ACT16_CLOSE_GUARD", "1") == "1"   # in the grasp approach, do NOT close the claw
+#   while the hand is still in the AIR above the grasp height.  EDGE positions (near base/camera) descend more
+#   SLOWLY, so the policy/reflex would otherwise close ~15mm too HIGH and miss -- the hand CAN reach the object,
+#   it is just not DOWN yet (verified by a pure forced-open reach test).  Mirrors the teacher's own close rule
+#   (hz <= grasp_z + 0.012), now ENFORCED on the learned policy too.  Disable with ACT16_CLOSE_GUARD=0.
 SIZE_ADAPT = os.environ.get("ACT_SIZE_ADAPT", "1") == "1"    # (c) derive grasp heights from object size
 PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene between episodes
 SCENE_N = int(os.environ.get("ACT16_SCENE_N", "3"))         # objects PLACED per episode (cmd + distractors);
@@ -313,6 +318,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         obj_belief = (cube_plan.copy() if cube_plan is not None else None) if servo else None
         servo_lost = 0; reacquires = 0; hover = 0            # (#4) grasp-reflex hover counter
         wrist_hold = None                                    # last aligned joint_4 (held through the grip)
+        guard_minz = 1.0; guard_stall = 0                    # close-guard: deepest descent + stall counter
         last_phase = phase; phase_age = 0                    # STALL-ESCAPE: don't hang in one phase forever
         for k in range(cap):
             phase_age = phase_age + 1 if phase == last_phase else 0
@@ -434,6 +440,15 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 hover = 0
             if hover > HOVER_LIMIT:
                 aim = np.array([c[0], c[1], gz]); j5 = max(J5_GRIP, j5 - 0.2); via = "reflex"
+            if CLOSE_GUARD and mode == "grasp" and cz < obj_h + 0.014:   # PROGRESS-aware close guard: keep the
+                if hz < guard_minz - 0.0008:                  # claw OPEN while the hand is still DESCENDING toward
+                    guard_minz = hz; guard_stall = 0          # the object (slow at the edges), so it does not close
+                else:                                         # in the air -- BUT release once the descent STALLS
+                    guard_stall += 1                          # (no downward progress) so a genuine stall still
+                if hz > gz + 0.012 and guard_stall < HOVER_LIMIT:   # closes (the reflex) and never DEADLOCKS open
+                    j5 = max(j5, J5_OPEN)
+            else:
+                guard_minz = 1.0; guard_stall = 0             # not in the grasp approach -> reset the tracker
             if log_fn is not None:                            # log the EXECUTED (state -> subgoal)
                 log_fn(state, np.asarray(aim, float), float(j5))
             if macro_log_fn is not None:                      # EXECUTED step + the FSM phase (for macro
