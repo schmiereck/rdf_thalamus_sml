@@ -44,16 +44,22 @@ def main():
     PERTURB = float(os.environ.get("ACT21_PERTURB", "0.02"))
     GM_STEPS = int(os.environ.get("ACT21_GM_STEPS", "8000"))
     GSEED = int(os.environ.get("ACT21_GSEED", "77"))
+    # MASTER seed for INDEPENDENT replicates: offsets every module init seed + the scatter seeds so a
+    # different ACT21_MSEED is a genuinely independent full run (training + curiosity exploration +
+    # B-phase scenes all differ).  Default 0 = byte-identical to the original (5/7/2/1, ACT16_SEED=1).
+    # Needed because the B (lifelong+curiosity) phase otherwise has NO external seed -> it was fully
+    # deterministic, so varying ACT21_GSEED (which only seeds the A/C fixed goals) did NOT vary B.
+    MSEED = int(os.environ.get("ACT21_MSEED", "0"))
 
 
     print("act21 — researching agent: CuriosityPlanner (no rule) + lifelong FK/IK, observed")
     sim = BracketArmSim(render_wh=(RES, RES)); sim.set_reach_site("contact")
 
     # ---- build + train the modules (as act20) ----
-    bm = BodyModelModule(rng=np.random.default_rng(5)); bm.babble(sim, 4000)
-    gm = GoalModule2D(rng=np.random.default_rng(7)); gm.pretrain(GM_STEPS)
-    motor = MotorModule(rng=np.random.default_rng(2))
-    curio = CuriosityPlanner(gm, rng=np.random.default_rng(1))
+    bm = BodyModelModule(rng=np.random.default_rng(5 + MSEED)); bm.babble(sim, 4000)
+    gm = GoalModule2D(rng=np.random.default_rng(7 + MSEED)); gm.pretrain(GM_STEPS)
+    motor = MotorModule(rng=np.random.default_rng(2 + MSEED))
+    curio = CuriosityPlanner(gm, rng=np.random.default_rng(1 + MSEED))
 
     Xs, Ys = [], []
     def log(state, aim, j5):
@@ -61,14 +67,14 @@ def main():
     print(f"  collecting reactive-teacher demos ({COLLECT} eps) ...")
     orig_seed = os.environ.get("ACT16_SEED", "1")
     for ep in range(COLLECT):
-        os.environ["ACT16_SEED"] = str(1000 + ep)
+        os.environ["ACT16_SEED"] = str(1000 + ep + MSEED * 100000)   # MSEED -> different demo scenes
         act16.run_combined(sim, bm.body, None, CAM, episodes=1, policy_fn=act16.reactive_subgoal, log_fn=log)
-    os.environ["ACT16_SEED"] = orig_seed
+    os.environ["ACT16_SEED"] = str(int(orig_seed) + MSEED)           # observatory scatter (A/B/C) varies per replicate
     baseX, baseY = np.array(Xs), np.array(Ys)             # anchor demos (kept for online DAgger shaping)
     motor.fit(baseX, baseY)
 
     print("  training the LEARNED inverse kinematics ...")
-    print(f"    IK babble reconstruction: {bm.learn_inverse(sim, rng=np.random.default_rng(11)):.2f} mm")
+    print(f"    IK babble reconstruction: {bm.learn_inverse(sim, rng=np.random.default_rng(11 + MSEED)):.2f} mm")
 
     # RECOVERY-DAgger polish (default ON): the BC policy occasionally grasps beside the cube, RE-grasps, then
     # HANGS with it instead of carrying -- those recovery states are rare in the teacher demos, so plain BC
