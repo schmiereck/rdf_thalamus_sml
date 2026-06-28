@@ -292,20 +292,37 @@ def main():
         print("=" * 72)
         return
 
+    # (a) opt-in LATENT PLACE SERVO: drive the CARRY place-target by the latent DIFFERENCE (goal-as-prior)
+    # instead of the open-loop decoded coordinate.  With a RoPE GoalModule the latent is ~linear in
+    # position, so the learned latent-inverse is near-exact and the servo converges to the TRUE goal
+    # (isolated: 0.0mm vs 4.4mm blob).  post_goal_fn sets the servo goal to the COMMITTED target; the carry
+    # override (place_servo_fn, run_combined) then servos the place target each step toward the latent match.
+    # Default OFF (byte-identical).  Pair with ACT_GOAL_ROPE=1 to feed it the linear RoPE latent.
+    PLACE_SERVO = os.environ.get("ACT21_PLACE_SERVO", "0") == "1"
+    _psv = {}
+    if PLACE_SERVO:
+        from pc_cvnn.arm_modules import LatentGoalServo
+        lservo = LatentGoalServo(gm, rng=np.random.default_rng(3 + MSEED))
+        _rec = lservo.train(steps=4000)
+        print(f"  [PLACE_SERVO] latent-difference place servo ON (RoPE goal-latent={gm.rope}); "
+              f"latent-inverse babble {_rec:.1f} mm")
+        _psv = {"post_goal_fn": (lambda cmd, obj, goal: lservo.set_goal(goal)),
+                "place_servo_fn": (lambda hxy: lservo.servo(hxy, gain=0.6))}
+
     if HEADLESS:
         act16.run_combined._quiet = True
         # --- A: frozen baseline on FIXED goals (post-perturb) ---
         dA, mA = act16.run_combined(sim, bm, None, CAM, episodes=BASE, policy_fn=motor.predict,
-                                    goal_fn=fixed_goals(GSEED), lifelong=False)
+                                    goal_fn=fixed_goals(GSEED), lifelong=False, **_psv)
         # --- B: LIFELONG exploration with the curiosity planner (adapt + explore), log per episode ---
         rows = []
         def ep_end(ep, ok, err):
             rows.append((int(ok), err, curio.coverage(), bm._surprise_mm))
         dB, mB = act16.run_combined(sim, bm, None, CAM, episodes=EXPLORE, policy_fn=motor.predict,
-                                    goal_fn=curiosity_goal, lifelong=True, episode_end_fn=ep_end)
+                                    goal_fn=curiosity_goal, lifelong=True, episode_end_fn=ep_end, **_psv)
         # --- C: frozen re-measure on the SAME FIXED goals as A (isolates lifelong recovery) ---
         dC, mC = act16.run_combined(sim, bm, None, CAM, episodes=BASE, policy_fn=motor.predict,
-                                    goal_fn=fixed_goals(GSEED), lifelong=False)
+                                    goal_fn=fixed_goals(GSEED), lifelong=False, **_psv)
         act16.run_combined._quiet = False
 
         rows = np.array(rows, float)
