@@ -91,7 +91,11 @@ class GoalModule2D:
         return _blob2d(pos_grid, self.M).reshape(-1)
 
     def _pos(self, flat):
-        c = _com2d(np.clip(flat, 0.0, None).reshape(self.M, self.M))
+        # CVNN: the reconstruction is complex.  The spatial blob's INTENSITY is
+        # the REAL part (the imaginary part is phase residue from the complex W);
+        # take np.real explicitly instead of relying on np.clip's lexicographic
+        # complex comparison.
+        c = _com2d(np.clip(np.real(flat), 0.0, None).reshape(self.M, self.M))
         return np.array([G / 2.0, G / 2.0]) if c is None else c / (self.M - 1) * (G - 1)
 
     def pretrain(self, steps=8000):
@@ -108,7 +112,9 @@ class GoalModule2D:
         return self.z.mu.copy()
 
     def decode_dream(self, z):
-        self.img.unclamp(); self.z.clamp(np.asarray(z, float))
+        # CVNN: keep the latent COMPLEX (was np.asarray(z, float), which discarded
+        # the imaginary part / phase).  The full complex latent drives the relax.
+        self.img.unclamp(); self.z.clamp(np.asarray(z, np.complex128))
         self.net.phase_predict(); self.net.phase_error(); self.net.phase_relax()
         out = self._pos(self.net.node("g_img").pi)
         self.z.unclamp(); self.img.set_input(self._blob(np.array([G / 2.0, G / 2.0])))
