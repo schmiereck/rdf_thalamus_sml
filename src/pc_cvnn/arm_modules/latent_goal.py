@@ -61,8 +61,8 @@ class LatentGoalServo:
         self.zsd = float(DZ.std() + 1e-9)
         DZn = DZ / self.zsd
         # least squares dpos ~= DZn @ D   ->  D = (DZn^+ ) DP
-        self.D = np.linalg.lstsq(DZn, DP, rcond=None)[0]    # (latent, 2)
-        rec = DZn @ self.D - DP
+        self.D = np.linalg.lstsq(DZn, DP, rcond=None)[0]    # (latent, 2); complex if latents are RoPE
+        rec = np.real(DZn @ self.D) - DP                    # the action is the REAL part of the latent step
         return float(np.mean(np.linalg.norm(rec, axis=1))) * 1000.0
 
     def set_goal(self, goal_xy):
@@ -72,9 +72,13 @@ class LatentGoalServo:
         return float(np.linalg.norm(self.z_g - self.encode_world(obj_xy)))
 
     def servo(self, obj_xy, gain=1.0):
-        """One latent-servo step: turn the latent error into a place target (clipped to reach)."""
+        """One latent-servo step: turn the latent error into a place target (clipped to reach).
+
+        CVNN: the latent (and D) may be COMPLEX (RoPE goal encoding).  The action must be REAL, so
+        take np.real of the latent-inverse step -- the lstsq fit drives DZn@D toward the real DP, so
+        the imaginary part is ~0 and Re(e@D) is the correct position delta (identity when real)."""
         e = (self.z_g - self.encode_world(obj_xy)) / self.zsd
-        dpos = gain * (e @ self.D)
+        dpos = gain * np.real(e @ self.D)
         return np.clip(np.asarray(obj_xy, float) + dpos, LO, HI)
 
 
