@@ -29,47 +29,8 @@ import numpy as np
 from pc_cvnn.node import SensorNode, PCNode
 from pc_cvnn.connection import ConnType
 from pc_cvnn.network import PCNetwork
-
-
-# ----------------------------------------------------------------------
-# RoPE-style positional PHASE encoding (amplitude = meaning, phase = position)
-# ----------------------------------------------------------------------
-
-def rope_freqs(n_freqs: int, span: float = 6.0, ratio: float = 1.7) -> np.ndarray:
-    """Per-channel angular frequencies, COARSE -> fine (RoPE geometric spread).
-
-    θ_0 (coarsest) is chosen so the phase stays inside [0, ~π] over the whole
-    working range [0, span] => θ_0 is UNAMBIGUOUS and we decode from it.  Higher
-    channels (θ_0·ratio^k) add finer resolution and drive the interference kernel.
-    """
-    lo = 0.9 * np.pi / span
-    return lo * (ratio ** np.arange(n_freqs))
-
-
-def rope_encode_1d(p: float, theta: np.ndarray, amp: float = 1.0) -> np.ndarray:
-    """A position p -> complex code  amp · exp(i · p · θ_k).  |z|=amp, phase carries p."""
-    return amp * np.exp(1j * p * theta)
-
-
-def rope_decode_1d(z: np.ndarray, theta: np.ndarray) -> float:
-    """Recover p from the COARSEST frequency (θ_0, unambiguous over [0, span])."""
-    return float(np.angle(z[0]) / theta[0])
-
-
-def rope_encode_2d(pos, n_freqs: int = 8, span: float = 6.0, amp: float = 1.0) -> np.ndarray:
-    """2-D position -> complex vector of length n_freqs (half the freqs per axis)."""
-    x, y = float(pos[0]), float(pos[1])
-    kf = n_freqs // 2
-    th = rope_freqs(kf, span)
-    return np.concatenate([rope_encode_1d(x, th, amp), rope_encode_1d(y, th, amp)])
-
-
-def rope_decode_2d(z: np.ndarray, n_freqs: int = 8, span: float = 6.0):
-    kf = n_freqs // 2
-    th = rope_freqs(kf, span)
-    x = rope_decode_1d(z[:kf], th)
-    y = rope_decode_1d(z[kf:], th)
-    return np.array([x, y])
+from pc_cvnn.rope import (rope_freqs, rope_encode_1d, rope_decode_1d,
+                          rope_encode_2d, rope_decode_2d)
 
 
 def banner(t):
