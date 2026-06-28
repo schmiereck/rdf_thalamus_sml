@@ -16,13 +16,21 @@ itself learned.
 """
 from __future__ import annotations
 
+import os
+
 import numpy as np
 
 
 class LearnedInverseKinematics:
-    def __init__(self, hid: int = 128, lr: float = 0.03, rng=None) -> None:
+    def __init__(self, hid: int = 128, lr: float = 0.03, rng=None, feat=None) -> None:
         rng = rng or np.random.default_rng(0)
-        self.W1 = rng.normal(0, 1 / np.sqrt(3), (hid, 3)); self.b1 = np.zeros(hid)
+        # Joint-angle featurisation for the M(q3) net.  "raw" (default) = normalised angles (byte-identical
+        # to before).  "phase" = a CIRCULAR encoding [cos q, sin q] per joint (din 6): the joints span a full
+        # [0, pi] and the inverse Jacobian M(q3) is itself trig in the angles, so the cos/sin basis is the
+        # natural one -- the analogue of RoPE phase for the kinematics.  Env ACT_IK_FEAT=phase.
+        self.feat = (feat if feat is not None else os.environ.get("ACT_IK_FEAT", "raw")).lower()
+        self.din = 6 if self.feat == "phase" else 3
+        self.W1 = rng.normal(0, 1 / np.sqrt(self.din), (hid, self.din)); self.b1 = np.zeros(hid)
         self.W2 = rng.normal(0, 1 / np.sqrt(hid), (9, hid)); self.b2 = np.zeros(9)   # -> M(q3) 3x3
         self.lr = lr
         self.qmu = np.zeros(3); self.qsd = np.ones(3)
@@ -31,10 +39,17 @@ class LearnedInverseKinematics:
         self.trained = False
 
     # ------------------------------------------------------------------
-    def _M(self, q3n):                                     # q3n: (B,3) normalised -> (B,3,3)
-        h = np.tanh(q3n @ self.W1.T + self.b1)             # (B,hid)
+    def _phi(self, Q):                                     # RAW q3 (B,3) -> network input (B,din)
+        Q = np.atleast_2d(np.asarray(Q, float))
+        if self.feat == "phase":
+            return np.concatenate([np.cos(Q), np.sin(Q)], axis=1)   # circular: [cos q0..2, sin q0..2]
+        return (Q - self.qmu) / self.qsd                            # raw: normalised angles
+
+    def _M(self, q3):                                      # q3: (B,3) RAW -> (B,3,3), h, phi(B,din)
+        phi = self._phi(q3)
+        h = np.tanh(phi @ self.W1.T + self.b1)             # (B,hid)
         Mf = h @ self.W2.T + self.b2                       # (B,9)
-        return Mf.reshape(-1, 3, 3), h
+        return Mf.reshape(-1, 3, 3), h, phi
 
     def train(self, fk, q_lo, q_hi, steps: int = 80000, dq_amp: float = 0.03,
               epochs: int = 10, bs: int = 256, wd: float = 3e-2, rng=None) -> float:
@@ -48,14 +63,13 @@ class LearnedInverseKinematics:
         self.v_max = float(np.percentile(np.linalg.norm(V, axis=1), 95))
         self.qmu, self.qsd = Q.mean(0), Q.std(0) + 1e-9
         self.sv = float(V.std() + 1e-9); self.sd = float(DQ.std() + 1e-9)   # O(1) train scales
-        Qn = (Q - self.qmu) / self.qsd
         Vn = V / self.sv; DQn = DQ / self.sd               # learn M' so M'·(v/sv) ≈ dq/sd
         n = steps
         for _ in range(epochs):
             idx = rng.permutation(n)
             for s in range(0, n, bs):
-                b = idx[s:s + bs]; qn, v, dq = Qn[b], Vn[b], DQn[b]
-                M, h = self._M(qn)                          # (B,3,3),(B,hid)
+                b = idx[s:s + bs]; q, v, dq = Q[b], Vn[b], DQn[b]
+                M, h, phi = self._M(q)                      # (B,3,3),(B,hid),(B,din)
                 pred = np.einsum("bij,bj->bi", M, v)        # (B,3)
                 e = (pred - dq) / len(b)                    # (B,3)
                 dMf = (e[:, :, None] * v[:, None, :]).reshape(len(b), 9)   # (B,9)
@@ -63,7 +77,7 @@ class LearnedInverseKinematics:
                 # it penalises large inverse-Jacobian entries, taming near-singular configurations.
                 self.W2 -= self.lr * (dMf.T @ h + wd * self.W2); self.b2 -= self.lr * dMf.sum(0)
                 dh = (dMf @ self.W2) * (1 - h ** 2)         # (B,hid)
-                self.W1 -= self.lr * (dh.T @ qn + wd * self.W1); self.b1 -= self.lr * dh.sum(0)
+                self.W1 -= self.lr * (dh.T @ phi + wd * self.W1); self.b1 -= self.lr * dh.sum(0)
         self.trained = True
         chk = rng.integers(0, n, 512)
         rec = [np.linalg.norm(fk(Q[i] + self.predict_dq(Q[i], V[i])) - fk(Q[i]) - V[i]) for i in chk]
@@ -75,21 +89,19 @@ class LearnedInverseKinematics:
         kinematics to the real arm as it moves — no analytic Jacobian, no babbling."""
         if not self.trained:
             return
-        qn = ((np.asarray(q3, float) - self.qmu) / self.qsd)[None, :]
         vn = (np.asarray(v, float) / self.sv)[None, :]
         dqn = (np.asarray(dq, float) / self.sd)[None, :]
-        M, h = self._M(qn)                                  # (1,3,3),(1,hid)
+        M, h, phi = self._M(np.asarray(q3, float)[None, :])  # (1,3,3),(1,hid),(1,din)
         pred = np.einsum("bij,bj->bi", M, vn)               # (1,3)
         e = pred - dqn                                      # (1,3)
         dMf = (e[:, :, None] * vn[:, None, :]).reshape(1, 9)
         self.W2 -= lr * (dMf.T @ h + wd * self.W2); self.b2 -= lr * dMf.sum(0)
         dh = (dMf @ self.W2) * (1 - h ** 2)
-        self.W1 -= lr * (dh.T @ qn + wd * self.W1); self.b1 -= lr * dh.sum(0)
+        self.W1 -= lr * (dh.T @ phi + wd * self.W1); self.b1 -= lr * dh.sum(0)
 
     # ------------------------------------------------------------------
     def predict_dq(self, q3, v):
-        qn = (np.asarray(q3, float) - self.qmu) / self.qsd
-        M, _ = self._M(qn[None, :])
+        M, _, _ = self._M(np.asarray(q3, float)[None, :])
         return self.sd * (M[0] @ (np.asarray(v, float) / self.sv))   # de-normalise the scales
 
     def reach_velocity(self, fk, q3, target, gain: float = 2.0, max_dq: float = 0.03):
