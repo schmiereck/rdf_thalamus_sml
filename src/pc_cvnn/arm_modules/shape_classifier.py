@@ -115,31 +115,43 @@ class ShapeClassifierModule(ArmModule):
     # ------------------------------------------------------------------
     # colour-agnostic occupancy + COMPLEX angular-harmonic descriptor
     # ------------------------------------------------------------------
-    def _harmonics(self, img_u8):
-        """uint8 HxWx3 -> complex angular harmonics F[ring,k] (world frame if calibrated, else px), or None."""
+    def _mask(self, img_u8):
+        """uint8 HxWx3 -> hue-agnostic saturation occupancy mask (1 on any coloured object, 0 on floor)."""
         f = img_u8.astype(np.float32) / 255.0
-        mask = ((f.max(2) - f.min(2)) > SAT_TH).astype(np.float32)   # hue-agnostic occupancy
-        if mask.sum() < 6:
-            return None
-        H, Wd = mask.shape
+        return ((f.max(2) - f.min(2)) > SAT_TH).astype(np.float32)
+
+    def _centroid(self, mask):
+        """Centre of `mask`: a WORLD centroid (overview, perspective-correct via H) or a PX centroid (top)."""
         ys, xs = np.nonzero(mask)
+        if self.H is not None:
+            return self._px_to_world(np.column_stack([xs, ys])).mean(0)
+        return np.array([xs.mean(), ys.mean()])
+
+    def _harmonics_at(self, mask, ctr):
+        """Complex angular harmonics F[ring,k] of `mask`, sampled on polar rings around `ctr`.  Overview:
+        rings in WORLD metres around the world centroid, projected to px by H (rotation is clean there).
+        Top: rings in px around the px centroid.  Sampling ONLY this `mask` ignores neighbouring objects."""
+        H, Wd = mask.shape
         th = np.arange(self.NA) / self.NA * 2 * np.pi
-        if self.H is not None:                               # WORLD-frame sampling (overview perspective)
-            cw = self._px_to_world(np.column_stack([xs, ys])).mean(0)    # world centroid (perspective-correct)
+        ring = np.column_stack([np.cos(th), np.sin(th)])
+        if self.H is not None:
             F = np.empty((len(self.RW), self.NH), complex)
             for i, r in enumerate(self.RW):
-                ring_w = cw + r * np.column_stack([np.cos(th), np.sin(th)])
-                rp = self._world_to_px(ring_w)
+                rp = self._world_to_px(ctr + r * ring)
                 py = np.clip(rp[:, 1].astype(int), 0, H - 1); px = np.clip(rp[:, 0].astype(int), 0, Wd - 1)
                 F[i] = np.fft.fft(mask[py, px])[:self.NH]
             return F
-        cy, cx = ys.mean(), xs.mean()                        # px-frame sampling (top-down cam)
         F = np.empty((len(self.RPX), self.NH), complex)
         for i, r in enumerate(self.RPX):
-            py = np.clip((cy + r * np.sin(th)).astype(int), 0, H - 1)
-            px = np.clip((cx + r * np.cos(th)).astype(int), 0, Wd - 1)
+            py = np.clip((ctr[1] + r * np.sin(th)).astype(int), 0, H - 1)
+            px = np.clip((ctr[0] + r * np.cos(th)).astype(int), 0, Wd - 1)
             F[i] = np.fft.fft(mask[py, px])[:self.NH]
         return F
+
+    def _harmonics(self, img_u8):
+        """Single-object: harmonics of the whole occupancy mask (assumes one object in view)."""
+        mask = self._mask(img_u8)
+        return None if mask.sum() < 6 else self._harmonics_at(mask, self._centroid(mask))
 
     def descriptor(self, img_u8):
         F = self._harmonics(img_u8)
@@ -208,6 +220,29 @@ class ShapeClassifierModule(ArmModule):
         self._last = (k, _softmax(logits), yaw)
         self.set_out("shape_logits", logits); self.set_out("shape_id", [k]); self.set_out("shape_yaw", [yaw])
         return SHAPES[k]
+
+    def perceive_all(self, sim, min_area=40):
+        """Localise + classify EVERY object under distractors: segment the colour-agnostic occupancy into
+        CONNECTED COMPONENTS (one blob = one object), then classify each by its own form descriptor (rings
+        sampled ONLY on that component, so neighbours don't leak in).  Returns a list of detections:
+        {shape, id, prob, pos (world xy, overview), yaw, px}.  No colour, no privileged positions."""
+        from scipy import ndimage
+        self._park_markers(sim)
+        mask = self._mask(self._render_u8(sim))
+        labels, n = ndimage.label(mask)
+        out = []
+        for lab in range(1, n + 1):
+            comp = (labels == lab).astype(np.float32)
+            if comp.sum() < min_area:
+                continue                                     # drop specks / glints
+            ctr = self._centroid(comp)                       # world (overview) or px (top)
+            F = self._harmonics_at(comp, ctr)
+            logits = self.classify(np.abs(F).ravel()); k = int(logits.argmax())
+            ys, xs = np.nonzero(comp)
+            out.append({"shape": SHAPES[k], "id": k, "prob": float(_softmax(logits)[k]),
+                        "pos": (ctr if self.H is not None else None), "yaw": self._yaw_from(F),
+                        "px": np.array([xs.mean(), ys.mean()])})
+        return out
 
     def step(self):
         pass
