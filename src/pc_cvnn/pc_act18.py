@@ -30,6 +30,7 @@ from pc_cvnn import PCNode, SensorNode, PCNetwork
 from pc_cvnn.connection import ConnType
 from pc_cvnn.test_pc_act10 import com2d, hex_neighbors
 from pc_cvnn.pc_act14 import BracketArmSim, ArmBodyModel3D, REACH_XY, _rand_xy, ARM3
+from pc_cvnn.rope import rope_encode_2d
 import pc_cvnn.pc_act16 as act16
 
 CMD_COLOR = {"obj_red": np.array([0.9, 0.1, 0.1]), "obj_green": np.array([0.1, 0.85, 0.1]),
@@ -43,12 +44,16 @@ F = int(os.environ.get("ACT_FOVEA_F", "16"))   # fovea sheet is F×F cells; env-
 
 
 def fovea_gradient(cells):
-    """2-D active-inference fovea drive on the OBJECT (sel) channel: ∂E/∂(φx,φy)."""
+    """2-D active-inference fovea drive on the OBJECT (sel) channel: ∂E/∂(φx,φy).
+
+    CVNN: the cell states are COMPLEX.  The energy is |ε|^2, so the real-valued
+    gaze gradient is Re(conj(ε) · ∂π/∂φ) -- take np.conj(e) and the .real part
+    (this reduces to the old real-net e·gx when the imaginary part is 0)."""
     e = np.array([[cells[(r, c)].epsilon[0] for c in range(F)] for r in range(F)])
     pi = np.array([[cells[(r, c)].pi[0] for c in range(F)] for r in range(F)])
     gx = (np.roll(pi, -1, 1) - np.roll(pi, 1, 1)) * 0.5
     gy = (np.roll(pi, -1, 0) - np.roll(pi, 1, 0)) * 0.5
-    return np.array([float((e * gx).sum()), float((e * gy).sum())])
+    return np.array([float((np.conj(e) * gx).sum().real), float((np.conj(e) * gy).sum().real)])
 
 
 # --------------------------------------------------------------------------- #
@@ -146,10 +151,26 @@ def hex_sample(img, gaze, K):
     return out
 
 
+# Opt-in RoPE positional PHASE for the hex cells (default OFF = real input, phase 0 -> the complex
+# engine behaves real).  When ON: each cell's [sel,R,G,B] keeps its value as the AMPLITUDE and gets a
+# per-cell PHASE that RoPE-encodes the cell's (row,col) position (rope_encode_2d over a span of F, the
+# 4 channels split 2 per axis).  arr itself stays REAL (com2d / selection head / viz read it), so only
+# the NET sees the phase -- the cells become position-tagged tokens (RoPE), exercising the phase channel.
+FOVEA_ROPE = os.environ.get("ACT_FOVEA_ROPE", "0") == "1"
+_CELL_ROT = (np.array([[rope_encode_2d(np.array([r, c]), n_freqs=4, span=float(F))
+                        for c in range(F)] for r in range(F)])
+             if FOVEA_ROPE else None)
+
+
 def set_sheet4(cells, arr):
-    for r in range(F):
-        for c in range(F):
-            cells[(r, c)].set_input(arr[r, c])
+    if FOVEA_ROPE:
+        for r in range(F):
+            for c in range(F):
+                cells[(r, c)].set_input(arr[r, c] * _CELL_ROT[r, c])   # amplitude=content, phase=position
+    else:
+        for r in range(F):
+            for c in range(F):
+                cells[(r, c)].set_input(arr[r, c])
 
 
 # --------------------------------------------------------------------------- #
