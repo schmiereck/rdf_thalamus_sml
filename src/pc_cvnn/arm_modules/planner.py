@@ -26,12 +26,15 @@ Ports (PlannerModule)
 """
 from __future__ import annotations
 
+import os
+
 import numpy as np
 
 from pc_cvnn import PCNode, SensorNode, PCNetwork
 from pc_cvnn.connection import ConnType
 from pc_cvnn.module import PCModule
 from pc_cvnn.pc_act14 import REACH_XY
+from pc_cvnn.rope import rope_encode_2d, rope_decode_2d
 from .base import ArmModule
 
 G = 24          # latent grid resolution (world REACH patch mapped to a G×G grid)
@@ -74,14 +77,29 @@ def rule_centre(_obj_world):                      # send the object to the works
 
 
 class GoalModule2D:
-    """PC-net dreamable latent embedding of 2-D positions (act9 port).  Works in grid coords."""
+    """PC-net dreamable latent embedding of 2-D positions (act9 port).  Works in grid coords.
 
-    def __init__(self, img=12, latent=10, rng=None):
+    Two interchangeable INPUT encodings of the position (the rest of the module is identical):
+      * BLOB (default): a real M×M Gaussian image -- position lives in the AMPLITUDE pattern
+        over M*M cells, phase ~ 0 (the engine is effectively real).
+      * RoPE (opt-in, rope=True or env ACT_GOAL_ROPE=1): a length-n_freqs COMPLEX vector with
+        |z|=1 and phase = position via per-channel frequencies (pc_cvnn.rope).  Position lives in
+        the PHASE; decode reads it back with np.angle.  Far denser (n_freqs cells vs M*M) and the
+        phase channel finally carries information, so the complex engine is genuinely exercised.
+    """
+
+    def __init__(self, img=12, latent=10, rng=None, rope=None, n_freqs=8):
         self.M = img
         self.rng = rng or np.random.default_rng()
+        if rope is None:
+            rope = os.environ.get("ACT_GOAL_ROPE", "0") == "1"
+        self.rope = bool(rope)
+        self.n_freqs = int(n_freqs)
+        self.span = float(G)                      # grid positions live in [0, G-1]
+        in_dim = self.n_freqs if self.rope else img * img
         net = PCNetwork(eta_inf=0.1, n_relax=50, eps_tol=1e-6, eta_learn=0.01,
                         gamma=0.3, w_clip=3.0, rng=self.rng)
-        self.img = net.add(SensorNode("g_img", dim=img * img))
+        self.img = net.add(SensorNode("g_img", dim=in_dim))
         self.z = net.add(PCNode("g_z", dim=latent, activation="identity", eta_temporal=0.0, rng=self.rng))
         net.connect("g_z", "g_img", ConnType.UP, pressure_scale=1.0)
         self.net = net
@@ -90,11 +108,20 @@ class GoalModule2D:
     def _blob(self, pos_grid):
         return _blob2d(pos_grid, self.M).reshape(-1)
 
+    def _encode_in(self, pos_grid):
+        """Position (grid coords) -> sensor input: RoPE phase code or real blob."""
+        if self.rope:
+            return rope_encode_2d(np.asarray(pos_grid, float), self.n_freqs, span=self.span)
+        return self._blob(pos_grid)
+
     def _pos(self, flat):
-        # CVNN: the reconstruction is complex.  The spatial blob's INTENSITY is
-        # the REAL part (the imaginary part is phase residue from the complex W);
-        # take np.real explicitly instead of relying on np.clip's lexicographic
-        # complex comparison.
+        if self.rope:
+            # RoPE: position is the PHASE of the reconstructed code (read via np.angle).
+            p = rope_decode_2d(np.asarray(flat), self.n_freqs, span=self.span)
+            return np.clip(p, 0.0, G - 1.0)
+        # BLOB: the reconstruction is complex; the spatial intensity is the REAL part
+        # (imaginary = phase residue from the complex W) -- take np.real explicitly
+        # instead of relying on np.clip's lexicographic complex comparison.
         c = _com2d(np.clip(np.real(flat), 0.0, None).reshape(self.M, self.M))
         return np.array([G / 2.0, G / 2.0]) if c is None else c / (self.M - 1) * (G - 1)
 
@@ -102,12 +129,12 @@ class GoalModule2D:
         pos = self.rng.uniform(0, G - 1, 2)
         for _ in range(steps):
             pos = np.clip(pos + self.rng.normal(0, G * 0.05, 2), 0, G - 1)
-            self.img.set_input(self._blob(pos))
+            self.img.set_input(self._encode_in(pos))
             self.net.phase_predict(); self.net.phase_error(); self.net.phase_relax()
             self.net.phase_learn(); self.net.commit_step()
 
     def encode(self, pos_grid):
-        self.z.unclamp(); self.img.set_input(self._blob(pos_grid))
+        self.z.unclamp(); self.img.set_input(self._encode_in(pos_grid))
         self.net.phase_predict(); self.net.phase_error(); self.net.phase_relax()
         return self.z.mu.copy()
 
@@ -117,14 +144,14 @@ class GoalModule2D:
         self.img.unclamp(); self.z.clamp(np.asarray(z, np.complex128))
         self.net.phase_predict(); self.net.phase_error(); self.net.phase_relax()
         out = self._pos(self.net.node("g_img").pi)
-        self.z.unclamp(); self.img.set_input(self._blob(np.array([G / 2.0, G / 2.0])))
+        self.z.unclamp(); self.img.set_input(self._encode_in(np.array([G / 2.0, G / 2.0])))
         return out
 
     def decode_error(self, n=12):
         errs = []
         for _ in range(n):
             p = self.rng.uniform(G * 0.1, G * 0.9, 2)
-            self.z.unclamp(); self.img.set_input(self._blob(p))
+            self.z.unclamp(); self.img.set_input(self._encode_in(p))
             self.net.phase_predict(); self.net.phase_error(); self.net.phase_relax()
             errs.append(float(np.linalg.norm(self._pos(self.net.node("g_img").pi) - p)))
         return float(np.mean(errs))
