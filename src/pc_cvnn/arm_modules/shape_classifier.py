@@ -53,9 +53,11 @@ class ShapeClassifierModule(ArmModule):
         self.W2 = self.rng.normal(0, 1 / np.sqrt(hid), (len(SHAPES), hid)); self.b2 = np.zeros(len(SHAPES))
         self.fmu = np.zeros(din); self.fsd = np.ones(din)
         self._last = None
+        self.add_in("shape_cmd", len(SHAPES), "one-hot shape command (cube/L/U) to select by FORM")
         self.add_out("shape_logits", len(SHAPES), "cube / L / U class scores")
         self.add_out("shape_id", 1, "argmax shape class index (0=cube,1=L,2=U)")
         self.add_out("shape_yaw", 1, "object orientation (rad, mod pi) from the harmonic phase")
+        self.add_out("selected_xy", 2, "world xy of the object whose FORM matches shape_cmd")
 
     # ------------------------------------------------------------------
     # rendering / housekeeping
@@ -243,6 +245,19 @@ class ShapeClassifierModule(ArmModule):
                         "pos": (ctr if self.H is not None else None), "yaw": self._yaw_from(F),
                         "px": np.array([xs.mean(), ys.mean()])})
         return out
+
+    def select(self, sim, shape_cmd, min_area=40):
+        """Command CONDITIONED on FORM (the colour-free analogue of the colour SelectionHead): among ALL
+        objects detected by perceive_all, return the detection whose SHAPE matches the command -- its world
+        xy + the full detection -- or None if no such shape is present.  shape_cmd: 'cube'/'L'/'U' or 0/1/2;
+        if several match (e.g. two cubes) the most confident is returned.  Publishes selected_xy."""
+        k = shape_cmd if isinstance(shape_cmd, (int, np.integer)) else SHAPES.index(shape_cmd)
+        matches = [d for d in self.perceive_all(sim, min_area=min_area) if d["id"] == k]
+        if not matches:
+            self._sel = None; self.set_out("selected_xy", None); return None
+        best = max(matches, key=lambda d: d["prob"])
+        self._sel = best; self.set_out("selected_xy", best["pos"])
+        return best
 
     def step(self):
         pass
