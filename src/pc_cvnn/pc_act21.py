@@ -431,14 +431,21 @@ class CommandState:
 
     OBJECTS = [("rot", "obj_red"), ("grün", "obj_green"), ("blau", "obj_blue")]
     MARKERS = ["target_sel_1", "target_sel_2", "target_sel_3"]   # fixed, selectable named goals
+    SHAPES_CMD = [("Würfel", "cube"), ("L", "L"), ("U", "U")]    # FORM commands (colour-agnostic)
+    SHAPE_BODY = {"cube": "obj_red", "L": "obj_L", "U": "obj_U"}  # fallback body per shape (if select fails)
+    ALL_BODIES = ["obj_red", "obj_green", "obj_blue", "obj_L", "obj_U"]
 
     def __init__(self, sim):
         self.sim = sim
-        self.obj = "obj_red"          # commanded object (abstract code)
+        self.mode = "color"           # "color" -> command by COLOUR (vc), "shape" -> command by FORM (shape_clf)
+        self.obj = "obj_red"          # commanded object by COLOUR (abstract code)
+        self.shape = 0                # commanded SHAPE index into SHAPES_CMD
         self.action = "grasp"         # "grasp" or "push"
         self.target_idx = 0           # which named marker is the goal
         self.go = False               # the user pressed "Ausführen"
         self.exit = False             # the user pressed "Beenden"
+        self.shape_clf = None         # ShapeClassifierModule (set by run_command_steering when built)
+        self._shape_det = None        # last shape-select detection (grasp_xy fed to perceive_fn)
 
     def _mocap(self, name):
         return self.sim.m.body_mocapid[mujoco.mj_name2id(self.sim.m, mujoco.mjtObj.mjOBJ_BODY, name)]
@@ -470,9 +477,22 @@ class CommandState:
             p = _rand_xy(rng)
         self.set_marker_xy(self.target_idx, p); self.sync_active()
 
+    def _nearest_body(self, xy):
+        """Map a perceived world xy to the nearest object BODY name (so run_combined can score/track the
+        right body for a FORM command -- the form selector is colour-agnostic and doesn't know body names)."""
+        return min(self.ALL_BODIES, key=lambda o: float(np.linalg.norm(np.asarray(xy) - self.sim.obj_pos(o)[:2])))
+
     # ---- run_combined hooks (the command, fed to the net) ----
     def cmd_fn(self, ep):
-        return self.obj                                   # abstract object code; net FINDS it via perception
+        if self.mode == "shape" and self.shape_clf is not None:   # FORM command: select the matching object,
+            shp = self.SHAPES_CMD[self.shape][1]                  #   cache its grasp point, name it for run_combined
+            saved = self.sim.d.mocap_pos.copy()                   # select() parks ALL markers -> restore the goal
+            self._shape_det = self.shape_clf.select(self.sim, shp)
+            self.sim.d.mocap_pos[:] = saved; mujoco.mj_forward(self.sim.m, self.sim.d)
+            if self._shape_det is not None:
+                return self._nearest_body(self._shape_det["pos"])
+            return self.SHAPE_BODY[shp]                           # shape absent -> fall back to its body
+        return self.obj                                           # COLOUR command: net localizes by colour
 
     def force_fn(self, cmd):
         return self.action
@@ -481,8 +501,10 @@ class CommandState:
         return self.marker_xy(self.target_idx)            # the selected named target marker
 
     def label(self):
-        col = next(c for c, nm in self.OBJECTS if nm == self.obj)
         act = "Greifen" if self.action == "grasp" else "Schieben"
+        if self.mode == "shape":
+            return f"Form: {self.SHAPES_CMD[self.shape][0]} | {act} | Ziel {self.target_idx + 1}"
+        col = next(c for c, nm in self.OBJECTS if nm == self.obj)
         return f"{col} | {act} | Ziel {self.target_idx + 1}"
 
 
@@ -519,11 +541,17 @@ class CommandPanel:
         self.live = self.fig.text(0.225, 0.285, "", ha="center", color="#9fb4c8", fontsize=8.5,
                                   family="monospace")        # live arm-execution status under the camera
         # --- buttons (bottom): two rows ---
-        self._obj_btns = {}; self._tgt_btns = {}
-        for i, (lbl, nm) in enumerate(state.OBJECTS):       # object colour buttons
+        self._obj_btns = {}; self._tgt_btns = {}; self._shp_btns = {}
+        for i, (lbl, nm) in enumerate(state.OBJECTS):       # object COLOUR buttons (command by colour)
             ax = self.fig.add_axes([0.035 + 0.13 * i, 0.150, 0.12, 0.055])
             b = Button(ax, lbl.capitalize(), color=self.OBJ_COL[nm], hovercolor=self.OBJ_COL[nm])
             b.on_clicked(lambda _e, nm=nm: self._set_obj(nm)); self._obj_btns[nm] = b
+        self.fig.text(0.018, 0.243, "Farbe", color="#9fb4c8", fontsize=8, rotation=90, va="center")
+        for i, (lbl, sk) in enumerate(state.SHAPES_CMD):    # FORM buttons (command by shape, colour-agnostic)
+            ax = self.fig.add_axes([0.035 + 0.13 * i, 0.215, 0.12, 0.05])
+            b = Button(ax, lbl, color="#44485c", hovercolor="#5a6080")
+            b.on_clicked(lambda _e, k=i: self._set_shape(k)); self._shp_btns[i] = b
+        self.fig.text(0.018, 0.305, "Form", color="#9fb4c8", fontsize=8, rotation=90, va="center")
         for i in range(len(state.MARKERS)):                 # named target buttons
             ax = self.fig.add_axes([0.55 + 0.13 * i, 0.150, 0.12, 0.055])
             b = Button(ax, f"Ziel {i + 1}", color="#3a3a44", hovercolor="#55556a")
@@ -541,7 +569,12 @@ class CommandPanel:
         self.fig.canvas.mpl_connect("close_event", lambda _e: setattr(self.state, "exit", True))
         self._refresh()
 
-    def _set_obj(self, nm): self.state.obj = nm; self._refresh()
+    def _set_obj(self, nm): self.state.mode = "color"; self.state.obj = nm; self._refresh()
+    def _set_shape(self, k):
+        self.state.mode = "shape"; self.state.shape = k
+        if self.state.shape_clf is None:
+            self.live.set_text("(Form-Wahrnehmung nicht verfügbar)")
+        self._refresh()
     def _go(self, _e): self.state.go = True
     def _exit(self, _e): self.state.exit = True
 
@@ -568,8 +601,12 @@ class CommandPanel:
 
     def _refresh(self):
         labels = {nm: lbl.capitalize() for lbl, nm in self.state.OBJECTS}
-        for nm, b in self._obj_btns.items():                # highlight selected: marker + bright target colour
-            b.label.set_text(("● " if nm == self.state.obj else "") + labels[nm])
+        csel = (self.state.mode == "color")
+        for nm, b in self._obj_btns.items():                # ● marks the active command (colour mode only)
+            b.label.set_text(("● " if (csel and nm == self.state.obj) else "") + labels[nm])
+        for i, b in self._shp_btns.items():                 # ● on the active shape (shape mode only)
+            lbl = self.state.SHAPES_CMD[i][0]
+            b.label.set_text(("● " if (not csel and i == self.state.shape) else "") + lbl)
         for i, b in self._tgt_btns.items():
             b.color = "#c050c0" if i == self.state.target_idx else "#3a3a44"; b.ax.set_facecolor(b.color)
         self.status.set_text("Befehl:  " + self.state.label())
@@ -653,12 +690,27 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
     #   run_combined does NOT block on viz.hold() / print after each command -> the buttons keep responding)
     print("\n" + "=" * 72)
     print("  COMMAND STEERING — grafische Schnittstelle (Kamera + Fovea + Surprise-Kurven in EINEM Fenster)")
-    print("  Objekt (Farbe) + Ziel (Marker) + Modus + 'Ziel neu' / 'Objekte neu', dann 'Ausführen'.")
+    print("  Objekt nach FARBE (rot/grün/blau) ODER nach FORM (Würfel/L/U) + Ziel (Marker) + Modus +")
+    print("  'Ziel neu' / 'Objekte neu', dann 'Ausführen'.  (Form = farb-agnostisch, eigener Klassifikator)")
     print("=" * 72)
+    SHAPE = os.environ.get("ACT21_SHAPE", "1") == "1"         # build the FORM perception + place L/U shapes
     obj_rng = np.random.default_rng(123)
     def randomize_objects():                                  # fresh positions + sizes; the scene stays MIXED with
         os.environ["ACT16_SEED"] = str(int(obj_rng.integers(1, 10 ** 6)))   # fresh seed -> NEW scatter positions
         act16.run_combined(sim, bm, None, CAM, episodes=0)    # ONE random object long (NOT the commanded one).
+        if SHAPE:                                             # place the L and U too, clear of the cubes/base, so
+            from pc_cvnn.pc_act14 import _rand_xy             #   FORM commands ("greife das U") have all 3 shapes
+            from pc_cvnn.pc_act16 import BASE_CLEAR
+            placed = [sim.obj_pos(o)[:2] for o in act16.OBJS]
+            for body in ("obj_L", "obj_U"):
+                p = _rand_xy(obj_rng)
+                for _ in range(200):
+                    if float(np.linalg.norm(p)) >= BASE_CLEAR and all(
+                            float(np.linalg.norm(p - q)) > 0.07 for q in placed):
+                        break
+                    p = _rand_xy(obj_rng)
+                sim.set_object(body, p, z=0.008, yaw=float(obj_rng.uniform(0, 2 * np.pi))); placed.append(p)
+            mujoco.mj_forward(sim.m, sim.d)
         if ELONG:                                             # re-scatter places all as cubes -> elongate one
             o = str(obj_rng.choice(act16.OBJS))
             sim.set_object_size(o, act16.ELONG_HALF)
@@ -669,9 +721,24 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
     panel.update(sim.render(CAM), "Wahrnehmung des Netzes wird trainiert ...")
     # build the perception with the fovea drawing INTO the panel (so the fovea view is in the same window)
     vc, _P = VisualCortexModule.from_sim(sim, CAM, RES, headless=True, viz=panel.fov_viz)
-    perceive = _steer_perceive(vc)
     orient = _P["orient"] if ELONG else None                 # perceive the commanded object's long axis (step C)
-    randomize_objects()                                       # place the scene ONCE (mixed: one random object long)
+    if SHAPE:                                                 # build the FORM perception (shape classifier)
+        from pc_cvnn.arm_modules import ShapeClassifierModule
+        panel.update(sim.render(CAM), "Form-Wahrnehmung wird trainiert ...")
+        mocap_saved = sim.d.mocap_pos.copy()                  # calibrate/train PARKS the markers -> restore after
+        shape_clf = ShapeClassifierModule(cam=CAM, rng=np.random.default_rng(0))
+        shape_clf.calibrate(sim)
+        shape_clf.train(sim, steps=int(os.environ.get("ACT21_SHAPE_STEPS", "2500")), rng=np.random.default_rng(1))
+        sim.d.mocap_pos[:] = mocap_saved; mujoco.mj_forward(sim.m, sim.d)   # restore the named target markers
+        state.shape_clf = shape_clf
+        print("  FORM perception ready (command 'Würfel/L/U' selects by SHAPE, colour-agnostic)")
+
+    def perceive(cmd):                                        # dispatch: FORM command -> shape grasp point;
+        if state.mode == "shape" and state._shape_det is not None:   # COLOUR command -> vc fovea/selection head
+            return np.asarray(state._shape_det["grasp_xy"], float), None, "grasp"
+        return vc.perceive(cmd), None, None
+
+    randomize_objects()                                       # place the scene ONCE (mixed: cubes + L + U)
     panel.update(sim.render(CAM), "bereit — Befehl wählen und Ausführen")   # the scene that WILL be used
 
     def track_and_plot():                                     # one follow frame + push the surprise curves
