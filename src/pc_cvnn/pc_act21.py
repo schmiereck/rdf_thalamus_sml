@@ -738,6 +738,11 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
             return np.asarray(state._shape_det["grasp_xy"], float), None, "grasp"
         return vc.perceive(cmd), None, None
 
+    _color_bodies = {nm for _l, nm in state.OBJECTS}
+    def orient_safe(cmd):                                     # the colour long-axis orient is COLOUR-only; a FORM
+        return orient(cmd) if (orient is not None and cmd in _color_bodies) else None   # body (obj_L/obj_U) is
+        #   "elong" by geometry -> run_combined falls back to privileged yaw (works, as in shape_grasp_viz); no crash
+
     randomize_objects()                                       # place the scene ONCE (mixed: cubes + L + U)
     panel.update(sim.render(CAM), "bereit — Befehl wählen und Ausführen")   # the scene that WILL be used
 
@@ -761,7 +766,7 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
         act16.run_combined(sim, bm, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_and_plot,
                            policy_fn=motor.predict, lifelong=True, tol=act16.TOL, servo=True,
-                           rescatter=False, episode_end_fn=ep_end, orient_fn=orient)
+                           rescatter=False, episode_end_fn=ep_end, orient_fn=orient_safe)
         ok = res.get("ok", False); err_mm = res.get("err", float("nan")) * 1000.0
         line = f"[Befehl {ep}] {'GELIEFERT' if ok else 'NICHT geliefert'}  |  Abstand zum Ziel {err_mm:.0f} mm"
         print("  " + line)
