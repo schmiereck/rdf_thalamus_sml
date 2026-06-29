@@ -31,6 +31,7 @@ from .base import ArmModule
 SHAPES = ["cube", "L", "U"]
 SHAPE_BODY = {"cube": ("obj_red", np.array([0.012, 0.012, 0.012])), "L": ("obj_L", None), "U": ("obj_U", None)}
 SAT_TH = 0.15
+GRIP_PX = 18                                             # gripper-sized window (px) for the densest-grip-point search
 RED = np.array([0.9, 0.1, 0.1])
 _MARKERS = ("target_marker", "target_sel_1", "target_sel_2", "target_sel_3")
 
@@ -246,12 +247,16 @@ class ShapeClassifierModule(ArmModule):
             F = self._harmonics_at(comp, ctr)
             logits = self.classify(np.abs(F).ravel()); k = int(logits.argmax())
             ys, xs = np.nonzero(comp)
-            # GRASP point: the MATERIAL point nearest the centroid -- for a concave shape (U) the centroid
-            # falls in the GAP, so gripping there grips air; the nearest occupied point sits on a bar.
+            # GRASP point: the MOST SOLID point = max local material DENSITY in a gripper-sized window.
+            # The footprint centroid is bad for a concave shape (a U's centroid is in the GAP -> grip air),
+            # and the nearest-material point sits on a thin OFF-CENTRE bar/prong -> the object hangs and
+            # SLIPS OUT during the lateral carry.  The densest point is the BALANCED, securely-grippable spot
+            # (U -> base centre, cube -> centre, L -> the corner): the object lifts level and survives carry.
             grasp = ctr
             if self.H is not None:
-                compW = self._px_to_world(np.column_stack([xs, ys]))
-                grasp = compW[int(np.argmin(np.linalg.norm(compW - ctr, axis=1)))]
+                dens = ndimage.uniform_filter(comp, size=GRIP_PX) * comp     # local material fraction, in-comp
+                gy, gx = np.unravel_index(int(np.argmax(dens)), dens.shape)
+                grasp = self._px_to_world(np.array([[gx, gy]]))[0]
             out.append({"shape": SHAPES[k], "id": k, "prob": float(_softmax(logits)[k]),
                         "pos": (ctr if self.H is not None else None), "grasp_xy": grasp,
                         "yaw": self._yaw_from(F), "px": np.array([xs.mean(), ys.mean()])})
