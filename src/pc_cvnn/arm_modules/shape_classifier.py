@@ -241,9 +241,15 @@ class ShapeClassifierModule(ArmModule):
             F = self._harmonics_at(comp, ctr)
             logits = self.classify(np.abs(F).ravel()); k = int(logits.argmax())
             ys, xs = np.nonzero(comp)
+            # GRASP point: the MATERIAL point nearest the centroid -- for a concave shape (U) the centroid
+            # falls in the GAP, so gripping there grips air; the nearest occupied point sits on a bar.
+            grasp = ctr
+            if self.H is not None:
+                compW = self._px_to_world(np.column_stack([xs, ys]))
+                grasp = compW[int(np.argmin(np.linalg.norm(compW - ctr, axis=1)))]
             out.append({"shape": SHAPES[k], "id": k, "prob": float(_softmax(logits)[k]),
-                        "pos": (ctr if self.H is not None else None), "yaw": self._yaw_from(F),
-                        "px": np.array([xs.mean(), ys.mean()])})
+                        "pos": (ctr if self.H is not None else None), "grasp_xy": grasp,
+                        "yaw": self._yaw_from(F), "px": np.array([xs.mean(), ys.mean()])})
         return out
 
     def select(self, sim, shape_cmd, min_area=40):
