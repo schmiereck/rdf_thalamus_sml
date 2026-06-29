@@ -107,19 +107,26 @@
                         friction="1.4 0.05 0.001"/>
     </body>
 
-    <!-- SHAPE objects (composite multi-geom bodies): an L and a U footprint in the x-y table plane, for
-         FORM-based perception.  Each is a single free body; the geoms are relative to the body frame.
-         Colours here are placeholders -- shape is meant to be perceived independently of colour. -->
-    <body name="obj_L" pos="0.02 0.18 0.008">
+    <!-- SHAPE objects: an L and a U built from 18mm segments (0.009 half) -- small enough that the ~24mm
+         gripper has clearance to grasp an exposed end segment.  Composite multi-geom free bodies on an 18mm
+         grid in the x-y table plane, 18mm tall (rest z=0.009).  L = a LONG side (3 segments) + a foot; U = a
+         3-segment base + two 2-segment prongs.  Colours are placeholders -- shape perceived by FORM. -->
+    <body name="obj_L" pos="0.02 0.18 0.009">      <!-- L: vertical arm of 3 + a foot (4 segments) -->
       <freejoint/>
-      <geom type="box" pos="-0.007  0.000 0" size="0.007 0.021 0.008" rgba="0.95 0.55 0.1 1" density="700" friction="1.4 0.05 0.001"/>
-      <geom type="box" pos=" 0.007 -0.014 0" size="0.014 0.007 0.008" rgba="0.95 0.55 0.1 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos="-0.009 -0.018 0" size="0.009 0.009 0.009" rgba="0.95 0.55 0.1 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos="-0.009  0.000 0" size="0.009 0.009 0.009" rgba="0.95 0.55 0.1 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos="-0.009  0.018 0" size="0.009 0.009 0.009" rgba="0.95 0.55 0.1 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos=" 0.009 -0.018 0" size="0.009 0.009 0.009" rgba="0.95 0.55 0.1 1" density="700" friction="1.4 0.05 0.001"/>
     </body>
-    <body name="obj_U" pos="-0.02 0.18 0.008">
+    <body name="obj_U" pos="-0.02 0.18 0.009">     <!-- U: 3-segment base + two 2-segment prongs (7 segments) -->
       <freejoint/>
-      <geom type="box" pos="-0.014  0.007 0" size="0.007 0.014 0.008" rgba="0.1 0.8 0.85 1" density="700" friction="1.4 0.05 0.001"/>
-      <geom type="box" pos=" 0.014  0.007 0" size="0.007 0.014 0.008" rgba="0.1 0.8 0.85 1" density="700" friction="1.4 0.05 0.001"/>
-      <geom type="box" pos=" 0.000 -0.014 0" size="0.021 0.007 0.008" rgba="0.1 0.8 0.85 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos="-0.018 -0.018 0" size="0.009 0.009 0.009" rgba="0.1 0.8 0.85 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos=" 0.000 -0.018 0" size="0.009 0.009 0.009" rgba="0.1 0.8 0.85 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos=" 0.018 -0.018 0" size="0.009 0.009 0.009" rgba="0.1 0.8 0.85 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos="-0.018  0.000 0" size="0.009 0.009 0.009" rgba="0.1 0.8 0.85 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos="-0.018  0.018 0" size="0.009 0.009 0.009" rgba="0.1 0.8 0.85 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos=" 0.018  0.000 0" size="0.009 0.009 0.009" rgba="0.1 0.8 0.85 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos=" 0.018  0.018 0" size="0.009 0.009 0.009" rgba="0.1 0.8 0.85 1" density="700" friction="1.4 0.05 0.001"/>
     </body>
 
     <!-- target marker: a flat disk on the table (mocap = kinematic, moved per episode),

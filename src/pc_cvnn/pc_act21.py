@@ -709,7 +709,7 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
                             float(np.linalg.norm(p - q)) > 0.07 for q in placed):
                         break
                     p = _rand_xy(obj_rng)
-                sim.set_object(body, p, z=0.008, yaw=float(obj_rng.uniform(0, 2 * np.pi))); placed.append(p)
+                sim.set_object(body, p, z=0.009, yaw=float(obj_rng.uniform(0, 2 * np.pi))); placed.append(p)
             mujoco.mj_forward(sim.m, sim.d)
         if ELONG:                                             # re-scatter places all as cubes -> elongate one
             o = str(obj_rng.choice(act16.OBJS))
@@ -747,14 +747,14 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
     panel.update(sim.render(CAM), "bereit — Befehl wählen und Ausführen")   # the scene that WILL be used
 
     def track_and_plot():                                     # one follow frame + push the surprise curves
-        obs = vc.track()                                       # drives the fovea VIEW + surprise (always)
+        if state.mode == "shape":                             # FORM command: the COLOUR fovea can't see the L/U
+            return None                                       #   -> don't chase the wrong (colour) object; the
+            #   fovea view holds (cosmetic).  Shape grasp uses the scripted controller (no servo), so None is fine.
+        obs = vc.track()                                       # COLOUR command: drive the fovea view + surprise
         s = vc.surprise()
         if s is not None:
             panel.surp_viz.push(s["sensor"], s["state"], s["total"], s["relax"],
                                 getattr(bm, "_surprise_mm", None))
-        if state.mode == "shape" and state._shape_det is not None:   # FORM command: the closed-loop servo must
-            return np.asarray(state._shape_det["grasp_xy"], float), 1.0   # HOLD the shape grasp point (vc tracks
-            #   the COLOUR object, which would drag the believed object off the form target -> arm into the air)
         return obs
 
     res = {}

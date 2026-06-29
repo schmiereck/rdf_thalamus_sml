@@ -80,7 +80,7 @@ class ShapeClassifierModule(ArmModule):
     def __init__(self, n_ang=72, n_harm=8, hid=32, cam="overview", name="ShapeClassifier", rng=None, engine=None):
         super().__init__(name)
         self.NA = int(n_ang); self.NH = int(n_harm); self.cam = cam
-        self.RW = np.arange(0.003, 0.033, 0.003)             # WORLD polar ring radii (m), used on overview
+        self.RW = np.arange(0.004, 0.046, 0.004)             # WORLD polar ring radii (m); reach ~44mm to cover
         self.RPX = np.arange(2, 26, 2)                       # px ring radii, used on the top cam
         self.rng = rng or np.random.default_rng(0)
         self.H = None; self.Hinv = None                      # table-plane homography world<->overview-px
@@ -149,7 +149,7 @@ class ShapeClassifierModule(ArmModule):
             sim.set_object(o, [0.5, -0.6], z=0.008)
         W, P = [], []
         for _ in range(n):
-            p = _rand_xy(rng); sim.set_object("obj_red", p, z=0.008); mujoco.mj_forward(sim.m, sim.d)
+            p = _rand_xy(rng); sim.set_object("obj_red", p, z=0.012); mujoco.mj_forward(sim.m, sim.d)
             px = detect_px(self._render_u8(sim), RED)
             if px is not None:
                 W.append([p[0], p[1]]); P.append([px[0], px[1]])
@@ -235,9 +235,11 @@ class ShapeClassifierModule(ArmModule):
             k = int(rng.integers(len(SHAPES))); body, half = SHAPE_BODY[SHAPES[k]]
             for o in allb:
                 sim.set_object(o, [0.5, -0.6], z=0.008)
+            bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, body)
             if half is not None:
-                sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, body)]] = half
-            sim.set_object(body, [rng.uniform(-0.08, 0.08), rng.uniform(0.08, 0.20)], z=0.008,
+                sim.m.geom_size[sim.m.body_geomadr[bid]] = half
+            zc = float(sim.m.geom_size[sim.m.body_geomadr[bid]][2])   # rest z = the object's half-height
+            sim.set_object(body, [rng.uniform(-0.08, 0.08), rng.uniform(0.08, 0.20)], z=zc,
                            yaw=rng.uniform(0, 2 * np.pi)); mujoco.mj_forward(sim.m, sim.d)
             d = self.descriptor(self._render_u8(sim))
             if d is not None:
@@ -293,18 +295,19 @@ class ShapeClassifierModule(ArmModule):
             F = self._harmonics_at(comp, ctr)
             logits = self.classify(np.abs(F).ravel()); k = int(logits.argmax())
             ys, xs = np.nonzero(comp)
-            # GRASP point: the MOST SOLID point = max local material DENSITY in a gripper-sized window.
-            # The footprint centroid is bad for a concave shape (a U's centroid is in the GAP -> grip air),
-            # and the nearest-material point sits on a thin OFF-CENTRE bar/prong -> the object hangs and
-            # SLIPS OUT during the lateral carry.  The densest point is the BALANCED, securely-grippable spot
-            # (U -> base centre, cube -> centre, L -> the corner): the object lifts level and survives carry.
-            grasp = ctr
+            # GRASP point: a FREE-STANDING END SEGMENT (the limb tip), gripped ACROSS the limb so the jaws
+            # approach from the two FREE sides -- on a cube-built shape the dense/corner point jams the jaws
+            # against the neighbouring 24mm segments, while a tip is exposed on 3 sides.  grasp_yaw = the limb
+            # axis (tip->body); run_combined grips across it (+pi/2), clearing the rest of the shape.
+            grasp = ctr; gyaw = 0.0
             if self.H is not None:
-                dens = ndimage.uniform_filter(comp, size=GRIP_PX) * comp     # local material fraction, in-comp
-                gy, gx = np.unravel_index(int(np.argmax(dens)), dens.shape)
-                grasp = self._px_to_world(np.array([[gx, gy]]))[0]
+                W = self._px_to_world(np.column_stack([xs, ys]))            # world coords of the component px
+                far = W[int(np.argmax(np.linalg.norm(W - ctr, axis=1)))]    # the extremity (a limb tip)
+                v = ctr - far; n = float(np.linalg.norm(v)) + 1e-9
+                grasp = far + (v / n) * min(0.012, n)                       # pull ~one half-segment inward
+                gyaw = float(np.arctan2(v[1], v[0]))                        # limb axis (grip ACROSS it)
             out.append({"shape": SHAPES[k], "id": k, "prob": float(_softmax(logits)[k]),
-                        "pos": (ctr if self.H is not None else None), "grasp_xy": grasp,
+                        "pos": (ctr if self.H is not None else None), "grasp_xy": grasp, "grasp_yaw": gyaw,
                         "yaw": self._yaw_from(F), "px": np.array([xs.mean(), ys.mean()])})
         return out
 
