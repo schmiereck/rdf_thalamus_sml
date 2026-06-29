@@ -24,9 +24,14 @@ Ports
 """
 from __future__ import annotations
 
+import os
+
 import numpy as np
 
 from .base import ArmModule
+from pc_cvnn.network import PCNetwork
+from pc_cvnn.node import PCNode, SensorNode
+from pc_cvnn.connection import ConnType
 
 SHAPES = ["cube", "L", "U"]
 SHAPE_BODY = {"cube": ("obj_red", np.array([0.012, 0.012, 0.012])), "L": ("obj_L", None), "U": ("obj_U", None)}
@@ -40,8 +45,39 @@ def _softmax(z):
     z = z - z.max(-1, keepdims=True); e = np.exp(z); return e / e.sum(-1, keepdims=True)
 
 
+class PCShapeHead:
+    """Supervised shape classifier IN the complex PC engine (pc_cvnn PCNetwork): a SensorNode for the
+    feature, a hidden PCNode and a class PCNode, wired generatively (class -> hidden -> feature) with
+    COMPLEX weights and PC learning.  Reads the rotation-INVARIANT |F| descriptor: the complex harmonics F
+    themselves are rotation-DEPENDENT (phase = rotation), so a flat net can't classify them invariantly
+    (measured: ~chance on F vs 100% on |F|) -- the magnitude IS the invariant feature.  Trains supervised
+    (clamp feature + one-hot class, relax, learn); infers the class by relaxing it free under the feature."""
+
+    def __init__(self, din, n_cls=3, hid=24, rng=None):
+        rng = rng or np.random.default_rng(0)
+        net = PCNetwork(eta_inf=0.1, n_relax=40, eps_tol=1e-6, eta_learn=0.03, gamma=0.5, w_clip=3.0, rng=rng)
+        self.x = net.add(SensorNode("sh_x", din))
+        self.z = net.add(PCNode("sh_z", hid, activation="tanh", eta_temporal=0.0, rng=rng))
+        self.y = net.add(PCNode("sh_y", n_cls, activation="identity", eta_temporal=0.0, rng=rng))
+        net.connect("sh_z", "sh_x", ConnType.UP); net.connect("sh_y", "sh_z", ConnType.UP)
+        self.net = net; self.n_cls = n_cls
+
+    def fit(self, X, Y, epochs=8, rng=None):
+        rng = rng or np.random.default_rng(0)
+        for _ in range(epochs):
+            for i in rng.permutation(len(X)):
+                self.x.set_input(X[i])
+                oh = np.zeros(self.n_cls); oh[int(Y[i])] = 1.0
+                self.y.clamp(oh.astype(np.complex128)); self.net.step(learn=True)
+            self.y.unclamp()
+
+    def logits(self, feat):
+        self.y.unclamp(); self.x.set_input(feat); self.net.step(learn=False)
+        return np.real(self.y.mu).copy()
+
+
 class ShapeClassifierModule(ArmModule):
-    def __init__(self, n_ang=72, n_harm=8, hid=32, cam="overview", name="ShapeClassifier", rng=None):
+    def __init__(self, n_ang=72, n_harm=8, hid=32, cam="overview", name="ShapeClassifier", rng=None, engine=None):
         super().__init__(name)
         self.NA = int(n_ang); self.NH = int(n_harm); self.cam = cam
         self.RW = np.arange(0.003, 0.033, 0.003)             # WORLD polar ring radii (m), used on overview
@@ -50,8 +86,12 @@ class ShapeClassifierModule(ArmModule):
         self.H = None; self.Hinv = None                      # table-plane homography world<->overview-px
         nr = len(self.RW)
         din = nr * self.NH
+        # classifier backend: "mlp" (default, numpy) or "pc" (the complex PC engine, ACT_SHAPE_ENGINE=pc).
+        # Both read the rotation-invariant |F|; the PC head reaches the same 100% (parity), in the PC paradigm.
+        self.engine = (engine or os.environ.get("ACT_SHAPE_ENGINE", "mlp")).lower()
         self.W1 = self.rng.normal(0, 1 / np.sqrt(din), (hid, din)); self.b1 = np.zeros(hid)
         self.W2 = self.rng.normal(0, 1 / np.sqrt(hid), (len(SHAPES), hid)); self.b2 = np.zeros(len(SHAPES))
+        self.head = PCShapeHead(din, len(SHAPES), rng=self.rng) if self.engine == "pc" else None
         self.fmu = np.zeros(din); self.fsd = np.ones(din)
         self._last = None
         self.add_in("shape_cmd", len(SHAPES), "one-hot shape command (cube/L/U) to select by FORM")
@@ -176,6 +216,8 @@ class ShapeClassifierModule(ArmModule):
         return h @ self.W2.T + self.b2, h
 
     def classify(self, feat):
+        if self.engine == "pc":                              # complex PC-engine head on the standardised |F|
+            return self.head.logits((np.asarray(feat, float) - self.fmu) / self.fsd)
         return self._forward(np.atleast_2d(feat))[0][0]
 
     def train(self, sim, steps=4500, lr=0.05, bs=64, epochs=10, rng=None):
@@ -202,6 +244,11 @@ class ShapeClassifierModule(ArmModule):
                 X.append(d); Y.append(k)
         X = np.array(X); Y = np.array(Y); n = len(X)
         self.fmu = X.mean(0); self.fsd = X.std(0) + 1e-9
+        self._X, self._Y = X, Y
+        if self.engine == "pc":                              # fit the complex PC head on standardised |F|
+            self.head.fit((X - self.fmu) / self.fsd, Y, epochs=min(epochs, 8), rng=rng)
+            chk = rng.choice(n, min(n, 300), replace=False)  # train acc on a subset (PC infer is per-sample)
+            return float(np.mean([self.classify(X[i]).argmax() == Y[i] for i in chk]))
         for _ in range(epochs):
             idx = rng.permutation(n)
             for s in range(0, n, bs):
@@ -211,7 +258,6 @@ class ShapeClassifierModule(ArmModule):
                 self.W2 -= lr * (p.T @ h); self.b2 -= lr * p.sum(0)
                 dh = (p @ self.W2) * (h > 0)
                 self.W1 -= lr * (dh.T @ ((xb - self.fmu) / self.fsd)); self.b1 -= lr * dh.sum(0)
-        self._X, self._Y = X, Y
         return float((self._forward(X)[0].argmax(1) == Y).mean())
 
     # ------------------------------------------------------------------
