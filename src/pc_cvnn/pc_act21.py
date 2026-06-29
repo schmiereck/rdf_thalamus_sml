@@ -765,12 +765,15 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
         state.go = False
         what = (f"Form {state.SHAPES_CMD[state.shape][1]}" if state.mode == "shape" else state.obj)
         print(f"  [Befehl {ep}] {state.label()} -> Netz lokalisiert {what} und liefert ...")
-        # rescatter=False: reuse the scene already on the table (placed ONCE at startup, kept across
-        # commands) so the positions the user SEES are the ones executed.
+        # FORM commands grasp L/U whose size (obj_h/obj_fp ~0.008/0.007) is OUT of the cube-trained motor's
+        # distribution -> the learned policy flies to the air; use the size-ADAPTIVE scripted controller
+        # (policy_fn=None) + no servo for shapes, exactly as the working shape_grasp_viz.  Colour keeps motor.
+        shape_cmd = (state.mode == "shape")
+        # rescatter=False: reuse the scene already on the table (placed ONCE at startup, kept across commands).
         act16.run_combined(sim, bm, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_and_plot,
-                           policy_fn=motor.predict, lifelong=True, tol=act16.TOL, servo=True,
-                           rescatter=False, episode_end_fn=ep_end, orient_fn=orient_safe)
+                           policy_fn=(None if shape_cmd else motor.predict), lifelong=True, tol=act16.TOL,
+                           servo=(not shape_cmd), rescatter=False, episode_end_fn=ep_end, orient_fn=orient_safe)
         ok = res.get("ok", False); err_mm = res.get("err", float("nan")) * 1000.0
         line = f"[Befehl {ep}] {'GELIEFERT' if ok else 'NICHT geliefert'}  |  Abstand zum Ziel {err_mm:.0f} mm"
         print("  " + line)
