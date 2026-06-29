@@ -65,12 +65,17 @@ class ShapeClassifierModule(ArmModule):
     @staticmethod
     def _park_markers(sim):
         import mujoco
+        moved = False
         for nm in _MARKERS:                                  # magenta markers corrupt the saturation mask
             try:
                 bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)
-                sim.d.mocap_pos[sim.m.body_mocapid[bid]] = [0.4, -0.6, -0.05]
+                sim.d.mocap_pos[sim.m.body_mocapid[bid]] = [0.4, -0.6, -0.05]; moved = True
             except Exception:
                 pass
+        if moved:
+            mujoco.mj_forward(sim.m, sim.d)                  # CRITICAL: refresh xpos, else the markers still
+            #   RENDER at their old spots (mocap_pos alone doesn't update the rendered pose) -> their magenta
+            #   disks survive in the mask and classify as "cube", hijacking select('cube').
 
     def _render_u8(self, sim):
         import mujoco
