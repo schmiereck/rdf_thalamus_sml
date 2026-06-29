@@ -747,11 +747,14 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
     panel.update(sim.render(CAM), "bereit — Befehl wählen und Ausführen")   # the scene that WILL be used
 
     def track_and_plot():                                     # one follow frame + push the surprise curves
-        obs = vc.track()
+        obs = vc.track()                                       # drives the fovea VIEW + surprise (always)
         s = vc.surprise()
         if s is not None:
             panel.surp_viz.push(s["sensor"], s["state"], s["total"], s["relax"],
                                 getattr(bm, "_surprise_mm", None))
+        if state.mode == "shape" and state._shape_det is not None:   # FORM command: the closed-loop servo must
+            return np.asarray(state._shape_det["grasp_xy"], float), 1.0   # HOLD the shape grasp point (vc tracks
+            #   the COLOUR object, which would drag the believed object off the form target -> arm into the air)
         return obs
 
     res = {}
@@ -760,7 +763,8 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
     ep = 0
     while panel.wait() != "exit":
         state.go = False
-        print(f"  [Befehl {ep}] {state.label()} -> Netz lokalisiert {state.obj} und liefert ...")
+        what = (f"Form {state.SHAPES_CMD[state.shape][1]}" if state.mode == "shape" else state.obj)
+        print(f"  [Befehl {ep}] {state.label()} -> Netz lokalisiert {what} und liefert ...")
         # rescatter=False: reuse the scene already on the table (placed ONCE at startup, kept across
         # commands) so the positions the user SEES are the ones executed.
         act16.run_combined(sim, bm, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
