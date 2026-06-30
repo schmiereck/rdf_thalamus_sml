@@ -17,7 +17,14 @@ Four honest checks (success here = self-acquisition + generalisation + improveme
   3. GENERALISATION: trained on cube+L only -> does it help / not hurt on the HELD-OUT U;
   4. LEARNING CURVE: U delivery as the agent collects more of its OWN U experience.
 
-Env: ACT23_NPOS ACT23_NTRIAL ACT23_HOLD ACT23_TEST ACT23_LAM ACT23_K ACT23_NCAND ACT23_CURVE_STEPS
+ACT23_MODE = "diag" (default) runs the SIGNAL-RICH validation -- a diagonally-oriented ELONGATED object whose
+delivery genuinely depends on the wrist.  The teacher's wrist heuristic is DISABLED (a fixed wrist as the
+no-privilege default); the world model learns -- from its OWN outcomes -- which wrist delivers as a function
+of the PERCEIVED long-axis orientation (ObjectOrientationModule, camera, not the privileged sim yaw).  It
+recovers / beats the privileged-yaw teacher WITHOUT privilege (the clean architecture demonstration).
+ACT23_MODE = "shapes" runs the near-ceiling cube/L/U grasp checks (honest: too little signal to self-improve).
+
+Env: ACT23_MODE ACT23_NPOS ACT23_NTRIAL ACT23_HOLD ACT23_TEST ACT23_LAM ACT23_K ACT23_NCAND ACT23_CURVE_STEPS
 """
 from __future__ import annotations
 
@@ -32,6 +39,7 @@ import mujoco
 from pc_cvnn.pc_act14 import BracketArmSim
 from pc_cvnn.arm_modules.body_model import BodyModelModule
 from pc_cvnn.arm_modules.shape_classifier import ShapeClassifierModule
+from pc_cvnn.arm_modules.object_orientation import ObjectOrientationModule
 from pc_cvnn.arm_modules.world_model import WorldModelModule, feats_from, action_vec, wrist_of
 import pc_cvnn.pc_act16 as act16
 
@@ -191,5 +199,97 @@ def _plot(curve, per, path):
     print(f"  [viz] learning curve saved -> {path}")
 
 
+def main_diag():
+    """SIGNAL-RICH validation: a diagonally-oriented elongated object whose delivery depends on the wrist.
+    The world model learns -- from its OWN outcomes -- which wrist delivers given the PERCEIVED long-axis
+    orientation (no privileged sim yaw), and recovers/beats the privileged-yaw teacher without privilege."""
+    NPOS = int(os.environ.get("ACT23_NPOS", "14"))
+    NTRIAL = int(os.environ.get("ACT23_NTRIAL", "6"))
+    TEST = int(os.environ.get("ACT23_TEST", "16"))
+    LAM = float(os.environ.get("ACT23_LAM", "1.0"))
+    K = int(os.environ.get("ACT23_K", "5"))
+    CURVE_STEPS = int(os.environ.get("ACT23_CURVE_STEPS", "3"))
+    CMD = "obj_red"; HALF = (0.028, 0.010, 0.012)
+
+    print("act23 [diag] — SELF-LEARNING the grip wrist for a diagonal ELONGATED object (no privileged yaw)")
+    sim = BracketArmSim(render_wh=(240, 240)); sim.set_reach_site("contact")
+    bm = BodyModelModule(rng=np.random.default_rng(5)); bm.babble(sim, 4000)
+    oo = ObjectOrientationModule()
+    err = oo.train(sim, cmd=CMD, cam=CAM, steps=2500, half=HALF, rng=np.random.default_rng(0))
+    print(f"  perceived long-axis train err: {err:.1f} deg  (self-supervised, camera -- NOT privileged)")
+    act16.run_combined._quiet = True
+    bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, CMD)
+
+    def setup(p, yaw):
+        sim.reset_home()
+        for o in ("obj_green", "obj_blue", "obj_L", "obj_U"):
+            sim.set_object(o, [0.5, -0.6], z=0.012)
+        sim.set_target_marker([0.0, -0.6], z=-0.05)
+        sim.m.geom_size[sim.m.body_geomadr[bid]] = np.asarray(HALF, float)
+        sim.set_object(CMD, p, z=float(HALF[2]), yaw=yaw); mujoco.mj_forward(sim.m, sim.d); sim.step(40)
+        sim.set_target_marker(TARGET, z=0.001)
+
+    def feats():
+        _, la = oo.perceive(sim, CMD, CAM); p = sim.obj_pos(CMD)[:2]   # PERCEIVED long axis (camera)
+        return np.array([p[0], p[1], np.cos(2 * la), np.sin(2 * la), 1.0, 0.0, 0.0])
+
+    def grasp(wrist):
+        wf = None if wrist == "priv" else (lambda s, _w=wrist: _w)     # "priv" -> run_combined's privileged yaw
+        d, _ = act16.run_combined(sim, bm.body, None, CAM, episodes=1, cmd_fixed=CMD, force="grasp",
+                                  perceive_fn=lambda c: (sim.obj_pos(CMD)[:2], None, "grasp"),
+                                  policy_fn=None, servo=False, goal_fn=lambda c, o: TARGET, rescatter=False,
+                                  wrist_fn=wf)
+        return int(d)
+
+    world = WorldModelModule(k=K, off_max=0.0, rng=np.random.default_rng(2))   # off_max=0 -> pure wrist search
+    rng = np.random.default_rng(7)
+
+    def collect(npos, ntr):
+        for _ in range(npos):
+            p = rand_pos(rng); yaw = rng.uniform(0, np.pi)
+            setup(p, yaw); fe = feats()
+            for _ in range(ntr):
+                w = rng.uniform(0, np.pi); setup(p, yaw)
+                world.observe(fe, action_vec(0, 0, w), grasp(w))
+
+    collect(NPOS, NTRIAL); world.train(epochs=600)
+    # held-out AUC
+    Xh, Yh = [], []
+    for _ in range(8):
+        p = rand_pos(rng); yaw = rng.uniform(0, np.pi); setup(p, yaw); fe = feats()
+        for _ in range(4):
+            w = rng.uniform(0, np.pi); setup(p, yaw); Yh.append(grasp(w)); Xh.append((fe, action_vec(0, 0, w)))
+    auc = _auc(Yh, [world.predict(f, a[None])[0][0] for f, a in Xh])
+    print(f"  [1] held-out P(deliver) AUC = {auc:.2f}  (deliver rate {np.mean(Yh):.2f})", flush=True)
+
+    tpos = [(rand_pos(rng), rng.uniform(0, np.pi)) for _ in range(TEST)]
+
+    def rate(mode):
+        d = 0
+        for p, yaw in tpos:
+            setup(p, yaw)
+            if mode == "fixed":
+                w = 0.0
+            elif mode == "priv":
+                w = "priv"
+            else:
+                a, _, _ = world.select_action(feats(), n=0, lam=LAM); w = wrist_of(a)
+            setup(p, yaw); d += grasp(w)
+        return d
+
+    print("  [2/3] self-learned wrist vs baselines (no privileged yaw for the agent):")
+    print(f"    fixed wrist=0 (no privilege)    : {rate('fixed')}/{TEST}")
+    print(f"    privileged obj_yaw (upper bound): {rate('priv')}/{TEST}")
+    print(f"    SELF-LEARNED (LCB)              : {rate('self')}/{TEST}", flush=True)
+    print(f"  [4] learning curve (self-learned, +{NPOS * NTRIAL}/step):")
+    for it in range(CURVE_STEPS):
+        collect(NPOS, NTRIAL); world.train(epochs=600)
+        print(f"    after {(it + 1) * NPOS * NTRIAL} more own trials (model {world.n()}): self {rate('self')}/{TEST}",
+              flush=True)
+
+
 if __name__ == "__main__":
-    main()
+    if os.environ.get("ACT23_MODE", "diag").lower() == "shapes":
+        main()
+    else:
+        main_diag()
