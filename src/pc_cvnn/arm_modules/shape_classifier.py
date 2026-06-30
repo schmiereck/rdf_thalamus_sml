@@ -295,19 +295,15 @@ class ShapeClassifierModule(ArmModule):
             F = self._harmonics_at(comp, ctr)
             logits = self.classify(np.abs(F).ravel()); k = int(logits.argmax())
             ys, xs = np.nonzero(comp)
-            # GRASP point: a FREE-STANDING END SEGMENT (the limb tip), gripped ACROSS the limb so the jaws
-            # approach from the two FREE sides -- on a cube-built shape the dense/corner point jams the jaws
-            # against the neighbouring 24mm segments, while a tip is exposed on 3 sides.  grasp_yaw = the limb
-            # axis (tip->body); run_combined grips across it (+pi/2), clearing the rest of the shape.
-            grasp = ctr; gyaw = 0.0
+            # GRASP point: the MATERIAL point nearest the centroid -- central + on a (thin) bar, which the
+            # gripper spans cleanly.  Best for the thin-bar shapes (the cube-built / tip / wrist variants were
+            # all marginal; this v1 grasped the thin-bar L well).  No wrist (orientation gave no gain).
+            grasp = ctr
             if self.H is not None:
                 W = self._px_to_world(np.column_stack([xs, ys]))            # world coords of the component px
-                far = W[int(np.argmax(np.linalg.norm(W - ctr, axis=1)))]    # the extremity (a limb tip)
-                v = ctr - far; n = float(np.linalg.norm(v)) + 1e-9
-                grasp = far + (v / n) * min(0.012, n)                       # pull ~one half-segment inward
-                gyaw = float(np.arctan2(v[1], v[0]))                        # limb axis (grip ACROSS it)
+                grasp = W[int(np.argmin(np.linalg.norm(W - ctr, axis=1)))]  # nearest material to the centroid
             out.append({"shape": SHAPES[k], "id": k, "prob": float(_softmax(logits)[k]),
-                        "pos": (ctr if self.H is not None else None), "grasp_xy": grasp, "grasp_yaw": gyaw,
+                        "pos": (ctr if self.H is not None else None), "grasp_xy": grasp, "grasp_yaw": 0.0,
                         "yaw": self._yaw_from(F), "px": np.array([xs.mean(), ys.mean()])})
         return out
 

@@ -709,7 +709,7 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
                             float(np.linalg.norm(p - q)) > 0.07 for q in placed):
                         break
                     p = _rand_xy(obj_rng)
-                sim.set_object(body, p, z=0.009, yaw=float(obj_rng.uniform(0, 2 * np.pi))); placed.append(p)
+                sim.set_object(body, p, z=0.012, yaw=float(obj_rng.uniform(0, 2 * np.pi))); placed.append(p)
             mujoco.mj_forward(sim.m, sim.d)
         if ELONG:                                             # re-scatter places all as cubes -> elongate one
             o = str(obj_rng.choice(act16.OBJS))
