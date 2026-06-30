@@ -49,6 +49,9 @@ CARRY_Z = float(os.environ.get("ACT16_CARRY_Z", "0.09"))   # hand height while C
 #   transport rammed any cube on the path and knocked the object loose (deliberate cube-on-path test:
 #   distractor knocked 3/6 -> 0/6 at 0.09; carried-cube bottom mean 16mm -> 50mm, clears a 24mm cube 15%
 #   -> 86% of carry steps).  Still within reach; the size-adaptive carry_z floors on this.  env: ACT16_CARRY_Z.
+CARRY_GAIN = float(os.environ.get("ACT16_CARRY_GAIN", "0.9"))   # GENTLE-CARRY reach (vs the normal 2.0/0.026):
+CARRY_MDQ  = float(os.environ.get("ACT16_CARRY_MDQ",  "0.011")) # slower lateral transport so an off-COM grip on
+#   a concave object (a perceived U) is not torn out of the claws by carry acceleration.  Opt-in (carry_gentle).
 PUSH_LIFT_Z = 0.07                              # raise the claws to move behind an object (clear it)
 STANDOFF, NEAR, TOL, CAP = 0.045, 0.02, 0.025, 2200
 GRASP_OFFSET = float(os.environ.get("ACT16_GRASP_OFFSET", "0.006"))   # (#2) grasp height = obj_half + this
@@ -163,7 +166,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                  mixed=False, track_fn=None, lifelong=False, log_fn=None, policy_fn=None,
                  episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None,
                  ood_rate=0.0, ood_rng=None, size_fn=None, tol=None, carry_target_fn=None,
-                 post_goal_fn=None, macro_log_fn=None, servo=False, rescatter=True, orient_fn=None):
+                 post_goal_fn=None, macro_log_fn=None, servo=False, rescatter=True, orient_fn=None,
+                 carry_gentle=False):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -457,7 +461,14 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 macro_log_fn(state, np.asarray(aim, float), float(j5), phase)   # sub-goal segmentation)
             sim.target("joint_5", j5)
             gentle = abs(j5 - J5_PUSH) < 0.2 and aim[2] < PUSH_Z + 0.02   # spread gripper + low = a PUSH
-            g, mdq = (1.3, 0.016) if gentle else (2.0, 0.026)            # (derived from the sub-goal, so it
+            # GENTLE CARRY: a concave object (e.g. a perceived U) is gripped OFF its centre-of-mass (its COM
+            # sits in the concavity, on no material), so the lateral acceleration of a normal-speed carry tears
+            # it out of the claws.  When the caller flags carry_gentle (driven by the PERCEIVED shape), the
+            # transport of a lifted, gripped object runs slow -> the off-COM grip survives the carry.
+            carrying = carry_gentle and cz > 0.03 and j5 < 0.5 * (J5_OPEN + J5_GRIP) and aim[2] > PUSH_Z
+            if gentle:    g, mdq = 1.3, 0.016
+            elif carrying: g, mdq = CARRY_GAIN, CARRY_MDQ
+            else:         g, mdq = 2.0, 0.026                            # (derived from the sub-goal, so it
             q3 = sim.arm3_angles(); sim.set_arm3_targets(q3 + body.reach_velocity(q3, aim, gain=g, max_dq=mdq))
             if WRIST_ALIGN:                                    # (B) align the claw to the object's grip axis --
                 near = np.linalg.norm(hxy - c) < WRIST_APPROACH_R      # ONLY during the APPROACH (near the

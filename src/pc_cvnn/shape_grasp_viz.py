@@ -71,7 +71,8 @@ def main():
             def pf(c, g=gxy):
                 return (g, None, "grasp")
             d, m = act16.run_combined(sim, bm.body, viz, CAM, episodes=1, cmd_fixed=BODY[cmd], force="grasp",
-                                      perceive_fn=pf, goal_fn=lambda c, o, T=TARGET: T, rescatter=False)
+                                      perceive_fn=pf, goal_fn=lambda c, o, T=TARGET: T, rescatter=False,
+                                      carry_gentle=(sel["shape"] == "U"))   # concave U: off-COM grip -> carry slow
             placed = sim.obj_pos(BODY[cmd])[:2]
             print(f"           -> delivered {d}/{m}   object now at {np.round(placed, 3)}  "
                   f"(target {np.round(TARGET, 3)}, dist {np.linalg.norm(placed - TARGET) * 1000:.0f}mm)")
