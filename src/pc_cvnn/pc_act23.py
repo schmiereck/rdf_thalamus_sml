@@ -470,7 +470,7 @@ def run_self_learning_steering(headless=False):
     panel = None
     if not headless:
         panel = CommandPanel23(state, CAM, RES, rng=np.random.default_rng(7))
-        panel.update(sim.render(CAM), "Wahrnehmung wird trainiert ...")
+        panel.update(sim.render(CAM), "Training: Farb-Wahrnehmung (Würfel-Szene; Formen ruhen) ...")
     vc, _P = VisualCortexModule.from_sim(sim, CAM, RES, headless=True,
                                          viz=(panel.fov_viz if panel is not None else None))
     if panel is not None:
@@ -536,13 +536,27 @@ def run_self_learning_steering(headless=False):
             z = float(LONG_HALF[2]) if m == "long" else 0.012
             yaw = crng.uniform(0, np.pi) if m == "long" else crng.uniform(0, 2 * np.pi)
             scene[nm] = (np.asarray(p, float), z, float(yaw)); placed.append(p)
-        restore_scene()
+        place_all()
 
-    def restore_scene():
+    def _set_sizes():
         sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "obj_red")]] = np.array([0.012] * 3)
         sim.m.geom_size[sim.m.body_geomadr[bid]] = np.asarray(LONG_HALF, float)   # obj_blue stays elongated
+
+    def place_all():
+        _set_sizes()
         for nm, (p, z, yaw) in scene.items():
             sim.set_object(nm, p, z=z, yaw=yaw)
+        mujoco.mj_forward(sim.m, sim.d); state.sync_active()
+
+    def restore_scene():
+        """Before each command UN-PARK only the objects run_combined parked off-table; objects still in the
+        workspace (incl. one delivered last command) are LEFT in place -> 'Ausführen' does not visibly
+        re-scatter the scene.  ('Objekte neu' calls place_all for a full fresh scatter.)"""
+        _set_sizes()
+        for nm, (p, z, yaw) in scene.items():
+            cur = sim.obj_pos(nm)[:2]
+            if not (-0.2 < cur[0] < 0.2 and 0.0 < cur[1] < 0.3):   # parked far off -> bring it back
+                sim.set_object(nm, p, z=z, yaw=yaw)
         mujoco.mj_forward(sim.m, sim.d); state.sync_active()
 
     if panel is not None:
@@ -563,24 +577,35 @@ def run_self_learning_steering(headless=False):
         return vc.perceive(body), None, None                   # cubes: the net localises by colour
 
     def track_and_plot():
-        obs = vc.track(); s = vc.surprise()
-        if s is not None and panel is not None:
-            panel.surp_viz.push(s["sensor"], s["state"], s["total"], s["relax"], getattr(bm, "_surprise_mm", None))
+        obs = vc.track()
+        if panel is not None:
+            s = vc.surprise()
+            q3 = sim.arm3_angles()                             # body-model FK surprise: predicted vs real hand
+            bmm = float(np.linalg.norm(bm.body.fk(q3) - sim.grasp_pos())) * 1000.0   # (was always 0: wrong attr)
+            if s is not None:
+                panel.surp_viz.push(s["sensor"], s["state"], s["total"], s["relax"], bmm)
         return obs
 
     res = {}
     def ep_end(ep, ok, err): res["ok"] = bool(ok); res["err"] = float(err)
 
     def run_one():
-        restore_scene()                                        # tidy, stable scene every command (un-park distractors)
+        restore_scene()                                        # un-park distractors; leave in-workspace objects put
         _l, body, method = state.selected()
+        if method in ("color", "long"):                        # drive the FOVEA to the commanded object (display);
+            try:                                               #   the grasp itself uses perceive() above
+                vc.perceive(body)
+                if panel is not None:
+                    track_and_plot(); panel.update(sim.render(CAM), f"Fovea -> {_l}")
+            except Exception:
+                pass
         u_cmd = (body == "obj_U"); wf = None
         if state.policy == "self" and method == "long":          # SELF-LEARNED wrist for the long object
             a, _, _ = world.select_action(long_feats(), n=0, lam=LAM); w = wrist_of(a)
             wf = (lambda s, _w=w: _w)
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_and_plot,
-                           policy_fn=None, servo=False, rescatter=False, episode_end_fn=ep_end,
+                           policy_fn=None, servo=False, rescatter=False, episode_end_fn=ep_end, lifelong=True,
                            carry_gentle=u_cmd, grip_close=(0.3 if u_cmd else None), wrist_fn=wf)
         return res.get("ok", False), res.get("err", float("nan")) * 1000.0
 

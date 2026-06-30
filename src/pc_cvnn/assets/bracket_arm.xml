@@ -110,10 +110,10 @@
     <!-- SHAPE objects: an L and a U from THIN bars (14mm wide) the gripper spans cleanly, but 24mm TALL
          (0.012 half, rest z=0.012 -- same top height as the cubes) so the claws have plenty to catch.
          Composite multi-geom free bodies, x-y table plane.  Colours are placeholders -- shape by FORM. -->
-    <body name="obj_L" pos="0.02 0.18 0.012">      <!-- L: long thin vertical arm + a foot -->
+    <body name="obj_L" pos="0.02 0.18 0.012">      <!-- L: a clearly LONG thin arm (56mm) + a 28mm foot (~2:1) -->
       <freejoint/>
-      <geom type="box" pos="-0.007  0.000 0" size="0.007 0.021 0.012" rgba="0.95 0.55 0.1 1" density="700" friction="1.4 0.05 0.001"/>
-      <geom type="box" pos=" 0.007 -0.014 0" size="0.014 0.007 0.012" rgba="0.95 0.55 0.1 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos="-0.007  0.000 0" size="0.007 0.028 0.012" rgba="0.95 0.55 0.1 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos=" 0.007 -0.021 0" size="0.014 0.007 0.012" rgba="0.95 0.55 0.1 1" density="700" friction="1.4 0.05 0.001"/>
     </body>
     <body name="obj_U" pos="-0.02 0.18 0.012">     <!-- U: two thin prongs + a base bar -->
       <freejoint/>
