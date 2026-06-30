@@ -167,12 +167,17 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                  episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None,
                  ood_rate=0.0, ood_rng=None, size_fn=None, tol=None, carry_target_fn=None,
                  post_goal_fn=None, macro_log_fn=None, servo=False, rescatter=True, orient_fn=None,
-                 carry_gentle=False):
+                 carry_gentle=False, grip_close=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
     Closes the perception->action loop.  (target_xy may be None to keep the given target.)"""
     rng = np.random.default_rng(int(os.environ.get("ACT16_SEED", "1")))
+    gclose = J5_GRIP if grip_close is None else float(grip_close)   # the GRIP close-angle the claws hold at.
+    #   J5_GRIP=0.0 = full-close: against a RIGID object the claws stall at the object's width and hold with a
+    #   force proportional to how far that width is from fully-closed -> a WIDE object (perceived U gripped
+    #   across its ~42mm prong span) is squeezed with large force and squirts OUT.  A wider gclose for a wide
+    #   grip holds it without crushing.  Caller passes grip_close from the PERCEIVED shape.
     tol = TOL if tol is None else float(tol)             # delivery tolerance (enlargeable target)
     _tm = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "target_marker")
     if _tm >= 0:                                          # show the disk at the scoring tolerance radius
@@ -380,12 +385,12 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 elif phase == "close":
                     dwell += 1                                    # close SLOWLY (ramp) so the
                     frac = min(1.0, dwell / 60.0)                 # claws don't shove the cube
-                    j5 = J5_OPEN + (J5_GRIP - J5_OPEN) * frac
+                    j5 = J5_OPEN + (gclose - J5_OPEN) * frac
                     aim = np.array([c[0], c[1], GRASP_Z])
                     if dwell > 90:
                         phase = "lift"
                 elif phase == "lift":
-                    j5, aim = J5_GRIP, np.array([hxy[0], hxy[1], CARRY_Z])
+                    j5, aim = gclose, np.array([hxy[0], hxy[1], CARRY_Z])
                     if hz > CARRY_Z - 0.015:
                         if cz > 0.030:                            # cube clearly lifted off the table
                             phase = "carry"                      # grasped!
@@ -394,11 +399,11 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                         else:
                             mode, phase = "push", "approach"      # wide / retries spent -> push fallback
                 elif phase == "carry":
-                    j5, aim = J5_GRIP, np.array([tgt_eff[0], tgt_eff[1], CARRY_Z])   # via the routed waypoint
+                    j5, aim = gclose, np.array([tgt_eff[0], tgt_eff[1], CARRY_Z])   # via the routed waypoint
                     if np.linalg.norm(hxy - tgt_true) < NEAR:
                         phase = "place"
                 elif phase == "place":
-                    j5, aim = J5_GRIP, np.array([tgt[0], tgt[1], GRASP_Z])
+                    j5, aim = gclose, np.array([tgt[0], tgt[1], GRASP_Z])
                     if hz < GRASP_Z + 0.012:
                         phase, dwell = "release", 0
                 else:  # release

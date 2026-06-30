@@ -766,11 +766,15 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
         # distribution -> the learned policy flies to the air; use the size-ADAPTIVE scripted controller
         # (policy_fn=None) + no servo for shapes, exactly as the working shape_grasp_viz.  Colour keeps motor.
         shape_cmd = (state.mode == "shape")
+        # the concave U is gripped across its wide (~42mm) prong span -> a FULL close (J5_GRIP=0) squeezes it
+        # OUT, and an off-COM grip slips in a fast carry; soften the close + slow the carry (perceived shape).
+        u_cmd = shape_cmd and state.SHAPES_CMD[state.shape][1] == "U"
         # rescatter=False: reuse the scene already on the table (placed ONCE at startup, kept across commands).
         act16.run_combined(sim, bm, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_and_plot,
                            policy_fn=(None if shape_cmd else motor.predict), lifelong=True, tol=act16.TOL,
-                           servo=(not shape_cmd), rescatter=False, episode_end_fn=ep_end, orient_fn=orient_safe)
+                           servo=(not shape_cmd), rescatter=False, episode_end_fn=ep_end, orient_fn=orient_safe,
+                           carry_gentle=u_cmd, grip_close=(0.3 if u_cmd else None))
         ok = res.get("ok", False); err_mm = res.get("err", float("nan")) * 1000.0
         line = f"[Befehl {ep}] {'GELIEFERT' if ok else 'NICHT geliefert'}  |  Abstand zum Ziel {err_mm:.0f} mm"
         print("  " + line)
