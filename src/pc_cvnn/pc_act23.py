@@ -288,8 +288,323 @@ def main_diag():
               flush=True)
 
 
+class CommandState23:
+    """Unified command state for the act23 GUI.  ONE coherent object list (no colour/form mode), plus a
+    grasp-policy toggle (teacher WRIST_ALIGN <-> SELF-learned world-model wrist).  Exposes the cmd/force/goal
+    hooks run_combined consumes."""
+
+    # one button per CONCRETE object; field 3 = how the net LOCALISES it (colour via vc / form via shape_clf /
+    # long = the elongated obj_blue, localised by colour, wrist by the self-learned world model)
+    OBJECTS = [("Rotes Wuerfel", "obj_red", "color"), ("Gruenes Wuerfel", "obj_green", "color"),
+               ("L-Form", "obj_L", "shape"), ("U-Form", "obj_U", "shape"), ("Langes Objekt", "obj_blue", "long")]
+    SHAPE_KEY = {"obj_L": "L", "obj_U": "U"}
+    MARKERS = ["target_sel_1", "target_sel_2", "target_sel_3"]
+    OBJ_COL = {"obj_red": "#d23030", "obj_green": "#2fae40", "obj_blue": "#3358d2",
+               "obj_L": "#d98a2b", "obj_U": "#27b3b3"}
+
+    def __init__(self, sim):
+        self.sim = sim; self.sel = 0; self.action = "grasp"; self.target_idx = 0
+        self.policy = "self"          # "self" -> world-model wrist (long obj); "teacher" -> WRIST_ALIGN
+        self.go = False; self.exit = False
+
+    def selected(self):
+        return self.OBJECTS[self.sel]
+
+    def _mocap(self, name):
+        return self.sim.m.body_mocapid[mujoco.mj_name2id(self.sim.m, mujoco.mjtObj.mjOBJ_BODY, name)]
+
+    def marker_xy(self, idx):
+        return self.sim.d.mocap_pos[self._mocap(self.MARKERS[idx])][:2].copy()
+
+    def set_marker_xy(self, idx, xy):
+        self.sim.d.mocap_pos[self._mocap(self.MARKERS[idx])][:2] = xy
+
+    def sync_active(self):
+        self.sim.d.mocap_pos[self._mocap("target_marker")][:2] = self.marker_xy(self.target_idx)
+        mujoco.mj_forward(self.sim.m, self.sim.d)
+
+    def place_selected_random(self, rng):
+        from pc_cvnn.pc_act14 import _rand_xy
+        from pc_cvnn.pc_act16 import BASE_CLEAR
+        bodies = [nm for _l, nm, _m in self.OBJECTS]
+        p = _rand_xy(rng)
+        for _ in range(200):
+            if float(np.linalg.norm(p)) >= BASE_CLEAR and all(
+                    float(np.linalg.norm(p - self.sim.obj_pos(o)[:2])) > 0.05 for o in bodies):
+                break
+            p = _rand_xy(rng)
+        self.set_marker_xy(self.target_idx, p); self.sync_active()
+
+    # run_combined hooks
+    def cmd_fn(self, ep):
+        return self.selected()[1]
+
+    def force_fn(self, cmd):
+        return self.action
+
+    def goal_fn(self, cmd, obj_xy):
+        return self.marker_xy(self.target_idx)
+
+    def label(self):
+        act = "Greifen" if self.action == "grasp" else "Schieben"
+        pol = "Selbst-gelernt" if self.policy == "self" else "Teacher"
+        return f"{self.selected()[0]} | {act} | Greifer: {pol} | Ziel {self.target_idx + 1}"
+
+
+class CommandPanel23:
+    """Same look as pc_act21's CommandPanel (arm camera + fovea + surprise + buttons) but with ONE unified
+    object row (no colour/form mode) and a grasp-policy toggle."""
+
+    def __init__(self, state, cam, res, rng=None, randomize_fn=None):
+        import matplotlib.pyplot as plt
+        from matplotlib.widgets import Button
+        from pc_cvnn.pc_act18 import HexFoveaViz, SurpriseViz
+        self.plt = plt; self.state = state; self._cam = cam; self._randomize_fn = randomize_fn
+        self._rng = rng if rng is not None else np.random.default_rng(0); plt.ion()
+        fw, fh = (float(x) for x in os.environ.get("ACT23_FIGSIZE", "12.0,7.5").split(","))
+        self.fig = plt.figure(figsize=(fw, fh)); self.fig.patch.set_facecolor("#0e0e12")
+        self.fig.canvas.manager.set_window_title("act23 — Selbst-lernender Greifer (Netz steuern)")
+        self.axCam = self.fig.add_axes([0.035, 0.30, 0.38, 0.63]); self.axCam.axis("off")
+        self.axCam.set_title(f"Arm — {cam} Kamera", color="w", fontsize=10)
+        self.imCam = self.axCam.imshow(np.zeros((res, res, 3), np.uint8))
+        axFovI = self.fig.add_axes([0.44, 0.62, 0.24, 0.31]); axFovC = self.fig.add_axes([0.44, 0.30, 0.21, 0.26])
+        self.fov_viz = HexFoveaViz(cam, res, axI=axFovI, axC=axFovC)
+        axE = self.fig.add_axes([0.715, 0.635, 0.27, 0.295]); axR = self.fig.add_axes([0.715, 0.30, 0.27, 0.235])
+        self.surp_viz = SurpriseViz(axE=axE, axR=axR, show_readout=False)
+        self.status = self.fig.text(0.5, 0.255, "", ha="center", color="w", fontsize=11, family="monospace")
+        self.live = self.fig.text(0.225, 0.285, "", ha="center", color="#9fb4c8", fontsize=8.5, family="monospace")
+        # unified OBJECT row (one button per concrete object)
+        self._obj_btns = {}
+        for i, (lbl, nm, _m) in enumerate(state.OBJECTS):
+            ax = self.fig.add_axes([0.035 + 0.115 * i, 0.150, 0.108, 0.055])
+            col = state.OBJ_COL[nm]
+            b = Button(ax, lbl, color=col, hovercolor=col); b.label.set_fontsize(7.5)
+            b.on_clicked(lambda _e, k=i: self._set_obj(k)); self._obj_btns[i] = b
+        self.fig.text(0.018, 0.178, "Objekt", color="#9fb4c8", fontsize=8, rotation=90, va="center")
+        # grasp-policy toggle
+        axPol = self.fig.add_axes([0.62, 0.150, 0.155, 0.055])
+        self.bPol = Button(axPol, "", color="#3a5a44", hovercolor="#4a7256"); self.bPol.on_clicked(self._toggle_policy)
+        # named target buttons (top-right of the control band)
+        self._tgt_btns = {}
+        for i in range(len(state.MARKERS)):
+            ax = self.fig.add_axes([0.55 + 0.135 * i, 0.220, 0.12, 0.05])
+            b = Button(ax, f"Ziel {i + 1}", color="#3a3a44", hovercolor="#55556a")
+            b.on_clicked(lambda _e, i=i: self._set_tgt(i)); self._tgt_btns[i] = b
+        # bottom controls
+        axA = self.fig.add_axes([0.035, 0.04, 0.20, 0.07])
+        self.bA = Button(axA, "Modus: Greifen", color="#555", hovercolor="#777"); self.bA.on_clicked(self._toggle)
+        axP = self.fig.add_axes([0.25, 0.04, 0.16, 0.07])
+        self.bP = Button(axP, "Ziel neu", color="#7a5cae", hovercolor="#9a78d0"); self.bP.on_clicked(self._place)
+        axO = self.fig.add_axes([0.415, 0.04, 0.155, 0.07])
+        self.bO = Button(axO, "Objekte neu", color="#5c7aae", hovercolor="#78a0d0"); self.bO.on_clicked(self._objects)
+        axG = self.fig.add_axes([0.58, 0.04, 0.18, 0.07])
+        self.bG = Button(axG, "Ausführen", color="#1f8a5b", hovercolor="#27a96f"); self.bG.on_clicked(self._go)
+        axX = self.fig.add_axes([0.77, 0.04, 0.18, 0.07])
+        self.bX = Button(axX, "Beenden", color="#8a3030", hovercolor="#a94040"); self.bX.on_clicked(self._exit)
+        self.fig.canvas.mpl_connect("close_event", lambda _e: setattr(self.state, "exit", True))
+        self._refresh()
+
+    def _set_obj(self, k): self.state.sel = k; self._refresh()
+    def _toggle_policy(self, _e):
+        self.state.policy = "teacher" if self.state.policy == "self" else "self"; self._refresh()
+    def _go(self, _e): self.state.go = True
+    def _exit(self, _e): self.state.exit = True
+
+    def _set_tgt(self, i):
+        self.state.target_idx = i; self.state.sync_active()
+        self.update(self.state.sim.render(self._cam), f"Ziel {i + 1} gewählt"); self._refresh()
+
+    def _place(self, _e):
+        self.state.place_selected_random(self._rng)
+        self.update(self.state.sim.render(self._cam), f"Ziel {self.state.target_idx + 1} neu platziert"); self._refresh()
+
+    def _objects(self, _e):
+        if self._randomize_fn is None:
+            return
+        self._randomize_fn(); self.update(self.state.sim.render(self._cam), "Objekte neu gewürfelt"); self._refresh()
+
+    def _toggle(self, _e):
+        self.state.action = "push" if self.state.action == "grasp" else "grasp"
+        self.bA.label.set_text("Modus: " + ("Schieben" if self.state.action == "push" else "Greifen")); self._refresh()
+
+    def _refresh(self):
+        for i, b in self._obj_btns.items():
+            lbl = self.state.OBJECTS[i][0]
+            b.label.set_text(("● " if i == self.state.sel else "") + lbl)
+        self.bPol.label.set_text("Greifer: " + ("Selbst-gelernt" if self.state.policy == "self" else "Teacher"))
+        for i, b in self._tgt_btns.items():
+            b.color = "#c050c0" if i == self.state.target_idx else "#3a3a44"; b.ax.set_facecolor(b.color)
+        self.status.set_text("Befehl:  " + self.state.label()); self.fig.canvas.draw_idle()
+
+    def update(self, frame, txt=""):
+        self.imCam.set_data(frame)
+        if txt:
+            self.live.set_text(txt)
+        self.fig.canvas.draw_idle(); self.fig.canvas.flush_events()
+
+    def wait(self):
+        while not (self.state.go or self.state.exit):
+            self.plt.pause(0.05)
+        return "exit" if self.state.exit else "go"
+
+    def hold(self):
+        self.plt.ioff(); self.plt.show()
+
+
+def run_self_learning_steering(headless=False):
+    """The act23 command-steering GUI: pick an object, toggle Teacher<->Self-learned wrist, watch the arm
+    grasp + deliver.  The self-learned wrist (world model) drives the LONG object; cube/L/U use the scripted
+    controller exactly as pc_act21/shape_grasp_viz."""
+    import pc_cvnn.pc_act16 as act16
+    from pc_cvnn.arm_modules import VisualCortexModule, ShapeClassifierModule
+    RES = int(os.environ.get("ACT23_RES", "240"))
+    LAM = float(os.environ.get("ACT23_LAM", "1.0"))
+    NPOS = int(os.environ.get("ACT23_NPOS", "10")); NTRIAL = int(os.environ.get("ACT23_NTRIAL", "5"))
+    LONG = "obj_blue"; LONG_HALF = (0.028, 0.010, 0.012)
+    CUBE_BODIES = ["obj_red", "obj_green"]
+
+    print("act23 [viz] — self-learning grasper command-steering" + (" (headless self-test)" if headless else ""))
+    sim = BracketArmSim(render_wh=(RES, RES)); sim.set_reach_site("contact")
+    bm = BodyModelModule(rng=np.random.default_rng(5)); bm.babble(sim, 4000)
+    state = CommandState23(sim)
+    panel = None
+    if not headless:
+        panel = CommandPanel23(state, CAM, RES, rng=np.random.default_rng(7))
+        panel.update(sim.render(CAM), "Wahrnehmung wird trainiert ...")
+    vc, _P = VisualCortexModule.from_sim(sim, CAM, RES, headless=True,
+                                         viz=(panel.fov_viz if panel is not None else None))
+    if panel is not None:
+        panel.update(sim.render(CAM), "Form-Wahrnehmung wird trainiert ...")
+    shape_clf = ShapeClassifierModule(cam=CAM, rng=np.random.default_rng(0))
+    saved = sim.d.mocap_pos.copy(); shape_clf.calibrate(sim)
+    shape_clf.train(sim, steps=int(os.environ.get("ACT23_SHAPE_STEPS", "2500")), rng=np.random.default_rng(1))
+    sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+    oo = ObjectOrientationModule(); oo.train(sim, cmd=LONG, cam=CAM, steps=2500, half=LONG_HALF, rng=np.random.default_rng(0))
+
+    # self-supervised world model for the LONG object's wrist (collect own trials, then train)
+    world = WorldModelModule(k=5, off_max=0.0, rng=np.random.default_rng(2))
+    bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, LONG)
+    crng = np.random.default_rng(7); act16.run_combined._quiet = True
+
+    def park_all():
+        sim.reset_home()
+        for o in ALL:
+            sim.set_object(o, [0.5, -0.6], z=0.012)
+        sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "obj_red")]] = np.array([0.012] * 3)
+        sim.set_target_marker([0.0, -0.6], z=-0.05)
+
+    def setup_long(p, yaw):
+        park_all(); sim.m.geom_size[sim.m.body_geomadr[bid]] = np.asarray(LONG_HALF, float)
+        sim.set_object(LONG, p, z=float(LONG_HALF[2]), yaw=yaw); mujoco.mj_forward(sim.m, sim.d); sim.step(40)
+        sim.set_target_marker(TARGET, z=0.001)
+
+    def long_feats():
+        _, la = oo.perceive(sim, LONG, CAM); p = sim.obj_pos(LONG)[:2]
+        return np.array([p[0], p[1], np.cos(2 * la), np.sin(2 * la), 1.0, 0.0, 0.0])
+
+    def grasp_long(wrist, gxy):
+        wf = None if wrist == "priv" else (lambda s, _w=wrist: _w)
+        d, _ = act16.run_combined(sim, bm.body, None, CAM, episodes=1, cmd_fixed=LONG, force="grasp",
+                                  perceive_fn=lambda c: (gxy, None, "grasp"), policy_fn=None, servo=False,
+                                  goal_fn=lambda c, o: TARGET, rescatter=False, wrist_fn=wf)
+        return int(d)
+
+    print(f"  collecting OWN trials for the long object's wrist ({NPOS}x{NTRIAL}) ...")
+    for j in range(NPOS):
+        p = rand_pos(crng); yaw = crng.uniform(0, np.pi); setup_long(p, yaw); fe = long_feats()
+        for _ in range(NTRIAL):
+            w = crng.uniform(0, np.pi); setup_long(p, yaw); world.observe(fe, action_vec(0, 0, w), grasp_long(w, sim.obj_pos(LONG)[:2]))
+        if panel is not None and j % 2 == 0:
+            panel.update(sim.render(CAM), f"Selbst-Lernen (langes Objekt): {(j + 1) * NTRIAL}/{NPOS * NTRIAL} Versuche")
+    world.train(epochs=600)
+    print(f"  world model trained on {world.n()} own trials.")
+
+    scene = {}                                                 # intended (body -> (xy, z, yaw)) so the scene is
+    #   RESTORED before every command: run_combined parks distractor OBJS mid-episode and never puts them back,
+    #   so a later-commanded object would sit at the park spot.  Restoring keeps a stable, tidy scene.
+    def randomize_objects():
+        from pc_cvnn.pc_act14 import _rand_xy
+        from pc_cvnn.pc_act16 import BASE_CLEAR
+        sim.reset_home()
+        placed = []
+        for _l, nm, m in state.OBJECTS:
+            p = _rand_xy(crng)
+            for _ in range(300):
+                if float(np.linalg.norm(p)) >= BASE_CLEAR and all(float(np.linalg.norm(p - q)) > 0.075 for q in placed):
+                    break
+                p = _rand_xy(crng)
+            z = float(LONG_HALF[2]) if m == "long" else 0.012
+            yaw = crng.uniform(0, np.pi) if m == "long" else crng.uniform(0, 2 * np.pi)
+            scene[nm] = (np.asarray(p, float), z, float(yaw)); placed.append(p)
+        restore_scene()
+
+    def restore_scene():
+        sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "obj_red")]] = np.array([0.012] * 3)
+        sim.m.geom_size[sim.m.body_geomadr[bid]] = np.asarray(LONG_HALF, float)   # obj_blue stays elongated
+        for nm, (p, z, yaw) in scene.items():
+            sim.set_object(nm, p, z=z, yaw=yaw)
+        mujoco.mj_forward(sim.m, sim.d); state.sync_active()
+
+    randomize_objects()
+
+    def perceive(cmd):
+        _l, body, method = state.selected()
+        if method == "shape":                                  # L/U: FORM perception (shape classifier)
+            saved = sim.d.mocap_pos.copy()                     # select() PARKS the mocap markers -> restore the
+            det = shape_clf.select(sim, state.SHAPE_KEY[body])  #   target markers, else goal_fn returns a parked goal
+            sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+            if det is not None:
+                return np.asarray(det["grasp_xy"], float), None, "grasp"
+            return sim.obj_pos(body)[:2], None, "grasp"        # perception missed -> privileged fallback
+        if method == "long":                                   # the elongated obj is OOD for the colour vc;
+            return sim.obj_pos(body)[:2], None, "grasp"        #   localise privileged (act23 point = the WRIST)
+        return vc.perceive(body), None, None                   # cubes: the net localises by colour
+
+    def track_and_plot():
+        obs = vc.track(); s = vc.surprise()
+        if s is not None and panel is not None:
+            panel.surp_viz.push(s["sensor"], s["state"], s["total"], s["relax"], getattr(bm, "_surprise_mm", None))
+        return obs
+
+    res = {}
+    def ep_end(ep, ok, err): res["ok"] = bool(ok); res["err"] = float(err)
+
+    def run_one():
+        restore_scene()                                        # tidy, stable scene every command (un-park distractors)
+        _l, body, method = state.selected()
+        u_cmd = (body == "obj_U"); wf = None
+        if state.policy == "self" and method == "long":          # SELF-LEARNED wrist for the long object
+            a, _, _ = world.select_action(long_feats(), n=0, lam=LAM); w = wrist_of(a)
+            wf = (lambda s, _w=w: _w)
+        act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
+                           goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_and_plot,
+                           policy_fn=None, servo=False, rescatter=False, episode_end_fn=ep_end,
+                           carry_gentle=u_cmd, grip_close=(0.3 if u_cmd else None), wrist_fn=wf)
+        return res.get("ok", False), res.get("err", float("nan")) * 1000.0
+
+    if headless:
+        print("  headless self-test: one command per object")
+        for k in range(len(state.OBJECTS)):
+            state.sel = k; ok, err = run_one()
+            print(f"    {state.OBJECTS[k][0]:16s}: {'GELIEFERT' if ok else 'NICHT'}  ({err:.0f}mm)", flush=True)
+        return
+
+    act16.run_combined._quiet = True
+    panel.update(sim.render(CAM), "bereit — Objekt wählen, Greifer Teacher/Selbst-gelernt, Ausführen")
+    ep = 0
+    while panel.wait() != "exit":
+        state.go = False
+        print(f"  [Befehl {ep}] {state.label()} ...")
+        ok, err = run_one()
+        line = f"[Befehl {ep}] {'GELIEFERT' if ok else 'NICHT geliefert'}  |  Abstand {err:.0f} mm"
+        print("  " + line); panel.update(sim.render(CAM), line); ep += 1
+    print("  Steering beendet.")
+
+
 if __name__ == "__main__":
-    if os.environ.get("ACT23_MODE", "diag").lower() == "shapes":
+    if os.environ.get("ACT23_VIZ", "0") == "1":
+        run_self_learning_steering(headless=(os.environ.get("ACT23_VIZ_HEADLESS", "0") == "1"))
+    elif os.environ.get("ACT23_MODE", "diag").lower() == "shapes":
         main()
     else:
         main_diag()
