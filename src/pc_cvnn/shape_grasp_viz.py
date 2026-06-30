@@ -32,13 +32,18 @@ SCENE = {"cube": np.array([-0.07, 0.12]), "L": np.array([0.07, 0.12]), "U": np.a
 TARGET = np.array([0.0, 0.10])
 
 
+def _rest_z(sim, body):
+    bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, body)
+    return float(sim.m.geom_size[sim.m.body_geomadr[bid]][2])   # rest z = the object's half-height
+
+
 def setup_scene(sim):
     sim.reset_home()
     for o in ALL:
-        sim.set_object(o, [0.5, -0.6], z=0.008)
+        sim.set_object(o, [0.5, -0.6], z=0.009)
     sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "obj_red")]] = np.array([0.012] * 3)
     for shp, p in SCENE.items():
-        sim.set_object(BODY[shp], p, z=0.012 if shp == "cube" else 0.008, yaw=0.4)
+        sim.set_object(BODY[shp], p, z=_rest_z(sim, BODY[shp]), yaw=0.4)   # cube 24mm -> 0.012, L/U 18mm -> 0.009
     mujoco.mj_forward(sim.m, sim.d); sim.step(60)
 
 
