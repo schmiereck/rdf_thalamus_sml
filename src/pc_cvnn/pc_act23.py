@@ -460,7 +460,7 @@ def run_self_learning_steering(headless=False):
     RES = int(os.environ.get("ACT23_RES", "240"))
     LAM = float(os.environ.get("ACT23_LAM", "1.0"))
     NPOS = int(os.environ.get("ACT23_NPOS", "10")); NTRIAL = int(os.environ.get("ACT23_NTRIAL", "5"))
-    LONG = "obj_blue"; LONG_HALF = (0.028, 0.010, 0.012)
+    LONG = "obj_blue"; LONG_HALF = (0.034, 0.009, 0.012)   # clearly a LONG thin bar (not a cube)
     CUBE_BODIES = ["obj_red", "obj_green"]
 
     print("act23 [viz] — self-learning grasper command-steering" + (" (headless self-test)" if headless else ""))
@@ -530,7 +530,7 @@ def run_self_learning_steering(headless=False):
         for _l, nm, m in state.OBJECTS:
             p = _rand_xy(crng)
             for _ in range(300):
-                if float(np.linalg.norm(p)) >= BASE_CLEAR and all(float(np.linalg.norm(p - q)) > 0.075 for q in placed):
+                if float(np.linalg.norm(p)) >= BASE_CLEAR and all(float(np.linalg.norm(p - q)) > 0.09 for q in placed):
                     break
                 p = _rand_xy(crng)
             z = float(LONG_HALF[2]) if m == "long" else 0.012
@@ -545,6 +545,8 @@ def run_self_learning_steering(headless=False):
             sim.set_object(nm, p, z=z, yaw=yaw)
         mujoco.mj_forward(sim.m, sim.d); state.sync_active()
 
+    if panel is not None:
+        panel._randomize_fn = randomize_objects     # wire "Objekte neu" (panel built before randomize_objects existed)
     randomize_objects()
 
     def perceive(cmd):
