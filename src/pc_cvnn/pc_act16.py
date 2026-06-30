@@ -167,7 +167,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                  episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None,
                  ood_rate=0.0, ood_rng=None, size_fn=None, tol=None, carry_target_fn=None,
                  post_goal_fn=None, macro_log_fn=None, servo=False, rescatter=True, orient_fn=None,
-                 carry_gentle=False, grip_close=None):
+                 carry_gentle=False, grip_close=None, wrist_fn=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -284,6 +284,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             wrist_mod = np.pi
         else:
             wrist_tgt, wrist_mod = WRIST_TGT, np.pi / 2
+        run_combined._wrist_tgt = float(wrist_tgt)            # expose the teacher's wrist target so a BC
+        #   collector (act23) can log it as the 5th action dim (learn the wrist from the teacher).
         if size_fn is not None:
             fpp = size_fn(cmd)
             if fpp is not None:
@@ -436,6 +438,11 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             if teacher_log_fn is not None:                    # DAgger: the FSM's sub-goal at the
                 teacher_log_fn(state, np.asarray(aim, float).copy(), float(j5))   # (policy-)VISITED state
             route_carry = carry_target_fn is not None and phase == "carry"   # the routed carry follows the
+            # (act23) LEARNED wrist as a SEPARATE, overridable action: wrist_fn(state) -> desired world claw_yaw,
+            # kept OUT of the aim policy (sharing one MLP made the wrist compete for capacity and degraded the
+            # aim).  Decoupled, the wrist is independently learnable/planner-optimisable (stage 3).  Default None
+            # -> the teacher's heuristic WRIST_ALIGN, exactly as before.
+            policy_wrist = float(wrist_fn(state)) if wrist_fn is not None else None
             if policy_fn is not None and not route_carry:     # planned waypoints (FSM servo); the LEARNED
                 out = policy_fn(state); aim = np.asarray(out[:3], float); j5 = float(out[3]); via = "policy"
             elif route_carry:                                 # policy carries to a STATIC goal only, so it
@@ -475,13 +482,17 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             elif carrying: g, mdq = CARRY_GAIN, CARRY_MDQ
             else:         g, mdq = 2.0, 0.026                            # (derived from the sub-goal, so it
             q3 = sim.arm3_angles(); sim.set_arm3_targets(q3 + body.reach_velocity(q3, aim, gain=g, max_dq=mdq))
-            if WRIST_ALIGN:                                    # (B) align the claw to the object's grip axis --
+            if WRIST_ALIGN or policy_wrist is not None:        # (B) align the claw to the object's grip axis --
+                # a 5-dim policy (act23) supplies its OWN desired claw_yaw (LEARNED wrist); else the teacher's
+                # heuristic wrist_tgt.  The parallel claw is symmetric mod pi, so the learned wrist aligns mod pi.
+                w_tgt = wrist_tgt if policy_wrist is None else policy_wrist
+                w_mod = wrist_mod if policy_wrist is None else np.pi
                 near = np.linalg.norm(hxy - c) < WRIST_APPROACH_R      # ONLY during the APPROACH (near the
                 gripping = j5 < J5_GRIP + 0.4                  #   object), and only while still open + above the
                 descended = hz <= gz + WRIST_LOCK_MARGIN       #   grip.  set_arm3_targets resets joint_4 to HOME
                 if near and not gripping and not descended:    #   each step + claw_yaw is POSE-dependent, so it
                     cy = sim.claw_yaw()                        #   keeps CORRECTING here (slope ~ -1) as the arm moves
-                    err = (cy - wrist_tgt + wrist_mod / 2) % wrist_mod - wrist_mod / 2
+                    err = (cy - w_tgt + w_mod / 2) % w_mod - w_mod / 2
                     wrist_hold = float(np.clip(sim.d.qpos[sim.jqadr["joint_4"]] + 0.6 * err, 0.0, np.pi))
                     sim.target("joint_4", wrist_hold)
                 elif wrist_hold is not None:                   # descended/gripping -> HOLD the aligned angle (no
