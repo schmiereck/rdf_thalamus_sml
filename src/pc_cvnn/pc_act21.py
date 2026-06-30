@@ -747,14 +747,11 @@ def run_command_steering(sim, bm, motor, CAM, RES, HEADLESS):
     panel.update(sim.render(CAM), "bereit — Befehl wählen und Ausführen")   # the scene that WILL be used
 
     def track_and_plot():                                     # one follow frame + push the surprise curves
-        if state.mode == "shape":                             # FORM command: the COLOUR fovea can't see the L/U
-            return None                                       #   -> don't chase the wrong (colour) object; the
-            #   fovea view holds (cosmetic).  Shape grasp uses the scripted controller (no servo), so None is fine.
-        obs = vc.track()                                       # COLOUR command: drive the fovea view + surprise
-        s = vc.surprise()
-        if s is not None:
-            panel.surp_viz.push(s["sensor"], s["state"], s["total"], s["relax"],
-                                getattr(bm, "_surprise_mm", None))
+        obs = vc.track()                                       # ALWAYS drive the fovea view + surprise (so the
+        s = vc.surprise()                                      #   views keep updating; in FORM mode it shows the
+        if s is not None:                                      #   COLOUR perception -- cosmetic, the shape grasp
+            panel.surp_viz.push(s["sensor"], s["state"], s["total"], s["relax"],   # uses servo=False so this
+                                getattr(bm, "_surprise_mm", None))                 # observation never steers it)
         return obs
 
     res = {}
