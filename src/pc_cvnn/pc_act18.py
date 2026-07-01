@@ -687,9 +687,22 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
     pmin = np.maximum(cpx.min(0) - 10, F * fovea.K).astype(float); pmax = np.minimum(cpx.max(0) + 10, RES - F * fovea.K).astype(float)
     grid = [np.array([x, y]) for y in np.linspace(pmin[1], pmax[1], 3) for x in np.linspace(pmin[0], pmax[0], 3)]
 
+    # opt-in EXTRA distractor bodies to scatter alongside the colour cubes during selection/warmup training
+    # (e.g. act23's L/U shapes) -> the perception net sees them at VARIED positions instead of memorising a
+    # fixed spot.  Colour selection is unaffected (extras are not colour-commandable).  Env: ACT18_SCATTER_EXTRA.
+    _EXTRA = [b for b in os.environ.get("ACT18_SCATTER_EXTRA", "").split(",") if b]
+
+    def _scatter_extra():
+        for o in _EXTRA:
+            try:
+                sim.set_object(o, _rand_xy(crng), yaw=float(crng.uniform(0, np.pi)))
+            except Exception:
+                pass
+
     def scatter_far():
         for o in CMD_COLOR:
             sim.set_object(o, _rand_xy(crng))
+        _scatter_extra()
         mujoco.mj_forward(sim.m, sim.d)
 
     # TRAINING scenes mix ARM-HIDDEN (matches perceive()) with ARM-VISIBLE poses (matches track()), so the
@@ -699,6 +712,7 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
     def scatter_train():
         for o in CMD_COLOR:
             sim.set_object(o, _rand_xy(crng))
+        _scatter_extra()                                       # scatter opt-in extra shapes (act23 L/U) too
         if crng.random() < 0.5:                                # ARM-VISIBLE sample: a random arm pose
             q3 = crng.uniform(rng3[:, 0], rng3[:, 1])
             for j, v in zip(ARM3, q3):

@@ -470,7 +470,8 @@ def run_self_learning_steering(headless=False):
     panel = None
     if not headless:
         panel = CommandPanel23(state, CAM, RES, rng=np.random.default_rng(7))
-        panel.update(sim.render(CAM), "Training: Farb-Wahrnehmung (Würfel-Szene; Formen ruhen) ...")
+        panel.update(sim.render(CAM), "Training: Farb-Wahrnehmung (Würfel + Formen als Distraktoren streuen) ...")
+    os.environ["ACT18_SCATTER_EXTRA"] = "obj_L,obj_U"   # scatter the shapes too during vc warmup (consistency)
     vc, _P = VisualCortexModule.from_sim(sim, CAM, RES, headless=True,
                                          viz=(panel.fov_viz if panel is not None else None))
     if panel is not None:
