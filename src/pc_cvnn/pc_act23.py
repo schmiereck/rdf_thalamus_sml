@@ -587,8 +587,13 @@ def run_self_learning_steering(headless=False):
     def ep_end(ep, ok, err): res["ok"] = bool(ok); res["err"] = float(err)
 
     _dbg = os.environ.get("ACT23_DEBUG", "0") == "1"
+    _dbgimg = os.environ.get("ACT23_DEBUG_IMG", "")
     def _pos():
         return {nm: np.round(sim.obj_pos(nm)[:2], 3).tolist() for _l, nm, _m in state.OBJECTS}
+    def _save(tag):
+        if _dbgimg:
+            from PIL import Image
+            Image.fromarray(sim.render(CAM)).save(os.path.join(_dbgimg, f"stage_{tag}.png"))
 
     def run_one():
         _l, body, method = state.selected()
@@ -598,6 +603,7 @@ def run_self_learning_steering(headless=False):
         snap = {nm: (sim.obj_pos(nm)[:2].copy(), float(sim.obj_pos(nm)[2]), float(sim.obj_yaw(nm)))
                 for _l2, nm, _m in state.OBJECTS}
         if _dbg: print(f"    [dbg] before  : {_pos()}", flush=True)
+        _save(f"{body}_0before")
         if method in ("color", "long"):                        # drive the FOVEA to the commanded object (display);
             try:                                               #   the grasp itself uses perceive() above
                 vc.perceive(body)
@@ -616,12 +622,16 @@ def run_self_learning_steering(headless=False):
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_and_plot,
                            policy_fn=None, servo=(method == "color"), rescatter=False, episode_end_fn=ep_end,
                            lifelong=True, carry_gentle=u_cmd, grip_close=(0.3 if u_cmd else None), wrist_fn=wf)
-        _set_sizes()                                           # restore non-commanded objects to where they were
-        for _l2, nm, _m in state.OBJECTS:                      #   (undo run_combined's parking + arm knocks)
-            if nm != body:
-                p, z, yaw = snap[nm]; sim.set_object(nm, p, z=z, yaw=yaw)
+        _save(f"{body}_1after_runcombined")
+        # Restore the WHOLE scene to the spread layout it had before this command -- incl. the commanded
+        # object.  Otherwise every delivered object piles onto the (central) target and the scene clumps.
+        # So: watch the grasp+transport, then the scene resets to the clean spread layout for the next pick.
+        _set_sizes()
+        for _l2, nm, _m in state.OBJECTS:
+            p, z, yaw = snap[nm]; sim.set_object(nm, p, z=z, yaw=yaw)
         mujoco.mj_forward(sim.m, sim.d); state.sync_active()
         if _dbg: print(f"    [dbg] after ep : {_pos()}", flush=True)
+        _save(f"{body}_2after_restore")
         return res.get("ok", False), res.get("err", float("nan")) * 1000.0
 
     if headless:
