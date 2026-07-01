@@ -559,6 +559,11 @@ def run_self_learning_steering(headless=False):
     if panel is not None:
         panel._randomize_fn = randomize_objects     # wire "Objekte neu" (panel built before randomize_objects existed)
     randomize_objects()
+    # CONTINUITY: make run_combined treat ALL 5 objects as its scene -> with SCENE_N = all, keep=all so it never
+    # PARKS a distractor off-table, and reposition_strays never fires (nothing is a stray) -> nothing teleports.
+    # The scene just evolves: only the commanded object is grasped + delivered (and STAYS), like real life.
+    act16.OBJS = [nm for _l, nm, _m in state.OBJECTS]
+    act16.SCENE_N = len(act16.OBJS)
 
     def perceive(cmd):
         _l, body, method = state.selected()
@@ -623,12 +628,14 @@ def run_self_learning_steering(headless=False):
                            policy_fn=None, servo=(method == "color"), rescatter=False, episode_end_fn=ep_end,
                            lifelong=True, carry_gentle=u_cmd, grip_close=(0.3 if u_cmd else None), wrist_fn=wf)
         _save(f"{body}_1after_runcombined")
-        # Restore the WHOLE scene to the spread layout it had before this command -- incl. the commanded
-        # object.  Otherwise every delivered object piles onto the (central) target and the scene clumps.
-        # So: watch the grasp+transport, then the scene resets to the clean spread layout for the next pick.
+        # CONTINUITY: leave everything where the action left it (commanded object delivered + STAYING, others
+        # untouched).  Only rescue an object that got physically KNOCKED right out of the valid table area,
+        # restoring it to where it was -- so nothing ever teleports, but the scene otherwise just evolves.
         _set_sizes()
         for _l2, nm, _m in state.OBJECTS:
-            p, z, yaw = snap[nm]; sim.set_object(nm, p, z=z, yaw=yaw)
+            cur = sim.obj_pos(nm)[:2]
+            if not (-0.14 < cur[0] < 0.14 and 0.04 < cur[1] < 0.24):    # knocked off the table -> put it back
+                p, z, yaw = snap[nm]; sim.set_object(nm, p, z=z, yaw=yaw)
         mujoco.mj_forward(sim.m, sim.d); state.sync_active()
         if _dbg: print(f"    [dbg] after ep : {_pos()}", flush=True)
         _save(f"{body}_2after_restore")
