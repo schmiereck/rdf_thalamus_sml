@@ -532,13 +532,18 @@ def run_self_learning_steering(headless=False):
     # DETERMINISTIC well-spread SLOTS: the workspace (x +-0.11, y 0.07..0.21, minus the base-clear disk) is too
     # small for random rejection-sampling to reliably separate 5 biggish objects -- it fails and falls back to a
     # central clump.  Fixed slots (shuffled onto the objects + small jitter) GUARANTEE a spread, non-dense scene.
-    SLOTS = [(-0.10, 0.13), (0.0, 0.13), (0.10, 0.13), (-0.065, 0.195), (0.065, 0.195)]
+    # SPACING matters: the L spans 56mm (reach ~35mm from its centre), so two shapes pointing at each other need
+    # ~70mm of centre clearance or their geoms INTERPENETRATE at placement.  mj_forward doesn't resolve contacts,
+    # so an overlap is INVISIBLE in the placed render -- then the first sim.step in run_combined ejects the
+    # overlapping shape ("a segment snaps/twists shortly after Ausfuehren").  These slots keep every pair >=87mm
+    # apart; with the small jitter below the worst case stays ~76mm > 70mm, so no overlap can occur.
+    SLOTS = [(-0.09, 0.20), (0.0, 0.20), (0.09, 0.20), (-0.055, 0.12), (0.055, 0.12)]
 
     def randomize_objects():
         sim.reset_home()
         order = list(range(len(SLOTS))); crng.shuffle(order)   # random object<->slot assignment (variety)
         for (_l, nm, m), si in zip(state.OBJECTS, order):
-            p = np.array(SLOTS[si], float) + crng.uniform(-0.006, 0.006, 2)   # small jitter
+            p = np.array(SLOTS[si], float) + crng.uniform(-0.004, 0.004, 2)   # small jitter
             z = float(LONG_HALF[2]) if m == "long" else 0.012
             yaw = crng.uniform(0, np.pi) if m == "long" else crng.uniform(0, 2 * np.pi)
             scene[nm] = (p, z, float(yaw))
@@ -554,7 +559,11 @@ def run_self_learning_steering(headless=False):
         _set_sizes()
         for nm, (p, z, yaw) in scene.items():
             sim.set_object(nm, p, z=z, yaw=yaw)
-        mujoco.mj_forward(sim.m, sim.d); state.sync_active()
+        mujoco.mj_forward(sim.m, sim.d)
+        sim.step(60)                          # SETTLE: resolve any residual contact NOW (arm at home, no reach),
+        #   so the shown "Szene platziert" == the physical state run_combined starts from -- nothing can snap
+        #   on the first step of Ausfuehren.  With the well-spaced slots this is a no-op (objects stay put).
+        state.sync_active()
 
     if panel is not None:
         panel._randomize_fn = randomize_objects     # wire "Objekte neu" (panel built before randomize_objects existed)
@@ -635,7 +644,14 @@ def run_self_learning_steering(headless=False):
         _set_sizes()
         for _l2, nm, _m in state.OBJECTS:
             if nm != body:
-                p, z, yaw = snap[nm]; sim.set_object(nm, p, z=z, yaw=yaw)
+                p, z, yaw = snap[nm]; sim.set_object(nm, p, z=z, yaw=yaw)   # non-commanded: pre-command pose
+            else:
+                # COMMANDED object: KEEP the delivered position + heading (no position reset -- you pick it by
+                # where you SEE it), but stand it UPRIGHT.  A thin, asymmetric L/U gets TORQUED by the claw during
+                # the grasp and can end tilted ("a segment snaps/twists") -- set_object writes a pure z-rotation,
+                # so this un-tips the delivered shape in place.  Cubes/long are already upright -> a no-op for them.
+                cp = sim.obj_pos(nm)[:2].copy(); cz = snap[nm][1]
+                sim.set_object(nm, cp, z=cz, yaw=sim.obj_yaw(nm))
         mujoco.mj_forward(sim.m, sim.d); state.sync_active()
         if _dbg: print(f"    [dbg] after ep : {_pos()}", flush=True)
         _save(f"{body}_2after_restore")
