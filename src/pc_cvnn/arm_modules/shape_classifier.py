@@ -220,10 +220,11 @@ class ShapeClassifierModule(ArmModule):
             return self.head.logits((np.asarray(feat, float) - self.fmu) / self.fsd)
         return self._forward(np.atleast_2d(feat))[0][0]
 
-    def train(self, sim, steps=4500, lr=0.05, bs=64, epochs=10, rng=None):
+    def train(self, sim, steps=4500, lr=0.05, bs=64, epochs=10, rng=None, viz_fn=None, viz_every=40):
         """Self-supervised: render each shape at random pos + yaw (others parked), take the rotation-
         INVARIANT complex descriptor, label by truth, fit the classifier.  Returns train accuracy.
-        Calibrates the homography first if cam is the angled overview and not yet calibrated."""
+        Calibrates the homography first if cam is the angled overview and not yet calibrated.
+        viz_fn(i, steps): optional callback every viz_every steps (e.g. to show the training live)."""
         import mujoco
         rng = rng or self.rng
         if self.cam != "top" and self.H is None:
@@ -231,7 +232,7 @@ class ShapeClassifierModule(ArmModule):
         sim.reset_home(); self._park_markers(sim)
         allb = ["obj_red", "obj_green", "obj_blue", "obj_L", "obj_U"]
         X, Y = [], []
-        for _ in range(steps):
+        for i in range(steps):
             k = int(rng.integers(len(SHAPES))); body, half = SHAPE_BODY[SHAPES[k]]
             for o in allb:
                 sim.set_object(o, [0.5, -0.6], z=0.008)
@@ -241,6 +242,8 @@ class ShapeClassifierModule(ArmModule):
             zc = float(sim.m.geom_size[sim.m.body_geomadr[bid]][2])   # rest z = the object's half-height
             sim.set_object(body, [rng.uniform(-0.08, 0.08), rng.uniform(0.08, 0.20)], z=zc,
                            yaw=rng.uniform(0, 2 * np.pi)); mujoco.mj_forward(sim.m, sim.d)
+            if viz_fn is not None and i % viz_every == 0:        # show the form-training live (every N steps)
+                viz_fn(i, steps, SHAPES[k])
             d = self.descriptor(self._render_u8(sim))
             if d is not None:
                 X.append(d); Y.append(k)

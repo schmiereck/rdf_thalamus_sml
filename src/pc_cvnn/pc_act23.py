@@ -478,7 +478,13 @@ def run_self_learning_steering(headless=False):
         panel.update(sim.render(CAM), "Form-Wahrnehmung wird trainiert ...")
     shape_clf = ShapeClassifierModule(cam=CAM, rng=np.random.default_rng(0))
     saved = sim.d.mocap_pos.copy(); shape_clf.calibrate(sim)
-    shape_clf.train(sim, steps=int(os.environ.get("ACT23_SHAPE_STEPS", "2500")), rng=np.random.default_rng(1))
+
+    def _shape_viz(i, steps, shp):                             # show the form-training live (one shape at a time)
+        panel.update(sim.render(CAM), f"Form-Wahrnehmung: {i}/{steps}  (lernt gerade: {shp})")
+
+    shape_clf.train(sim, steps=int(os.environ.get("ACT23_SHAPE_STEPS", "2500")), rng=np.random.default_rng(1),
+                    viz_fn=(_shape_viz if panel is not None else None),
+                    viz_every=int(os.environ.get("ACT23_SHAPE_VIZ_EVERY", "40")))
     sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
     oo = ObjectOrientationModule(); oo.train(sim, cmd=LONG, cam=CAM, steps=2500, half=LONG_HALF, rng=np.random.default_rng(0))
 
