@@ -527,24 +527,24 @@ def run_self_learning_steering(headless=False):
     world.train(epochs=600)
     print(f"  world model trained on {world.n()} own trials.")
 
-    scene = {}                                                 # intended (body -> (xy, z, yaw)) so the scene is
-    #   RESTORED before every command: run_combined parks distractor OBJS mid-episode and never puts them back,
-    #   so a later-commanded object would sit at the park spot.  Restoring keeps a stable, tidy scene.
+    scene = {}                                                 # intended (body -> (xy, z, yaw)); the scene is FIXED
+    #   after placement and restored per command, so only the commanded object moves.
+    # DETERMINISTIC well-spread SLOTS: the workspace (x +-0.11, y 0.07..0.21, minus the base-clear disk) is too
+    # small for random rejection-sampling to reliably separate 5 biggish objects -- it fails and falls back to a
+    # central clump.  Fixed slots (shuffled onto the objects + small jitter) GUARANTEE a spread, non-dense scene.
+    SLOTS = [(-0.10, 0.13), (0.0, 0.13), (0.10, 0.13), (-0.065, 0.195), (0.065, 0.195)]
+
     def randomize_objects():
-        from pc_cvnn.pc_act14 import _rand_xy
-        from pc_cvnn.pc_act16 import BASE_CLEAR
         sim.reset_home()
-        placed = []
-        for _l, nm, m in state.OBJECTS:
-            p = _rand_xy(crng)
-            for _ in range(300):
-                if float(np.linalg.norm(p)) >= BASE_CLEAR and all(float(np.linalg.norm(p - q)) > 0.09 for q in placed):
-                    break
-                p = _rand_xy(crng)
+        order = list(range(len(SLOTS))); crng.shuffle(order)   # random object<->slot assignment (variety)
+        for (_l, nm, m), si in zip(state.OBJECTS, order):
+            p = np.array(SLOTS[si], float) + crng.uniform(-0.006, 0.006, 2)   # small jitter
             z = float(LONG_HALF[2]) if m == "long" else 0.012
             yaw = crng.uniform(0, np.pi) if m == "long" else crng.uniform(0, 2 * np.pi)
-            scene[nm] = (np.asarray(p, float), z, float(yaw)); placed.append(p)
+            scene[nm] = (p, z, float(yaw))
         place_all()
+        if panel is not None:                                  # show the placed scene immediately (decide from it)
+            panel.update(sim.render(CAM), "Szene platziert — Objekt wählen und Ausführen")
 
     def _set_sizes():
         sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "obj_red")]] = np.array([0.012] * 3)
