@@ -457,6 +457,7 @@ def run_self_learning_steering(headless=False):
     controller exactly as pc_act21/shape_grasp_viz."""
     import pc_cvnn.pc_act16 as act16
     from pc_cvnn.arm_modules import VisualCortexModule, ShapeClassifierModule
+    act16.ELONG_RATE = 0.0                                 # don't let run_combined elongate a distractor cube
     RES = int(os.environ.get("ACT23_RES", "240"))
     LAM = float(os.environ.get("ACT23_LAM", "1.0"))
     NPOS = int(os.environ.get("ACT23_NPOS", "10")); NTRIAL = int(os.environ.get("ACT23_NTRIAL", "5"))
@@ -555,17 +556,6 @@ def run_self_learning_steering(headless=False):
             sim.set_object(nm, p, z=z, yaw=yaw)
         mujoco.mj_forward(sim.m, sim.d); state.sync_active()
 
-    def restore_scene():
-        """Before each command UN-PARK only the objects run_combined parked off-table; objects still in the
-        workspace (incl. one delivered last command) are LEFT in place -> 'Ausführen' does not visibly
-        re-scatter the scene.  ('Objekte neu' calls place_all for a full fresh scatter.)"""
-        _set_sizes()
-        for nm, (p, z, yaw) in scene.items():
-            cur = sim.obj_pos(nm)[:2]
-            if not (-0.2 < cur[0] < 0.2 and 0.0 < cur[1] < 0.3):   # parked far off -> bring it back
-                sim.set_object(nm, p, z=z, yaw=yaw)
-        mujoco.mj_forward(sim.m, sim.d); state.sync_active()
-
     if panel is not None:
         panel._randomize_fn = randomize_objects     # wire "Objekte neu" (panel built before randomize_objects existed)
     randomize_objects()
@@ -596,9 +586,18 @@ def run_self_learning_steering(headless=False):
     res = {}
     def ep_end(ep, ok, err): res["ok"] = bool(ok); res["err"] = float(err)
 
+    _dbg = os.environ.get("ACT23_DEBUG", "0") == "1"
+    def _pos():
+        return {nm: np.round(sim.obj_pos(nm)[:2], 3).tolist() for _l, nm, _m in state.OBJECTS}
+
     def run_one():
-        restore_scene()                                        # un-park distractors; leave in-workspace objects put
         _l, body, method = state.selected()
+        # SNAPSHOT every object's pose before acting.  run_combined parks distractor cubes off-table and the
+        # arm can knock objects -> afterwards restore all NON-commanded objects to exactly here, so the scene
+        # stays put and only the commanded object moves (to the target).  No more surprise re-scatter.
+        snap = {nm: (sim.obj_pos(nm)[:2].copy(), float(sim.obj_pos(nm)[2]), float(sim.obj_yaw(nm)))
+                for _l2, nm, _m in state.OBJECTS}
+        if _dbg: print(f"    [dbg] before  : {_pos()}", flush=True)
         if method in ("color", "long"):                        # drive the FOVEA to the commanded object (display);
             try:                                               #   the grasp itself uses perceive() above
                 vc.perceive(body)
@@ -610,10 +609,19 @@ def run_self_learning_steering(headless=False):
         if state.policy == "self" and method == "long":          # SELF-LEARNED wrist for the long object
             a, _, _ = world.select_action(long_feats(), n=0, lam=LAM); w = wrist_of(a)
             wf = (lambda s, _w=w: _w)
+        # CLOSED-LOOP fovea for the COLOUR cubes: servo=True lets vc.track's live observation CORRECT the
+        # grasp-target belief during the reach (+ occlusion memory).  L/U (form-localised) + the long object
+        # (OOD for the colour fovea) keep servo=False -> a colour servo would drag them onto a wrong object.
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_and_plot,
-                           policy_fn=None, servo=False, rescatter=False, episode_end_fn=ep_end, lifelong=True,
-                           carry_gentle=u_cmd, grip_close=(0.3 if u_cmd else None), wrist_fn=wf)
+                           policy_fn=None, servo=(method == "color"), rescatter=False, episode_end_fn=ep_end,
+                           lifelong=True, carry_gentle=u_cmd, grip_close=(0.3 if u_cmd else None), wrist_fn=wf)
+        _set_sizes()                                           # restore non-commanded objects to where they were
+        for _l2, nm, _m in state.OBJECTS:                      #   (undo run_combined's parking + arm knocks)
+            if nm != body:
+                p, z, yaw = snap[nm]; sim.set_object(nm, p, z=z, yaw=yaw)
+        mujoco.mj_forward(sim.m, sim.d); state.sync_active()
+        if _dbg: print(f"    [dbg] after ep : {_pos()}", flush=True)
         return res.get("ok", False), res.get("err", float("nan")) * 1000.0
 
     if headless:
