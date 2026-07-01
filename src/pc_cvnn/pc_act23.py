@@ -628,13 +628,13 @@ def run_self_learning_steering(headless=False):
                            policy_fn=None, servo=(method == "color"), rescatter=False, episode_end_fn=ep_end,
                            lifelong=True, carry_gentle=u_cmd, grip_close=(0.3 if u_cmd else None), wrist_fn=wf)
         _save(f"{body}_1after_runcombined")
-        # CONTINUITY: leave everything where the action left it (commanded object delivered + STAYING, others
-        # untouched).  Only rescue an object that got physically KNOCKED right out of the valid table area,
-        # restoring it to where it was -- so nothing ever teleports, but the scene otherwise just evolves.
+        # CONTINUITY + keep the shapes UPRIGHT: leave the COMMANDED object where the action left it (delivered
+        # + staying), but put every NON-commanded object back on its pre-command pose.  set_object writes a pure
+        # z-rotation, so this also UN-TIPS any shape the arm nudged onto its side (the thin 24mm-tall L/U bars
+        # tip easily).  No teleport (OBJS=all5 above), no full reset -- the scene just evolves as you command.
         _set_sizes()
         for _l2, nm, _m in state.OBJECTS:
-            cur = sim.obj_pos(nm)[:2]
-            if not (-0.14 < cur[0] < 0.14 and 0.04 < cur[1] < 0.24):    # knocked off the table -> put it back
+            if nm != body:
                 p, z, yaw = snap[nm]; sim.set_object(nm, p, z=z, yaw=yaw)
         mujoco.mj_forward(sim.m, sim.d); state.sync_active()
         if _dbg: print(f"    [dbg] after ep : {_pos()}", flush=True)
