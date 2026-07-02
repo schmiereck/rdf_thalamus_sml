@@ -601,6 +601,9 @@ def run_self_learning_steering(headless=False):
         place_all()
         if panel is not None:                                  # show the placed scene immediately (decide from it)
             panel.update(sim.render(CAM), "Szene platziert — Objekt wählen und Ausführen")
+            if vc.viz is not None:                             # refresh the hex "overview Kamera (Fovea)" too --
+                vc.viz.update(sim.render(CAM), "Szene platziert")   # it otherwise keeps showing the last
+                #   TRAINING frame until the first tracked episode ("two overviews, two scenes")
 
     def _set_sizes():
         sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "obj_red")]] = np.array([0.012] * 3)
@@ -629,6 +632,10 @@ def run_self_learning_steering(headless=False):
     act16.OBJS = [nm for _l, nm, _m in state.OBJECTS]
     act16.SCENE_N = len(act16.OBJS)
 
+    _sel_seed = {}                                             # last select() detection: seeds the form tracker
+    #   with the SAME object the grasp targets (the tracker's own first-frame max-prob pick can differ --
+    #   the user watched the U command start focused on the L before snapping over)
+
     def perceive(cmd):
         _l, body, method = state.selected()
         if method == "shape":                                  # L/U: FORM perception (shape classifier)
@@ -636,10 +643,19 @@ def run_self_learning_steering(headless=False):
             det = shape_clf.select(sim, state.SHAPE_KEY[body])  #   target markers, else goal_fn returns a parked goal
             sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
             if det is not None:
+                _sel_seed.update(key=state.SHAPE_KEY[body], xy=np.asarray(det["pos"], float),
+                                 px=np.asarray(det["px"], float))
                 return np.asarray(det["grasp_xy"], float), None, "grasp"
             return sim.obj_pos(body)[:2], None, "grasp"        # perception missed -> privileged fallback
         if method == "long":                                   # the elongated obj is OOD for the colour vc;
             return sim.obj_pos(body)[:2], None, "grasp"        #   localise privileged (act23 point = the WRIST)
+        if body == "obj_red":                                  # PARK the magenta markers for RED only: red is a
+            saved = sim.d.mocap_pos.copy(); shape_clf._park_markers(sim)   # SUBSET of magenta (1,0,1) and the
+            try:                                               #   sel head has no 'marker' code to out-claim it
+                xy = vc.perceive(body)                         #   contrastively, so the RED command LOCKS the
+            finally:                                           #   target disk (user-observed: the first grasp
+                sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)   # went there).  Other colours don't
+            return xy, None, None                              #   alias with magenta -> unchanged (minimal cut).
         return vc.perceive(body), None, None                   # cubes: the net localises by colour
 
     def plot_surprise():
@@ -655,7 +671,7 @@ def run_self_learning_steering(headless=False):
         plot_surprise()
         return obs
 
-    def make_shape_track(body):
+    def make_shape_track(body, key=None):
         """FORM-aware live tracker (the user's fovea goal): per tracked frame, segment+classify the scene
         (perceive_all) and return the commanded SHAPE's grasp point + confidence in run_combined's
         (obs, conf) servo protocol -- approach corrections work for L/U exactly like the colour servo.
@@ -666,21 +682,35 @@ def run_self_learning_steering(headless=False):
           * DISPLAY follow: nearest component in IMAGE px, ANY class -- a lifted/carried shape leaves the
             table plane (world pos wrong) and often mis-classifies, but its image blob stays trackable ->
             the fovea window follows the shape through grasp AND transport, like the colour fovea does.
+        SEEDING: for shapes the belief starts LAZILY from the select() detection the grasp actually
+        targets (_sel_seed; the first-frame max-prob pick can be a DIFFERENT same-class blob -- the user
+        watched the U command start focused on the L).  key=None = the LONG object: no class to key on ->
+        DISPLAY-ONLY blob follower seeded from the object's start position, obs stays None (the colour
+        fovea drive locked the CYAN U here: the obj_blue code fires on cyan, user-observed).
         The hex net can't be command-keyed to a FORM, so the form tracker DRIVES the hex view itself:
         one perception step at the followed px (fovea.step: lifelong hex learning + surprise stay alive)
         and the viz drawn at the SAME gaze -- box and cells consistent, no colour-keyed follow step to
         fight the pin, no zoom-out spiral (v1 called vc.track() from the pin: the colour drive walked the
         box away from the sampled crop and zoomed out every frame -- the user's frozen/mismatched views)."""
-        key = state.SHAPE_KEY[body]
         mem = {"xy": None, "px": None}                         # world belief (servo) + image belief (display)
+        if key is None:                                        # long object: seed from its start position
+            p0 = sim.obj_pos(body)[:2]
+            mem["xy"] = np.asarray(p0, float)
+            try:
+                mem["px"] = np.asarray(shape_clf._world_to_px(p0)[0], float)
+            except Exception:
+                pass
         vc.fovea.z = 1.0                                       # defined DETAIL zoom for the form view
 
         def _track():
+            if mem["px"] is None and key is not None and _sel_seed.get("key") == key:
+                mem["xy"] = _sel_seed.get("xy"); mem["px"] = _sel_seed.get("px")   # lazy: perceive() runs
+                #   INSIDE run_combined, after this tracker was built -> read the seed on the first frame
             saved = sim.d.mocap_pos.copy()                     # perceive_all parks the markers -> restore
             dets = shape_clf.perceive_all(sim)
             sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
             obs, conf = None, 0.0
-            cands = [d for d in dets if d["shape"] == key and d["pos"] is not None]
+            cands = [d for d in dets if key is not None and d["shape"] == key and d["pos"] is not None]
             if cands:
                 best = (max(cands, key=lambda d: d["prob"]) if mem["xy"] is None
                         else min(cands, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"]) - mem["xy"]))))
@@ -688,7 +718,7 @@ def run_self_learning_steering(headless=False):
                     obs = np.asarray(best["grasp_xy"], float)  # correct toward the GRASP point (what the belief
                     conf = float(best["prob"])                 #   holds), not the centroid (off-material on L/U)
                     mem["xy"] = np.asarray(best["pos"], float); mem["px"] = np.asarray(best["px"], float)
-            if obs is None and mem["px"] is not None and dets:  # class match failed (lifted/mis-class) ->
+            if obs is None and mem["px"] is not None and dets:  # class match failed (lifted/mis-class/long) ->
                 near = min(dets, key=lambda d: float(np.linalg.norm(np.asarray(d["px"]) - mem["px"])))
                 if float(np.linalg.norm(np.asarray(near["px"]) - mem["px"])) < 40.0:   # follow the blob in px
                     mem["px"] = np.asarray(near["px"], float)
@@ -699,7 +729,7 @@ def run_self_learning_steering(headless=False):
                 arr = vc.fovea.step(img, gaze, vc._P["state"]["cmd"], True)
                 if vc.viz is not None:
                     vc.viz.fovea(img, gaze, vc.fovea._ek(), np.clip(arr[:, :, 1:], 0, 1),
-                                 f"Form-Tracker folgt {key}")
+                                 f"Form-Tracker folgt {key or body}")
                 plot_surprise()
             else:
                 track_and_plot()                               # nothing tracked yet -> the colour follow frame
@@ -756,9 +786,20 @@ def run_self_learning_steering(headless=False):
                 for _l2, nm, _m in state.OBJECTS}
         if _dbg: print(f"    [dbg] before  : {_pos()}", flush=True)
         _save(f"{body}_0before")
-        if method in ("color", "long"):                        # drive the FOVEA to the commanded object (display);
-            try:                                               #   the grasp itself uses perceive() above
-                vc.perceive(body)
+        _sel_seed.clear()                                      # form tracker seeds from THIS command's select()
+        if method == "color":                                  # drive the FOVEA to the commanded cube (display);
+            #   the grasp itself uses perceive() above.  LONG no longer drives by colour: its obj_blue code
+            #   FIRES ON THE CYAN U (user watched the fovea sit on the U for every long command) -- the
+            #   seeded blob follower handles the long display now.  Markers parked: red locks the magenta disk.
+            try:
+                if body == "obj_red":                          # red-only marker parking (see perceive())
+                    saved = sim.d.mocap_pos.copy(); shape_clf._park_markers(sim)
+                    try:
+                        vc.perceive(body)
+                    finally:
+                        sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+                else:
+                    vc.perceive(body)
                 if panel is not None:
                     track_and_plot(); panel.update(sim.render(CAM), f"Fovea -> {_l}")
             except Exception:
@@ -779,7 +820,12 @@ def run_self_learning_steering(headless=False):
         # user's fovea goal: the fovea supports approach+grasp for the shapes too, instead of sitting on
         # whatever colour was last commanded.  Only the long object stays servo=False (not a class the
         # form tracker can key on; its colour is OOD for the hex fovea -> both trackers would mislead).
-        track_fn = make_shape_track(body) if method == "shape" else track_and_plot
+        if method == "shape":
+            track_fn = make_shape_track(body, key=state.SHAPE_KEY[body])
+        elif method == "long":
+            track_fn = make_shape_track(body)                  # display-only blob follower (no class to key on)
+        else:
+            track_fn = track_and_plot
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_fn,
                            policy_fn=None, servo=(method in ("color", "shape")), rescatter=False, episode_end_fn=ep_end,
@@ -804,11 +850,11 @@ def run_self_learning_steering(headless=False):
                 cp = sim.obj_pos(nm)[:2].copy(); cz = snap[nm][1]
                 sim.set_object(nm, cp, z=cz, yaw=sim.obj_yaw(nm))
         mujoco.mj_forward(sim.m, sim.d); state.sync_active()
-        if panel is not None:                                  # refresh the hex fovea views with the RESTORED
-            try:                                               #   scene: they last rendered a pre-restore frame,
-                track_and_plot()                               #   so after the object snap-back the views showed
-            except Exception:                                  #   an inconsistent (stale) object layout
-                pass
+        if panel is not None and vc.viz is not None:           # refresh the hex "overview Kamera (Fovea)" with
+            try:                                               #   the RESTORED scene (it last rendered a pre-
+                vc.viz.update(sim.render(CAM), "Szene aktualisiert")   # restore frame -> stale layout); a plain
+            except Exception:                                  #   image refresh -- no colour-keyed track step
+                pass                                           #   that would walk the gaze off the final view
         if _dbg:
             print(f"    [dbg] after ep : {_pos()}", flush=True)
             hs = {nm: np.round(sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)]] * 1000, 1).tolist()
