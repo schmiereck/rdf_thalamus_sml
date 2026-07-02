@@ -458,6 +458,13 @@ def run_self_learning_steering(headless=False):
     import pc_cvnn.pc_act16 as act16
     from pc_cvnn.arm_modules import VisualCortexModule, ShapeClassifierModule
     act16.ELONG_RATE = 0.0                                 # don't let run_combined elongate a distractor cube
+    # run_combined must NEVER rebuild the scene itself: without PERSIST it calls reset_home()+scatter() at
+    # EVERY episode, and scatter() set_object_size()s every body in OBJS to CUBE_HALF.  On the composite L/U
+    # that clobbers the FIRST geom only (the L's 56mm arm / one U prong becomes a 24mm cube -> "a segment
+    # looks rotated 90 deg" at Ausfuehren), permanently -- _set_sizes() only repairs obj_red/obj_blue.  With
+    # PERSIST run_combined just does arm_home()+reposition_strays(): act23 owns ALL placement (setup_long,
+    # place_all, the run_one snapshot-restore), so the scene truly persists and no geom is ever resized.
+    act16.PERSIST = True
     RES = int(os.environ.get("ACT23_RES", "240"))
     LAM = float(os.environ.get("ACT23_LAM", "1.0"))
     NPOS = int(os.environ.get("ACT23_NPOS", "10")); NTRIAL = int(os.environ.get("ACT23_NTRIAL", "5"))
@@ -466,6 +473,8 @@ def run_self_learning_steering(headless=False):
 
     print("act23 [viz] — self-learning grasper command-steering" + (" (headless self-test)" if headless else ""))
     sim = BracketArmSim(render_wh=(RES, RES)); sim.set_reach_site("contact")
+    shape_half0 = {nm: sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)]].copy()
+                   for nm in ("obj_L", "obj_U")}           # pristine XML first-geom half-extents (repair below)
     bm = BodyModelModule(rng=np.random.default_rng(5)); bm.babble(sim, 4000)
     state = CommandState23(sim)
     panel = None
@@ -517,6 +526,11 @@ def run_self_learning_steering(headless=False):
                                   goal_fn=lambda c, o: TARGET, rescatter=False, wrist_fn=wf)
         return int(d)
 
+    act16.OBJS = [LONG]                                    # wrist collection: the long object IS the scene.
+    #   park_all() parks the others at (0.5,-0.6), OUTSIDE run_combined's stray bounds -- with them in OBJS,
+    #   PERSIST's reposition_strays() would drop them back onto the table as surprise distractors.  (PERSIST
+    #   also means the object now really STAYS at the setup_long pose the logged grasp point refers to;
+    #   before, the per-episode scatter() moved+resized it under the fixed gxy.)  Restored to all 5 below.
     print(f"  collecting OWN trials for the long object's wrist ({NPOS}x{NTRIAL}) ...")
     for j in range(NPOS):
         p = rand_pos(crng); yaw = crng.uniform(0, np.pi); setup_long(p, yaw); fe = long_feats()
@@ -554,6 +568,10 @@ def run_self_learning_steering(headless=False):
     def _set_sizes():
         sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "obj_red")]] = np.array([0.012] * 3)
         sim.m.geom_size[sim.m.body_geomadr[bid]] = np.asarray(LONG_HALF, float)   # obj_blue stays elongated
+        for nm, h0 in shape_half0.items():                 # repair the L/U FIRST geom too: any set_object_size
+            sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)]] = h0
+            #   on a composite body hits only its first geom and silently DEFORMS the shape ("a segment turns
+            #   90 deg") -- with PERSIST above this is a no-op, but the shape must never stay deformed.
 
     def place_all():
         _set_sizes()
@@ -653,7 +671,11 @@ def run_self_learning_steering(headless=False):
                 cp = sim.obj_pos(nm)[:2].copy(); cz = snap[nm][1]
                 sim.set_object(nm, cp, z=cz, yaw=sim.obj_yaw(nm))
         mujoco.mj_forward(sim.m, sim.d); state.sync_active()
-        if _dbg: print(f"    [dbg] after ep : {_pos()}", flush=True)
+        if _dbg:
+            print(f"    [dbg] after ep : {_pos()}", flush=True)
+            hs = {nm: np.round(sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)]] * 1000, 1).tolist()
+                  for nm in ("obj_L", "obj_U")}            # the exact failure mode: a resized L/U first geom
+            print(f"    [dbg] L/U half : {hs}  (XML: L [7,28,12] U [7,14,12])", flush=True)
         _save(f"{body}_2after_restore")
         return res.get("ok", False), res.get("err", float("nan")) * 1000.0
 
