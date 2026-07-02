@@ -167,7 +167,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                  episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None,
                  ood_rate=0.0, ood_rng=None, size_fn=None, tol=None, carry_target_fn=None,
                  post_goal_fn=None, macro_log_fn=None, servo=False, rescatter=True, orient_fn=None,
-                 carry_gentle=False, grip_close=None, wrist_fn=None):
+                 carry_gentle=False, grip_close=None, wrist_fn=None, arm_reset=True):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -232,7 +232,9 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         ood_rng = np.random.default_rng(123)
     for ep in range(episodes):
         if PERSIST:
-            sim.arm_home(); reposition_strays()
+            if arm_reset:                        # arm_reset=False: the caller DRIVES the arm back to (near)
+                sim.arm_home()                   #   home after each episode (act23 drive_home) -- continuous
+            reposition_strays()                  #   operation, no qpos snap (a physical robot can't teleport)
         else:
             sim.reset_home(); scatter()
         sim.target("joint_3", HOME["joint_3"]); sim.target("joint_5", J5_OPEN)

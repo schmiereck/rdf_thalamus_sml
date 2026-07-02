@@ -36,7 +36,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 import mujoco
 
-from pc_cvnn.pc_act14 import BracketArmSim
+from pc_cvnn.pc_act14 import BracketArmSim, HOME
 from pc_cvnn.arm_modules.body_model import BodyModelModule
 from pc_cvnn.arm_modules.shape_classifier import ShapeClassifierModule
 from pc_cvnn.arm_modules.object_orientation import ObjectOrientationModule
@@ -615,6 +615,34 @@ def run_self_learning_steering(headless=False):
                 panel.surp_viz.push(s["sensor"], s["state"], s["total"], s["relax"], bmm)
         return obs
 
+    HOME_Q3 = np.array([HOME[j] for j in ("joint_0", "joint_1", "joint_2")])
+
+    def drive_home():
+        """CONTINUOUS episode transition: after the release the arm DRIVES back to (near) its home posture
+        under its normal actuators (the same reach primitive the episode uses) instead of the qpos teleport
+        arm_home() does -- a physical robot can't teleport, and the user wants sim runs to stay connectable
+        to the real rig.  Two legs: RAISE the claw first (a low sideways retreat could sweep the just-placed
+        object), then bounded joint-space steps toward home.  NEAR home is enough (0.05 rad/joint): the next
+        episode starts from a SIMILAR pose, not a bit-identical one (run_combined gets arm_reset=False)."""
+        sim.target("joint_5", act16.J5_OPEN)
+        for k in range(60):                                    # leg 1: straight up to carry height
+            q3 = sim.arm3_angles(); h = sim.grasp_pos()
+            if h[2] > act16.CARRY_Z - 0.01:
+                break
+            sim.set_arm3_targets(q3 + bm.body.reach_velocity(q3, np.array([h[0], h[1], act16.CARRY_Z]),
+                                                             gain=2.0, max_dq=0.026))
+            sim.step(2)
+            if panel is not None and k % 8 == 0:
+                panel.update(sim.render(CAM), "Arm hebt ab ...")
+        for k in range(240):                                   # leg 2: drive the joints home, bounded speed
+            q3 = sim.arm3_angles()
+            if float(np.max(np.abs(q3 - HOME_Q3))) < 0.05:
+                break
+            sim.set_arm3_targets(q3 + np.clip(HOME_Q3 - q3, -0.03, 0.03))
+            sim.step(2)
+            if panel is not None and k % 8 == 0:
+                panel.update(sim.render(CAM), "Arm fährt zur Ausgangsposition ...")
+
     res = {}
     def ep_end(ep, ok, err): res["ok"] = bool(ok); res["err"] = float(err)
 
@@ -644,17 +672,22 @@ def run_self_learning_steering(headless=False):
             except Exception:
                 pass
         u_cmd = (body == "obj_U"); wf = None
+        fe_long = long_feats() if method == "long" else None     # situation snapshot for the LIFELONG loop below
+        w_exec = None                                            # wrist this episode actually runs (self mode)
         if state.policy == "self" and method == "long":          # SELF-LEARNED wrist for the long object
-            a, _, _ = world.select_action(long_feats(), n=0, lam=LAM); w = wrist_of(a)
-            wf = (lambda s, _w=w: _w)
+            a, _, _ = world.select_action(fe_long, n=0, lam=LAM); w_exec = wrist_of(a)
+            wf = (lambda s, _w=w_exec: _w)
         # CLOSED-LOOP fovea for the COLOUR cubes: servo=True lets vc.track's live observation CORRECT the
         # grasp-target belief during the reach (+ occlusion memory).  L/U (form-localised) + the long object
         # (OOD for the colour fovea) keep servo=False -> a colour servo would drag them onto a wrong object.
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_and_plot,
                            policy_fn=None, servo=(method == "color"), rescatter=False, episode_end_fn=ep_end,
-                           lifelong=True, carry_gentle=u_cmd, grip_close=(0.3 if u_cmd else None), wrist_fn=wf)
+                           lifelong=True, carry_gentle=u_cmd, grip_close=(0.3 if u_cmd else None), wrist_fn=wf,
+                           arm_reset=False)
         _save(f"{body}_1after_runcombined")
+        drive_home()                          # retreat FIRST: restoring an object under the still-lowered arm
+        #   could re-create contact under the claw; and the next episode then starts from ~home WITHOUT a reset
         # CONTINUITY + keep the shapes UPRIGHT: leave the COMMANDED object where the action left it (delivered
         # + staying), but put every NON-commanded object back on its pre-command pose.  set_object writes a pure
         # z-rotation, so this also UN-TIPS any shape the arm nudged onto its side (the thin 24mm-tall L/U bars
@@ -677,6 +710,20 @@ def run_self_learning_steering(headless=False):
                   for nm in ("obj_L", "obj_U")}            # the exact failure mode: a resized L/U first geom
             print(f"    [dbg] L/U half : {hs}  (XML: L [7,28,12] U [7,14,12])", flush=True)
         _save(f"{body}_2after_restore")
+        # LIFELONG loop (long object): every command IS a trial.  Log the perceived situation, the wrist that
+        # actually ran (self-selected, OR the teacher's aligned wrist -- run_combined exposes it as _wrist_tgt,
+        # so Teacher commands keep feeding the model as demonstrations) and the OWN outcome, then refit the
+        # ensemble.  The model keeps learning from its acting: a wrist it currently believes in but that is
+        # unreliable (e.g. the squeeze-rotate long-side grip) gets corrected by its own failures over time.
+        if fe_long is not None:
+            w_obs = w_exec if w_exec is not None else getattr(act16.run_combined, "_wrist_tgt", None)
+            if w_obs is not None:
+                world.observe(fe_long, action_vec(0.0, 0.0, float(w_obs)), res.get("ok", False))
+                world.train(epochs=600)
+                print(f"    [lifelong] Welt-Modell +1 Versuch ({'Selbst' if w_exec is not None else 'Teacher'}"
+                      f"-Wrist {np.degrees(float(w_obs)) % 180.0:.0f} Grad, "
+                      f"{'geliefert' if res.get('ok', False) else 'nicht geliefert'}) -> "
+                      f"{world.n()} Versuche, nachtrainiert", flush=True)
         return res.get("ok", False), res.get("err", float("nan")) * 1000.0
 
     if headless:
