@@ -27,9 +27,10 @@ import mujoco
 
 from pc_cvnn.pc_act14 import BracketArmSim, ArmBodyModel3D, HOME, _rand_xy, CamViz, REACH_XY
 
-J5_OPEN = float(os.environ.get("ACT16_J5_OPEN", "1.08"))   # gripper OPEN angle (was 1.8; user set 60% -> 1.08 so
-J5_GRIP, J5_PUSH = 0.0, 0.55                    # the open claw does not splay so wide it hits the base on a turn).
-#   J5_GRIP = fully-closed (grip); J5_PUSH = partly-open (push).  Restore the old wide open via ACT16_J5_OPEN=1.8.
+J5_OPEN = float(os.environ.get("ACT16_J5_OPEN", "0.54"))   # gripper OPEN angle (was 1.8; user first set 60% ->
+J5_GRIP, J5_PUSH = 0.0, 0.55                    # 1.08, then 30% -> 0.54: the wide-open claw kept COLLIDING with
+#   neighbouring objects during the approach, before it even closes).  J5_GRIP = fully-closed (grip);
+#   J5_PUSH = partly-open (push).  Restore the old wide open via ACT16_J5_OPEN=1.8.
 # Gripper-regime thresholds SCALE with J5_OPEN (calibrated to reproduce the old fixed values at open=1.8) -- a
 # fixed 1.0/0.9/0.6 sat right at the TOP of a narrowed (1.08) range, so the "descend-while-open then close"
 # choreography collapsed (the policy began closing ~30mm too HIGH; measured: gripper closed at hand_z ~60mm vs a
