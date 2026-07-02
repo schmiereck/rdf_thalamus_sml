@@ -682,8 +682,23 @@ def run_self_learning_steering(headless=False):
         """A class the net just SELF-LABELLED becomes commandable: append the object to the GUI list and
         key its localisation/tracking on the open-class name.  The body handle is command PLUMBING only
         (which MuJoCo body the button stands for) -- select / track / situation_feats run purely on the
-        class name the net invented."""
+        class name the net invented.
+        VERIFY the match first (user-hit bug): a class born during the introduction glances is NOT
+        necessarily the introduced object's -- the untrained long I is usually STILL undiscovered then and
+        gets born FIRST from the same glances; blindly binding the first-born class put the I's class on
+        the T's button (fovea+grasp locked the blue I on every T command).  So only register `cname` if a
+        detection of that class sits AT the introduced object (privileged pos as plumbing aid only, same
+        role as in situation_feats)."""
         if NOVEL_BODY in state.SHAPE_KEY or NOVEL_BODY not in scene:
+            return
+        saved = sim.d.mocap_pos.copy()                         # perceive_all parks the markers -> restore
+        dets = shape_clf.perceive_all(sim)
+        sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+        pT = sim.obj_pos(NOVEL_BODY)[:2]
+        if not any(d["shape"] == cname and d["pos"] is not None
+                   and float(np.linalg.norm(np.asarray(d["pos"]) - pT)) < 0.04 for d in dets):
+            print(f"  [open-set] Klasse '{cname}' entdeckt, sitzt aber NICHT auf dem neuen Objekt "
+                  f"(z.B. der lange Balken) -- nicht als Kommando registriert", flush=True)
             return
         label = f"Neue Form {len(shape_clf.open_names)}"
         state.add_object(label, NOVEL_BODY, cname)
@@ -999,23 +1014,31 @@ def run_self_learning_steering(headless=False):
         return res.get("ok", False), res.get("err", float("nan")) * 1000.0
 
     if headless:
-        print("  headless self-test: one command per object")
-        for k in range(len(state.OBJECTS)):
-            state.sel = k; ok, err = run_one()
-            print(f"    {state.OBJECTS[k][0]:16s}: {'GELIEFERT' if ok else 'NICHT'}  ({err:.0f}mm)", flush=True)
-        print("  open-set: das nie trainierte obj_T taucht auf ...")
-        introduce_object()
-        if NOVEL_BODY in state.SHAPE_KEY:
+        def _intro_and_command():
+            print("  open-set: das nie trainierte obj_T taucht auf ...")
+            introduce_object()
+            if NOVEL_BODY not in state.SHAPE_KEY:
+                print(f"    NICHT entdeckt/registriert (Klassen: {shape_clf.open_names}, "
+                      f"buffer={len(shape_clf._novel_buf)}, th={shape_clf.novel_th:.2f}) -- EXPECTED at mini "
+                      f"ACT23_SHAPE_STEPS (manifold too sparse: at 250 steps known/novel OVERLAP, >=1200 "
+                      f"separates; GUI default 2500 discovers).", flush=True)
+                return
             print(f"    entdeckt + selbst benannt: '{state.SHAPE_KEY[NOVEL_BODY]}'  "
                   f"(Klassen: {shape_clf.open_names})", flush=True)
             state.sel = len(state.OBJECTS) - 1
             ok, err = run_one()
-            print(f"    {state.OBJECTS[state.sel][0]:16s}: {'GELIEFERT' if ok else 'NICHT'}  ({err:.0f}mm)", flush=True)
-        else:
-            print(f"    NICHT entdeckt (buffer={len(shape_clf._novel_buf)}, th={shape_clf.novel_th:.2f}) -- "
-                  f"EXPECTED at mini ACT23_SHAPE_STEPS: novelty needs the trained manifold DENSE enough "
-                  f"(measured: at 250 steps known-max 9.4 vs T-p10 9.4 OVERLAP; at >=1200 steps 6.1 vs 8.6 "
-                  f"separate cleanly).  The GUI default 2500 discovers.", flush=True)
+            print(f"    {state.OBJECTS[state.sel][0]:16s}: {'GELIEFERT' if ok else 'NICHT'}  ({err:.0f}mm)",
+                  flush=True)
+
+        intro_first = os.environ.get("ACT23_INTRO_FIRST", "0") == "1"
+        if intro_first:                                        # the USER'S race: introduce while the long I
+            _intro_and_command()                               # is still undiscovered -- its class is born
+        print("  headless self-test: one command per object")  # FIRST from the same glances and must NOT
+        for k, _o in enumerate(CommandState23.OBJECTS):        # get bound to the T's button
+            state.sel = k; ok, err = run_one()
+            print(f"    {state.OBJECTS[k][0]:16s}: {'GELIEFERT' if ok else 'NICHT'}  ({err:.0f}mm)", flush=True)
+        if not intro_first:
+            _intro_and_command()
         return
 
     act16.run_combined._quiet = True

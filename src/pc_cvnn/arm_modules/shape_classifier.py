@@ -52,7 +52,10 @@ NOVEL_K = 3                                                             # kNN or
 OPEN_MARGIN = float(os.environ.get("ACT_SHAPE_OPEN_MARGIN", "1.6"))     # claim radius for open classes, * novel_th
 #   (measured: the same novel form seen at DIFFERENT poses sits p50 ~8.3 / p90 ~11.2 apart while novel_th
 #   is ~7.3 -- a sparse young exemplar set needs the relaxed radius or later poses would read novel again)
-MERGE_MARGIN = 2.0                                                      # birth-time merge radius, * novel_th
+MERGE_MARGIN = 1.7                                                      # birth-time merge radius, * novel_th
+#   (must sit BETWEEN same-form cross-pose spread (p90 ~11.2 -> merge pose-miss re-births) and the
+#   DISTANCE BETWEEN TWO DIFFERENT novel forms (long-I vs T measured p10 ~12.6: 2.0*th=14.6 FUSED them
+#   in the user's GUI session -> the T never got its own class); 1.7*th ~ 12.4 splits both measured sets)
 OPEN_CAP = 80                                                           # max stored exemplars per self-labelled class
 SAT_TH = 0.15
 GRIP_PX = 18                                             # gripper-sized window (px) for the densest-grip-point search
