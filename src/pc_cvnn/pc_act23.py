@@ -497,26 +497,36 @@ def run_self_learning_steering(headless=False):
                     viz_fn=(_shape_viz if panel is not None else None),
                     viz_every=int(os.environ.get("ACT23_SHAPE_VIZ_EVERY", "40")))
     sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
-    oo = ObjectOrientationModule(); oo.train(sim, cmd=LONG, cam=CAM, steps=2500, half=LONG_HALF, rng=np.random.default_rng(0))
 
-    # self-supervised world model for the LONG object's wrist (collect own trials, then train).
-    # OPEN-WORLD situation features: the shape slot is the |F|-descriptor EMBEDDING seen by the camera
-    # (shape_clf.desc_embed, NH dims), NOT the class one-hot -- a one-hot needs a slot per known shape
-    # (closed world), the descriptor exists for ANY object, so the same model can later absorb trials
-    # from L/U/novel shapes and generalise its wrist knowledge across FORMS instead of class labels.
-    world = WorldModelModule(k=5, off_max=0.0, rng=np.random.default_rng(2), feat_dim=4 + shape_clf.NH)
+    # self-supervised world model for the GRASP WRIST (collect own trials, then train).
+    # OPEN-WORLD situation features -- ONE camera perception path (|F| pipeline) for EVERY object:
+    #   [pos(2), cos/sin(2*yaw), cos/sin(4*yaw4), desc_embed(NH)]
+    # yaw (k=2 phase, mod pi) carries an ELONGATED object's axis; yaw4 (k=4 phase, mod pi/2) carries a
+    # SQUARE's orientation -- k=2 is DEGENERATE on a cube, and the fixed teacher wrist (WRIST_TGT mod
+    # 90deg) is exactly what slips off DIAGONAL cubes now that the continuous scene keeps their random
+    # yaw (scatter() used to re-place them axis-aligned each episode, masking the gap).  The descriptor
+    # embedding (no class one-hot) lets this ONE model absorb trials from any form.  (The former
+    # ObjectOrientationModule features are subsumed by the k=2 phase -- one perception path, no oo.)
+    world = WorldModelModule(k=5, off_max=0.0, rng=np.random.default_rng(2), feat_dim=6 + shape_clf.NH)
 
-    def shape_desc_at(p_ref):
-        """The camera's |F|-descriptor embedding of the object nearest p_ref (mocap markers parked+restored
-        around perceive_all, same pattern as perceive()).  No detection -> zeros (an honest 'no form seen')."""
-        saved = sim.d.mocap_pos.copy()
+    def situation_feats(cmd):
+        """PERCEIVED situation of `cmd` for the world model (None if the camera can't find it).  The
+        privileged position is only a MATCHING aid; the features themselves are the detection's."""
+        p_ref = sim.obj_pos(cmd)[:2]
+        saved = sim.d.mocap_pos.copy()                     # perceive_all parks the markers -> restore
         dets = shape_clf.perceive_all(sim)
         sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
         dets = [d for d in dets if d["pos"] is not None]
         if not dets:
-            return np.zeros(shape_clf.NH)
-        best = min(dets, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"]) - np.asarray(p_ref))))
-        return shape_clf.desc_embed(best["desc"])
+            return None
+        best = min(dets, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"]) - p_ref)))
+        if float(np.linalg.norm(np.asarray(best["pos"]) - p_ref)) > 0.05:
+            return None                                    # nearest blob is a DIFFERENT object -> no honest read
+        y2, y4 = float(best["yaw"]), float(best["yaw4"])
+        return np.concatenate([np.asarray(best["pos"], float),
+                               [np.cos(2 * y2), np.sin(2 * y2), np.cos(4 * y4), np.sin(4 * y4)],
+                               shape_clf.desc_embed(best["desc"])])
+
     bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, LONG)
     crng = np.random.default_rng(7); act16.run_combined._quiet = True
 
@@ -527,34 +537,44 @@ def run_self_learning_steering(headless=False):
         sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "obj_red")]] = np.array([0.012] * 3)
         sim.set_target_marker([0.0, -0.6], z=-0.05)
 
-    def setup_long(p, yaw):
-        park_all(); sim.m.geom_size[sim.m.body_geomadr[bid]] = np.asarray(LONG_HALF, float)
-        sim.set_object(LONG, p, z=float(LONG_HALF[2]), yaw=yaw); mujoco.mj_forward(sim.m, sim.d); sim.step(40)
+    def setup_obj(cmd, p, yaw):
+        park_all()
+        if cmd == LONG:
+            sim.m.geom_size[sim.m.body_geomadr[bid]] = np.asarray(LONG_HALF, float)
+            z = float(LONG_HALF[2])
+        else:
+            z = 0.012
+        sim.set_object(cmd, p, z=z, yaw=yaw); mujoco.mj_forward(sim.m, sim.d); sim.step(40)
         sim.set_target_marker(TARGET, z=0.001)
 
-    def long_feats():
-        _, la = oo.perceive(sim, LONG, CAM); p = sim.obj_pos(LONG)[:2]
-        return np.concatenate([[p[0], p[1], np.cos(2 * la), np.sin(2 * la)], shape_desc_at(p)])
-
-    def grasp_long(wrist, gxy):
-        wf = None if wrist == "priv" else (lambda s, _w=wrist: _w)
-        d, _ = act16.run_combined(sim, bm.body, None, CAM, episodes=1, cmd_fixed=LONG, force="grasp",
+    def grasp_trial(cmd, wrist, gxy):
+        wf = None if wrist is None else (lambda s, _w=wrist: _w)
+        d, _ = act16.run_combined(sim, bm.body, None, CAM, episodes=1, cmd_fixed=cmd, force="grasp",
                                   perceive_fn=lambda c: (gxy, None, "grasp"), policy_fn=None, servo=False,
                                   goal_fn=lambda c, o: TARGET, rescatter=False, wrist_fn=wf)
         return int(d)
 
-    act16.OBJS = [LONG]                                    # wrist collection: the long object IS the scene.
-    #   park_all() parks the others at (0.5,-0.6), OUTSIDE run_combined's stray bounds -- with them in OBJS,
-    #   PERSIST's reposition_strays() would drop them back onto the table as surprise distractors.  (PERSIST
-    #   also means the object now really STAYS at the setup_long pose the logged grasp point refers to;
-    #   before, the per-episode scatter() moved+resized it under the fixed gxy.)  Restored to all 5 below.
-    print(f"  collecting OWN trials for the long object's wrist ({NPOS}x{NTRIAL}) ...")
-    for j in range(NPOS):
-        p = rand_pos(crng); yaw = crng.uniform(0, np.pi); setup_long(p, yaw); fe = long_feats()
-        for _ in range(NTRIAL):
-            w = crng.uniform(0, np.pi); setup_long(p, yaw); world.observe(fe, action_vec(0, 0, w), grasp_long(w, sim.obj_pos(LONG)[:2]))
-        if panel is not None and j % 2 == 0:
-            panel.update(sim.render(CAM), f"Selbst-Lernen (langes Objekt): {(j + 1) * NTRIAL}/{NPOS * NTRIAL} Versuche")
+    def collect_trials(cmd, label, yaw_hi):
+        """Self-supervised wrist trials on `cmd`: random pose + yaw, RANDOM wrist, the OWN delivered/not
+        outcome as the only label.  act16.OBJS=[cmd]: this object IS the scene -- park_all() parks the
+        others OUTSIDE run_combined's stray bounds, and with them in OBJS reposition_strays() would drop
+        them back onto the table as surprise distractors.  (Restored to all 5 for the steering scene.)"""
+        act16.OBJS = [cmd]
+        print(f"  collecting OWN trials: {label} ({NPOS}x{NTRIAL}) ...")
+        for j in range(NPOS):
+            p = rand_pos(crng); yaw = crng.uniform(0, yaw_hi); setup_obj(cmd, p, yaw)
+            fe = situation_feats(cmd)
+            if fe is None:
+                continue                                       # camera can't see it here -> no honest trial
+            for _ in range(NTRIAL):
+                w = crng.uniform(0, np.pi); setup_obj(cmd, p, yaw)
+                world.observe(fe, action_vec(0, 0, w), grasp_trial(cmd, w, sim.obj_pos(cmd)[:2]))
+            if panel is not None and j % 2 == 0:
+                panel.update(sim.render(CAM), f"Selbst-Lernen ({label}): {(j + 1) * NTRIAL}/{NPOS * NTRIAL} Versuche")
+
+    collect_trials(LONG, "langes Objekt", np.pi)
+    collect_trials("obj_red", "Würfel, auch diagonal", np.pi / 2)   # cube yaw mod pi/2 (square symmetry);
+    #   the descriptor is COLOUR-agnostic, so red-cube trials transfer to the green cube too
     world.train(epochs=600)
     print(f"  world model trained on {world.n()} own trials.")
 
@@ -744,10 +764,14 @@ def run_self_learning_steering(headless=False):
             except Exception:
                 pass
         u_cmd = (body == "obj_U"); wf = None
-        fe_long = long_feats() if method == "long" else None     # situation snapshot for the LIFELONG loop below
+        fe = situation_feats(body)                               # perceived situation for the LIFELONG loop
         w_exec = None                                            # wrist this episode actually runs (self mode)
-        if state.policy == "self" and method == "long":          # SELF-LEARNED wrist for the long object
-            a, _, _ = world.select_action(fe_long, n=0, lam=LAM); w_exec = wrist_of(a)
+        # SELF-LEARNED wrist: the long object AND the colour cubes.  The teacher's cube wrist is a FIXED
+        # world angle (WRIST_TGT mod 90deg) -- exactly what slips off a DIAGONAL cube; the model instead
+        # conditions on the perceived k=4 orientation.  L/U keep the teacher wrist (no own L/U trials
+        # yet), but their episodes DO feed the model below, so that data accumulates for later.
+        if state.policy == "self" and method in ("color", "long") and fe is not None:
+            a, _, _ = world.select_action(fe, n=0, lam=LAM); w_exec = wrist_of(a)
             wf = (lambda s, _w=w_exec: _w)
         # CLOSED-LOOP fovea: servo=True lets the live tracker CORRECT the grasp-target belief during the
         # reach (+ occlusion memory).  COLOUR cubes track via the hex fovea (vc.track); L/U now track via
@@ -791,15 +815,16 @@ def run_self_learning_steering(headless=False):
                   for nm in ("obj_L", "obj_U")}            # the exact failure mode: a resized L/U first geom
             print(f"    [dbg] L/U half : {hs}  (XML: L [7,28,12] U [7,14,12])", flush=True)
         _save(f"{body}_2after_restore")
-        # LIFELONG loop (long object): every command IS a trial.  Log the perceived situation, the wrist that
-        # actually ran (self-selected, OR the teacher's aligned wrist -- run_combined exposes it as _wrist_tgt,
-        # so Teacher commands keep feeding the model as demonstrations) and the OWN outcome, then refit the
-        # ensemble.  The model keeps learning from its acting: a wrist it currently believes in but that is
-        # unreliable (e.g. the squeeze-rotate long-side grip) gets corrected by its own failures over time.
-        if fe_long is not None:
+        # LIFELONG loop (EVERY object): every command IS a trial.  Log the perceived situation, the wrist
+        # that actually ran (self-selected, OR the teacher's -- run_combined exposes it as _wrist_tgt, so
+        # Teacher commands keep feeding the model as demonstrations; for L/U that is currently the only
+        # source) and the OWN outcome, then refit the ensemble.  The model keeps learning from its acting:
+        # a wrist it currently believes in but that is unreliable (e.g. the squeeze-rotate long-side grip,
+        # or a diagonal-cube slip) gets corrected by its own failures over time.
+        if fe is not None:
             w_obs = w_exec if w_exec is not None else getattr(act16.run_combined, "_wrist_tgt", None)
             if w_obs is not None:
-                world.observe(fe_long, action_vec(0.0, 0.0, float(w_obs)), res.get("ok", False))
+                world.observe(fe, action_vec(0.0, 0.0, float(w_obs)), res.get("ok", False))
                 world.train(epochs=600)
                 print(f"    [lifelong] Welt-Modell +1 Versuch ({'Selbst' if w_exec is not None else 'Teacher'}"
                       f"-Wrist {np.degrees(float(w_obs)) % 180.0:.0f} Grad, "

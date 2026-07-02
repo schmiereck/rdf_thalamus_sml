@@ -209,6 +209,15 @@ class ShapeClassifierModule(ArmModule):
     def _yaw_from(F):
         return 0.5 * float(np.angle(F[:, 2]).mean())         # long axis = k=2 (undirected), yaw mod pi
 
+    @staticmethod
+    def _yaw4_from(F):
+        """Orientation from the k=4 harmonic -- a SQUARE's symmetry: a rotation by alpha shifts the k=4
+        phase by 4*alpha, so angle(F4)/4 reads a cube's yaw mod pi/2, where k=2 is DEGENERATE (a square
+        has no long axis).  Complex SUM over the rings (wrap-safe; a rotation shifts every ring's phase
+        equally).  The absolute zero is shape-dependent -- fine for a LEARNER, which needs a CONSISTENT
+        orientation signal, not a calibrated one."""
+        return 0.25 * float(np.angle(F[:, 4].sum()))
+
     # ------------------------------------------------------------------
     def _forward(self, X):
         Xn = (X - self.fmu) / self.fsd
@@ -307,7 +316,8 @@ class ShapeClassifierModule(ArmModule):
                 grasp = W[int(np.argmin(np.linalg.norm(W - ctr, axis=1)))]  # nearest material to the centroid
             out.append({"shape": SHAPES[k], "id": k, "prob": float(_softmax(logits)[k]),
                         "pos": (ctr if self.H is not None else None), "grasp_xy": grasp, "grasp_yaw": 0.0,
-                        "yaw": self._yaw_from(F), "px": np.array([xs.mean(), ys.mean()]),
+                        "yaw": self._yaw_from(F), "yaw4": self._yaw4_from(F),
+                        "px": np.array([xs.mean(), ys.mean()]),
                         "desc": np.abs(F).ravel()})            # the raw rotation-invariant |F| descriptor --
         return out                                             #   OPEN-WORLD (any object yields one, no class slot)
 
