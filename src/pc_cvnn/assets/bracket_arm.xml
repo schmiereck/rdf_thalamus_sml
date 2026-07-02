@@ -128,8 +128,11 @@
          parked NEXT TO (not on) the generic park spot 0.5,-0.6 the other objects get stacked on -->
 
       <freejoint/>
-      <geom type="box" pos=" 0.000  0.014 0" size="0.021 0.007 0.012" rgba="0.92 0.86 0.12 1" density="700" friction="1.4 0.05 0.001"/>
-      <geom type="box" pos=" 0.000 -0.007 0" size="0.007 0.014 0.012" rgba="0.92 0.86 0.12 1" density="700" friction="1.4 0.05 0.001"/>
+      <!-- VIOLET, not yellow: yellow's 0.92 RED channel attracted the trained red colour drive (the net
+           never saw the T during warmup, nothing out-claims it) and "Roter Wuerfel" locked+grasped the T
+           (user-observed).  Violet keeps red/green channels weak; saturation stays high for the form mask. -->
+      <geom type="box" pos=" 0.000  0.014 0" size="0.021 0.007 0.012" rgba="0.45 0.12 0.9 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos=" 0.000 -0.007 0" size="0.007 0.014 0.012" rgba="0.45 0.12 0.9 1" density="700" friction="1.4 0.05 0.001"/>
     </body>
 
     <!-- target marker: a flat disk on the table (mocap = kinematic, moved per episode),

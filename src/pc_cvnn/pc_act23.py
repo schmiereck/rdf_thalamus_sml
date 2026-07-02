@@ -301,12 +301,13 @@ class CommandState23:
     SHAPE_KEY = {"obj_L": "L", "obj_U": "U"}
     MARKERS = ["target_sel_1", "target_sel_2", "target_sel_3"]
     OBJ_COL = {"obj_red": "#d23030", "obj_green": "#2fae40", "obj_blue": "#3358d2",
-               "obj_L": "#d98a2b", "obj_U": "#27b3b3", "obj_T": "#c9b52a"}
+               "obj_L": "#d98a2b", "obj_U": "#27b3b3", "obj_T": "#7a3fd0"}
 
     def __init__(self, sim):
         self.sim = sim; self.sel = 0; self.action = "grasp"; self.target_idx = 0
         self.policy = "self"          # "self" -> world-model wrist (long obj); "teacher" -> WRIST_ALIGN
         self.go = False; self.exit = False
+        self.auto = False             # AUTO-Lauf: random object + random target per episode (self-training)
         # INSTANCE copies: OPEN-SET discovery appends objects at runtime (a self-labelled class becomes a
         # commandable button) -- the class-level lists stay the pristine trained set.
         self.OBJECTS = list(CommandState23.OBJECTS)
@@ -401,6 +402,10 @@ class CommandPanel23:
         axN = self.fig.add_axes([0.035, 0.220, 0.16, 0.05])
         self.bN = Button(axN, "Objekt hinzufügen", color="#8a7430", hovercolor="#a89040")
         self.bN.on_clicked(self._introduce)
+        # AUTO-Lauf: self-play episodes (random object + random target) until toggled off
+        axAuto = self.fig.add_axes([0.205, 0.220, 0.115, 0.05])
+        self.bAuto = Button(axAuto, "Auto: aus", color="#3a3a5a", hovercolor="#50507a")
+        self.bAuto.on_clicked(self._toggle_auto)
         # named target buttons (top-right of the control band)
         self._tgt_btns = {}
         for i in range(len(state.MARKERS)):
@@ -443,6 +448,12 @@ class CommandPanel23:
     def _introduce(self, _e):
         if self._introduce_fn is not None:
             self._introduce_fn(); self._refresh()
+
+    def _toggle_auto(self, _e):
+        self.state.auto = not self.state.auto
+        self.bAuto.label.set_text("Auto: an" if self.state.auto else "Auto: aus")
+        self.bAuto.color = "#2a7a4a" if self.state.auto else "#3a3a5a"
+        self.bAuto.ax.set_facecolor(self.bAuto.color); self.fig.canvas.draw_idle()
 
     def add_discovered(self, idx):
         """Button for a SELF-DISCOVERED object (state.OBJECTS[idx]), appended to the object row."""
@@ -877,22 +888,31 @@ def run_self_learning_steering(headless=False):
         arm_home() does -- a physical robot can't teleport, and the user wants sim runs to stay connectable
         to the real rig.  Two legs: RAISE the claw first (a low sideways retreat could sweep the just-placed
         object), then bounded joint-space steps toward home.  NEAR home is enough (0.05 rad/joint): the next
-        episode starts from a SIMILAR pose, not a bit-identical one (run_combined gets arm_reset=False)."""
+        episode starts from a SIMILAR pose, not a bit-identical one (run_combined gets arm_reset=False).
+        WRIST: set_arm3_targets CLOBBERS joint_4 to HOME on every call (the aa8446a bug class) -- without a
+        per-step re-assert the wrist WHIPPED home at ground level on the first leg-1 step and flung the
+        just-placed object (user-observed).  So leg 1 HOLDS the episode's wrist angle while lifting; only
+        leg 2, at carry height, ramps it home at a bounded rate."""
         sim.target("joint_5", act16.J5_OPEN)
-        for k in range(60):                                    # leg 1: straight up to carry height
+        w = float(sim.d.qpos[sim.jqadr["joint_4"]])            # the wrist angle the episode ended with
+        HOME_W = HOME["joint_4"]
+        for k in range(60):                                    # leg 1: straight up, wrist HELD
             q3 = sim.arm3_angles(); h = sim.grasp_pos()
             if h[2] > act16.CARRY_Z - 0.01:
                 break
             sim.set_arm3_targets(q3 + bm.body.reach_velocity(q3, np.array([h[0], h[1], act16.CARRY_Z]),
                                                              gain=2.0, max_dq=0.026))
+            sim.target("joint_4", w)                           # re-assert vs the set_arm3_targets clobber
             sim.step(2)
             if panel is not None and k % 8 == 0:
                 panel.update(sim.render(CAM), "Arm hebt ab ...")
-        for k in range(240):                                   # leg 2: drive the joints home, bounded speed
+        for k in range(240):                                   # leg 2: joints home, wrist RAMPED home slowly
             q3 = sim.arm3_angles()
-            if float(np.max(np.abs(q3 - HOME_Q3))) < 0.05:
+            if float(np.max(np.abs(q3 - HOME_Q3))) < 0.05 and abs(w - HOME_W) < 0.1:
                 break
             sim.set_arm3_targets(q3 + np.clip(HOME_Q3 - q3, -0.03, 0.03))
+            w += float(np.clip(HOME_W - w, -0.02, 0.02))
+            sim.target("joint_4", w)
             sim.step(2)
             if panel is not None and k % 8 == 0:
                 panel.update(sim.render(CAM), "Arm fährt zur Ausgangsposition ...")
@@ -1044,11 +1064,19 @@ def run_self_learning_steering(headless=False):
     act16.run_combined._quiet = True
     panel.update(sim.render(CAM), "bereit — Objekt wählen, Greifer Teacher/Selbst-gelernt, Ausführen")
     ep = 0
-    while panel.wait() != "exit":
+    while not state.exit:
+        if not (state.go or state.auto):
+            panel.plt.pause(0.05); continue
+        if state.auto:                                         # AUTO-Lauf (user request): random object +
+            state.sel = int(crng.integers(len(state.OBJECTS)))  # freshly placed random target per episode --
+            state.target_idx = int(crng.integers(len(state.MARKERS)))   # the LIFELONG loop (world model +
+            state.place_selected_random(crng)                  # open-set glances) trains itself; toggle
+            panel._refresh()                                   # "Auto: aus" to stop after the episode
         state.go = False
-        print(f"  [Befehl {ep}] {state.label()} ...")
+        tag = "Auto" if state.auto else "Befehl"
+        print(f"  [{tag} {ep}] {state.label()} ...")
         ok, err = run_one()
-        line = f"[Befehl {ep}] {'GELIEFERT' if ok else 'NICHT geliefert'}  |  Abstand {err:.0f} mm"
+        line = f"[{tag} {ep}] {'GELIEFERT' if ok else 'NICHT geliefert'}  |  Abstand {err:.0f} mm"
         print("  " + line); panel.update(sim.render(CAM), line); ep += 1
     print("  Steering beendet.")
 

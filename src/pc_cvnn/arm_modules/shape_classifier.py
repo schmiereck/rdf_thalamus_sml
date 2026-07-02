@@ -347,12 +347,21 @@ class ShapeClassifierModule(ArmModule):
         dk = self._knn(z, self._ZX)
         if dk <= self.novel_th:
             return SHAPES[int(self.classify(desc).argmax())], dk
-        best_nm, best_d = None, np.inf
+        best_nm, best_d, second_d = None, np.inf, np.inf
         for nm, ex in self.open.items():
             d = self._knn(z, ex, k=1)                        # nearest exemplar (young sets are small)
             if d < best_d:
-                best_nm, best_d = nm, d
-        if best_nm is not None and best_d <= self.novel_th * OPEN_MARGIN:
+                best_nm, best_d, second_d = nm, d, best_d
+            elif d < second_d:
+                second_d = d
+        # claim gates (all MEASURED against the long-I vs T pair, the user-hit confusion):
+        #  * absolute: within the relaxed radius (young sets are pose-sparse),
+        #  * vs KNOWN: nearer than the trained manifold (T->known p50 9.9 < T->exI p10 12.6; without
+        #    this the I's class ABSORBED every T sighting -> the T was never born, no button),
+        #  * RELATIVE: clearly nearer than the second-best open class (kills tail cross-claims that
+        #    would POLLUTE an exemplar set -- one wrong exemplar collapses future distances, cascade).
+        if (best_nm is not None and best_d <= min(self.novel_th * OPEN_MARGIN, dk)
+                and best_d <= 0.8 * second_d):
             return best_nm, best_d
         return None, min(dk, best_d)
 
@@ -392,9 +401,13 @@ class ShapeClassifierModule(ArmModule):
                     # birth-time MERGE: a claim can MISS a young class across a pose change (deterministic
                     # renders repeat the miss NOVEL_CONFIRM times) -- if the newborn cluster sits within
                     # MERGE_MARGIN of an existing open class it IS that class seen anew, absorb it.
+                    # Same vs-KNOWN gate as claims: merging a cluster that is NEARER THE TRAINED MANIFOLD
+                    # than the host class mixes two forms (a mis-merged T POISONED the I's exemplars --
+                    # one wrong exemplar collapses future distances and the classes bleed together).
+                    dko = min(self._knn(q, self._ZX) for q in ex)
                     host = next((onm for onm, oex in self.open.items()
                                  if min(float(np.linalg.norm(a - b)) for a in ex for b in oex)
-                                 < self.novel_th * MERGE_MARGIN), None)
+                                 < min(self.novel_th * MERGE_MARGIN, dko)), None)
                     if host is not None:
                         self.open[host] = (self.open[host] + ex)[:OPEN_CAP]
                     else:
@@ -404,6 +417,20 @@ class ShapeClassifierModule(ArmModule):
                     self._novel_buf = [b for b in self._novel_buf if not any(b is q for q in near)]
                 else:
                     self._novel_buf.append(z)
+        self._novel_buf = self._novel_buf[-12:]              # stale far-pose sightings must not pile up
+        # CONSOLIDATE duplicates: the dko merge gate can force a SECOND class for the same form (far-pose
+        # re-birth); once both sets densify, same-form sets grow INTO each other (T-T p50 ~5.8) while
+        # different forms stay >= the cross floor (~12.5) -> min cross-distance < novel_th = same form.
+        # The OLDER name survives (it is the one act23 may have registered as a command).
+        for a in list(self.open_names):
+            for b in list(self.open_names):
+                if (self.open_names.index(a) < self.open_names.index(b)
+                        and a in self.open and b in self.open
+                        and min(float(np.linalg.norm(p - q))
+                                for p in self.open[a] for q in self.open[b]) < self.novel_th):
+                    self.open[a] = (self.open[a] + self.open[b])[:OPEN_CAP]
+                    del self.open[b]; self.open_names.remove(b)
+                    born = [nm for nm in born if nm != b]
         return born
 
     # ------------------------------------------------------------------
