@@ -121,6 +121,16 @@
       <geom type="box" pos=" 0.014  0.007 0" size="0.007 0.014 0.012" rgba="0.1 0.8 0.85 1" density="700" friction="1.4 0.05 0.001"/>
       <geom type="box" pos=" 0.000 -0.014 0" size="0.021 0.007 0.012" rgba="0.1 0.8 0.85 1" density="700" friction="1.4 0.05 0.001"/>
     </body>
+    <!-- OPEN-SET probe object: a T-shape the classifier is NEVER trained on.  Starts PARKED off-table so
+         no training phase ever sees it; act23's "Objekt hinzufuegen" drops it into the scene and the
+         open-set layer must DISCOVER it (novelty in |F| space) and self-label a new class. -->
+    <body name="obj_T" pos="0.58 -0.6 0.012">      <!-- T: 42mm crossbar + a centred stem, same thin bars;
+         parked NEXT TO (not on) the generic park spot 0.5,-0.6 the other objects get stacked on -->
+
+      <freejoint/>
+      <geom type="box" pos=" 0.000  0.014 0" size="0.021 0.007 0.012" rgba="0.92 0.86 0.12 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos=" 0.000 -0.007 0" size="0.007 0.014 0.012" rgba="0.92 0.86 0.12 1" density="700" friction="1.4 0.05 0.001"/>
+    </body>
 
     <!-- target marker: a flat disk on the table (mocap = kinematic, moved per episode),
          no collision so it never disturbs the cubes; also a visible cue for the camera.

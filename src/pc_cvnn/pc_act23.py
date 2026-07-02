@@ -301,12 +301,23 @@ class CommandState23:
     SHAPE_KEY = {"obj_L": "L", "obj_U": "U"}
     MARKERS = ["target_sel_1", "target_sel_2", "target_sel_3"]
     OBJ_COL = {"obj_red": "#d23030", "obj_green": "#2fae40", "obj_blue": "#3358d2",
-               "obj_L": "#d98a2b", "obj_U": "#27b3b3"}
+               "obj_L": "#d98a2b", "obj_U": "#27b3b3", "obj_T": "#c9b52a"}
 
     def __init__(self, sim):
         self.sim = sim; self.sel = 0; self.action = "grasp"; self.target_idx = 0
         self.policy = "self"          # "self" -> world-model wrist (long obj); "teacher" -> WRIST_ALIGN
         self.go = False; self.exit = False
+        # INSTANCE copies: OPEN-SET discovery appends objects at runtime (a self-labelled class becomes a
+        # commandable button) -- the class-level lists stay the pristine trained set.
+        self.OBJECTS = list(CommandState23.OBJECTS)
+        self.SHAPE_KEY = dict(CommandState23.SHAPE_KEY)
+
+    def add_object(self, label, body, shape_key):
+        """Register a SELF-DISCOVERED object: commandable like L/U, localised by its self-labelled open
+        class (`shape_key`, e.g. 'neu-1').  The body handle is GUI plumbing only -- perception (select /
+        track) runs purely on the class name."""
+        self.OBJECTS = self.OBJECTS + [(label, body, "shape")]
+        self.SHAPE_KEY[body] = shape_key
 
     def selected(self):
         return self.OBJECTS[self.sel]
@@ -382,9 +393,14 @@ class CommandPanel23:
             b = Button(ax, lbl, color=col, hovercolor=col); b.label.set_fontsize(7.5)
             b.on_clicked(lambda _e, k=i: self._set_obj(k)); self._obj_btns[i] = b
         self.fig.text(0.018, 0.178, "Objekt", color="#9fb4c8", fontsize=8, rotation=90, va="center")
-        # grasp-policy toggle
-        axPol = self.fig.add_axes([0.62, 0.150, 0.155, 0.055])
+        # grasp-policy toggle (right of the object row -- slot 6 belongs to a discovered form)
+        axPol = self.fig.add_axes([0.78, 0.150, 0.155, 0.055])
         self.bPol = Button(axPol, "", color="#3a5a44", hovercolor="#4a7256"); self.bPol.on_clicked(self._toggle_policy)
+        # OPEN-SET: drop the unknown probe object into the scene (the net must DISCOVER + self-label it)
+        self._introduce_fn = None
+        axN = self.fig.add_axes([0.035, 0.220, 0.16, 0.05])
+        self.bN = Button(axN, "Objekt hinzufügen", color="#8a7430", hovercolor="#a89040")
+        self.bN.on_clicked(self._introduce)
         # named target buttons (top-right of the control band)
         self._tgt_btns = {}
         for i in range(len(state.MARKERS)):
@@ -423,6 +439,20 @@ class CommandPanel23:
         if self._randomize_fn is None:
             return
         self._randomize_fn(); self.update(self.state.sim.render(self._cam), "Objekte neu gewürfelt"); self._refresh()
+
+    def _introduce(self, _e):
+        if self._introduce_fn is not None:
+            self._introduce_fn(); self._refresh()
+
+    def add_discovered(self, idx):
+        """Button for a SELF-DISCOVERED object (state.OBJECTS[idx]), appended to the object row."""
+        from matplotlib.widgets import Button
+        lbl, nm, _m = self.state.OBJECTS[idx]
+        ax = self.fig.add_axes([0.035 + 0.115 * idx, 0.150, 0.108, 0.055])
+        col = self.state.OBJ_COL.get(nm, "#888888")
+        b = Button(ax, lbl, color=col, hovercolor=col); b.label.set_fontsize(7.5)
+        b.on_clicked(lambda _e, k=idx: self._set_obj(k)); self._obj_btns[idx] = b
+        self._refresh()
 
     def _toggle(self, _e):
         self.state.action = "push" if self.state.action == "grasp" else "grasp"
@@ -475,7 +505,7 @@ def run_self_learning_steering(headless=False):
     print("act23 [viz] — self-learning grasper command-steering" + (" (headless self-test)" if headless else ""))
     sim = BracketArmSim(render_wh=(RES, RES)); sim.set_reach_site("contact")
     shape_half0 = {nm: sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)]].copy()
-                   for nm in ("obj_L", "obj_U")}           # pristine XML first-geom half-extents (repair below)
+                   for nm in ("obj_L", "obj_U", "obj_T")}  # pristine XML first-geom half-extents (repair below)
     bm = BodyModelModule(rng=np.random.default_rng(5)); bm.babble(sim, 4000)
     state = CommandState23(sim)
     panel = None
@@ -586,19 +616,28 @@ def run_self_learning_steering(headless=False):
     # SPACING matters: the L spans 56mm (reach ~35mm from its centre), so two shapes pointing at each other need
     # ~70mm of centre clearance or their geoms INTERPENETRATE at placement.  mj_forward doesn't resolve contacts,
     # so an overlap is INVISIBLE in the placed render -- then the first sim.step in run_combined ejects the
-    # overlapping shape ("a segment snaps/twists shortly after Ausfuehren").  These slots keep every pair >=87mm
-    # apart; with the small jitter below the worst case stays ~76mm > 70mm, so no overlap can occur.
-    SLOTS = [(-0.09, 0.20), (0.0, 0.20), (0.09, 0.20), (-0.055, 0.12), (0.055, 0.12)]
+    # overlapping shape ("a segment snaps/twists shortly after Ausfuehren").  SIX slots (two rows) so the
+    # open-set probe object has a place once discovered: min pair = the 78mm row gap, jitter +-3mm keeps the
+    # worst case ~72mm > 70mm.  Rows stay inside the PROVEN reach envelope: top corners r~0.221 = the old
+    # 5-slot corners (a first cut at y=0.205/x=0.10, r=0.229, made BOTH top corner grasps fail -- reach
+    # edge); bottom r>=0.119 stays outside BASE_CLEAR=0.11 (near-base grasps fail mechanically inside).
+    SLOTS = [(-0.095, 0.20), (0.0, 0.20), (0.095, 0.20), (-0.10, 0.122), (0.0, 0.122), (0.10, 0.122)]
+    scene_slots = {}                                           # body -> slot index (finds the FREE slot)
 
     def randomize_objects():
         sim.reset_home()
+        bodies = [(nm, m) for _l, nm, m in state.OBJECTS]
+        if NOVEL_BODY in scene and all(nm != NOVEL_BODY for nm, _ in bodies):
+            bodies.append((NOVEL_BODY, "shape"))               # introduced but not yet discovered: keep it in play
         order = list(range(len(SLOTS))); crng.shuffle(order)   # random object<->slot assignment (variety)
-        for (_l, nm, m), si in zip(state.OBJECTS, order):
-            p = np.array(SLOTS[si], float) + crng.uniform(-0.004, 0.004, 2)   # small jitter
+        scene_slots.clear()
+        for (nm, m), si in zip(bodies, order):
+            p = np.array(SLOTS[si], float) + crng.uniform(-0.003, 0.003, 2)   # small jitter
             z = float(LONG_HALF[2]) if m == "long" else 0.012
             yaw = crng.uniform(0, np.pi) if m == "long" else crng.uniform(0, 2 * np.pi)
-            scene[nm] = (p, z, float(yaw))
+            scene[nm] = (p, z, float(yaw)); scene_slots[nm] = si
         place_all()
+        open_set_glance()                                      # lifelong open-set look at the fresh scene
         if panel is not None:                                  # show the placed scene immediately (decide from it)
             panel.update(sim.render(CAM), "Szene platziert — Objekt wählen und Ausführen")
             if vc.viz is not None:                             # RE-CENTER the fovea on a fresh scene: the old
@@ -627,8 +666,82 @@ def run_self_learning_steering(headless=False):
         #   on the first step of Ausfuehren.  With the well-spaced slots this is a no-op (objects stay put).
         state.sync_active()
 
+    # ------------------------------------------------------------------
+    # OPEN-SET form learning: the reserve probe body obj_T was NEVER seen by any training phase (parked
+    # off-table in the XML).  "Objekt hinzufügen" drops it into a free slot; the net must DISCOVER it
+    # (consistent novel |F| sightings -> a self-labelled class, shape_classifier.observe_scene) and it
+    # then becomes commandable through the SAME form pipeline as L/U (select/track/grasp by class name).
+    # NOTE an HONEST side discovery: the LONG bar (obj_blue, resized at runtime) is ALSO form-untrained,
+    # so the lifelong glances typically self-label IT first ('neu-1') -- correct open-set behaviour, its
+    # sightings then claim that class instead of feeding the buffer.  It is not REGISTERED as a command
+    # (it has its own button/path already); only obj_T maps to a new button, usually as 'neu-2'.
+    # ------------------------------------------------------------------
+    NOVEL_BODY = "obj_T"
+
+    def _register_open_class(cname):
+        """A class the net just SELF-LABELLED becomes commandable: append the object to the GUI list and
+        key its localisation/tracking on the open-class name.  The body handle is command PLUMBING only
+        (which MuJoCo body the button stands for) -- select / track / situation_feats run purely on the
+        class name the net invented."""
+        if NOVEL_BODY in state.SHAPE_KEY or NOVEL_BODY not in scene:
+            return
+        label = f"Neue Form {len(shape_clf.open_names)}"
+        state.add_object(label, NOVEL_BODY, cname)
+        act16.OBJS = [nm for _l, nm, _m in state.OBJECTS]; act16.SCENE_N = len(act16.OBJS)
+        print(f"  [open-set] NEUE FORM selbst benannt: '{cname}' -> Kommando '{label}'", flush=True)
+        if panel is not None:
+            panel.add_discovered(len(state.OBJECTS) - 1)
+            panel.update(sim.render(CAM), f"Neue Form entdeckt und selbst benannt: '{cname}' — jetzt kommandierbar")
+
+    def open_set_glance():
+        """One open-set LOOK at the current scene: unknown blobs feed the novelty buffer, a young class's
+        exemplar set grows over new poses (observe_scene); a class born here becomes a commandable object.
+        Runs at scene EVENTS (placement, after a command), not per tracked frame."""
+        if shape_clf.novel_th is None:
+            return []
+        saved = sim.d.mocap_pos.copy()                         # observe_scene parks the markers -> restore
+        born = shape_clf.observe_scene(sim, bounds=(-0.105, 0.105, 0.075, 0.205))   # only inside the
+        sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)   # calibrated workspace (slots reach
+        #   x 0.103 / y 0.203 max; anything beyond lies where a knocked/mis-dropped object renders
+        #   clipped or distorted and would read consistently-"novel" for a boring reason)
+        if os.environ.get("ACT23_DEBUG", "0") == "1" and shape_clf.last_events:
+            print(f"    [dbg open-set] {shape_clf.last_events}  buffer={len(shape_clf._novel_buf)}", flush=True)
+        for cname in born:
+            _register_open_class(cname)
+        return born
+
+    def introduce_object():
+        """'Objekt hinzufügen': drop the NEVER-TRAINED probe object into a free slot.  The net then has to
+        DISCOVER it -- consistent open-set sightings commit a self-labelled class and the new command
+        button appears.  No truth label anywhere; if the glances don't confirm, the object simply stays on
+        the table and every later scene glance keeps observing it."""
+        if NOVEL_BODY in scene:
+            if panel is not None:
+                panel.update(sim.render(CAM), "Das Objekt ist schon in der Szene")
+            return
+        free = [si for si in range(len(SLOTS)) if si not in scene_slots.values()]
+        si = int(free[0]) if free else 0
+        p = np.array(SLOTS[si], float) + crng.uniform(-0.003, 0.003, 2)
+        yaw = float(crng.uniform(0, 2 * np.pi))
+        _set_sizes()
+        sim.set_object(NOVEL_BODY, p, z=0.012, yaw=yaw)
+        mujoco.mj_forward(sim.m, sim.d); sim.step(60)
+        scene[NOVEL_BODY] = (p, 0.012, yaw); scene_slots[NOVEL_BODY] = si
+        if panel is not None:
+            panel.update(sim.render(CAM), "Ein unbekanntes Objekt ist aufgetaucht ...")
+        for g in range(4):                                     # NOVEL_CONFIRM sightings + one spare
+            open_set_glance()
+            if NOVEL_BODY in state.SHAPE_KEY:
+                break
+            if panel is not None:
+                panel.update(sim.render(CAM), f"Netz beobachtet das unbekannte Objekt ({g + 1}) ...")
+            sim.step(20)
+        if NOVEL_BODY not in state.SHAPE_KEY and panel is not None:
+            panel.update(sim.render(CAM), "Noch keine neue Klasse — das Netz beobachtet bei jedem Befehl weiter")
+
     if panel is not None:
         panel._randomize_fn = randomize_objects     # wire "Objekte neu" (panel built before randomize_objects existed)
+        panel._introduce_fn = introduce_object      # wire "Objekt hinzufügen" (open-set discovery)
     randomize_objects()
     # CONTINUITY: make run_combined treat ALL 5 objects as its scene -> with SCENE_N = all, keep=all so it never
     # PARKS a distractor off-table, and reposition_strays never fires (nothing is a stray) -> nothing teleports.
@@ -859,11 +972,14 @@ def run_self_learning_steering(headless=False):
                 vc.viz.update(sim.render(CAM), "Szene aktualisiert")   # restore frame -> stale layout); a plain
             except Exception:                                  #   image refresh -- no colour-keyed track step
                 pass                                           #   that would walk the gaze off the final view
+        open_set_glance()                  # lifelong OPEN-SET look at the settled scene: young self-labelled
+        #   classes keep growing exemplars over the new poses; an undiscovered novel object keeps feeding
+        #   the buffer (discovery can also happen HERE, not only at "Objekt hinzufügen")
         if _dbg:
             print(f"    [dbg] after ep : {_pos()}", flush=True)
             hs = {nm: np.round(sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)]] * 1000, 1).tolist()
-                  for nm in ("obj_L", "obj_U")}            # the exact failure mode: a resized L/U first geom
-            print(f"    [dbg] L/U half : {hs}  (XML: L [7,28,12] U [7,14,12])", flush=True)
+                  for nm in ("obj_L", "obj_U", "obj_T")}   # the exact failure mode: a resized first geom
+            print(f"    [dbg] L/U/T half : {hs}  (XML: L [7,28,12] U [7,14,12] T [21,7,12])", flush=True)
         _save(f"{body}_2after_restore")
         # LIFELONG loop (EVERY object): every command IS a trial.  Log the perceived situation, the wrist
         # that actually ran (self-selected, OR the teacher's -- run_combined exposes it as _wrist_tgt, so
@@ -887,6 +1003,19 @@ def run_self_learning_steering(headless=False):
         for k in range(len(state.OBJECTS)):
             state.sel = k; ok, err = run_one()
             print(f"    {state.OBJECTS[k][0]:16s}: {'GELIEFERT' if ok else 'NICHT'}  ({err:.0f}mm)", flush=True)
+        print("  open-set: das nie trainierte obj_T taucht auf ...")
+        introduce_object()
+        if NOVEL_BODY in state.SHAPE_KEY:
+            print(f"    entdeckt + selbst benannt: '{state.SHAPE_KEY[NOVEL_BODY]}'  "
+                  f"(Klassen: {shape_clf.open_names})", flush=True)
+            state.sel = len(state.OBJECTS) - 1
+            ok, err = run_one()
+            print(f"    {state.OBJECTS[state.sel][0]:16s}: {'GELIEFERT' if ok else 'NICHT'}  ({err:.0f}mm)", flush=True)
+        else:
+            print(f"    NICHT entdeckt (buffer={len(shape_clf._novel_buf)}, th={shape_clf.novel_th:.2f}) -- "
+                  f"EXPECTED at mini ACT23_SHAPE_STEPS: novelty needs the trained manifold DENSE enough "
+                  f"(measured: at 250 steps known-max 9.4 vs T-p10 9.4 OVERLAP; at >=1200 steps 6.1 vs 8.6 "
+                  f"separate cleanly).  The GUI default 2500 discovers.", flush=True)
         return
 
     act16.run_combined._quiet = True

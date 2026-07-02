@@ -17,6 +17,17 @@ Design:
    by the homography (overview-px <-> world, fit by DLT in calibrate()).  So rotation = phase holds in the
    rectified world frame.  cam="top" instead samples directly in px (a straight-down view needs no rectify).
 
+4. OPEN-SET (self-labelled classes): the trained classes are NOT a closed world.  Novelty gate = kNN
+   DISTANCE TO THE TRAINING EXEMPLARS in the standardised |F| space, threshold calibrated LEAVE-ONE-OUT on
+   the training set itself.  (Measured: class-prototype / diag-Mahalanobis distances OVERLAP -- the L class
+   spreads as wide as a novel T sits far -- while kNN separates cleanly: held-out known max ~6.2 vs novel-T
+   min ~7.7, p50 ~9.9, at LOO p99.5 = 6.0.)  A detection beyond the threshold from the training set AND
+   every self-labelled class is a NOVEL form (shape=None); observe_scene() collects such sightings and,
+   once several CONSISTENT ones agree (temporal consistency -- a persistent object, not a glint), COMMITS a
+   new self-labelled class ("neu-1", ...) whose exemplar set keeps growing with every later view.  No truth
+   label is ever involved: the agent discovers, names and afterwards selects/tracks/grasps the new form
+   through the same pipeline.
+
 Ports
   out : shape_logits (3)   cube / L / U class scores
         shape_id     (1)   argmax class index (0=cube, 1=L, 2=U)
@@ -35,6 +46,14 @@ from pc_cvnn.connection import ConnType
 
 SHAPES = ["cube", "L", "U"]
 SHAPE_BODY = {"cube": ("obj_red", np.array([0.012, 0.012, 0.012])), "L": ("obj_L", None), "U": ("obj_U", None)}
+NOVEL_MARGIN = float(os.environ.get("ACT_SHAPE_NOVEL_MARGIN", "1.2"))   # novelty gate = LOO-kNN q99.5 * this
+NOVEL_CONFIRM = int(os.environ.get("ACT_SHAPE_NOVEL_CONFIRM", "3"))     # consistent sightings before a class is born
+NOVEL_K = 3                                                             # kNN order of the novelty distance
+OPEN_MARGIN = float(os.environ.get("ACT_SHAPE_OPEN_MARGIN", "1.6"))     # claim radius for open classes, * novel_th
+#   (measured: the same novel form seen at DIFFERENT poses sits p50 ~8.3 / p90 ~11.2 apart while novel_th
+#   is ~7.3 -- a sparse young exemplar set needs the relaxed radius or later poses would read novel again)
+MERGE_MARGIN = 2.0                                                      # birth-time merge radius, * novel_th
+OPEN_CAP = 80                                                           # max stored exemplars per self-labelled class
 SAT_TH = 0.15
 GRIP_PX = 18                                             # gripper-sized window (px) for the densest-grip-point search
 RED = np.array([0.9, 0.1, 0.1])
@@ -93,6 +112,15 @@ class ShapeClassifierModule(ArmModule):
         self.W2 = self.rng.normal(0, 1 / np.sqrt(hid), (len(SHAPES), hid)); self.b2 = np.zeros(len(SHAPES))
         self.head = PCShapeHead(din, len(SHAPES), rng=self.rng) if self.engine == "pc" else None
         self.fmu = np.zeros(din); self.fsd = np.ones(din)
+        # OPEN-SET state: training exemplars in the standardised |F| space + the LOO-calibrated kNN
+        # novelty threshold (both from train()); self-labelled classes + unclaimed novel sightings.
+        self._ZX = None                                      # trained-class exemplars (z space, novelty gate)
+        self.novel_th = None                                 # kNN z-distance beyond which a view is NOVEL
+        self.area_hi = None                                  # blob-area sanity cap (merged-blob guard)
+        self.open = {}                                       # self-labelled class name -> [z exemplars]
+        self.open_names = []                                 # their names in creation order (ids after SHAPES)
+        self._novel_buf = []                                 # novel z's awaiting temporal consistency
+        self.last_events = []                                # last observe_scene glance trail (debugging)
         self._last = None
         self.add_in("shape_cmd", len(SHAPES), "one-hot shape command (cube/L/U) to select by FORM")
         self.add_out("shape_logits", len(SHAPES), "cube / L / U class scores")
@@ -240,7 +268,7 @@ class ShapeClassifierModule(ArmModule):
             self.calibrate(sim, rng=np.random.default_rng(3))
         sim.reset_home(); self._park_markers(sim)
         allb = ["obj_red", "obj_green", "obj_blue", "obj_L", "obj_U"]
-        X, Y = [], []
+        X, Y, areas = [], [], []
         for i in range(steps):
             k = int(rng.integers(len(SHAPES))); body, half = SHAPE_BODY[SHAPES[k]]
             for o in allb:
@@ -253,12 +281,15 @@ class ShapeClassifierModule(ArmModule):
                            yaw=rng.uniform(0, 2 * np.pi)); mujoco.mj_forward(sim.m, sim.d)
             if viz_fn is not None and i % viz_every == 0:        # show the form-training live (every N steps)
                 viz_fn(i, steps, SHAPES[k])
-            d = self.descriptor(self._render_u8(sim))
+            img = self._render_u8(sim)
+            d = self.descriptor(img)
             if d is not None:
-                X.append(d); Y.append(k)
+                X.append(d); Y.append(k); areas.append(float(self._mask(img).sum()))
         X = np.array(X); Y = np.array(Y); n = len(X)
         self.fmu = X.mean(0); self.fsd = X.std(0) + 1e-9
         self._X, self._Y = X, Y
+        self.area_hi = float(np.quantile(areas, 0.995)) * 1.5   # merged-blob guard (see observe_scene)
+        self._fit_novelty()                                  # open-set gate: exemplars + LOO kNN threshold
         if self.engine == "pc":                              # fit the complex PC head on standardised |F|
             self.head.fit((X - self.fmu) / self.fsd, Y, epochs=min(epochs, 8), rng=rng)
             chk = rng.choice(n, min(n, 300), replace=False)  # train acc on a subset (PC infer is per-sample)
@@ -273,6 +304,104 @@ class ShapeClassifierModule(ArmModule):
                 dh = (p @ self.W2) * (h > 0)
                 self.W1 -= lr * (dh.T @ ((xb - self.fmu) / self.fsd)); self.b1 -= lr * dh.sum(0)
         return float((self._forward(X)[0].argmax(1) == Y).mean())
+
+    # ------------------------------------------------------------------
+    # OPEN-SET layer: prototypes, novelty gate, self-labelled classes
+    # ------------------------------------------------------------------
+    def _z(self, desc):
+        return (np.asarray(desc, float) - self.fmu) / self.fsd
+
+    @staticmethod
+    def _knn(z, Z, k=NOVEL_K):
+        """Distance from z to its k-th nearest exemplar in Z (fewer exemplars -> the farthest available)."""
+        d = np.sqrt(((np.asarray(Z) - z) ** 2).sum(1))
+        return float(np.sort(d)[min(k, len(d)) - 1])
+
+    def _fit_novelty(self):
+        """Calibrate the open-set NOVELTY gate from the training views: keep them as EXEMPLARS (z space)
+        and set the threshold LEAVE-ONE-OUT -- the kNN distance every training view has to the REST of the
+        set, generous quantile * margin.  (Prototype / Mahalanobis distances measured NON-separating here:
+        the L class alone spreads as far as a novel form sits away; kNN keeps the local manifold tight.)"""
+        Z = (self._X - self.fmu) / self.fsd
+        self._ZX = Z
+        G = Z @ Z.T                                          # pairwise sq-distances via the Gram matrix
+        sq = np.maximum(np.diag(G)[:, None] + np.diag(G)[None, :] - 2 * G, 0.0)
+        loo = np.sqrt(np.sort(sq, axis=1)[:, NOVEL_K])       # k-th neighbour EXCLUDING self (index 0)
+        self.novel_th = float(np.quantile(loo, 0.995)) * NOVEL_MARGIN
+
+    def all_names(self):
+        return SHAPES + self.open_names
+
+    def resolve(self, desc):
+        """OPEN-SET classification of one |F| descriptor -> (name, kNN distance).  Stage 1: within
+        novel_th of the TRAINING exemplars -> a base class, the trained head decides (it is the accurate
+        boundary there).  Stage 2: nearest self-labelled class within the RELAXED claim radius
+        (OPEN_MARGIN * novel_th -- young exemplar sets are sparse over poses, see OPEN_MARGIN above).
+        Neither -> (None, d): a NOVEL form."""
+        if self.novel_th is None:                            # not calibrated (train() not run) -> closed set
+            return SHAPES[int(self.classify(desc).argmax())], 0.0
+        z = self._z(desc)
+        dk = self._knn(z, self._ZX)
+        if dk <= self.novel_th:
+            return SHAPES[int(self.classify(desc).argmax())], dk
+        best_nm, best_d = None, np.inf
+        for nm, ex in self.open.items():
+            d = self._knn(z, ex, k=1)                        # nearest exemplar (young sets are small)
+            if d < best_d:
+                best_nm, best_d = nm, d
+        if best_nm is not None and best_d <= self.novel_th * OPEN_MARGIN:
+            return best_nm, best_d
+        return None, min(dk, best_d)
+
+    def observe_scene(self, sim, min_area=40, bounds=None):
+        """OPEN-SET self-labelling GLANCE: segment+resolve the scene; every NOVEL blob feeds the candidate
+        buffer, and once NOVEL_CONFIRM sightings AGREE (mutual z-distance < novel_th -- the same PERSISTENT
+        form, not a glint or an occlusion artefact) a new class is COMMITTED and self-named ("neu-1", ...).
+        Sightings that match an already self-labelled class EXTEND its exemplar set (capped), so the
+        self-label keeps improving with every later view/pose.  No truth label anywhere.  Call this at
+        scene events (placement, after a command), NOT per tracked frame (near-duplicate frames would
+        swamp the exemplar sets).  `bounds` (xmin,xmax,ymin,ymax): only sightings INSIDE this world region
+        count -- the descriptor is only calibrated where training sampled; an object dropped at the
+        workspace EDGE renders clipped/distorted and reads consistently "novel" for a boring reason
+        (measured: a mis-delivered cube at y=0.24 bred a phantom class).  Returns newly created names."""
+        born = []
+        self.last_events = []                                # glance debug trail (novel/claim/born + where)
+        for det in self.perceive_all(sim, min_area=min_area):
+            if self.area_hi is not None and det["area"] > self.area_hi:
+                continue                                     # oversize blob = two objects MERGED (pushed
+                #   together mid-scene) -- never a valid form sighting, would breed a phantom class
+            if bounds is not None and det["pos"] is not None:
+                x, y = float(det["pos"][0]), float(det["pos"][1])
+                if not (bounds[0] <= x <= bounds[1] and bounds[2] <= y <= bounds[3]):
+                    continue                                 # outside the calibrated workspace -> no verdict
+            z = self._z(det["desc"]); nm = det["shape"]
+            if nm is not None and nm not in SHAPES:          # open-class match -> grow its exemplar set
+                self.last_events.append(("claim", nm, None if det["pos"] is None
+                                         else np.round(det["pos"], 3).tolist()))
+                if len(self.open[nm]) < OPEN_CAP:
+                    self.open[nm].append(z)
+            elif nm is None:                                 # NOVEL sighting -> temporal-consistency buffer
+                self.last_events.append(("novel", None if det["pos"] is None
+                                         else np.round(det["pos"], 3).tolist(), int(det["area"])))
+                near = [b for b in self._novel_buf if float(np.linalg.norm(b - z)) < self.novel_th]
+                if len(near) + 1 >= NOVEL_CONFIRM:
+                    ex = near + [z]
+                    # birth-time MERGE: a claim can MISS a young class across a pose change (deterministic
+                    # renders repeat the miss NOVEL_CONFIRM times) -- if the newborn cluster sits within
+                    # MERGE_MARGIN of an existing open class it IS that class seen anew, absorb it.
+                    host = next((onm for onm, oex in self.open.items()
+                                 if min(float(np.linalg.norm(a - b)) for a in ex for b in oex)
+                                 < self.novel_th * MERGE_MARGIN), None)
+                    if host is not None:
+                        self.open[host] = (self.open[host] + ex)[:OPEN_CAP]
+                    else:
+                        name = f"neu-{len(self.open_names) + 1}"
+                        self.open_names.append(name); self.open[name] = ex
+                        born.append(name)
+                    self._novel_buf = [b for b in self._novel_buf if not any(b is q for q in near)]
+                else:
+                    self._novel_buf.append(z)
+        return born
 
     # ------------------------------------------------------------------
     def perceive(self, sim):
@@ -305,7 +434,18 @@ class ShapeClassifierModule(ArmModule):
                 continue                                     # drop specks / glints
             ctr = self._centroid(comp)                       # world (overview) or px (top)
             F = self._harmonics_at(comp, ctr)
-            logits = self.classify(np.abs(F).ravel()); k = int(logits.argmax())
+            desc = np.abs(F).ravel()
+            # OPEN-SET resolve: a trained class (head decides), a self-labelled class (prototype claims
+            # it), or None = NOVEL form.  prob for open classes = prototype proximity (no softmax exists).
+            name, ndist = self.resolve(desc)
+            if name is None:
+                k, prob = -1, 0.0
+            elif name in SHAPES:
+                logits = self.classify(desc); k = int(logits.argmax())
+                prob = float(_softmax(logits)[k])
+            else:
+                k = len(SHAPES) + self.open_names.index(name)
+                prob = float(np.clip(1.0 - ndist / (2.0 * self.novel_th), 0.05, 1.0))
             ys, xs = np.nonzero(comp)
             # GRASP point: the MATERIAL point nearest the centroid -- central + on a (thin) bar, which the
             # gripper spans cleanly.  Best for the thin-bar shapes (the cube-built / tip / wrist variants were
@@ -314,11 +454,11 @@ class ShapeClassifierModule(ArmModule):
             if self.H is not None:
                 W = self._px_to_world(np.column_stack([xs, ys]))            # world coords of the component px
                 grasp = W[int(np.argmin(np.linalg.norm(W - ctr, axis=1)))]  # nearest material to the centroid
-            out.append({"shape": SHAPES[k], "id": k, "prob": float(_softmax(logits)[k]),
+            out.append({"shape": name, "id": k, "prob": prob,   # shape=None + id=-1 = a NOVEL form (open set)
                         "pos": (ctr if self.H is not None else None), "grasp_xy": grasp, "grasp_yaw": 0.0,
-                        "yaw": self._yaw_from(F), "yaw4": self._yaw4_from(F),
+                        "yaw": self._yaw_from(F), "yaw4": self._yaw4_from(F), "area": float(comp.sum()),
                         "px": np.array([xs.mean(), ys.mean()]),
-                        "desc": np.abs(F).ravel()})            # the raw rotation-invariant |F| descriptor --
+                        "desc": desc})                         # the raw rotation-invariant |F| descriptor --
         return out                                             #   OPEN-WORLD (any object yields one, no class slot)
 
     def desc_embed(self, desc):
@@ -332,10 +472,11 @@ class ShapeClassifierModule(ArmModule):
     def select(self, sim, shape_cmd, min_area=40):
         """Command CONDITIONED on FORM (the colour-free analogue of the colour SelectionHead): among ALL
         objects detected by perceive_all, return the detection whose SHAPE matches the command -- its world
-        xy + the full detection -- or None if no such shape is present.  shape_cmd: 'cube'/'L'/'U' or 0/1/2;
-        if several match (e.g. two cubes) the most confident is returned.  Publishes selected_xy."""
-        k = shape_cmd if isinstance(shape_cmd, (int, np.integer)) else SHAPES.index(shape_cmd)
-        matches = [d for d in self.perceive_all(sim, min_area=min_area) if d["id"] == k]
+        xy + the full detection -- or None if no such shape is present.  shape_cmd: a class NAME (trained
+        'cube'/'L'/'U' OR a self-labelled open class like 'neu-1') or its index into all_names(); if
+        several match (e.g. two cubes) the most confident is returned.  Publishes selected_xy."""
+        nm = self.all_names()[shape_cmd] if isinstance(shape_cmd, (int, np.integer)) else shape_cmd
+        matches = [d for d in self.perceive_all(sim, min_area=min_area) if d["shape"] == nm]
         if not matches:
             self._sel = None; self.set_out("selected_xy", None); return None
         best = max(matches, key=lambda d: d["prob"])
