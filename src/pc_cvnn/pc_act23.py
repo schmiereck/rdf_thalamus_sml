@@ -37,6 +37,7 @@ import numpy as np
 import mujoco
 
 from pc_cvnn.pc_act14 import BracketArmSim, HOME
+from pc_cvnn.pc_act18 import F as HEX_F
 from pc_cvnn.arm_modules.body_model import BodyModelModule
 from pc_cvnn.arm_modules.shape_classifier import ShapeClassifierModule
 from pc_cvnn.arm_modules.object_orientation import ObjectOrientationModule
@@ -621,50 +622,67 @@ def run_self_learning_steering(headless=False):
             return sim.obj_pos(body)[:2], None, "grasp"        #   localise privileged (act23 point = the WRIST)
         return vc.perceive(body), None, None                   # cubes: the net localises by colour
 
-    def track_and_plot():
-        obs = vc.track()
+    def plot_surprise():
         if panel is not None:
             s = vc.surprise()
             q3 = sim.arm3_angles()                             # body-model FK surprise: predicted vs real hand
             bmm = float(np.linalg.norm(bm.body.fk(q3) - sim.grasp_pos())) * 1000.0   # (was always 0: wrong attr)
             if s is not None:
                 panel.surp_viz.push(s["sensor"], s["state"], s["total"], s["relax"], bmm)
+
+    def track_and_plot():
+        obs = vc.track()
+        plot_surprise()
         return obs
 
     def make_shape_track(body):
-        """FORM-aware live tracker (the user's fovea goal, v1): per tracked frame, segment+classify the
-        scene (perceive_all) and return the commanded SHAPE's grasp point + confidence in run_combined's
-        (obs, conf) servo protocol -- approach corrections now work for L/U exactly like the colour servo
-        (before, the colour fovea kept tracking whatever colour was last commanded: the user's complaint).
-        The hex fovea can't be command-keyed to a FORM, so its DISPLAY is PINNED onto the tracked shape
-        each frame; vc.track then runs one follow step from there (display + surprise plot + lifelong hex
-        learning stay alive) but its colour-keyed observation is NOT used for the servo."""
+        """FORM-aware live tracker (the user's fovea goal): per tracked frame, segment+classify the scene
+        (perceive_all) and return the commanded SHAPE's grasp point + confidence in run_combined's
+        (obs, conf) servo protocol -- approach corrections work for L/U exactly like the colour servo.
+        TWO separate uses of the detections (the v1 lesson):
+          * SERVO obs: commanded-CLASS match + a 5cm world jump gate.  Only valid while the object rests
+            ON the table (the px->world homography is a TABLE-plane map) -- run_combined only servos in
+            over/lower anyway.
+          * DISPLAY follow: nearest component in IMAGE px, ANY class -- a lifted/carried shape leaves the
+            table plane (world pos wrong) and often mis-classifies, but its image blob stays trackable ->
+            the fovea window follows the shape through grasp AND transport, like the colour fovea does.
+        The hex net can't be command-keyed to a FORM, so the form tracker DRIVES the hex view itself:
+        one perception step at the followed px (fovea.step: lifelong hex learning + surprise stay alive)
+        and the viz drawn at the SAME gaze -- box and cells consistent, no colour-keyed follow step to
+        fight the pin, no zoom-out spiral (v1 called vc.track() from the pin: the colour drive walked the
+        box away from the sampled crop and zoomed out every frame -- the user's frozen/mismatched views)."""
         key = state.SHAPE_KEY[body]
-        mem = {"xy": None}                                     # running position belief (mis-detection gate)
+        mem = {"xy": None, "px": None}                         # world belief (servo) + image belief (display)
+        vc.fovea.z = 1.0                                       # defined DETAIL zoom for the form view
 
         def _track():
             saved = sim.d.mocap_pos.copy()                     # perceive_all parks the markers -> restore
             dets = shape_clf.perceive_all(sim)
             sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
-            cands = [d for d in dets if d["shape"] == key and d["pos"] is not None]
             obs, conf = None, 0.0
+            cands = [d for d in dets if d["shape"] == key and d["pos"] is not None]
             if cands:
-                if mem["xy"] is None:
-                    best = max(cands, key=lambda d: d["prob"])
-                else:                                          # nearest to the running belief; a JUMP means a
-                    best = min(cands, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"]) - mem["xy"])))
-                    if float(np.linalg.norm(np.asarray(best["pos"]) - mem["xy"])) > 0.05:
-                        best = None                            #   second same-shape blob / mis-class -> hold belief
-                if best is not None:
+                best = (max(cands, key=lambda d: d["prob"]) if mem["xy"] is None
+                        else min(cands, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"]) - mem["xy"]))))
+                if mem["xy"] is None or float(np.linalg.norm(np.asarray(best["pos"]) - mem["xy"])) <= 0.05:
                     obs = np.asarray(best["grasp_xy"], float)  # correct toward the GRASP point (what the belief
                     conf = float(best["prob"])                 #   holds), not the centroid (off-material on L/U)
-                    mem["xy"] = np.asarray(best["pos"], float)
-            if mem["xy"] is not None:                          # pin the hex fovea DISPLAY onto the tracked shape
-                try:
-                    vc._P["state"]["gaze"] = np.asarray(shape_clf._world_to_px(mem["xy"])[0], float)
-                except Exception:
-                    pass
-            track_and_plot()                                   # one hex follow frame from the pinned gaze
+                    mem["xy"] = np.asarray(best["pos"], float); mem["px"] = np.asarray(best["px"], float)
+            if obs is None and mem["px"] is not None and dets:  # class match failed (lifted/mis-class) ->
+                near = min(dets, key=lambda d: float(np.linalg.norm(np.asarray(d["px"]) - mem["px"])))
+                if float(np.linalg.norm(np.asarray(near["px"]) - mem["px"])) < 40.0:   # follow the blob in px
+                    mem["px"] = np.asarray(near["px"], float)
+            if mem["px"] is not None:                          # form tracker drives the hex fovea view
+                gaze = np.clip(mem["px"], HEX_F * vc.fovea.K, RES - HEX_F * vc.fovea.K)
+                vc._P["state"]["gaze"] = gaze
+                img = sim.render(CAM)
+                arr = vc.fovea.step(img, gaze, vc._P["state"]["cmd"], True)
+                if vc.viz is not None:
+                    vc.viz.fovea(img, gaze, vc.fovea._ek(), np.clip(arr[:, :, 1:], 0, 1),
+                                 f"Form-Tracker folgt {key}")
+                plot_surprise()
+            else:
+                track_and_plot()                               # nothing tracked yet -> the colour follow frame
             return obs, conf
 
         return _track
@@ -762,6 +780,11 @@ def run_self_learning_steering(headless=False):
                 cp = sim.obj_pos(nm)[:2].copy(); cz = snap[nm][1]
                 sim.set_object(nm, cp, z=cz, yaw=sim.obj_yaw(nm))
         mujoco.mj_forward(sim.m, sim.d); state.sync_active()
+        if panel is not None:                                  # refresh the hex fovea views with the RESTORED
+            try:                                               #   scene: they last rendered a pre-restore frame,
+                track_and_plot()                               #   so after the object snap-back the views showed
+            except Exception:                                  #   an inconsistent (stale) object layout
+                pass
         if _dbg:
             print(f"    [dbg] after ep : {_pos()}", flush=True)
             hs = {nm: np.round(sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)]] * 1000, 1).tolist()
