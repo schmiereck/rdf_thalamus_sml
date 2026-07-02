@@ -498,8 +498,24 @@ def run_self_learning_steering(headless=False):
     sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
     oo = ObjectOrientationModule(); oo.train(sim, cmd=LONG, cam=CAM, steps=2500, half=LONG_HALF, rng=np.random.default_rng(0))
 
-    # self-supervised world model for the LONG object's wrist (collect own trials, then train)
-    world = WorldModelModule(k=5, off_max=0.0, rng=np.random.default_rng(2))
+    # self-supervised world model for the LONG object's wrist (collect own trials, then train).
+    # OPEN-WORLD situation features: the shape slot is the |F|-descriptor EMBEDDING seen by the camera
+    # (shape_clf.desc_embed, NH dims), NOT the class one-hot -- a one-hot needs a slot per known shape
+    # (closed world), the descriptor exists for ANY object, so the same model can later absorb trials
+    # from L/U/novel shapes and generalise its wrist knowledge across FORMS instead of class labels.
+    world = WorldModelModule(k=5, off_max=0.0, rng=np.random.default_rng(2), feat_dim=4 + shape_clf.NH)
+
+    def shape_desc_at(p_ref):
+        """The camera's |F|-descriptor embedding of the object nearest p_ref (mocap markers parked+restored
+        around perceive_all, same pattern as perceive()).  No detection -> zeros (an honest 'no form seen')."""
+        saved = sim.d.mocap_pos.copy()
+        dets = shape_clf.perceive_all(sim)
+        sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+        dets = [d for d in dets if d["pos"] is not None]
+        if not dets:
+            return np.zeros(shape_clf.NH)
+        best = min(dets, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"]) - np.asarray(p_ref))))
+        return shape_clf.desc_embed(best["desc"])
     bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, LONG)
     crng = np.random.default_rng(7); act16.run_combined._quiet = True
 
@@ -517,7 +533,7 @@ def run_self_learning_steering(headless=False):
 
     def long_feats():
         _, la = oo.perceive(sim, LONG, CAM); p = sim.obj_pos(LONG)[:2]
-        return np.array([p[0], p[1], np.cos(2 * la), np.sin(2 * la), 1.0, 0.0, 0.0])
+        return np.concatenate([[p[0], p[1], np.cos(2 * la), np.sin(2 * la)], shape_desc_at(p)])
 
     def grasp_long(wrist, gxy):
         wf = None if wrist == "priv" else (lambda s, _w=wrist: _w)
@@ -615,6 +631,44 @@ def run_self_learning_steering(headless=False):
                 panel.surp_viz.push(s["sensor"], s["state"], s["total"], s["relax"], bmm)
         return obs
 
+    def make_shape_track(body):
+        """FORM-aware live tracker (the user's fovea goal, v1): per tracked frame, segment+classify the
+        scene (perceive_all) and return the commanded SHAPE's grasp point + confidence in run_combined's
+        (obs, conf) servo protocol -- approach corrections now work for L/U exactly like the colour servo
+        (before, the colour fovea kept tracking whatever colour was last commanded: the user's complaint).
+        The hex fovea can't be command-keyed to a FORM, so its DISPLAY is PINNED onto the tracked shape
+        each frame; vc.track then runs one follow step from there (display + surprise plot + lifelong hex
+        learning stay alive) but its colour-keyed observation is NOT used for the servo."""
+        key = state.SHAPE_KEY[body]
+        mem = {"xy": None}                                     # running position belief (mis-detection gate)
+
+        def _track():
+            saved = sim.d.mocap_pos.copy()                     # perceive_all parks the markers -> restore
+            dets = shape_clf.perceive_all(sim)
+            sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+            cands = [d for d in dets if d["shape"] == key and d["pos"] is not None]
+            obs, conf = None, 0.0
+            if cands:
+                if mem["xy"] is None:
+                    best = max(cands, key=lambda d: d["prob"])
+                else:                                          # nearest to the running belief; a JUMP means a
+                    best = min(cands, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"]) - mem["xy"])))
+                    if float(np.linalg.norm(np.asarray(best["pos"]) - mem["xy"])) > 0.05:
+                        best = None                            #   second same-shape blob / mis-class -> hold belief
+                if best is not None:
+                    obs = np.asarray(best["grasp_xy"], float)  # correct toward the GRASP point (what the belief
+                    conf = float(best["prob"])                 #   holds), not the centroid (off-material on L/U)
+                    mem["xy"] = np.asarray(best["pos"], float)
+            if mem["xy"] is not None:                          # pin the hex fovea DISPLAY onto the tracked shape
+                try:
+                    vc._P["state"]["gaze"] = np.asarray(shape_clf._world_to_px(mem["xy"])[0], float)
+                except Exception:
+                    pass
+            track_and_plot()                                   # one hex follow frame from the pinned gaze
+            return obs, conf
+
+        return _track
+
     HOME_Q3 = np.array([HOME[j] for j in ("joint_0", "joint_1", "joint_2")])
 
     def drive_home():
@@ -677,12 +731,16 @@ def run_self_learning_steering(headless=False):
         if state.policy == "self" and method == "long":          # SELF-LEARNED wrist for the long object
             a, _, _ = world.select_action(fe_long, n=0, lam=LAM); w_exec = wrist_of(a)
             wf = (lambda s, _w=w_exec: _w)
-        # CLOSED-LOOP fovea for the COLOUR cubes: servo=True lets vc.track's live observation CORRECT the
-        # grasp-target belief during the reach (+ occlusion memory).  L/U (form-localised) + the long object
-        # (OOD for the colour fovea) keep servo=False -> a colour servo would drag them onto a wrong object.
+        # CLOSED-LOOP fovea: servo=True lets the live tracker CORRECT the grasp-target belief during the
+        # reach (+ occlusion memory).  COLOUR cubes track via the hex fovea (vc.track); L/U now track via
+        # the FORM-aware tracker (make_shape_track: perceive_all per frame, matched by SHAPE class) -- the
+        # user's fovea goal: the fovea supports approach+grasp for the shapes too, instead of sitting on
+        # whatever colour was last commanded.  Only the long object stays servo=False (not a class the
+        # form tracker can key on; its colour is OOD for the hex fovea -> both trackers would mislead).
+        track_fn = make_shape_track(body) if method == "shape" else track_and_plot
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
-                           goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_and_plot,
-                           policy_fn=None, servo=(method == "color"), rescatter=False, episode_end_fn=ep_end,
+                           goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_fn,
+                           policy_fn=None, servo=(method in ("color", "shape")), rescatter=False, episode_end_fn=ep_end,
                            lifelong=True, carry_gentle=u_cmd, grip_close=(0.3 if u_cmd else None), wrist_fn=wf,
                            arm_reset=False)
         _save(f"{body}_1after_runcombined")

@@ -307,8 +307,17 @@ class ShapeClassifierModule(ArmModule):
                 grasp = W[int(np.argmin(np.linalg.norm(W - ctr, axis=1)))]  # nearest material to the centroid
             out.append({"shape": SHAPES[k], "id": k, "prob": float(_softmax(logits)[k]),
                         "pos": (ctr if self.H is not None else None), "grasp_xy": grasp, "grasp_yaw": 0.0,
-                        "yaw": self._yaw_from(F), "px": np.array([xs.mean(), ys.mean()])})
-        return out
+                        "yaw": self._yaw_from(F), "px": np.array([xs.mean(), ys.mean()]),
+                        "desc": np.abs(F).ravel()})            # the raw rotation-invariant |F| descriptor --
+        return out                                             #   OPEN-WORLD (any object yields one, no class slot)
+
+    def desc_embed(self, desc):
+        """Compact OPEN-WORLD shape embedding from the raw |F| descriptor: standardise by the training
+        stats (fmu/fsd), then average over the rings per harmonic -> NH dims.  Unlike a class one-hot this
+        exists for ANY object -- known or novel -- so downstream models (e.g. the act23 world model) can
+        condition on the FORM ITSELF and generalise to shapes that have no class slot."""
+        z = (np.asarray(desc, float) - self.fmu) / self.fsd
+        return z.reshape(len(self.RW), self.NH).mean(0)
 
     def select(self, sim, shape_cmd, min_area=40):
         """Command CONDITIONED on FORM (the colour-free analogue of the colour SelectionHead): among ALL

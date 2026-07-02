@@ -16,7 +16,11 @@ has learned.  This is the fix for the model-exploitation failure.
 Lifelong: observe() keeps buffering, train() refits -> the model gets better as the agent acts,
 and generalises to NEW shapes/positions via the PERCEIVED features (no per-case tuning).
 
-Situation features (perceived, NOT privileged): [pos_x, pos_y, cos2yaw, sin2yaw, shape_onehot(3)].
+Situation features (perceived, NOT privileged): [pos_x, pos_y, cos2yaw, sin2yaw, <shape features>].
+The shape features default to a CLASS one-hot (3, the diag drivers) but the module takes feat_dim, so a
+caller can condition on the OPEN-WORLD |F| shape-descriptor embedding instead (ShapeClassifier.desc_embed,
+act23 GUI): the one-hot is a CLOSED-WORLD assumption (a novel shape has no slot), the descriptor exists
+for any object -- the model can then generalise its action knowledge across forms it never saw.
 Action: [dx, dy, cos2w, sin2w]  -- a grasp-point OFFSET (m) + the wrist as a mod-pi unit vector.
 """
 from __future__ import annotations
@@ -51,17 +55,18 @@ def wrist_of(a):
 class WorldModelModule(ArmModule):
     """Ensemble outcome model P(deliver | feats, action) with uncertainty-aware action selection."""
 
-    def __init__(self, k=5, hid=64, off_max=0.012, wrist_grid=8, rng=None, name="WorldModel"):
+    def __init__(self, k=5, hid=64, off_max=0.012, wrist_grid=8, rng=None, name="WorldModel", feat_dim=FEAT_DIM):
         super().__init__(name)
         self.rng = rng or np.random.default_rng(0)
         self.off_max = float(off_max)
         self.wrist_grid = int(wrist_grid)
-        self.members = [Policy(din=FEAT_DIM + ACT_DIM, dout=1, hid=hid,
+        self.feat_dim = int(feat_dim)                # situation size: 4 + one-hot(3) OR 4 + descriptor embedding
+        self.members = [Policy(din=self.feat_dim + ACT_DIM, dout=1, hid=hid,
                                rng=np.random.default_rng(int(self.rng.integers(1 << 30))))
                         for _ in range(int(k))]
         self._X: list[np.ndarray] = []
         self._Y: list[list[float]] = []
-        (self.add_in("situation", FEAT_DIM, "perceived [pos, cos2yaw, sin2yaw, shape_onehot]")
+        (self.add_in("situation", self.feat_dim, "perceived [pos, cos2yaw, sin2yaw, shape features]")
              .add_in("action", ACT_DIM, "[dx, dy, cos2w, sin2w]")
              .add_out("p_success", 1, "ensemble-mean predicted delivery prob")
              .add_out("uncertainty", 1, "ensemble-std (epistemic)"))
