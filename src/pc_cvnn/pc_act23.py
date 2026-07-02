@@ -601,9 +601,13 @@ def run_self_learning_steering(headless=False):
         place_all()
         if panel is not None:                                  # show the placed scene immediately (decide from it)
             panel.update(sim.render(CAM), "Szene platziert — Objekt wählen und Ausführen")
-            if vc.viz is not None:                             # refresh the hex "overview Kamera (Fovea)" too --
-                vc.viz.update(sim.render(CAM), "Szene platziert")   # it otherwise keeps showing the last
-                #   TRAINING frame until the first tracked episode ("two overviews, two scenes")
+            if vc.viz is not None:                             # RE-CENTER the fovea on a fresh scene: the old
+                g = np.array([RES / 2.0, RES / 2.0])           #   gaze points at where an object USED to be --
+                vc._P["state"]["gaze"] = g                     #   over the new layout that looks like "the fovea
+                img = sim.render(CAM)                          #   still focuses an old position" (user-observed;
+                arr = vc.fovea.step(img, g, vc._P["state"]["cmd"], False)   # aiming itself always re-perceives).
+                vc.viz.fovea(img, g, vc.fovea._ek(), np.clip(arr[:, :, 1:], 0, 1),
+                             "Szene neu — Fovea zentriert")    # box + cells + image consistent (learn=False)
 
     def _set_sizes():
         sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "obj_red")]] = np.array([0.012] * 3)
