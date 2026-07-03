@@ -1087,9 +1087,16 @@ def run_self_learning_steering(headless=False):
     # agent's own: model disagreement + visit history).  ACT23_AUTO_CURIOUS=0 restores the random pick.
     AUTO_CURIOUS = os.environ.get("ACT23_AUTO_CURIOUS", "1") == "1"
     tgt_visited = [state.marker_xy(i) for i in range(len(state.MARKERS))]
+    sig_hist = {}                                              # label -> recent sigma readings (progress signal)
 
     def curious_pick():
-        """Pick object + target by curiosity; returns a status line, or None -> caller picks randomly."""
+        """Pick object + target by curiosity; returns a status line, or None -> caller picks randomly.
+        LEARNING PROGRESS, not raw uncertainty (the noisy-TV fix, user-observed): a stochastic outcome
+        keeps the ensemble sigma HIGH forever (aleatoric noise looks like epistemic uncertainty), so
+        argmax-sigma FIXATED on the freshly discovered form and practiced nothing else.  Score = the
+        recent DROP of sigma (practice is paying off) + a small sigma term (young objects start
+        data-poor and must be tried at all); the object is DRAWN proportional to score -- fixation
+        impossible, mastered skills keep a small maintenance share."""
         from pc_cvnn.pc_act14 import _rand_xy
         from pc_cvnn.pc_act16 import BASE_CLEAR
         scores = []
@@ -1097,11 +1104,15 @@ def run_self_learning_steering(headless=False):
             fe = situation_feats(nm)
             if fe is None:
                 continue                                       # camera can't find it -> not a candidate
-            _mu, sd = world.predict(fe, world.candidates(0))   # sigma over the wrist grid HERE
-            scores.append((float(sd.max()), k, _l))
+            _mu, sd = world.predict(fe, world.candidates(0))   # sigma over the action grid HERE
+            s = float(sd.max())
+            h = sig_hist.setdefault(_l, []); h.append(s); del h[:-8]
+            lp = float(np.mean(h[:len(h) // 2]) - np.mean(h[len(h) // 2:])) if len(h) >= 6 else 0.0
+            scores.append((max(lp, 0.0) + 0.25 * s, lp, s, k, _l))
         if not scores or world.n() == 0:
             return None
-        sd_best, k, lbl = max(scores)
+        w = np.array([sc[0] for sc in scores]) + 1e-3
+        _sc, lp_best, sd_best, k, lbl = scores[int(crng.choice(len(scores), p=w / w.sum()))]
         state.sel = k
         bodies = [nm for _l2, nm, _m2 in state.OBJECTS]
         best_p, best_nov = None, -1.0
@@ -1117,7 +1128,7 @@ def run_self_learning_steering(headless=False):
             state.target_idx = int(crng.integers(len(state.MARKERS)))
             state.set_marker_xy(state.target_idx, best_p); state.sync_active()
             tgt_visited.append(np.asarray(best_p, float)); del tgt_visited[:-40]
-        return (f"[curiosity] übt '{lbl}' (Modell-Unsicherheit σ={sd_best:.2f})"
+        return (f"[curiosity] übt '{lbl}' (Fortschritt {lp_best:+.2f}, σ={sd_best:.2f})"
                 + (f", neues Ziel [{best_p[0]:.2f},{best_p[1]:.2f}]" if best_p is not None else ""))
 
     if headless:
