@@ -86,6 +86,10 @@ WRIST_APPROACH_R = float(os.environ.get("ACT16_WRIST_APPROACH_R", "0.07"))   # a
 #   collides with arm/base).  Once the hand has descended to the grip (WRIST_LOCK_MARGIN) the angle is HELD
 #   (re-asserted, NOT re-corrected) so the wrist does not suddenly roll and twist the object out at contact.
 WRIST_LOCK_MARGIN = float(os.environ.get("ACT16_WRIST_LOCK", "0.012"))   # lock the wrist this far above grip z
+SOFT_RELEASE = os.environ.get("ACT16_SOFT_RELEASE", "1") == "1"   # place: RAMP the claw open (mirror of the
+#   close ramp) + retreat UP open, and never grasp-reflex onto an object already AT the goal -- the old
+#   instant snap-open at grasp height FLICKED the just-placed object off the target (user-observed in the
+#   act23 auto runs: "delivered, then shoved away at release/re-grasp").  ACT16_SOFT_RELEASE=0 restores.
 CLOSE_GUARD = os.environ.get("ACT16_CLOSE_GUARD", "1") == "1"   # in the grasp approach, do NOT close the claw
 #   while the hand is still in the AIR above the grasp height.  EDGE positions (near base/camera) descend more
 #   SLOWLY, so the policy/reflex would otherwise close ~15mm too HIGH and miss -- the hand CAN reach the object,
@@ -412,9 +416,18 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                     if hz < GRASP_Z + 0.012:
                         phase, dwell = "release", 0
                 else:  # release
-                    j5, aim, dwell = J5_OPEN, np.array([tgt[0], tgt[1], GRASP_Z]), dwell + 1
-                    if dwell > 50:
-                        break
+                    if SOFT_RELEASE:
+                        dwell += 1
+                        frac = min(1.0, dwell / 40.0)         # open SLOWLY (the mirror of the close ramp:
+                        j5 = gclose + (J5_OPEN - gclose) * frac   # an instant snap-open FLICKS the placed
+                        zr = GRASP_Z if dwell <= 40 else OVER_Z   # object); then retreat UP already open
+                        aim = np.array([tgt[0], tgt[1], zr])
+                        if dwell > 65:
+                            break
+                    else:
+                        j5, aim, dwell = J5_OPEN, np.array([tgt[0], tgt[1], GRASP_Z]), dwell + 1
+                        if dwell > 50:
+                            break
             else:  # PUSH: get behind the object (OVER it, since the arm can't go through), push
                 via = "push"
                 behind = c - d * STANDOFF
@@ -455,7 +468,10 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             # drives a descend+close.  Fires ONLY on a stall (HOVER_LIMIT), so the learned policy still drives
             # normally -- this just guarantees the grasp EXECUTES instead of the policy hovering forever (#4).
             gz = obj_h + GRASP_OFFSET
-            if np.linalg.norm(hxy - c) < 0.03 and cz < 0.035 and j5 > J5_REFLEX_TH and hz > gz + 0.012:
+            at_goal = np.linalg.norm(c - tgt) < tol and cz < 0.035   # object already RESTS at the goal --
+            #   re-grasping it is a misfire in ANY flow (the "nachfassen" that shoved a delivered object)
+            if (np.linalg.norm(hxy - c) < 0.03 and cz < 0.035 and j5 > J5_REFLEX_TH and hz > gz + 0.012
+                    and not (SOFT_RELEASE and (at_goal or phase == "release"))):
                 hover += 1
             else:
                 hover = 0
