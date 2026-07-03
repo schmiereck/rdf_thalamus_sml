@@ -21,7 +21,12 @@ The shape features default to a CLASS one-hot (3, the diag drivers) but the modu
 caller can condition on the OPEN-WORLD |F| shape-descriptor embedding instead (ShapeClassifier.desc_embed,
 act23 GUI): the one-hot is a CLOSED-WORLD assumption (a novel shape has no slot), the descriptor exists
 for any object -- the model can then generalise its action knowledge across forms it never saw.
-Action: [dx, dy, cos2w, sin2w]  -- a grasp-point OFFSET (m) + the wrist as a mod-pi unit vector.
+Action: [dx, dy, cos2w, sin2w, grip, gentle]  -- a grasp-point OFFSET (m), the wrist as a mod-pi unit
+vector, the claw CLOSE-ANGLE the grip holds at (0 = full close .. ~0.4 = wide, for concave objects that
+squirt out under full squeeze) and a 0/1 GENTLE-carry flag (slow transport for off-COM grips).  grip +
+gentle used to be hand-coded per-object runtime rules in act23 (body=='obj_U' -> 0.3/gentle); as action
+dims the MODEL decides them from the perceived situation (stage-1 de-scripting, user's no-runtime-rules
+principle).
 """
 from __future__ import annotations
 
@@ -31,7 +36,10 @@ from pc_cvnn.pc_act19 import Policy
 from .base import ArmModule
 
 FEAT_DIM = 7          # [pos(2), cos2yaw, sin2yaw, shape_onehot(3)]
-ACT_DIM = 4           # [dx, dy, cos2w, sin2w]
+ACT_DIM = 6           # [dx, dy, cos2w, sin2w, grip, gentle]
+GRIP_MODES = ((0.0, 0.0), (0.3, 1.0))   # structured grip regimes in the candidate grid: firm full-close
+#   vs wide-hold + gentle carry (the regime a concave object needs) -- like the offset-0 wrist grid this
+#   only makes the regimes REPRESENTABLE; the model decides which one wins by predicted success.
 SHAPE_ID = {"cube": 0, "L": 1, "U": 2}
 
 
@@ -43,8 +51,8 @@ def feats_from(sel, shape):
     return np.concatenate([pos, [np.cos(2 * yaw), np.sin(2 * yaw)], oh])
 
 
-def action_vec(dx, dy, w):
-    return np.array([dx, dy, np.cos(2 * w), np.sin(2 * w)], float)
+def action_vec(dx, dy, w, grip=0.0, gentle=0.0):
+    return np.array([dx, dy, np.cos(2 * w), np.sin(2 * w), float(grip), float(gentle)], float)
 
 
 def wrist_of(a):
@@ -67,7 +75,7 @@ class WorldModelModule(ArmModule):
         self._X: list[np.ndarray] = []
         self._Y: list[list[float]] = []
         (self.add_in("situation", self.feat_dim, "perceived [pos, cos2yaw, sin2yaw, shape features]")
-             .add_in("action", ACT_DIM, "[dx, dy, cos2w, sin2w]")
+             .add_in("action", ACT_DIM, "[dx, dy, cos2w, sin2w, grip, gentle]")
              .add_out("p_success", 1, "ensemble-mean predicted delivery prob")
              .add_out("uncertainty", 1, "ensemble-std (epistemic)"))
 
@@ -96,12 +104,15 @@ class WorldModelModule(ArmModule):
         return P.mean(0), P.std(0)
 
     def candidates(self, n):
-        """Default-ish offset-0 wrist GRID (so teacher-like pure-wrist actions are always
-        representable) + n random (offset, wrist) samples."""
-        A = [action_vec(0.0, 0.0, w) for w in np.linspace(0, np.pi, self.wrist_grid, endpoint=False)]
+        """Structured GRID (offset-0 wrists x grip regimes, so teacher-like actions are always
+        representable) + n random (offset, wrist, grip, gentle) samples."""
+        A = [action_vec(0.0, 0.0, w, g, ge)
+             for w in np.linspace(0, np.pi, self.wrist_grid, endpoint=False)
+             for g, ge in GRIP_MODES]
         for _ in range(int(n)):
             dx, dy = self.rng.uniform(-self.off_max, self.off_max, 2)
-            A.append(action_vec(dx, dy, self.rng.uniform(0, np.pi)))
+            A.append(action_vec(dx, dy, self.rng.uniform(0, np.pi),
+                                grip=self.rng.uniform(0.0, 0.4), gentle=float(self.rng.integers(2))))
         return np.array(A)
 
     def select_action(self, feats, n=40, lam=1.0):
