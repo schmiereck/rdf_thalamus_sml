@@ -36,7 +36,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 import mujoco
 
-from pc_cvnn.pc_act14 import BracketArmSim, HOME
+os.environ.setdefault("ACT14_DOF", "4")   # act23 runs the 4-DOF arm: joint_3 freed (user request) --
+#   it was LOCKED at HOME=3.14 everywhere and is THE reason for the small workspace; the learned
+#   kinematics babbles all 4 positioning joints and the reach keeps the CLAW DIRECTION (redundancy).
+#   ACT14_DOF=3 restores the classic arm.  Must be set BEFORE pc_act14 is imported (ARM3 is built then).
+from pc_cvnn.pc_act14 import BracketArmSim, HOME, ARM3
 from pc_cvnn.pc_act18 import F as HEX_F
 from pc_cvnn.arm_modules.body_model import BodyModelModule
 from pc_cvnn.arm_modules.shape_classifier import ShapeClassifierModule
@@ -922,7 +926,7 @@ def run_self_learning_steering(headless=False):
 
         return _track
 
-    HOME_Q3 = np.array([HOME[j] for j in ("joint_0", "joint_1", "joint_2")])
+    HOME_Q3 = np.array([HOME[j] for j in ARM3])            # all positioning joints (3, or 4 with joint_3)
 
     def drive_home():
         """CONTINUOUS episode transition: after the release the arm DRIVES back to (near) its home posture

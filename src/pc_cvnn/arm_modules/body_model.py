@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from pc_cvnn.pc_act14 import ArmBodyModel3D
+from pc_cvnn.pc_act14 import ArmBodyModel3D, ARM3
 from .base import ArmModule
 from .inverse_kinematics import LearnedInverseKinematics
 
@@ -30,10 +30,11 @@ class BodyModelModule(ArmModule):
         self.ik: LearnedInverseKinematics | None = None     # LEARNED reach (set via learn_inverse)
         self._surprise_mm = float("nan")
         self._prev = None                                   # (q3, hand) for the IK lifelong differential
+        n = len(ARM3)                                       # 3, or 4 with joint_3 freed (ACT14_DOF=4)
         (self.add_in("hand_target_xyz", 3, "desired hand position")
-             .add_in("joint_angles", 3, "current 3-motor angles")
+             .add_in("joint_angles", n, "current positioning-motor angles")
              .add_out("hand_xyz", 3, "predicted hand position fk(q3)")
-             .add_out("joint_dq", 3, "reach velocity toward the target"))
+             .add_out("joint_dq", n, "reach velocity toward the target"))
 
     # -- training delegates (babbling), kept on the module so the agent owns it --
     def babble(self, sim, steps: int) -> None:

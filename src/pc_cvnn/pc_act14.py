@@ -30,9 +30,15 @@ ASSET = os.path.join(os.path.dirname(__file__), "assets", "bracket_arm.xml")
 ARM_JOINTS = ["joint_0", "joint_1", "joint_2", "joint_3", "joint_4"]   # 5 DOF (gripper = joint_5)
 HOME = {"joint_0": 1.5708, "joint_1": 0.0, "joint_2": 0.0,
         "joint_3": 3.14, "joint_4": 1.5708, "joint_5": 0.76}
-# the 3 motors used first: base-yaw + shoulder + elbow (wrist j3=pi points the gripper down so
-# the grasp reaches the table; j4/gripper held at home).  "3 motors with height".
-ARM3 = ["joint_0", "joint_1", "joint_2"]
+# the POSITIONING motors: base-yaw + shoulder + elbow ("3 motors with height", the act14 default),
+# optionally + joint_3 (ACT14_DOF=4, act23): the second pitch was LOCKED at HOME=3.14 (fully folded,
+# range end!) everywhere, which is THE reason for the small ~16x10cm workspace vs the arm's ~0.27m
+# reach (user diagnosis).  Freeing it makes the arm REDUNDANT for a 3-D position -- reach control
+# then also needs the learned CLAW-DIRECTION objective (see ArmBodyModel3D.reach_velocity), else the
+# claw orientation drifts and grasping breaks.  j4/gripper stay separately controlled.
+DOF = int(os.environ.get("ACT14_DOF", "3"))
+ARM3 = ["joint_0", "joint_1", "joint_2"] + (["joint_3"] if DOF >= 4 else [])
+WDIR = float(os.environ.get("ACT14_WDIR", "0.05"))   # claw-direction weight in the 4-DOF reach LS
 
 
 class BracketArmSim:
@@ -90,7 +96,8 @@ class BracketArmSim:
         return np.array([self.d.qpos[self.jqadr[j]] for j in ARM3])
 
     def set_arm3_targets(self, q3):
-        self.set_arm_targets([q3[0], q3[1], q3[2], HOME["joint_3"], HOME["joint_4"]])
+        j3 = q3[3] if len(ARM3) >= 4 else HOME["joint_3"]
+        self.set_arm_targets([q3[0], q3[1], q3[2], j3, HOME["joint_4"]])
 
     def arm3_range(self):
         return np.array([self.m.jnt_range[self._jid(j)] for j in ARM3])   # (3,2)
@@ -117,10 +124,16 @@ class BracketArmSim:
         grasp position.  In sim this is instant via mj_forward (no dynamics)."""
         for j, v in zip(ARM3, q3):
             self.d.qpos[self.jqadr[j]] = float(v)
-        self.d.qpos[self.jqadr["joint_3"]] = HOME["joint_3"]
+        if "joint_3" not in ARM3:
+            self.d.qpos[self.jqadr["joint_3"]] = HOME["joint_3"]
         self.d.qpos[self.jqadr["joint_4"]] = HOME["joint_4"]
         mujoco.mj_forward(self.m, self.d)
         return self.grasp_pos()
+
+    def grasp_dir(self):
+        """World direction the CLAW points along (the gripper body's +z at the grasp site) --
+        the orientation the 4-DOF reach must PRESERVE (learned alongside the FK by babbling)."""
+        return self.d.site_xmat[self.grasp_sid].reshape(3, 3)[:, 2].copy()
 
     def set_reach_site(self, name):
         self.reach_sid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_SITE, name)
@@ -143,8 +156,11 @@ class BracketArmSim:
         return float(np.arctan2(x[1], x[0]))
 
     def set_arm_wrist_targets(self, q3, j4, j3=None):
-        """Command the 3 positioning motors + the wrist-ROLL joint_4 (j3 = wrist-pitch, default HOME)."""
-        self.set_arm_targets([q3[0], q3[1], q3[2], HOME["joint_3"] if j3 is None else j3, j4])
+        """Command the positioning motors + the wrist-ROLL joint_4 (j3 = wrist-pitch; defaults to
+        q3[3] at 4 DOF, else HOME)."""
+        if j3 is None:
+            j3 = q3[3] if len(ARM3) >= 4 else HOME["joint_3"]
+        self.set_arm_targets([q3[0], q3[1], q3[2], j3, j4])
 
     def site_jacobian(self):
         """3x5 position Jacobian of the grasp site w.r.t. the 5 arm joints."""
@@ -170,59 +186,99 @@ def reach_step(sim, target_xyz, gain=2.0, max_dq=0.03):
 
 
 class ArmBodyModel3D:
-    """The agent's LEARNED 3-D kinematics for the 3-motor arm.  The forward kinematics is
-    exactly LINEAR in the lifted feature set  Φ(θ) = [cosθ0·g, sinθ0·g, g]  with
-    g = [1, cosθ1, sinθ1, cos(θ1+θ2), sin(θ1+θ2)]  (base-yaw rotates the shoulder/elbow
-    plane), so a learned linear map  hand = W·[Φ;1]  recovers the kinematics by babbling
-    (the 3-D analogue of act12's linear-in-features body model).  Its finite-difference
-    Jacobian drives damped-least-squares reach control."""
+    """The agent's LEARNED 3-D kinematics for the positioning motors.  The forward kinematics is
+    exactly LINEAR in the lifted feature set  Φ(θ) = [cosθ0·g, sinθ0·g, g]  (base-yaw rotates the
+    pitch plane; g = cos/sin of the CUMULATIVE pitch angles with both signs, so least-squares picks
+    the true chain combo), learned by babbling -- the 3-D analogue of act12's linear-in-features
+    body model.  At 4 DOF (joint_3 freed) the SAME babble additionally learns the CLAW DIRECTION
+    (Wd, also exactly linear in Φ): the arm is then REDUNDANT for a 3-D position and the reach
+    solves a weighted stacked least-squares [position; soft claw-direction], else the claw
+    orientation would drift with the null space and grasping breaks."""
 
-    NF = 22                                              # 3*7 features + bias
-
-    def __init__(self, rng=None):
+    def __init__(self, rng=None, dof=None):
         self.rng = rng or np.random.default_rng(0)
-        self.W = np.zeros((self.NF, 3)); self.last_surprise = None
+        self.dof = int(dof) if dof is not None else len(ARM3)
+        self.NF = 3 * (7 if self.dof == 3 else 15) + 1
+        self.W = np.zeros((self.NF, 3)); self.Wd = np.zeros((self.NF, 3))
+        self.dir_ref = None                              # claw direction to PRESERVE (from babble poses)
+        self.last_surprise = None
 
-    @staticmethod
-    def _feat(q3):
-        t0, t1, t2 = float(q3[0]), float(q3[1]), float(q3[2])
-        # base-yaw rotates the shoulder/elbow plane; the elbow axis is reversed + 90deg
-        # offsets, so include BOTH (θ1+θ2) and (θ1-θ2) — least-squares picks the right combo.
-        g = np.array([1.0, np.cos(t1), np.sin(t1),
-                      np.cos(t1 + t2), np.sin(t1 + t2), np.cos(t1 - t2), np.sin(t1 - t2)])
-        return np.concatenate([np.cos(t0) * g, np.sin(t0) * g, g])    # 21
+    def _feat(self, q):
+        t0, t1, t2 = float(q[0]), float(q[1]), float(q[2])
+        # the elbow axis is reversed + 90deg offsets, so include BOTH (θ1+θ2) and (θ1-θ2) —
+        # least-squares picks the right combo; at 4 DOF likewise all (θ1±θ2±θ3) combos.
+        g = [1.0, np.cos(t1), np.sin(t1),
+             np.cos(t1 + t2), np.sin(t1 + t2), np.cos(t1 - t2), np.sin(t1 - t2)]
+        if self.dof >= 4:
+            t3 = float(q[3])
+            for s in (t1 + t2 + t3, t1 + t2 - t3, t1 - t2 + t3, t1 - t2 - t3):
+                g += [np.cos(s), np.sin(s)]
+        g = np.array(g)
+        return np.concatenate([np.cos(t0) * g, np.sin(t0) * g, g])
 
-    def _aug(self, q3):
-        return np.append(self._feat(q3), 1.0)                          # +bias -> 22
+    def _aug(self, q):
+        return np.append(self._feat(q), 1.0)                          # +bias
 
-    def fk(self, q3):
-        return self._aug(q3) @ self.W
+    def fk(self, q):
+        return self._aug(q) @ self.W
+
+    def claw_dir(self, q):
+        """Predicted world direction the claw points along (unit; the learned Wd readout)."""
+        d = self._aug(q) @ self.Wd
+        n = float(np.linalg.norm(d))
+        return d / n if n > 1e-9 else d
 
     def babble(self, sim, steps):
         rng3 = sim.arm3_range()
-        X = np.empty((steps, self.NF)); Y = np.empty((steps, 3))
+        X = np.empty((steps, self.NF)); Y = np.empty((steps, 3)); D = np.empty((steps, 3))
         for i in range(steps):
-            q3 = self.rng.uniform(rng3[:, 0], rng3[:, 1])
-            X[i] = self._aug(q3); Y[i] = sim.fk_truth(q3)
-        self.W = np.linalg.solve(X.T @ X + 1e-6 * np.eye(self.NF), X.T @ Y)   # ridge least squares
+            q = self.rng.uniform(rng3[:, 0], rng3[:, 1])
+            X[i] = self._aug(q); Y[i] = sim.fk_truth(q); D[i] = sim.grasp_dir()
+        G = np.linalg.inv(X.T @ X + 1e-6 * np.eye(self.NF))           # ridge least squares
+        self.W = G @ (X.T @ Y); self.Wd = G @ (X.T @ D)
+        # the claw direction to PRESERVE at 4 DOF: MEASURED as the mean claw direction over LOW
+        # (table-level) poses with joint_3 at its classic HOME -- exactly the orientation the
+        # proven 3-DOF grasp choreography operated with (no assumed world axis).
+        ref = []
+        for _ in range(200):
+            q = self.rng.uniform(rng3[:, 0], rng3[:, 1])
+            if self.dof >= 4:
+                q[3] = HOME["joint_3"]
+            if sim.fk_truth(q)[2] < 0.06:
+                ref.append(sim.grasp_dir().copy())
+        d = np.mean(ref, axis=0) if ref else sim.grasp_dir().copy()
+        self.dir_ref = d / max(float(np.linalg.norm(d)), 1e-9)
 
-    def observe(self, q3, hand_obs, lr=0.05):           # lifelong / vision refinement
-        a = self._aug(q3); err = a @ self.W - np.asarray(hand_obs, float)
+    def observe(self, q, hand_obs, lr=0.05):            # lifelong / vision refinement
+        a = self._aug(q); err = a @ self.W - np.asarray(hand_obs, float)
         s = float(np.linalg.norm(err))
         self.last_surprise = s if self.last_surprise is None else 0.9 * self.last_surprise + 0.1 * s
         self.W -= lr * np.outer(a, err)
 
-    def jacobian(self, q3, eps=1e-4):
-        J = np.zeros((3, 3))
-        for i in range(3):
-            dq = np.zeros(3); dq[i] = eps
-            J[:, i] = (self.fk(q3 + dq) - self.fk(q3 - dq)) / (2 * eps)
+    def jacobian(self, q, eps=1e-4, W=None):
+        W = self.W if W is None else W
+        J = np.zeros((3, self.dof))
+        for i in range(self.dof):
+            dq = np.zeros(self.dof); dq[i] = eps
+            J[:, i] = (self._aug(q + dq) @ W - self._aug(q - dq) @ W) / (2 * eps)
         return J
 
-    def reach_velocity(self, q3, target, gain=2.0, max_dq=0.03, damp=0.04):
-        err = np.asarray(target, float) - self.fk(q3)
-        J = self.jacobian(q3)
-        dq = J.T @ np.linalg.solve(J @ J.T + damp * np.eye(3), gain * err)
+    def reach_velocity(self, q, target, gain=2.0, max_dq=0.03, damp=0.04):
+        err = np.asarray(target, float) - self.fk(q)
+        J = self.jacobian(q)
+        if self.dof >= 4 and self.dir_ref is not None:
+            # REDUNDANT arm: solve [position error; SOFT claw-direction error] as one weighted
+            # stacked least-squares.  UNITS matter (measured: 0.35 made every grasp fail): the
+            # position residual is gain*metres (~0.02-0.2), the direction residual is O(1), so the
+            # direction weight must be SMALL for position to win wherever the two conflict -- the
+            # extra DOF then only spends its null space on keeping the claw in grasp orientation.
+            wd = WDIR
+            derr = self.dir_ref - self.claw_dir(q)
+            A = np.vstack([J, wd * self.jacobian(q, W=self.Wd)])
+            e = np.concatenate([gain * err, wd * derr])
+            dq = A.T @ np.linalg.solve(A @ A.T + damp * np.eye(6), e)
+        else:
+            dq = J.T @ np.linalg.solve(J @ J.T + damp * np.eye(3), gain * err)
         m = float(np.max(np.abs(dq)))
         if m > max_dq:
             dq *= max_dq / m
