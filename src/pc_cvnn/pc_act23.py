@@ -308,6 +308,9 @@ class CommandState23:
         self.policy = "self"          # "self" -> world-model wrist (long obj); "teacher" -> WRIST_ALIGN
         self.go = False; self.exit = False
         self.auto = False             # AUTO-Lauf: random object + random target per episode (self-training)
+        self.busy = False             # an episode is RUNNING: matplotlib fires button callbacks inside the
+        #   run's flush_events -- scene-mutating actions must be DEFERRED to after the episode (a mid-run
+        #   "Objekt hinzufügen" grew the object list past the pose snapshot + moved objects under the claw)
         # INSTANCE copies: OPEN-SET discovery appends objects at runtime (a self-labelled class becomes a
         # commandable button) -- the class-level lists stay the pristine trained set.
         self.OBJECTS = list(CommandState23.OBJECTS)
@@ -399,6 +402,7 @@ class CommandPanel23:
         self.bPol = Button(axPol, "", color="#3a5a44", hovercolor="#4a7256"); self.bPol.on_clicked(self._toggle_policy)
         # OPEN-SET: drop the unknown probe object into the scene (the net must DISCOVER + self-label it)
         self._introduce_fn = None
+        self._pending_introduce = False; self._pending_randomize = False   # deferred mid-episode clicks
         axN = self.fig.add_axes([0.035, 0.220, 0.16, 0.05])
         self.bN = Button(axN, "Objekt hinzufügen", color="#8a7430", hovercolor="#a89040")
         self.bN.on_clicked(self._introduce)
@@ -443,11 +447,20 @@ class CommandPanel23:
     def _objects(self, _e):
         if self._randomize_fn is None:
             return
+        if self.state.busy:                                    # mid-episode click -> defer (see state.busy)
+            self._pending_randomize = True
+            self.live.set_text("Objekte neu — nach der laufenden Episode"); self.fig.canvas.draw_idle()
+            return
         self._randomize_fn(); self.update(self.state.sim.render(self._cam), "Objekte neu gewürfelt"); self._refresh()
 
     def _introduce(self, _e):
-        if self._introduce_fn is not None:
-            self._introduce_fn(); self._refresh()
+        if self._introduce_fn is None:
+            return
+        if self.state.busy:                                    # mid-episode click -> defer (see state.busy)
+            self._pending_introduce = True
+            self.live.set_text("Neues Objekt — nach der laufenden Episode"); self.fig.canvas.draw_idle()
+            return
+        self._introduce_fn(); self._refresh()
 
     def _toggle_auto(self, _e):
         self.state.auto = not self.state.auto
@@ -1029,7 +1042,9 @@ def run_self_learning_steering(headless=False):
         # z-rotation, so this also UN-TIPS any shape the arm nudged onto its side (the thin 24mm-tall L/U bars
         # tip easily).  No teleport (OBJS=all5 above), no full reset -- the scene just evolves as you command.
         _set_sizes()
-        for _l2, nm, _m in state.OBJECTS:
+        for nm in snap:                                        # iterate the SNAPSHOT, not state.OBJECTS: the
+            #   object list can GROW mid-episode (a GUI click during the run discovers/introduces a new
+            #   object -> KeyError on restore, user-hit); anything not snapped simply stays where it is
             if nm != body:
                 p, z, yaw = snap[nm]; sim.set_object(nm, p, z=z, yaw=yaw)   # non-commanded: pre-command pose
             else:
@@ -1179,9 +1194,19 @@ def run_self_learning_steering(headless=False):
         state.go = False
         tag = "Auto" if state.auto else "Befehl"
         print(f"  [{tag} {ep}] {state.label()} ...")
-        ok, err = run_one()
+        state.busy = True
+        try:
+            ok, err = run_one()
+        finally:
+            state.busy = False
         line = f"[{tag} {ep}] {'GELIEFERT' if ok else 'NICHT geliefert'}  |  Abstand {err:.0f} mm"
         print("  " + line); panel.update(sim.render(CAM), line); ep += 1
+        if panel._pending_randomize:                           # deferred mid-episode clicks run NOW,
+            panel._pending_randomize = False                   #   between episodes (see state.busy)
+            randomize_objects(); panel.update(sim.render(CAM), "Objekte neu gewürfelt"); panel._refresh()
+        if panel._pending_introduce:
+            panel._pending_introduce = False
+            introduce_object(); panel._refresh()
     print("  Steering beendet.")
 
 
