@@ -1033,6 +1033,48 @@ def run_self_learning_steering(headless=False):
                       f"{world.n()} Versuche, nachtrainiert", flush=True)
         return res.get("ok", False), res.get("err", float("nan")) * 1000.0
 
+    # CURIOSITY-driven auto-run (the act21 researcher pattern, user request): instead of a random pick
+    # the agent practices what it KNOWS LEAST.  Object = the one whose CURRENT perceived situation has
+    # the highest ensemble DISAGREEMENT sigma of the outcome model over the wrist candidates (epistemic
+    # uncertainty -- exactly where one more own trial teaches the model most; a freshly discovered form
+    # starts data-poor -> gets practiced automatically).  Target = DISTANCE-NOVELTY over the targets
+    # already practiced (coverage, act21's dreamed goals -- no reward anywhere, both signals are the
+    # agent's own: model disagreement + visit history).  ACT23_AUTO_CURIOUS=0 restores the random pick.
+    AUTO_CURIOUS = os.environ.get("ACT23_AUTO_CURIOUS", "1") == "1"
+    tgt_visited = [state.marker_xy(i) for i in range(len(state.MARKERS))]
+
+    def curious_pick():
+        """Pick object + target by curiosity; returns a status line, or None -> caller picks randomly."""
+        from pc_cvnn.pc_act14 import _rand_xy
+        from pc_cvnn.pc_act16 import BASE_CLEAR
+        scores = []
+        for k, (_l, nm, _m) in enumerate(state.OBJECTS):
+            fe = situation_feats(nm)
+            if fe is None:
+                continue                                       # camera can't find it -> not a candidate
+            _mu, sd = world.predict(fe, world.candidates(0))   # sigma over the wrist grid HERE
+            scores.append((float(sd.max()), k, _l))
+        if not scores or world.n() == 0:
+            return None
+        sd_best, k, lbl = max(scores)
+        state.sel = k
+        bodies = [nm for _l2, nm, _m2 in state.OBJECTS]
+        best_p, best_nov = None, -1.0
+        for _ in range(24):                                    # target = most NOVEL reachable spot
+            p = _rand_xy(crng)
+            if float(np.linalg.norm(p)) < BASE_CLEAR or any(
+                    float(np.linalg.norm(p - sim.obj_pos(o)[:2])) < 0.05 for o in bodies):
+                continue
+            nov = min(float(np.linalg.norm(p - q)) for q in tgt_visited)
+            if nov > best_nov:
+                best_p, best_nov = p, nov
+        if best_p is not None:
+            state.target_idx = int(crng.integers(len(state.MARKERS)))
+            state.set_marker_xy(state.target_idx, best_p); state.sync_active()
+            tgt_visited.append(np.asarray(best_p, float)); del tgt_visited[:-40]
+        return (f"[curiosity] übt '{lbl}' (Modell-Unsicherheit σ={sd_best:.2f})"
+                + (f", neues Ziel [{best_p[0]:.2f},{best_p[1]:.2f}]" if best_p is not None else ""))
+
     if headless:
         def _intro_and_command():
             print("  open-set: das nie trainierte obj_T taucht auf ...")
@@ -1059,6 +1101,8 @@ def run_self_learning_steering(headless=False):
             print(f"    {state.OBJECTS[k][0]:16s}: {'GELIEFERT' if ok else 'NICHT'}  ({err:.0f}mm)", flush=True)
         if not intro_first:
             _intro_and_command()
+        for _ in range(3):                                     # exercise the curiosity pick (GUI auto path)
+            print(f"    curiosity: {curious_pick()}  -> sel={state.OBJECTS[state.sel][0]}", flush=True)
         return
 
     act16.run_combined._quiet = True
@@ -1067,11 +1111,15 @@ def run_self_learning_steering(headless=False):
     while not state.exit:
         if not (state.go or state.auto):
             panel.plt.pause(0.05); continue
-        if state.auto:                                         # AUTO-Lauf (user request): random object +
-            state.sel = int(crng.integers(len(state.OBJECTS)))  # freshly placed random target per episode --
-            state.target_idx = int(crng.integers(len(state.MARKERS)))   # the LIFELONG loop (world model +
-            state.place_selected_random(crng)                  # open-set glances) trains itself; toggle
-            panel._refresh()                                   # "Auto: aus" to stop after the episode
+        if state.auto:                                         # AUTO-Lauf: CURIOSITY picks what to practice
+            pick = curious_pick() if AUTO_CURIOUS else None    #   (model uncertainty + goal novelty); random
+            if pick is None:                                   #   fallback if perception/model isn't ready
+                state.sel = int(crng.integers(len(state.OBJECTS)))
+                state.target_idx = int(crng.integers(len(state.MARKERS)))
+                state.place_selected_random(crng)
+            else:
+                print(f"    {pick}", flush=True)
+            panel._refresh()                                   # "Auto: aus" stoppt nach der Episode
         state.go = False
         tag = "Auto" if state.auto else "Befehl"
         print(f"  [{tag} {ep}] {state.label()} ...")
