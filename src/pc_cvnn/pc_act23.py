@@ -1055,6 +1055,29 @@ def run_self_learning_steering(headless=False):
                 cp = sim.obj_pos(nm)[:2].copy(); cz = snap[nm][1]
                 sim.set_object(nm, cp, z=cz, yaw=sim.obj_yaw(nm))
         mujoco.mj_forward(sim.m, sim.d); state.sync_active()
+        # SCENE housekeeping (user-observed degeneration over long auto runs): an object DRAGGED outside
+        # the reachable workspace by a failed grasp stays out FOREVER (the restore puts non-commanded
+        # objects back on their pre-command = out pose; a commanded one keeps its end pose) -- every
+        # later reach toward it is unreachable and SWEEPS through the scene ("the arm lifts some
+        # unmarked object and throws it").  Return such objects to a free slot: ENVIRONMENT tidying
+        # between episodes (the bounded act23 heir of act16's reposition_strays), not an agent rule.
+        for _l2, nm, _m2 in state.OBJECTS:
+            p = sim.obj_pos(nm)[:2]
+            if abs(p[0]) <= 0.125 and 0.055 <= p[1] <= 0.235:
+                continue                                       # inside (generous bounds: a legit delivery can
+                #   rest tolerance-width past a top target -- CONTINUITY, only truly-LOST objects return)
+            occ = [sim.obj_pos(o)[:2] for _l3, o, _m3 in state.OBJECTS if o != nm]
+            free = [s for s in SLOTS
+                    if all(float(np.linalg.norm(np.asarray(s) - q)) > 0.055 for q in occ)]
+            if not free:
+                continue
+            s = max(free, key=lambda sl: min(float(np.linalg.norm(np.asarray(sl) - q)) for q in occ))
+            zr = scene.get(nm, (None, 0.012, 0.0))[1]
+            sim.set_object(nm, np.asarray(s, float) + crng.uniform(-0.003, 0.003, 2), z=zr,
+                           yaw=float(crng.uniform(0, 2 * np.pi)))
+            print(f"    [Szene] {nm} lag außerhalb des Arbeitsbereichs — zurück auf einen freien Platz",
+                  flush=True)
+        mujoco.mj_forward(sim.m, sim.d)
         if panel is not None and vc.viz is not None:           # refresh the hex "overview Kamera (Fovea)" with
             try:                                               #   the RESTORED scene (it last rendered a pre-
                 vc.viz.update(sim.render(CAM), "Szene aktualisiert")   # restore frame -> stale layout); a plain
