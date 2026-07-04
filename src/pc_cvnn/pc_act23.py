@@ -1183,7 +1183,9 @@ def run_self_learning_steering(headless=False):
         # STAGE 2 lifelong: refit the choreography on the aggregated teacher labels; on FSM-driven
         # episodes report the SHADOW divergence (what the net WOULD have done vs the teacher).
         div = runtime.shadow_divergence_mm()
-        runtime.train(epochs=80)
+        runtime.train(epochs=200)                              # act19's DAgger refits used 300; 80 underfit
+        #   the shifting aggregate (user watched the net under-CLOSE the gripper -- the BC smoothing
+        #   artefact that stronger refits + DAgger labels at the visited close-states sharpen)
         if not use_net and np.isfinite(div):
             print(f"    [Stufe 2] Choreo-Schatten: |Netz-Teacher| {div:.0f} mm "
                   f"({runtime.n()} Samples, nachtrainiert)", flush=True)

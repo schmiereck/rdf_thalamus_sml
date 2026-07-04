@@ -24,6 +24,11 @@ from .base import ArmModule
 CAP = 24000            # FIFO sample cap: newest ~50 episodes; enough for the teacher manifold,
 #                        bounded refit cost (the buffer is refit lifelong after episodes)
 SUBSAMPLE = 2          # keep every 2nd visited step (neighbouring steps are near-duplicates)
+CORE = 8000            # the FIRST samples (teacher-driven demos) are PROTECTED from FIFO eviction:
+#                        during long policy-driven (DAgger) stretches every episode FAILS at first, so a
+#                        plain FIFO would wash the happy-path demos out of the buffer and the policy
+#                        would forget the path it never visits (act19 anchored on the demos for the
+#                        same reason).  Eviction only applies beyond the core.
 
 
 class RuntimePolicyModule(ArmModule):
@@ -50,8 +55,9 @@ class RuntimePolicyModule(ArmModule):
             return
         self._X.append(np.asarray(state, float).copy())
         self._Y.append(np.asarray(subgoal, float).copy())
-        if len(self._X) > CAP:
-            del self._X[:len(self._X) - CAP]; del self._Y[:len(self._Y) - CAP]
+        if len(self._X) > CAP:                                # evict the oldest NON-core samples
+            cut = len(self._X) - CAP
+            del self._X[CORE:CORE + cut]; del self._Y[CORE:CORE + cut]
 
     def n(self) -> int:
         return len(self._X)
