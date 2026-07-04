@@ -561,7 +561,68 @@ def run_self_learning_steering(headless=False):
     # young world model's action lottery; the GUI toggle changes it live as before)
     shape_half0 = {nm: sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)]].copy()
                    for nm in ("obj_L", "obj_U", "obj_T")}  # pristine XML first-geom half-extents (repair below)
-    bm = BodyModelModule(rng=np.random.default_rng(5)); bm.babble(sim, 4000)
+
+    # PERSISTENCE (user request): the four numpy learners -- body model, shape classifier incl. the
+    # self-labelled OPEN-SET classes, world model incl. its trial buffer, runtime policy incl. its DAgger
+    # aggregate -- survive across sessions, so lifelong progress (the whole point of the stage-2 DAgger
+    # volume) is not lost and the ~10min startup training is skipped.  The hex perception net is NOT
+    # persisted (complex PCNetwork; its warmup is ~2min and runs every session).  ACT23_FRESH=1 retrains;
+    # ACT23_STATE_PATH overrides the file.  Headless self-tests stay FRESH by default (reproducible gate).
+    import pickle
+    STATE_PATH = os.environ.get("ACT23_STATE_PATH", os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "state", "act23_state.pkl"))
+    PERSIST_STATE = (not headless) or os.environ.get("ACT23_STATE_HEADLESS", "0") == "1"
+    STATE_SCHEMA = 2       # BUMP whenever a learner's STRUCTURE changes (action/feature dims, new fields)
+
+    def _validate_loaded(b):
+        """SAFE versioning (user request): a pickle can LOAD fine and still not fit the current code
+        (a class evolved since the save) -- then it would crash mid-session instead of at startup.
+        Two gates: explicit schema/structure fields, then a FUNCTIONAL smoke test of every learner on
+        dummy inputs.  Returns None if usable, else the human-readable reason."""
+        from pc_cvnn.arm_modules.world_model import ACT_DIM as _AD
+        if b.get("schema") != STATE_SCHEMA:
+            return f"Schema {b.get('schema')} != Code {STATE_SCHEMA}"
+        if b.get("dof") != len(ARM3):
+            return f"DOF {b.get('dof')} != {len(ARM3)}"
+        try:
+            w, rt, sc, bmod = b["world"], b["runtime"], b["shape_clf"], b["bm"]
+            bmod.body.fk(np.zeros(len(ARM3)))                  # kinematics forward
+            cand = w.candidates(0)
+            if cand.shape[1] != _AD:
+                return f"Aktions-Dim {cand.shape[1]} != {_AD}"
+            w.predict(np.zeros(w.feat_dim), cand[:2])          # world-model ensemble forward
+            sc.classify(np.zeros(sc.fmu.shape[0]))             # shape head forward
+            sc.resolve(np.zeros(sc.fmu.shape[0]))              # open-set gate (exemplars + thresholds)
+            if rt.trained:
+                rt.predict(np.zeros(11))                       # runtime policy forward
+        except Exception as e:
+            return f"Funktionstest: {type(e).__name__}: {e}"
+        return None
+
+    _loaded = None
+    if PERSIST_STATE and os.environ.get("ACT23_FRESH", "0") != "1" and os.path.exists(STATE_PATH):
+        reason = None
+        try:
+            with open(STATE_PATH, "rb") as f:
+                _b = pickle.load(f)
+            reason = _validate_loaded(_b)
+            if reason is None:
+                _loaded = _b
+        except Exception as e:
+            reason = f"Laden: {type(e).__name__}: {e}"
+        if reason is not None:                                 # keep the old state instead of silently
+            bak = STATE_PATH + ".bak"                          #   overwriting it on the next save
+            try:
+                os.replace(STATE_PATH, bak)
+                print(f"  [Persistenz] Zustand passt nicht zum Code ({reason}) — alte Datei -> "
+                      f"{os.path.basename(bak)}, trainiere frisch", flush=True)
+            except Exception:
+                print(f"  [Persistenz] Zustand unbrauchbar ({reason}) — trainiere frisch", flush=True)
+
+    if _loaded is not None:
+        bm = _loaded["bm"]
+    else:
+        bm = BodyModelModule(rng=np.random.default_rng(5)); bm.babble(sim, 4000)
     state = CommandState23(sim)
     state.policy = os.environ.get("ACT23_POLICY", "self")
     state.choreo = os.environ.get("ACT23_CHOREO", "fsm")
@@ -572,18 +633,23 @@ def run_self_learning_steering(headless=False):
     os.environ["ACT18_SCATTER_EXTRA"] = "obj_L,obj_U"   # scatter the shapes too during vc warmup (consistency)
     vc, _P = VisualCortexModule.from_sim(sim, CAM, RES, headless=True,
                                          viz=(panel.fov_viz if panel is not None else None))
-    if panel is not None:
-        panel.update(sim.render(CAM), "Form-Wahrnehmung wird trainiert ...")
-    shape_clf = ShapeClassifierModule(cam=CAM, rng=np.random.default_rng(0))
-    saved = sim.d.mocap_pos.copy(); shape_clf.calibrate(sim)
+    if _loaded is not None:
+        shape_clf = _loaded["shape_clf"]
+        if panel is not None:
+            panel.update(sim.render(CAM), "Form-Wahrnehmung aus gespeichertem Zustand geladen")
+    else:
+        if panel is not None:
+            panel.update(sim.render(CAM), "Form-Wahrnehmung wird trainiert ...")
+        shape_clf = ShapeClassifierModule(cam=CAM, rng=np.random.default_rng(0))
+        saved = sim.d.mocap_pos.copy(); shape_clf.calibrate(sim)
 
-    def _shape_viz(i, steps, shp):                             # show the form-training live (one shape at a time)
-        panel.update(sim.render(CAM), f"Form-Wahrnehmung: {i}/{steps}  (lernt gerade: {shp})")
+        def _shape_viz(i, steps, shp):                         # show the form-training live (one shape at a time)
+            panel.update(sim.render(CAM), f"Form-Wahrnehmung: {i}/{steps}  (lernt gerade: {shp})")
 
-    shape_clf.train(sim, steps=int(os.environ.get("ACT23_SHAPE_STEPS", "2500")), rng=np.random.default_rng(1),
-                    viz_fn=(_shape_viz if panel is not None else None),
-                    viz_every=int(os.environ.get("ACT23_SHAPE_VIZ_EVERY", "40")))
-    sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+        shape_clf.train(sim, steps=int(os.environ.get("ACT23_SHAPE_STEPS", "2500")), rng=np.random.default_rng(1),
+                        viz_fn=(_shape_viz if panel is not None else None),
+                        viz_every=int(os.environ.get("ACT23_SHAPE_VIZ_EVERY", "40")))
+        sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
 
     # self-supervised world model for the GRASP WRIST (collect own trials, then train).
     # OPEN-WORLD situation features -- ONE camera perception path (|F| pipeline) for EVERY object:
@@ -594,7 +660,8 @@ def run_self_learning_steering(headless=False):
     # yaw (scatter() used to re-place them axis-aligned each episode, masking the gap).  The descriptor
     # embedding (no class one-hot) lets this ONE model absorb trials from any form.  (The former
     # ObjectOrientationModule features are subsumed by the k=2 phase -- one perception path, no oo.)
-    world = WorldModelModule(k=5, off_max=0.008, rng=np.random.default_rng(2), feat_dim=6 + shape_clf.NH)
+    world = (_loaded["world"] if _loaded is not None else
+             WorldModelModule(k=5, off_max=0.008, rng=np.random.default_rng(2), feat_dim=6 + shape_clf.NH))
     #   off_max>0 (STAGE-1 de-scripting): the grasp-point OFFSET dims are live -- the model can learn to
     #   grasp a form off its perceived grasp point; grip+gentle action dims replace the obj_U runtime rules.
 
@@ -604,7 +671,24 @@ def run_self_learning_steering(headless=False):
     # lesson: the stateful phase machine's labels degrade DAgger).  "Choreo: Netz" (GUI toggle /
     # ACT23_CHOREO=netz) lets the POLICY drive the sub-goals incl. the gripper; guards stay on by default
     # (train-with-guard) -- verify guard-free with ACT16_CLOSE_GUARD=0 ACT16_REFLEX=0.
-    runtime = RuntimePolicyModule(rng=np.random.default_rng(4))
+    runtime = _loaded["runtime"] if _loaded is not None else RuntimePolicyModule(rng=np.random.default_rng(4))
+
+    def save_state():
+        """Persist the four learners + the self-discovered command objects (every episode; cheap)."""
+        if not PERSIST_STATE:
+            return
+        try:
+            os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
+            base = {nm for _l, nm, _m in CommandState23.OBJECTS}
+            blob = {"schema": STATE_SCHEMA, "dof": len(ARM3),
+                    "bm": bm, "shape_clf": shape_clf, "world": world, "runtime": runtime,
+                    "objects": [o for o in state.OBJECTS if o[1] not in base],
+                    "shape_key": {k: v for k, v in state.SHAPE_KEY.items()
+                                  if k not in CommandState23.SHAPE_KEY}}
+            with open(STATE_PATH, "wb") as f:
+                pickle.dump(blob, f)
+        except Exception as e:
+            print(f"  [Persistenz] Speichern fehlgeschlagen: {e}", flush=True)
 
     def choreo_log(s, _aim, _j5):
         runtime.observe(s, act16.reactive_subgoal(s))      # label the VISITED state, ignore the FSM's own
@@ -697,17 +781,23 @@ def run_self_learning_steering(headless=False):
             if panel is not None and j % 2 == 0:
                 panel.update(sim.render(CAM), f"Selbst-Lernen ({label}): {(j + 1) * NTRIAL}/{NPOS * NTRIAL} Versuche")
 
-    collect_trials(LONG, "langes Objekt", np.pi)
-    collect_trials("obj_red", "Würfel, auch diagonal", np.pi / 2)   # cube yaw mod pi/2 (square symmetry);
-    #   the descriptor is COLOUR-agnostic, so red-cube trials transfer to the green cube too
-    collect_trials("obj_L", "L-Form", 2 * np.pi)                    # stage 1: the SHAPES get own trials too
-    collect_trials("obj_U", "U-Form", 2 * np.pi)                    #   (self wrist/grip/offset instead of
-    #   the teacher rules; the grip+gentle dims must SEE both regimes to learn the U's contingency)
-    world.train(epochs=600)
-    print(f"  world model trained on {world.n()} own trials.")
-    runtime.train(epochs=400)
-    print(f"  runtime policy (Stufe 2) trained on {runtime.n()} teacher-labelled states "
-          f"({'bereit' if runtime.trained else 'zu wenig Daten'}).")
+    if _loaded is not None:
+        print(f"  [Persistenz] Zustand geladen: Welt-Modell {world.n()} Versuche, Runtime-Policy "
+              f"{runtime.n()} Samples, offene Klassen {shape_clf.open_names} — Startup-Training übersprungen",
+              flush=True)
+    else:
+        collect_trials(LONG, "langes Objekt", np.pi)
+        collect_trials("obj_red", "Würfel, auch diagonal", np.pi / 2)   # cube yaw mod pi/2 (square symmetry);
+        #   the descriptor is COLOUR-agnostic, so red-cube trials transfer to the green cube too
+        collect_trials("obj_L", "L-Form", 2 * np.pi)                    # stage 1: the SHAPES get own trials too
+        collect_trials("obj_U", "U-Form", 2 * np.pi)                    #   (self wrist/grip/offset instead of
+        #   the teacher rules; the grip+gentle dims must SEE both regimes to learn the U's contingency)
+        world.train(epochs=600)
+        print(f"  world model trained on {world.n()} own trials.")
+        runtime.train(epochs=400)
+        print(f"  runtime policy (Stufe 2) trained on {runtime.n()} teacher-labelled states "
+              f"({'bereit' if runtime.trained else 'zu wenig Daten'}).")
+        save_state()                                           # capture the fresh startup training
 
     scene = {}                                                 # intended (body -> (xy, z, yaw)); the scene is FIXED
     #   after placement and restored per command, so only the commanded object moves.
@@ -854,6 +944,12 @@ def run_self_learning_steering(headless=False):
         if NOVEL_BODY not in state.SHAPE_KEY and panel is not None:
             panel.update(sim.render(CAM), "Noch keine neue Klasse — das Netz beobachtet bei jedem Befehl weiter")
 
+    if _loaded is not None:                                    # restore SELF-DISCOVERED command objects: the
+        for lbl, nm, m in _loaded.get("objects", []):          #   open-set classes live in shape_clf; the GUI
+            state.OBJECTS = state.OBJECTS + [(lbl, nm, m)]     #   plumbing (button, body<->class key) is re-
+            if panel is not None:                              #   registered here so "Neue Form" survives
+                panel.add_discovered(len(state.OBJECTS) - 1)   #   the restart as a commandable object
+        state.SHAPE_KEY.update(_loaded.get("shape_key", {}))
     if panel is not None:
         panel._randomize_fn = randomize_objects     # wire "Objekte neu" (panel built before randomize_objects existed)
         panel._introduce_fn = introduce_object      # wire "Objekt hinzufügen" (open-set discovery)
@@ -1189,6 +1285,7 @@ def run_self_learning_steering(headless=False):
         if not use_net and np.isfinite(div):
             print(f"    [Stufe 2] Choreo-Schatten: |Netz-Teacher| {div:.0f} mm "
                   f"({runtime.n()} Samples, nachtrainiert)", flush=True)
+        save_state()                                           # lifelong progress survives a restart
         return res.get("ok", False), res.get("err", float("nan")) * 1000.0
 
     # CURIOSITY-driven auto-run (the act21 researcher pattern, user request): instead of a random pick
