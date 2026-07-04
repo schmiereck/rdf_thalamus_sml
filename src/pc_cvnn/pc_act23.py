@@ -56,6 +56,7 @@ from pc_cvnn.arm_modules.body_model import BodyModelModule
 from pc_cvnn.arm_modules.shape_classifier import ShapeClassifierModule
 from pc_cvnn.arm_modules.object_orientation import ObjectOrientationModule
 from pc_cvnn.arm_modules.world_model import WorldModelModule, feats_from, action_vec, wrist_of
+from pc_cvnn.arm_modules.runtime_policy import RuntimePolicyModule
 import pc_cvnn.pc_act16 as act16
 
 CAM = "overview"
@@ -320,6 +321,8 @@ class CommandState23:
     def __init__(self, sim):
         self.sim = sim; self.sel = 0; self.action = "grasp"; self.target_idx = 0
         self.policy = "self"          # "self" -> world-model wrist (long obj); "teacher" -> WRIST_ALIGN
+        self.choreo = "fsm"           # "fsm" -> scripted choreography (collects DAgger data);
+        #                               "netz" -> the LEARNED runtime policy drives the sub-goals (Stufe 2)
         self.go = False; self.exit = False
         self.auto = False             # AUTO-Lauf: random object + random target per episode (self-training)
         self.busy = False             # an episode is RUNNING: matplotlib fires button callbacks inside the
@@ -378,7 +381,8 @@ class CommandState23:
     def label(self):
         act = "Greifen" if self.action == "grasp" else "Schieben"
         pol = "Selbst-gelernt" if self.policy == "self" else "Teacher"
-        return f"{self.selected()[0]} | {act} | Greifer: {pol} | Ziel {self.target_idx + 1}"
+        ch = "Netz" if self.choreo == "netz" else "FSM"
+        return f"{self.selected()[0]} | {act} | Greifer: {pol} | Choreo: {ch} | Ziel {self.target_idx + 1}"
 
 
 class CommandPanel23:
@@ -424,6 +428,10 @@ class CommandPanel23:
         axAuto = self.fig.add_axes([0.205, 0.220, 0.115, 0.05])
         self.bAuto = Button(axAuto, "Auto: aus", color="#3a3a5a", hovercolor="#50507a")
         self.bAuto.on_clicked(self._toggle_auto)
+        # STAGE 2: scripted FSM choreography <-> the LEARNED runtime policy drives the sub-goals
+        axCh = self.fig.add_axes([0.33, 0.220, 0.125, 0.05])
+        self.bCh = Button(axCh, "Choreo: FSM", color="#5a3a3a", hovercolor="#7a5050")
+        self.bCh.on_clicked(self._toggle_choreo)
         # named target buttons (top-right of the control band)
         self._tgt_btns = {}
         for i in range(len(state.MARKERS)):
@@ -481,6 +489,13 @@ class CommandPanel23:
         self.bAuto.label.set_text("Auto: an" if self.state.auto else "Auto: aus")
         self.bAuto.color = "#2a7a4a" if self.state.auto else "#3a3a5a"
         self.bAuto.ax.set_facecolor(self.bAuto.color); self.fig.canvas.draw_idle()
+
+    def _toggle_choreo(self, _e):
+        self.state.choreo = "netz" if self.state.choreo == "fsm" else "fsm"
+        net = self.state.choreo == "netz"
+        self.bCh.label.set_text("Choreo: Netz" if net else "Choreo: FSM")
+        self.bCh.color = "#2a5a7a" if net else "#5a3a3a"
+        self.bCh.ax.set_facecolor(self.bCh.color); self._refresh()
 
     def add_discovered(self, idx):
         """Button for a SELF-DISCOVERED object (state.OBJECTS[idx]), appended to the object row."""
@@ -549,6 +564,7 @@ def run_self_learning_steering(headless=False):
     bm = BodyModelModule(rng=np.random.default_rng(5)); bm.babble(sim, 4000)
     state = CommandState23(sim)
     state.policy = os.environ.get("ACT23_POLICY", "self")
+    state.choreo = os.environ.get("ACT23_CHOREO", "fsm")
     panel = None
     if not headless:
         panel = CommandPanel23(state, CAM, RES, rng=np.random.default_rng(7))
@@ -581,6 +597,18 @@ def run_self_learning_steering(headless=False):
     world = WorldModelModule(k=5, off_max=0.008, rng=np.random.default_rng(2), feat_dim=6 + shape_clf.NH)
     #   off_max>0 (STAGE-1 de-scripting): the grasp-point OFFSET dims are live -- the model can learn to
     #   grasp a form off its perceived grasp point; grip+gentle action dims replace the obj_U runtime rules.
+
+    # STAGE 2 de-scripting (user request): a LEARNED runtime policy replaces the scripted choreography.
+    # EVERY episode -- startup trials, manual commands, the curiosity auto-run -- is lifelong DAgger data:
+    # each VISITED state is labelled by the MARKOVIAN reactive teacher (act16.reactive_subgoal; the act19
+    # lesson: the stateful phase machine's labels degrade DAgger).  "Choreo: Netz" (GUI toggle /
+    # ACT23_CHOREO=netz) lets the POLICY drive the sub-goals incl. the gripper; guards stay on by default
+    # (train-with-guard) -- verify guard-free with ACT16_CLOSE_GUARD=0 ACT16_REFLEX=0.
+    runtime = RuntimePolicyModule(rng=np.random.default_rng(4))
+
+    def choreo_log(s, _aim, _j5):
+        runtime.observe(s, act16.reactive_subgoal(s))      # label the VISITED state, ignore the FSM's own
+        #   (aim, j5): the reactive teacher is a pure function of state, the phase machine is not
 
     def situation_feats(cmd):
         """PERCEIVED situation of `cmd` for the world model (None if the camera can't find it).  The
@@ -625,7 +653,8 @@ def run_self_learning_steering(headless=False):
         d, _ = act16.run_combined(sim, bm.body, None, CAM, episodes=1, cmd_fixed=cmd, force="grasp",
                                   perceive_fn=lambda c: (gxy, None, "grasp"), policy_fn=None, servo=False,
                                   goal_fn=lambda c, o: TARGET, rescatter=False, wrist_fn=wf,
-                                  grip_close=grip, carry_gentle=bool(gentle))
+                                  grip_close=grip, carry_gentle=bool(gentle),
+                                  log_fn=choreo_log)         # startup trials feed the runtime policy too
         return int(d)
 
     def grasp_gxy(cmd):
@@ -676,6 +705,9 @@ def run_self_learning_steering(headless=False):
     #   the teacher rules; the grip+gentle dims must SEE both regimes to learn the U's contingency)
     world.train(epochs=600)
     print(f"  world model trained on {world.n()} own trials.")
+    runtime.train(epochs=400)
+    print(f"  runtime policy (Stufe 2) trained on {runtime.n()} teacher-labelled states "
+          f"({'bereit' if runtime.trained else 'zu wenig Daten'}).")
 
     scene = {}                                                 # intended (body -> (xy, z, yaw)); the scene is FIXED
     #   after placement and restored per command, so only the commanded object moves.
@@ -1054,9 +1086,18 @@ def run_self_learning_steering(headless=False):
             grip_exec = float(np.clip(a_exec[4], 0.0, 0.45)); gentle_exec = bool(a_exec[5] > 0.5)
         else:                                                  # TEACHER: the old rules, now demonstrations
             grip_exec = 0.3 if u_cmd else None; gentle_exec = u_cmd
+        # STAGE 2: "Choreo: Netz" -> the learned runtime policy drives the sub-goals; the reactive
+        # teacher LABELS the visited states either way (log_fn on FSM runs = behaviour data, teacher_
+        # log_fn on policy runs = true DAgger), so every episode trains the choreography lifelong.
+        use_net = state.choreo == "netz" and runtime.trained
+        if state.choreo == "netz" and not runtime.trained:
+            print("    [Stufe 2] Choreo-Netz noch nicht trainiert -- FSM fährt", flush=True)
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_fn,
-                           policy_fn=None, servo=(method in ("color", "shape")), rescatter=False, episode_end_fn=ep_end,
+                           policy_fn=(runtime.predict if use_net else None),
+                           log_fn=(None if use_net else choreo_log),
+                           teacher_log_fn=(choreo_log if use_net else None),
+                           servo=(method in ("color", "shape")), rescatter=False, episode_end_fn=ep_end,
                            lifelong=True, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
                            arm_reset=False)
         _save(f"{body}_1after_runcombined")
@@ -1139,6 +1180,13 @@ def run_self_learning_steering(headless=False):
                       f"{', sanft' if a_obs[5] > 0.5 else ''}, "
                       f"{'geliefert' if res.get('ok', False) else 'nicht geliefert'}) -> "
                       f"{world.n()} Versuche, nachtrainiert", flush=True)
+        # STAGE 2 lifelong: refit the choreography on the aggregated teacher labels; on FSM-driven
+        # episodes report the SHADOW divergence (what the net WOULD have done vs the teacher).
+        div = runtime.shadow_divergence_mm()
+        runtime.train(epochs=80)
+        if not use_net and np.isfinite(div):
+            print(f"    [Stufe 2] Choreo-Schatten: |Netz-Teacher| {div:.0f} mm "
+                  f"({runtime.n()} Samples, nachtrainiert)", flush=True)
         return res.get("ok", False), res.get("err", float("nan")) * 1000.0
 
     # CURIOSITY-driven auto-run (the act21 researcher pattern, user request): instead of a random pick
@@ -1222,6 +1270,11 @@ def run_self_learning_steering(headless=False):
             _intro_and_command()
         for _ in range(3):                                     # exercise the curiosity pick (GUI auto path)
             print(f"    curiosity: {curious_pick()}  -> sel={state.OBJECTS[state.sel][0]}", flush=True)
+        state.choreo = "netz"                                  # STAGE 2: the LEARNED choreography drives
+        print(f"  Stufe 2: Choreo-NETZ fährt die Kommandos ({runtime.n()} Teacher-Samples) ...")
+        for k, _o in enumerate(CommandState23.OBJECTS):
+            state.sel = k; ok, err = run_one()
+            print(f"    {state.OBJECTS[k][0]:16s}: {'GELIEFERT' if ok else 'NICHT'}  ({err:.0f}mm)", flush=True)
         return
 
     act16.run_combined._quiet = True
