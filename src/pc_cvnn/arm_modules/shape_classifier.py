@@ -457,7 +457,8 @@ class ShapeClassifierModule(ArmModule):
         {shape, id, prob, pos (world xy, overview), yaw, px}.  No colour, no privileged positions."""
         from scipy import ndimage
         self._park_markers(sim)
-        mask = self._mask(self._render_u8(sim))
+        img = self._render_u8(sim)
+        mask = self._mask(img)
         labels, n = ndimage.label(mask)
         out = []
         for lab in range(1, n + 1):
@@ -486,9 +487,13 @@ class ShapeClassifierModule(ArmModule):
             if self.H is not None:
                 W = self._px_to_world(np.column_stack([xs, ys]))            # world coords of the component px
                 grasp = W[int(np.argmin(np.linalg.norm(W - ctr, axis=1)))]  # nearest material to the centroid
+            rgb = img[ys, xs].astype(float).mean(0) / 255.0     # component CHROMATICITY (stage-3 colour
+            csum = float(rgb.sum())                             #   open-set: brightness-normalised, so
+            chroma = rgb / csum if csum > 1e-6 else rgb         #   shading/position largely cancel)
             out.append({"shape": name, "id": k, "prob": prob,   # shape=None + id=-1 = a NOVEL form (open set)
                         "pos": (ctr if self.H is not None else None), "grasp_xy": grasp, "grasp_yaw": 0.0,
                         "yaw": self._yaw_from(F), "yaw4": self._yaw4_from(F), "area": float(comp.sum()),
+                        "chroma": chroma,
                         "px": np.array([xs.mean(), ys.mean()]),
                         "desc": desc})                         # the raw rotation-invariant |F| descriptor --
         return out                                             #   OPEN-WORLD (any object yields one, no class slot)

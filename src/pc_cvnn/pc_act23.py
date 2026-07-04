@@ -57,6 +57,7 @@ from pc_cvnn.arm_modules.shape_classifier import ShapeClassifierModule
 from pc_cvnn.arm_modules.object_orientation import ObjectOrientationModule
 from pc_cvnn.arm_modules.world_model import WorldModelModule, feats_from, action_vec, wrist_of
 from pc_cvnn.arm_modules.runtime_policy import RuntimePolicyModule
+from pc_cvnn.arm_modules.colour_openset import ColourOpenSetModule
 import pc_cvnn.pc_act16 as act16
 
 CAM = "overview"
@@ -595,6 +596,8 @@ def run_self_learning_steering(headless=False):
             sc.resolve(np.zeros(sc.fmu.shape[0]))              # open-set gate (exemplars + thresholds)
             if rt.trained:
                 rt.predict(np.zeros(11))                       # runtime policy forward
+            if b.get("colours") is not None:                   # optional stage-3 colour classes
+                b["colours"].classify(np.ones(3) / 3)
         except Exception as e:
             return f"Funktionstest: {type(e).__name__}: {e}"
         return None
@@ -673,6 +676,15 @@ def run_self_learning_steering(headless=False):
     # (train-with-guard) -- verify guard-free with ACT16_CLOSE_GUARD=0 ACT16_REFLEX=0.
     runtime = _loaded["runtime"] if _loaded is not None else RuntimePolicyModule(rng=np.random.default_rng(4))
 
+    # STAGE 3 (user request): OPEN-SET COLOURS -- fully self-labelled, no teacher colour set anywhere.
+    # Scene glances feed component CHROMATICITIES; classes are self-named ("farbe-N") and bound to the
+    # body they were discovered on (plumbing aid, like the form registration).  Concrete de-crutching:
+    # the LONG object is localised by its self-labelled colour class instead of privileged sim access.
+    # OPTIONAL blob keys (old saves load fine without them -- no schema bump, the user's running
+    # lifelong state survives).
+    colours = (_loaded.get("colours") if _loaded is not None else None) or ColourOpenSetModule()
+    colour_of_body = dict(_loaded.get("colour_of_body", {})) if _loaded is not None else {}
+
     def save_state():
         """Persist the four learners + the self-discovered command objects (every episode; cheap)."""
         if not PERSIST_STATE:
@@ -682,6 +694,7 @@ def run_self_learning_steering(headless=False):
             base = {nm for _l, nm, _m in CommandState23.OBJECTS}
             blob = {"schema": STATE_SCHEMA, "dof": len(ARM3),
                     "bm": bm, "shape_clf": shape_clf, "world": world, "runtime": runtime,
+                    "colours": colours, "colour_of_body": dict(colour_of_body),
                     "objects": [o for o in state.OBJECTS if o[1] not in base],
                     "shape_key": {k: v for k, v in state.SHAPE_KEY.items()
                                   if k not in CommandState23.SHAPE_KEY}}
@@ -913,6 +926,31 @@ def run_self_learning_steering(headless=False):
             print(f"    [dbg open-set] {shape_clf.last_events}  buffer={len(shape_clf._novel_buf)}", flush=True)
         for cname in born:
             _register_open_class(cname)
+        # STAGE 3: OPEN-SET COLOURS from the same glance -- every in-workspace component's chromaticity
+        # feeds the fully self-labelled colour classes; a newborn class is BOUND to the body it was
+        # discovered on (nearest body <4cm, plumbing aid exactly like the form registration).
+        saved = sim.d.mocap_pos.copy()
+        dets = shape_clf.perceive_all(sim)
+        sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+        bodies = list(dict.fromkeys([nm for _l, nm, _m in state.OBJECTS]
+                                    + ([NOVEL_BODY] if NOVEL_BODY in scene else [])))
+        for d in dets:
+            if d["pos"] is None:
+                continue
+            if shape_clf.area_hi is not None and d["area"] > shape_clf.area_hi:
+                continue                                       # merged blob = MIXED chromaticity -> would
+                #   breed a phantom colour class (one appeared un-bound in the headless run)
+            x, y = float(d["pos"][0]), float(d["pos"][1])
+            if not (-0.115 <= x <= 0.115 and 0.075 <= y <= 0.235):
+                continue                                       # same calibrated-workspace gate as the forms
+            for cname in colours.observe(d["chroma"]):
+                near = min(bodies, key=lambda o: float(np.linalg.norm(sim.obj_pos(o)[:2] - d["pos"])))
+                if (float(np.linalg.norm(sim.obj_pos(near)[:2] - np.asarray(d["pos"]))) < 0.04
+                        and near not in colour_of_body):
+                    colour_of_body[near] = cname
+                    print(f"  [open-set] NEUE FARBE selbst benannt: '{cname}' (auf {near})", flush=True)
+                else:
+                    print(f"  [open-set] NEUE FARBE selbst benannt: '{cname}'", flush=True)
         return born
 
     def introduce_object():
@@ -982,8 +1020,30 @@ def run_self_learning_steering(headless=False):
                                  px=np.asarray(det["px"], float))
                 return _off(det["grasp_xy"]), None, "grasp"
             return _off(sim.obj_pos(body)[:2]), None, "grasp"  # perception missed -> privileged fallback
-        if method == "long":                                   # the elongated obj is OOD for the colour vc;
-            return _off(sim.obj_pos(body)[:2]), None, "grasp"  #   localise privileged (act23 point = the WRIST)
+        if method == "long":                                   # the elongated obj is OOD for the trained
+            # colour vc -- it used to be localised PRIVILEGED (the last perception crutch in the GUI).
+            # STAGE 3: localise it by its SELF-LABELLED colour class (bound at discovery); privileged
+            # only as fallback while the class doesn't exist yet / the object isn't seen.
+            cname = colour_of_body.get(body)
+            if cname is not None and os.environ.get("ACT23_LONG_PRIV", "0") != "1":
+                saved = sim.d.mocap_pos.copy()
+                dets = shape_clf.perceive_all(sim)
+                sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+                cands = [d for d in dets if d["pos"] is not None
+                         and colours.classify(d["chroma"])[0] == cname]
+                if cands:
+                    best = min(cands, key=lambda d: colours.classify(d["chroma"])[1])
+                    _sel_seed.update(key=None, xy=np.asarray(best["pos"], float),
+                                     px=np.asarray(best["px"], float))
+                    if os.environ.get("ACT23_DEBUG", "0") == "1":
+                        print(f"    [dbg] Langes Objekt via Farbklasse '{cname}' lokalisiert", flush=True)
+                    return _off(best["grasp_xy"]), None, "grasp"
+            p0 = np.asarray(sim.obj_pos(body)[:2], float)      # fallback: class unborn / not in sight
+            try:
+                _sel_seed.update(key=None, xy=p0, px=np.asarray(shape_clf._world_to_px(p0)[0], float))
+            except Exception:
+                pass
+            return _off(p0), None, "grasp"
         if body == "obj_red":                                  # PARK the magenta markers for RED only: red is a
             saved = sim.d.mocap_pos.copy(); shape_clf._park_markers(sim)   # SUBSET of magenta (1,0,1) and the
             try:                                               #   sel head has no 'marker' code to out-claim it
@@ -1028,19 +1088,16 @@ def run_self_learning_steering(headless=False):
         fight the pin, no zoom-out spiral (v1 called vc.track() from the pin: the colour drive walked the
         box away from the sampled crop and zoomed out every frame -- the user's frozen/mismatched views)."""
         mem = {"xy": None, "px": None}                         # world belief (servo) + image belief (display)
-        if key is None:                                        # long object: seed from its start position
-            p0 = sim.obj_pos(body)[:2]
-            mem["xy"] = np.asarray(p0, float)
-            try:
-                mem["px"] = np.asarray(shape_clf._world_to_px(p0)[0], float)
-            except Exception:
-                pass
+        #   (the long object used to be seeded PRIVILEGED here; stage 3: perceive() now always writes
+        #   _sel_seed for it too -- colour-class localization, or its explicit fallback -- so the lazy
+        #   seed below covers key=None as well)
         vc.fovea.z = 1.0                                       # defined DETAIL zoom for the form view
 
         def _track():
-            if mem["px"] is None and key is not None and _sel_seed.get("key") == key:
+            if mem["px"] is None and _sel_seed.get("key", "__unset__") == key:
                 mem["xy"] = _sel_seed.get("xy"); mem["px"] = _sel_seed.get("px")   # lazy: perceive() runs
                 #   INSIDE run_combined, after this tracker was built -> read the seed on the first frame
+                #   (key=None = the long object; its seed now comes from perceive() too, stage 3)
             saved = sim.d.mocap_pos.copy()                     # perceive_all parks the markers -> restore
             dets = shape_clf.perceive_all(sim)
             sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
