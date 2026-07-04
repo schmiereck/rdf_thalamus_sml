@@ -1259,7 +1259,11 @@ def run_self_learning_steering(headless=False):
         # -- wrist via run_combined._wrist_tgt, grip/gentle = its old rules, logged as demonstrations)
         # and the OWN outcome, then refit the ensemble.  The model keeps learning from its acting: an
         # action it currently believes in but that is unreliable gets corrected by its own failures.
-        if fe is not None:
+        # ONLY on FSM-driven episodes (use_net False): while the runtime policy is immature, its failed
+        # episodes would be logged as (situation, action, 0) although the ACTION was fine and the
+        # CHOREOGRAPHY failed -- mis-credited labels POISONED the world model in the user's long run
+        # (sigma stayed 0.4-0.9 everywhere, LCB picks went random-ish, curiosity fed on the noise).
+        if fe is not None and not use_net:
             if a_exec is not None:
                 a_obs, src = a_exec, "Selbst"
             else:
@@ -1379,6 +1383,8 @@ def run_self_learning_steering(headless=False):
     act16.run_combined._quiet = True
     panel.update(sim.render(CAM), "bereit — Objekt wählen, Greifer Teacher/Selbst-gelernt, Ausführen")
     ep = 0
+    bilanz = {"fsm": [], "netz": []}                           # rolling per-mode delivery record: without
+    #   a scoreboard slow DAgger progress is indistinguishable from noise (user: "so la la")
     while not state.exit:
         if not (state.go or state.auto):
             panel.plt.pause(0.05); continue
@@ -1401,6 +1407,14 @@ def run_self_learning_steering(headless=False):
             state.busy = False
         line = f"[{tag} {ep}] {'GELIEFERT' if ok else 'NICHT geliefert'}  |  Abstand {err:.0f} mm"
         print("  " + line); panel.update(sim.render(CAM), line); ep += 1
+        bilanz["netz" if state.choreo == "netz" else "fsm"].append(bool(ok))
+        if ep % 10 == 0:                                       # rolling last-30 scoreboard per mode
+            parts = []
+            for md, lbl in (("fsm", "FSM"), ("netz", "Netz")):
+                h = bilanz[md][-30:]
+                if h:
+                    parts.append(f"{lbl} {sum(h)}/{len(h)}")
+            print(f"    [Bilanz] letzte 30 je Modus: " + ", ".join(parts), flush=True)
         if panel._pending_randomize:                           # deferred mid-episode clicks run NOW,
             panel._pending_randomize = False                   #   between episodes (see state.busy)
             randomize_objects(); panel.update(sim.render(CAM), "Objekte neu gewürfelt"); panel._refresh()
