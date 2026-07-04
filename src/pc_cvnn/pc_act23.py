@@ -40,6 +40,16 @@ os.environ.setdefault("ACT14_DOF", "4")   # act23 runs the 4-DOF arm: joint_3 fr
 #   it was LOCKED at HOME=3.14 everywhere and is THE reason for the small workspace; the learned
 #   kinematics babbles all 4 positioning joints and the reach keeps the CLAW DIRECTION (redundancy).
 #   ACT14_DOF=3 restores the classic arm.  Must be set BEFORE pc_act14 is imported (ARM3 is built then).
+# WORKSPACE enlarged toward the 4-DOF reach (user request), bounded by the MEASURED GRASP ENVELOPE:
+# the panned physical-rig camera localises 0-5mm over the whole table and straight-ahead grasps work
+# to r=0.32, BUT the teacher choreography fails at combined |x|>~0.09 with y>~0.15 (probes: (+-0.115,
+# 0.16) 0/4, (+-0.095,0.20) 0/3 -- ALSO at 3 DOF, a PRE-EXISTING envelope hole the old probes never
+# sampled; 4 DOF adds claw TILT there, 30-42deg vs 14-19).  So: y extended 0.21->0.24 (centre column +
+# narrow top verified), x kept at ~old size.  The envelope hole is an open work item (fits stage 2:
+# a learned policy could learn its own envelope).
+for _k, _v in (("ACT_REACH_X0", "-0.12"), ("ACT_REACH_X1", "0.12"),
+               ("ACT_REACH_Y0", "0.07"), ("ACT_REACH_Y1", "0.24")):
+    os.environ.setdefault(_k, _v)
 from pc_cvnn.pc_act14 import BracketArmSim, HOME, ARM3
 from pc_cvnn.pc_act18 import F as HEX_F
 from pc_cvnn.arm_modules.body_model import BodyModelModule
@@ -93,7 +103,7 @@ class Env:
 
 
 def rand_pos(rng):
-    return np.array([rng.uniform(-0.09, 0.09), rng.uniform(0.10, 0.18)])
+    return np.array([rng.uniform(-0.10, 0.10), rng.uniform(0.09, 0.22)])   # inside the enlarged workspace
 
 
 def collect(env, world, shapes, npos, ntrial, rng, into_world=True):
@@ -532,10 +542,13 @@ def run_self_learning_steering(headless=False):
 
     print("act23 [viz] — self-learning grasper command-steering" + (" (headless self-test)" if headless else ""))
     sim = BracketArmSim(render_wh=(RES, RES)); sim.set_reach_site("contact")
+    # ACT23_POLICY=teacher starts in teacher mode (headless isolation: execution/perception WITHOUT the
+    # young world model's action lottery; the GUI toggle changes it live as before)
     shape_half0 = {nm: sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)]].copy()
                    for nm in ("obj_L", "obj_U", "obj_T")}  # pristine XML first-geom half-extents (repair below)
     bm = BodyModelModule(rng=np.random.default_rng(5)); bm.babble(sim, 4000)
     state = CommandState23(sim)
+    state.policy = os.environ.get("ACT23_POLICY", "self")
     panel = None
     if not headless:
         panel = CommandPanel23(state, CAM, RES, rng=np.random.default_rng(7))
@@ -640,10 +653,16 @@ def run_self_learning_steering(headless=False):
             fe = situation_feats(cmd)
             if fe is None:
                 continue                                       # camera can't see it here -> no honest trial
-            for _ in range(NTRIAL):
+            for t in range(NTRIAL):
                 w = crng.uniform(0, np.pi); setup_obj(cmd, p, yaw)
-                off = crng.uniform(-0.008, 0.008, 2)
-                grip = float(crng.uniform(0.0, 0.4)); gentle = float(crng.integers(2))
+                if t == 0:                                     # anchor trial ON the structured candidate
+                    off = np.zeros(2); grip = 0.0; gentle = 0.0   # grid (offset-0, firm grip): the LCB
+                    #   prefers those candidates, so the model needs EVIDENCE there -- purely random
+                    #   trials left them unsampled and a young model picked edge offsets + wide grips
+                    #   ("Greifer schliesst nicht weit genug", carried objects slipped mid-carry)
+                else:
+                    off = crng.uniform(-0.008, 0.008, 2)
+                    grip = float(crng.uniform(0.0, 0.4)); gentle = float(crng.integers(2))
                 ok = grasp_trial(cmd, w, grasp_gxy(cmd) + off, grip, gentle)
                 world.observe(fe, action_vec(off[0], off[1], w, grip, gentle), ok)
             if panel is not None and j % 2 == 0:
@@ -666,12 +685,11 @@ def run_self_learning_steering(headless=False):
     # SPACING matters: the L spans 56mm (reach ~35mm from its centre), so two shapes pointing at each other need
     # ~70mm of centre clearance or their geoms INTERPENETRATE at placement.  mj_forward doesn't resolve contacts,
     # so an overlap is INVISIBLE in the placed render -- then the first sim.step in run_combined ejects the
-    # overlapping shape ("a segment snaps/twists shortly after Ausfuehren").  SIX slots (two rows) so the
-    # open-set probe object has a place once discovered: min pair = the 78mm row gap, jitter +-3mm keeps the
-    # worst case ~72mm > 70mm.  Rows stay inside the PROVEN reach envelope: top corners r~0.221 = the old
-    # 5-slot corners (a first cut at y=0.205/x=0.10, r=0.229, made BOTH top corner grasps fail -- reach
-    # edge); bottom r>=0.119 stays outside BASE_CLEAR=0.11 (near-base grasps fail mechanically inside).
-    SLOTS = [(-0.095, 0.20), (0.0, 0.20), (0.095, 0.20), (-0.10, 0.122), (0.0, 0.122), (0.10, 0.122)]
+    # overlapping shape ("a segment snaps/twists shortly after Ausfuehren").  SIX slots, EVERY cell inside the
+    # MEASURED 4-DOF grasp envelope (probes, 3-4/4 each: centre column any y, |x|<=0.06 at the top, |x|<=0.09
+    # low; the mid band |x|>~0.085 / y 0.16..0.235 FAILS 0-2/4 -- pre-existing envelope hole, see REACH note).
+    # Min pair 71mm at jitter +-2mm; (0,0.115) r>BASE_CLEAR=0.11.
+    SLOTS = [(-0.06, 0.24), (0.06, 0.24), (0.0, 0.19), (-0.09, 0.115), (0.09, 0.115), (0.0, 0.115)]
     scene_slots = {}                                           # body -> slot index (finds the FREE slot)
 
     def randomize_objects():
@@ -682,7 +700,7 @@ def run_self_learning_steering(headless=False):
         order = list(range(len(SLOTS))); crng.shuffle(order)   # random object<->slot assignment (variety)
         scene_slots.clear()
         for (nm, m), si in zip(bodies, order):
-            p = np.array(SLOTS[si], float) + crng.uniform(-0.003, 0.003, 2)   # small jitter
+            p = np.array(SLOTS[si], float) + crng.uniform(-0.002, 0.002, 2)   # small jitter
             z = float(LONG_HALF[2]) if m == "long" else 0.012
             yaw = crng.uniform(0, np.pi) if m == "long" else crng.uniform(0, 2 * np.pi)
             scene[nm] = (p, z, float(yaw)); scene_slots[nm] = si
@@ -765,10 +783,10 @@ def run_self_learning_steering(headless=False):
         if shape_clf.novel_th is None:
             return []
         saved = sim.d.mocap_pos.copy()                         # observe_scene parks the markers -> restore
-        born = shape_clf.observe_scene(sim, bounds=(-0.105, 0.105, 0.075, 0.205))   # only inside the
-        sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)   # calibrated workspace (slots reach
-        #   x 0.103 / y 0.203 max; anything beyond lies where a knocked/mis-dropped object renders
-        #   clipped or distorted and would read consistently-"novel" for a boring reason)
+        born = shape_clf.observe_scene(sim, bounds=(-0.115, 0.115, 0.075, 0.235))   # only inside the
+        sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)   # calibrated workspace (5mm inside
+        #   REACH_XY; anything beyond lies where a knocked/mis-dropped object renders clipped or
+        #   distorted and would read consistently-"novel" for a boring reason)
         if os.environ.get("ACT23_DEBUG", "0") == "1" and shape_clf.last_events:
             print(f"    [dbg open-set] {shape_clf.last_events}  buffer={len(shape_clf._novel_buf)}", flush=True)
         for cname in born:
@@ -1013,7 +1031,10 @@ def run_self_learning_steering(headless=False):
         # form descriptor).  L/U/T get own startup trials now; the teacher path below remains as pure
         # TRAINING scripting whose choices are logged as demonstrations.
         if state.policy == "self" and fe is not None:
-            a, _, _ = world.select_action(fe, n=24, lam=LAM)
+            n_cand = 24 if state.auto else 0                   # EXPLORE only in the Auto self-play (random
+            #   offset/grip candidates); a MANUAL command EXPLOITS the structured grid (offset-0 wrists x
+            #   grip regimes) -- the user watched a young model pick edge offsets + non-closing grips
+            a, _, _ = world.select_action(fe, n=n_cand, lam=LAM)
             a_exec = a; wf = (lambda s, _w=wrist_of(a): _w)
             if float(np.linalg.norm(a[:2])) > 1e-9:
                 sel_off["dxy"] = np.asarray(a[:2], float)
@@ -1067,7 +1088,7 @@ def run_self_learning_steering(headless=False):
         # between episodes (the bounded act23 heir of act16's reposition_strays), not an agent rule.
         for _l2, nm, _m2 in state.OBJECTS:
             p = sim.obj_pos(nm)[:2]
-            if abs(p[0]) <= 0.125 and 0.055 <= p[1] <= 0.235:
+            if abs(p[0]) <= 0.135 and 0.055 <= p[1] <= 0.265:
                 continue                                       # inside (generous bounds: a legit delivery can
                 #   rest tolerance-width past a top target -- CONTINUITY, only truly-LOST objects return)
             occ = [sim.obj_pos(o)[:2] for _l3, o, _m3 in state.OBJECTS if o != nm]

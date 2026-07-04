@@ -237,8 +237,11 @@ class ArmBodyModel3D:
         G = np.linalg.inv(X.T @ X + 1e-6 * np.eye(self.NF))           # ridge least squares
         self.W = G @ (X.T @ Y); self.Wd = G @ (X.T @ D)
         # the claw direction to PRESERVE at 4 DOF: MEASURED as the mean claw direction over LOW
-        # (table-level) poses with joint_3 at its classic HOME -- exactly the orientation the
-        # proven 3-DOF grasp choreography operated with (no assumed world axis).
+        # (table-level) poses with joint_3 at its classic HOME, then reduced to its VERTICAL
+        # component.  The measured mean has a small (~4 deg) lean IN THE ARM'S PLANE -- as a
+        # WORLD-frame reference that lean is only right straight ahead and TWISTS the reach at
+        # large bearings (measured: all |x|=0.125 slot grasps failed, centre slots fine); the
+        # vertical part is bearing-invariant by construction.
         ref = []
         for _ in range(200):
             q = self.rng.uniform(rng3[:, 0], rng3[:, 1])
@@ -247,7 +250,7 @@ class ArmBodyModel3D:
             if sim.fk_truth(q)[2] < 0.06:
                 ref.append(sim.grasp_dir().copy())
         d = np.mean(ref, axis=0) if ref else sim.grasp_dir().copy()
-        self.dir_ref = d / max(float(np.linalg.norm(d)), 1e-9)
+        self.dir_ref = np.array([0.0, 0.0, np.sign(d[2]) if abs(d[2]) > 1e-9 else -1.0])
 
     def observe(self, q, hand_obs, lr=0.05):            # lifelong / vision refinement
         a = self._aug(q); err = a @ self.W - np.asarray(hand_obs, float)
@@ -273,6 +276,9 @@ class ArmBodyModel3D:
             # direction weight must be SMALL for position to win wherever the two conflict -- the
             # extra DOF then only spends its null space on keeping the claw in grasp orientation.
             wd = WDIR
+            #   (an endgame-boosted adaptive weight was TRIED against the mid-band envelope hole --
+            #   no effect, 0/24: the hole is not a weight issue but likely the reach settling into an
+            #   elbow BRANCH whose vertical-claw solution is unreachable by gradient; open work item)
             derr = self.dir_ref - self.claw_dir(q)
             A = np.vstack([J, wd * self.jacobian(q, W=self.Wd)])
             e = np.concatenate([gain * err, wd * derr])

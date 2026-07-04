@@ -280,7 +280,9 @@ class ShapeClassifierModule(ArmModule):
             if half is not None:
                 sim.m.geom_size[sim.m.body_geomadr[bid]] = half
             zc = float(sim.m.geom_size[sim.m.body_geomadr[bid]][2])   # rest z = the object's half-height
-            sim.set_object(body, [rng.uniform(-0.08, 0.08), rng.uniform(0.08, 0.20)], z=zc,
+            from pc_cvnn.pc_act14 import REACH_XY                     # train over the CURRENT workspace
+            sim.set_object(body, [rng.uniform(REACH_XY[0][0] + 0.03, REACH_XY[1][0] - 0.03),
+                                  rng.uniform(REACH_XY[0][1] + 0.01, REACH_XY[1][1] - 0.01)], z=zc,
                            yaw=rng.uniform(0, 2 * np.pi)); mujoco.mj_forward(sim.m, sim.d)
             if viz_fn is not None and i % viz_every == 0:        # show the form-training live (every N steps)
                 viz_fn(i, steps, SHAPES[k])
