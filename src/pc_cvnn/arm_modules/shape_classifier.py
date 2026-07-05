@@ -426,8 +426,9 @@ class ShapeClassifierModule(ArmModule):
         # The OLDER name survives (it is the one act23 may have registered as a command).
         for a in list(self.open_names):
             for b in list(self.open_names):
-                if (self.open_names.index(a) < self.open_names.index(b)
-                        and a in self.open and b in self.open
+                if (a in self.open and b in self.open                # a/b may have been MERGED AWAY by an
+                        #   earlier pass of this very loop -- index() on a removed name raised ValueError
+                        and self.open_names.index(a) < self.open_names.index(b)
                         and min(float(np.linalg.norm(p - q))
                                 for p in self.open[a] for q in self.open[b]) < self.novel_th):
                     self.open[a] = (self.open[a] + self.open[b])[:OPEN_CAP]

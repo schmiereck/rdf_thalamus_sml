@@ -1215,10 +1215,13 @@ def run_self_learning_steering(headless=False):
         # rules (the user's no-runtime-rules principle: the net decides, conditioned on the perceived
         # form descriptor).  L/U/T get own startup trials now; the teacher path below remains as pure
         # TRAINING scripting whose choices are logged as demonstrations.
+        use_net = state.choreo == "netz" and runtime.trained   # decided HERE: it also gates exploration
         if state.policy == "self" and fe is not None:
-            n_cand = 24 if state.auto else 0                   # EXPLORE only in the Auto self-play (random
+            n_cand = 24 if (state.auto and not use_net) else 0  # EXPLORE only in the Auto self-play (random
             #   offset/grip candidates); a MANUAL command EXPLOITS the structured grid (offset-0 wrists x
-            #   grip regimes) -- the user watched a young model pick edge offsets + non-closing grips
+            #   grip regimes) -- the user watched a young model pick edge offsets + non-closing grips.
+            #   NOT on Netz episodes: the world model gets NO outcome labels there (poisoning fix), so
+            #   random candidates are pure risk without learning -- exploit the model's best action.
             a, _, _ = world.select_action(fe, n=n_cand, lam=LAM)
             a_exec = a; wf = (lambda s, _w=wrist_of(a): _w)
             if float(np.linalg.norm(a[:2])) > 1e-9:
@@ -1242,7 +1245,6 @@ def run_self_learning_steering(headless=False):
         # STAGE 2: "Choreo: Netz" -> the learned runtime policy drives the sub-goals; the reactive
         # teacher LABELS the visited states either way (log_fn on FSM runs = behaviour data, teacher_
         # log_fn on policy runs = true DAgger), so every episode trains the choreography lifelong.
-        use_net = state.choreo == "netz" and runtime.trained
         if state.choreo == "netz" and not runtime.trained:
             print("    [Stufe 2] Choreo-Netz noch nicht trainiert -- FSM fährt", flush=True)
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,

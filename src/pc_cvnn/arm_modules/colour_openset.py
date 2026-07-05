@@ -74,7 +74,9 @@ class ColourOpenSetModule(ArmModule):
         # CONSOLIDATE: two centroids inside TH are the same colour seen twice -- older name survives
         for a in list(self.names):
             for b in list(self.names):
-                if (self.names.index(a) < self.names.index(b) and a in self.classes and b in self.classes
+                if (a in self.classes and b in self.classes          # a/b may have been merged away by an
+                        #   earlier pass -- index() on a removed name raises ValueError
+                        and self.names.index(a) < self.names.index(b)
                         and float(np.linalg.norm(self.classes[a]["mu"] - self.classes[b]["mu"])) < TH):
                     self.classes[a]["n"] += self.classes[b]["n"]
                     del self.classes[b]; self.names.remove(b)
