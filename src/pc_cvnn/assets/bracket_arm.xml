@@ -115,11 +115,13 @@
       <geom type="box" pos="-0.007  0.000 0" size="0.007 0.028 0.012" rgba="0.95 0.55 0.1 1" density="700" friction="1.4 0.05 0.001"/>
       <geom type="box" pos=" 0.007 -0.021 0" size="0.014 0.007 0.012" rgba="0.95 0.55 0.1 1" density="700" friction="1.4 0.05 0.001"/>
     </body>
-    <body name="obj_U" pos="-0.02 0.18 0.012">     <!-- U: two thin prongs + a base bar -->
+    <body name="obj_U" pos="-0.02 0.18 0.012">     <!-- U: two thin prongs + a base bar.  Inner cutout
+         WIDENED 14mm -> 24mm (user-observed: the 16mm-wide finger WEDGED in the old 14mm slot and the
+         arm could not shake the U off; 24mm = finger + 4mm clearance per side, bar thickness unchanged) -->
       <freejoint/>
-      <geom type="box" pos="-0.014  0.007 0" size="0.007 0.014 0.012" rgba="0.1 0.8 0.85 1" density="700" friction="1.4 0.05 0.001"/>
-      <geom type="box" pos=" 0.014  0.007 0" size="0.007 0.014 0.012" rgba="0.1 0.8 0.85 1" density="700" friction="1.4 0.05 0.001"/>
-      <geom type="box" pos=" 0.000 -0.014 0" size="0.021 0.007 0.012" rgba="0.1 0.8 0.85 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos="-0.019  0.007 0" size="0.007 0.014 0.012" rgba="0.1 0.8 0.85 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos=" 0.019  0.007 0" size="0.007 0.014 0.012" rgba="0.1 0.8 0.85 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos=" 0.000 -0.014 0" size="0.026 0.007 0.012" rgba="0.1 0.8 0.85 1" density="700" friction="1.4 0.05 0.001"/>
     </body>
     <!-- OPEN-SET probe object: a T-shape the classifier is NEVER trained on.  Starts PARKED off-table so
          no training phase ever sees it; act23's "Objekt hinzufuegen" drops it into the scene and the

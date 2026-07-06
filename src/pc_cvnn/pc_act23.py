@@ -637,23 +637,70 @@ def run_self_learning_steering(headless=False):
     os.environ["ACT18_SCATTER_EXTRA"] = "obj_L,obj_U"   # scatter the shapes too during vc warmup (consistency)
     vc, _P = VisualCortexModule.from_sim(sim, CAM, RES, headless=True,
                                          viz=(panel.fov_viz if panel is not None else None))
-    if _loaded is not None:
-        shape_clf = _loaded["shape_clf"]
-        if panel is not None:
-            panel.update(sim.render(CAM), "Form-Wahrnehmung aus gespeichertem Zustand geladen")
-    else:
+    def _fresh_shape_clf():
         if panel is not None:
             panel.update(sim.render(CAM), "Form-Wahrnehmung wird trainiert ...")
-        shape_clf = ShapeClassifierModule(cam=CAM, rng=np.random.default_rng(0))
-        saved = sim.d.mocap_pos.copy(); shape_clf.calibrate(sim)
+        sc = ShapeClassifierModule(cam=CAM, rng=np.random.default_rng(0))
+        saved = sim.d.mocap_pos.copy(); sc.calibrate(sim)
 
         def _shape_viz(i, steps, shp):                         # show the form-training live (one shape at a time)
             panel.update(sim.render(CAM), f"Form-Wahrnehmung: {i}/{steps}  (lernt gerade: {shp})")
 
-        shape_clf.train(sim, steps=int(os.environ.get("ACT23_SHAPE_STEPS", "2500")), rng=np.random.default_rng(1),
-                        viz_fn=(_shape_viz if panel is not None else None),
-                        viz_every=int(os.environ.get("ACT23_SHAPE_VIZ_EVERY", "40")))
+        sc.train(sim, steps=int(os.environ.get("ACT23_SHAPE_STEPS", "2500")), rng=np.random.default_rng(1),
+                 viz_fn=(_shape_viz if panel is not None else None),
+                 viz_every=int(os.environ.get("ACT23_SHAPE_VIZ_EVERY", "40")))
         sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+        return sc
+
+    def _shapes_match_world(sc):
+        """WORLD-CONSISTENCY post-load check (the versioning philosophy, but vs the WORLD instead of
+        the schema): the loaded classifier must still FIND each trained shape in the CURRENT sim.  An
+        object-geometry edit silently invalidates the trained |F| manifold -- measured with the
+        widened U: the old-U classifier saw it as 27/30 NOVEL and select('U') never matched, so the
+        command would run on the privileged fallback forever and the open-set would breed a phantom
+        class ON the U.  Each trained shape gets 2 poses; 1 hit each is enough (the healthy
+        classifier localises 0-2mm, a stale one misses ALL poses of the changed shape)."""
+        keep = {o: (sim.obj_pos(o)[:2].copy(), float(sim.obj_pos(o)[2]), float(sim.obj_yaw(o)))
+                for o in ALL}
+        saved = sim.d.mocap_pos.copy()
+        ok = True
+        try:
+            for body, key in (("obj_red", "cube"), ("obj_L", "L"), ("obj_U", "U")):
+                hits = 0
+                for xy, yaw in (((0.0, 0.15), 0.0), ((0.05, 0.18), 0.9)):
+                    for o in ALL:
+                        sim.set_object(o, [0.5, -0.6], z=0.012)
+                    sim.set_object(body, list(xy), z=0.012, yaw=yaw)
+                    mujoco.mj_forward(sim.m, sim.d)
+                    det = sc.select(sim, key)
+                    if det is not None and float(np.linalg.norm(np.asarray(det["pos"])
+                                                                - np.asarray(xy))) < 0.03:
+                        hits += 1
+                if hits == 0:
+                    print(f"  [Persistenz] Welt-Check: Form '{key}' wird nicht mehr erkannt", flush=True)
+                    ok = False
+        finally:
+            for o, (xy, z, yaw) in keep.items():
+                sim.set_object(o, xy.tolist(), z=z, yaw=yaw)
+            sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+        return ok
+
+    if _loaded is not None:
+        shape_clf = _loaded["shape_clf"]
+        if _shapes_match_world(shape_clf):
+            if panel is not None:
+                panel.update(sim.render(CAM), "Form-Wahrnehmung aus gespeichertem Zustand geladen")
+        else:
+            print("  [Persistenz] Form-Klassifikator passt nicht mehr zur Welt (Objekt-Geometrie "
+                  "geändert?) -> NUR die Form-Wahrnehmung wird neu trainiert; Welt-Modell, Policy und "
+                  "Farbklassen bleiben erhalten.  Offene Form-Klassen (neu-*) leben im alten "
+                  "Deskriptor-Raum und werden verworfen -- neue Objekte werden wieder selbst entdeckt.",
+                  flush=True)
+            shape_clf = _fresh_shape_clf()
+            _loaded["objects"] = []                            # discovered commands were keyed on the old
+            _loaded["shape_key"] = {}                          #   classes -> dropped with the old manifold
+    else:
+        shape_clf = _fresh_shape_clf()
 
     # self-supervised world model for the GRASP WRIST (collect own trials, then train).
     # OPEN-WORLD situation features -- ONE camera perception path (|F| pipeline) for EVERY object:
