@@ -57,6 +57,7 @@ from pc_cvnn.arm_modules.shape_classifier import ShapeClassifierModule
 from pc_cvnn.arm_modules.object_orientation import ObjectOrientationModule
 from pc_cvnn.arm_modules.world_model import WorldModelModule, feats_from, action_vec, wrist_of
 from pc_cvnn.arm_modules.runtime_policy import RuntimePolicyModule
+from pc_cvnn.arm_modules import colour_openset
 from pc_cvnn.arm_modules.colour_openset import ColourOpenSetModule
 import pc_cvnn.pc_act16 as act16
 
@@ -1020,12 +1021,14 @@ def run_self_learning_steering(headless=False):
                                  px=np.asarray(det["px"], float))
                 return _off(det["grasp_xy"]), None, "grasp"
             return _off(sim.obj_pos(body)[:2]), None, "grasp"  # perception missed -> privileged fallback
-        if method == "long":                                   # the elongated obj is OOD for the trained
-            # colour vc -- it used to be localised PRIVILEGED (the last perception crutch in the GUI).
-            # STAGE 3: localise it by its SELF-LABELLED colour class (bound at discovery); privileged
-            # only as fallback while the class doesn't exist yet / the object isn't seen.
+        if method in ("long", "color"):                        # STAGE 3 de-crutching, now for the CUBES too:
+            # localise by the SELF-LABELLED colour class (bound at discovery) instead of the trained vc
+            # hex codes.  For the long object this replaced the last PRIVILEGED lookup; for the cubes it
+            # replaces the vc colour codes AND the red-only marker parking (red aliased with the magenta
+            # target disks -- perceive_all parks the markers itself, so the aliasing source is gone).
             cname = colour_of_body.get(body)
-            if cname is not None and os.environ.get("ACT23_LONG_PRIV", "0") != "1":
+            knob = "ACT23_LONG_PRIV" if method == "long" else "ACT23_CUBE_VC"
+            if cname is not None and os.environ.get(knob, "0") != "1":
                 saved = sim.d.mocap_pos.copy()
                 dets = shape_clf.perceive_all(sim)
                 sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
@@ -1036,21 +1039,22 @@ def run_self_learning_steering(headless=False):
                     _sel_seed.update(key=None, xy=np.asarray(best["pos"], float),
                                      px=np.asarray(best["px"], float))
                     if os.environ.get("ACT23_DEBUG", "0") == "1":
-                        print(f"    [dbg] Langes Objekt via Farbklasse '{cname}' lokalisiert", flush=True)
+                        print(f"    [dbg] {body} via Farbklasse '{cname}' lokalisiert", flush=True)
                     return _off(best["grasp_xy"]), None, "grasp"
-            p0 = np.asarray(sim.obj_pos(body)[:2], float)      # fallback: class unborn / not in sight
-            try:
-                _sel_seed.update(key=None, xy=p0, px=np.asarray(shape_clf._world_to_px(p0)[0], float))
-            except Exception:
-                pass
-            return _off(p0), None, "grasp"
-        if body == "obj_red":                                  # PARK the magenta markers for RED only: red is a
-            saved = sim.d.mocap_pos.copy(); shape_clf._park_markers(sim)   # SUBSET of magenta (1,0,1) and the
-            try:                                               #   sel head has no 'marker' code to out-claim it
-                xy = vc.perceive(body)                         #   contrastively, so the RED command LOCKS the
-            finally:                                           #   target disk (user-observed: the first grasp
-                sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)   # went there).  Other colours don't
-            return _off(xy), None, None                        #   alias with magenta -> unchanged (minimal cut).
+            if method == "long":
+                p0 = np.asarray(sim.obj_pos(body)[:2], float)  # fallback: class unborn / not in sight
+                try:
+                    _sel_seed.update(key=None, xy=p0, px=np.asarray(shape_clf._world_to_px(p0)[0], float))
+                except Exception:
+                    pass
+                return _off(p0), None, "grasp"
+        if body == "obj_red":                                  # CUBE FALLBACK (class unborn / not in sight /
+            saved = sim.d.mocap_pos.copy(); shape_clf._park_markers(sim)   # ACT23_CUBE_VC=1): the old trained-vc
+            try:                                               #   path.  PARK the magenta markers for RED only:
+                xy = vc.perceive(body)                         #   red is a SUBSET of magenta (1,0,1) and the sel
+            finally:                                           #   head has no 'marker' code to out-claim it
+                sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)   # contrastively -> the RED command
+            return _off(xy), None, None                        #   LOCKED the target disk (user-observed).
         return _off(vc.perceive(body)), None, None             # cubes: the net localises by colour
 
     def plot_surprise():
@@ -1066,7 +1070,7 @@ def run_self_learning_steering(headless=False):
         plot_surprise()
         return obs
 
-    def make_shape_track(body, key=None):
+    def make_shape_track(body, key=None, ckey=None):
         """FORM-aware live tracker (the user's fovea goal): per tracked frame, segment+classify the scene
         (perceive_all) and return the commanded SHAPE's grasp point + confidence in run_combined's
         (obs, conf) servo protocol -- approach corrections work for L/U exactly like the colour servo.
@@ -1082,6 +1086,9 @@ def run_self_learning_steering(headless=False):
         watched the U command start focused on the L).  key=None = the LONG object: no class to key on ->
         DISPLAY-ONLY blob follower seeded from the object's start position, obs stays None (the colour
         fovea drive locked the CYAN U here: the obj_blue code fires on cyan, user-observed).
+        ckey = a SELF-LABELLED COLOUR class name (stage 3 cube de-crutching): servo cands are matched by
+        colours.classify on the detection chromaticity instead of the shape class; conf maps the chroma
+        distance into [0,1] against the class threshold (within-spread ~0.075 -> conf ~0.7).
         The hex net can't be command-keyed to a FORM, so the form tracker DRIVES the hex view itself:
         one perception step at the followed px (fovea.step: lifelong hex learning + surprise stay alive)
         and the viz drawn at the SAME gaze -- box and cells consistent, no colour-keyed follow step to
@@ -1102,13 +1109,24 @@ def run_self_learning_steering(headless=False):
             dets = shape_clf.perceive_all(sim)
             sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
             obs, conf = None, 0.0
-            cands = [d for d in dets if key is not None and d["shape"] == key and d["pos"] is not None]
+            if key is not None:                                # SHAPE-keyed servo cands (L/U)
+                cands = [d for d in dets if d["shape"] == key and d["pos"] is not None]
+            elif ckey is not None:                             # COLOUR-CLASS-keyed servo cands (cubes)
+                cands = [d for d in dets if d["pos"] is not None
+                         and colours.classify(d["chroma"])[0] == ckey]
+            else:
+                cands = []                                     # long: display-only blob follower
             if cands:
-                best = (max(cands, key=lambda d: d["prob"]) if mem["xy"] is None
-                        else min(cands, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"]) - mem["xy"]))))
+                if mem["xy"] is None:                          # first sighting: most confident match
+                    best = (max(cands, key=lambda d: d["prob"]) if key is not None
+                            else min(cands, key=lambda d: colours.classify(d["chroma"])[1]))
+                else:                                          # tracking: nearest to the belief
+                    best = min(cands, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"]) - mem["xy"])))
                 if mem["xy"] is None or float(np.linalg.norm(np.asarray(best["pos"]) - mem["xy"])) <= 0.05:
                     obs = _off(best["grasp_xy"])               # correct toward the GRASP point (+ the learned
-                    conf = float(best["prob"])                 #   offset, else the servo would fight it)
+                    conf = (float(best["prob"]) if key is not None   # offset, else the servo would fight it)
+                            else float(np.clip(1.0 - colours.classify(best["chroma"])[1]
+                                               / (2.0 * colour_openset.TH), 0.0, 1.0)))
                     mem["xy"] = np.asarray(best["pos"], float); mem["px"] = np.asarray(best["px"], float)
             if obs is None and mem["px"] is not None and dets:  # class match failed (lifted/mis-class/long) ->
                 near = min(dets, key=lambda d: float(np.linalg.norm(np.asarray(d["px"]) - mem["px"])))
@@ -1188,10 +1206,14 @@ def run_self_learning_steering(headless=False):
         if _dbg: print(f"    [dbg] before  : {_pos()}", flush=True)
         _save(f"{body}_0before")
         _sel_seed.clear()                                      # form tracker seeds from THIS command's select()
-        if method == "color":                                  # drive the FOVEA to the commanded cube (display);
-            #   the grasp itself uses perceive() above.  LONG no longer drives by colour: its obj_blue code
-            #   FIRES ON THE CYAN U (user watched the fovea sit on the U for every long command) -- the
-            #   seeded blob follower handles the long display now.  Markers parked: red locks the magenta disk.
+        # STAGE 3 cube de-crutching: a cube with a bound SELF-LABELLED colour class localises + servos
+        # via that class (like the long object) -- the trained vc hex codes and the red marker parking
+        # remain only as FALLBACK while the class isn't born/bound yet (or ACT23_CUBE_VC=1 restores them).
+        cube_ckey = (colour_of_body.get(body)
+                     if method == "color" and os.environ.get("ACT23_CUBE_VC", "0") != "1" else None)
+        if method == "color" and cube_ckey is None:            # FALLBACK display: drive the FOVEA to the cube
+            #   via the vc colour code.  With a colour class the form tracker drives the view itself.
+            #   LONG never drives by colour: its obj_blue code FIRES ON THE CYAN U (user-observed).
             try:
                 if body == "obj_red":                          # red-only marker parking (see perceive())
                     saved = sim.d.mocap_pos.copy(); shape_clf._park_markers(sim)
@@ -1227,15 +1249,17 @@ def run_self_learning_steering(headless=False):
             if float(np.linalg.norm(a[:2])) > 1e-9:
                 sel_off["dxy"] = np.asarray(a[:2], float)
         # CLOSED-LOOP fovea: servo=True lets the live tracker CORRECT the grasp-target belief during the
-        # reach (+ occlusion memory).  COLOUR cubes track via the hex fovea (vc.track); L/U now track via
-        # the FORM-aware tracker (make_shape_track: perceive_all per frame, matched by SHAPE class) -- the
-        # user's fovea goal: the fovea supports approach+grasp for the shapes too, instead of sitting on
-        # whatever colour was last commanded.  Only the long object stays servo=False (not a class the
-        # form tracker can key on; its colour is OOD for the hex fovea -> both trackers would mislead).
+        # reach (+ occlusion memory).  L/U track via the FORM-aware tracker (make_shape_track:
+        # perceive_all per frame, matched by SHAPE class); CUBES with a bound colour class track via the
+        # SAME tracker keyed on the class (vc.track only as fallback) -- the user's fovea goal: the fovea
+        # supports approach+grasp instead of sitting on whatever colour was last commanded.  Only the
+        # long object stays servo=False (no class to key on when this comment was written; kept as-is).
         if method == "shape":
             track_fn = make_shape_track(body, key=state.SHAPE_KEY[body])
         elif method == "long":
             track_fn = make_shape_track(body)                  # display-only blob follower (no class to key on)
+        elif cube_ckey is not None:                            # cube with a bound colour class: colour-keyed
+            track_fn = make_shape_track(body, ckey=cube_ckey)  #   servo tracker (stage 3 de-crutching)
         else:
             track_fn = track_and_plot
         if a_exec is not None:                                 # SELF: the model's grip + gentle dims
