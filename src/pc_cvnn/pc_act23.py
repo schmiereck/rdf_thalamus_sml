@@ -50,6 +50,8 @@ os.environ.setdefault("ACT14_DOF", "4")   # act23 runs the 4-DOF arm: joint_3 fr
 for _k, _v in (("ACT_REACH_X0", "-0.12"), ("ACT_REACH_X1", "0.12"),
                ("ACT_REACH_Y0", "0.07"), ("ACT_REACH_Y1", "0.24")):
     os.environ.setdefault(_k, _v)
+os.environ.setdefault("ACT_GOAL_ROPE", "1")   # STAGE 4a: RoPE goal-latent (near-linear in position ->
+#   the learned latent-inverse is near-exact; measured in act21: servo isolated ~0mm vs 4.4mm blob)
 from pc_cvnn.pc_act14 import BracketArmSim, HOME, ARM3
 from pc_cvnn.pc_act18 import F as HEX_F
 from pc_cvnn.arm_modules.body_model import BodyModelModule
@@ -59,6 +61,8 @@ from pc_cvnn.arm_modules.world_model import WorldModelModule, feats_from, action
 from pc_cvnn.arm_modules.runtime_policy import RuntimePolicyModule
 from pc_cvnn.arm_modules import colour_openset
 from pc_cvnn.arm_modules.colour_openset import ColourOpenSetModule
+from pc_cvnn.arm_modules.planner import GoalModule2D, LO as GOAL_LO, HI as GOAL_HI
+from pc_cvnn.arm_modules.latent_goal import LatentGoalServo
 import pc_cvnn.pc_act16 as act16
 
 CAM = "overview"
@@ -325,6 +329,8 @@ class CommandState23:
         self.policy = "self"          # "self" -> world-model wrist (long obj); "teacher" -> WRIST_ALIGN
         self.choreo = "fsm"           # "fsm" -> scripted choreography (collects DAgger data);
         #                               "netz" -> the LEARNED runtime policy drives the sub-goals (Stufe 2)
+        self.goalmode = os.environ.get("ACT23_GOAL", "latent")   # STAGE 4a: "latent" -> the place target
+        #   is a GOAL LATENT, executed by the latent-difference servo; "koord" -> classic coordinate place
         self.go = False; self.exit = False
         self.auto = False             # AUTO-Lauf: random object + random target per episode (self-training)
         self.busy = False             # an episode is RUNNING: matplotlib fires button callbacks inside the
@@ -384,7 +390,8 @@ class CommandState23:
         act = "Greifen" if self.action == "grasp" else "Schieben"
         pol = "Selbst-gelernt" if self.policy == "self" else "Teacher"
         ch = "Netz" if self.choreo == "netz" else "FSM"
-        return f"{self.selected()[0]} | {act} | Greifer: {pol} | Choreo: {ch} | Ziel {self.target_idx + 1}"
+        zl = " (latent)" if self.goalmode == "latent" else ""
+        return f"{self.selected()[0]} | {act} | Greifer: {pol} | Choreo: {ch} | Ziel {self.target_idx + 1}{zl}"
 
 
 class CommandPanel23:
@@ -434,6 +441,13 @@ class CommandPanel23:
         axCh = self.fig.add_axes([0.33, 0.220, 0.125, 0.05])
         self.bCh = Button(axCh, "Choreo: FSM", color="#5a3a3a", hovercolor="#7a5050")
         self.bCh.on_clicked(self._toggle_choreo)
+        # STAGE 4a: place target as GOAL LATENT (latent-difference servo) <-> classic coordinate
+        axLG = self.fig.add_axes([0.462, 0.220, 0.082, 0.05])
+        _lat = state.goalmode == "latent"
+        self.bLG = Button(axLG, "Ziel: Latent" if _lat else "Ziel: Koord",
+                          color=("#2a6a5a" if _lat else "#5a4a3a"), hovercolor="#3a8a75")
+        self.bLG.label.set_fontsize(7)
+        self.bLG.on_clicked(self._toggle_goalmode)
         # named target buttons (top-right of the control band)
         self._tgt_btns = {}
         for i in range(len(state.MARKERS)):
@@ -498,6 +512,13 @@ class CommandPanel23:
         self.bCh.label.set_text("Choreo: Netz" if net else "Choreo: FSM")
         self.bCh.color = "#2a5a7a" if net else "#5a3a3a"
         self.bCh.ax.set_facecolor(self.bCh.color); self._refresh()
+
+    def _toggle_goalmode(self, _e):
+        self.state.goalmode = "koord" if self.state.goalmode == "latent" else "latent"
+        lat = self.state.goalmode == "latent"
+        self.bLG.label.set_text("Ziel: Latent" if lat else "Ziel: Koord")
+        self.bLG.color = "#2a6a5a" if lat else "#5a4a3a"
+        self.bLG.ax.set_facecolor(self.bLG.color); self._refresh()
 
     def add_discovered(self, idx):
         """Button for a SELF-DISCOVERED object (state.OBJECTS[idx]), appended to the object row."""
@@ -576,6 +597,21 @@ def run_self_learning_steering(headless=False):
     PERSIST_STATE = (not headless) or os.environ.get("ACT23_STATE_HEADLESS", "0") == "1"
     STATE_SCHEMA = 2       # BUMP whenever a learner's STRUCTURE changes (action/feature dims, new fields)
 
+    def _lg_pack(lg):
+        """STAGE 4a persistence: after training, the latent-goal servo only ever touches its cached
+        latent GRID + the learned latent-inverse D -- the PC goal-net itself is never called again.
+        So persist just those arrays (no PCNetwork pickling risk) + the workspace bounds they were
+        trained on (a changed REACH invalidates the world->grid map, like the shape world-check)."""
+        return {"gx": lg._gx, "grid_z": lg._grid_z, "D": lg.D, "zsd": lg.zsd,
+                "lo": np.asarray(GOAL_LO, float), "hi": np.asarray(GOAL_HI, float)}
+
+    def _lg_unpack(bb):
+        lg = LatentGoalServo.__new__(LatentGoalServo)
+        lg.gm = None; lg.rng = np.random.default_rng(3); lg.z_g = None
+        lg._gx = bb["gx"]; lg._grid_z = bb["grid_z"]; lg.D = bb["D"]
+        lg.zmu = 0.0; lg.zsd = bb["zsd"]
+        return lg
+
     def _validate_loaded(b):
         """SAFE versioning (user request): a pickle can LOAD fine and still not fit the current code
         (a class evolved since the save) -- then it would crash mid-session instead of at startup.
@@ -599,6 +635,15 @@ def run_self_learning_steering(headless=False):
                 rt.predict(np.zeros(11))                       # runtime policy forward
             if b.get("colours") is not None:                   # optional stage-3 colour classes
                 b["colours"].classify(np.ones(3) / 3)
+            lg = b.get("latent_goal")                          # optional stage-4a goal-latent servo
+            if lg is not None:                                 #   (lightweight blob, see _lg_pack)
+                if not (np.allclose(lg["lo"], GOAL_LO) and np.allclose(lg["hi"], GOAL_HI)):
+                    b["latent_goal"] = None                    # workspace changed -> latent grid stale,
+                else:                                          #   retrain (analogue of the world check)
+                    _t = _lg_unpack(lg); _t.set_goal(np.array([0.0, 0.15]))
+                    _p = _t.servo(np.array([0.02, 0.14]))
+                    if _p.shape != (2,) or not np.all(np.isfinite(_p)):
+                        return "Ziel-Latent-Servo liefert Unsinn"
         except Exception as e:
             return f"Funktionstest: {type(e).__name__}: {e}"
         return None
@@ -702,6 +747,26 @@ def run_self_learning_steering(headless=False):
     else:
         shape_clf = _fresh_shape_clf()
 
+    # STAGE 4a: the place TARGET as a LATENT state (the act6 goal-as-prior, wired into the GUI).
+    # The commanded goal is ENCODED once into the goal-module latent; while the object is carried,
+    # the place target is DRIVEN by the latent DIFFERENCE between goal latent and the hand's latent
+    # (learned latent-inverse) -- execution converges where the LATENTS MATCH, not on a decoded
+    # coordinate (act-b: side-steps decode bias; RoPE latent = near-linear -> servo isolated ~0mm).
+    # GUI toggle "Ziel: Latent/Koord"; env ACT23_GOAL=koord restores the coordinate place.
+    _lgb = _loaded.get("latent_goal") if _loaded is not None else None
+    if _lgb is not None:
+        lgoal = _lg_unpack(_lgb)
+        print("  [Stufe 4] Ziel-Latent-Servo aus gespeichertem Zustand geladen", flush=True)
+    else:
+        if panel is not None:
+            panel.update(sim.render(CAM), "Stufe 4: Ziel-Latent wird trainiert (Goal-Modul + Latent-Inverse) ...")
+        _gm = GoalModule2D(rng=np.random.default_rng(7))
+        _gm.pretrain(int(os.environ.get("ACT23_GM_STEPS", "8000")))
+        lgoal = LatentGoalServo(_gm, rng=np.random.default_rng(3))
+        _rec = lgoal.train(steps=4000)
+        print(f"  [Stufe 4] Ziel-Latent bereit (RoPE-Latent={_gm.rope}): "
+              f"Latent-Inverse-Babble {_rec:.1f} mm", flush=True)
+
     # self-supervised world model for the GRASP WRIST (collect own trials, then train).
     # OPEN-WORLD situation features -- ONE camera perception path (|F| pipeline) for EVERY object:
     #   [pos(2), cos/sin(2*yaw), cos/sin(4*yaw4), desc_embed(NH)]
@@ -743,6 +808,8 @@ def run_self_learning_steering(headless=False):
             blob = {"schema": STATE_SCHEMA, "dof": len(ARM3),
                     "bm": bm, "shape_clf": shape_clf, "world": world, "runtime": runtime,
                     "colours": colours, "colour_of_body": dict(colour_of_body),
+                    "latent_goal": _lg_pack(lgoal),
+
                     "objects": [o for o in state.OBJECTS if o[1] not in base],
                     "shape_key": {k: v for k, v in state.SHAPE_KEY.items()
                                   if k not in CommandState23.SHAPE_KEY}}
@@ -1318,11 +1385,18 @@ def run_self_learning_steering(headless=False):
         # log_fn on policy runs = true DAgger), so every episode trains the choreography lifelong.
         if state.choreo == "netz" and not runtime.trained:
             print("    [Stufe 2] Choreo-Netz noch nicht trainiert -- FSM fährt", flush=True)
+        # STAGE 4a: "Ziel: Latent" -> the committed goal becomes a LATENT (post_goal_fn encodes it
+        # once); while the object is carried, place_servo_fn drives the place target by the latent
+        # difference to the hand's latent.  Works under FSM AND Netz (the policy state's target
+        # follows the servo'd tgt via tgt_eff).  "Ziel: Koord" = both hooks off, classic place.
+        use_latent = state.goalmode == "latent"
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_fn,
                            policy_fn=(runtime.predict if use_net else None),
                            log_fn=(None if use_net else choreo_log),
                            teacher_log_fn=(choreo_log if use_net else None),
+                           post_goal_fn=((lambda c, o, g: lgoal.set_goal(g)) if use_latent else None),
+                           place_servo_fn=((lambda hxy: lgoal.servo(hxy, gain=0.6)) if use_latent else None),
                            servo=(method in ("color", "shape")), rescatter=False, episode_end_fn=ep_end,
                            lifelong=True, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
                            arm_reset=False)
