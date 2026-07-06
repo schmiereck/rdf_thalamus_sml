@@ -63,7 +63,13 @@ class ColourOpenSetModule(ArmModule):
         else:
             near = [b for b in self._buf if float(np.linalg.norm(b - c)) < TH]
             if len(near) + 1 >= NOVEL_CONFIRM:
-                name = f"farbe-{len(self.names) + 1}"
+                # unique name via a monotone counter (len+1 collides once consolidation shrank the
+                # list); getattr = backward-compat with pickled instances
+                seq = getattr(self, "_name_seq", None)
+                if seq is None:
+                    seq = max((int(nm.rsplit("-", 1)[1]) for nm in self.names), default=0)
+                self._name_seq = seq + 1
+                name = f"farbe-{self._name_seq}"
                 self.names.append(name)
                 self.classes[name] = {"mu": np.mean(near + [c], axis=0), "n": len(near) + 1}
                 self._buf = [b for b in self._buf if not any(b is q for q in near)]

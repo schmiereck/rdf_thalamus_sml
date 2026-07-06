@@ -413,7 +413,14 @@ class ShapeClassifierModule(ArmModule):
                     if host is not None:
                         self.open[host] = (self.open[host] + ex)[:OPEN_CAP]
                     else:
-                        name = f"neu-{len(self.open_names) + 1}"
+                        # UNIQUE name via a monotone counter, NOT len+1: consolidation SHRINKS the list,
+                        # so len+1 can collide with a live class and silently overwrite it.  getattr =
+                        # backward-compat with pickled instances (seeded from the highest existing number).
+                        seq = getattr(self, "_name_seq", None)
+                        if seq is None:
+                            seq = max((int(nm.rsplit("-", 1)[1]) for nm in self.open_names), default=0)
+                        self._name_seq = seq + 1
+                        name = f"neu-{self._name_seq}"
                         self.open_names.append(name); self.open[name] = ex
                         born.append(name)
                     self._novel_buf = [b for b in self._novel_buf if not any(b is q for q in near)]
