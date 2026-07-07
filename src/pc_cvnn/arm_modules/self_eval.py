@@ -36,6 +36,12 @@ import numpy as np
 from .base import ArmModule
 
 
+def colour_TH():
+    """The colour open-set acceptance threshold (import-cycle-free lazy read)."""
+    from .colour_openset import TH
+    return TH
+
+
 class SelfEvalModule(ArmModule):
     def __init__(self, tol: float = 0.025, name: str = "SelfEval") -> None:
         super().__init__(name)
@@ -49,33 +55,69 @@ class SelfEvalModule(ArmModule):
              .add_out("success", 1, "self-judged delivered (1/0)"))
 
     # ------------------------------------------------------------------ #
-    def judge(self, dets, lgoal, colour_key=None, colours=None, shape_key=None):
+    def judge(self, dets, lgoal, colour_key=None, colours=None, shape_key=None,
+              near_xy=None, near_r=0.05):
         """Judge the settled scene.  Returns (self_ok, self_d_m, found):
         self_ok False+found False = object not seen (lost/hanging/occluded) -> not delivered;
         returns (None, None, False) = ABSTAIN when the agent has no own class to identify the
-        object with (nothing to judge honestly)."""
-        cands = []
-        if colour_key is not None and colours is not None:
-            cands = [d for d in dets if d.get("pos") is not None
-                     and colours.classify(d["chroma"])[0] == colour_key]
-            if cands:
-                best = min(cands, key=lambda d: colours.classify(d["chroma"])[1])
-        if not cands and shape_key is not None:
-            cands = [d for d in dets if d.get("pos") is not None and d.get("shape") == shape_key]
-            if cands:
-                best = max(cands, key=lambda d: d.get("prob", 0.0))
+        object (nothing to judge honestly).
+
+        IDENTITY = CONTINUITY, appearance only as a tie-break (measured lesson): the agent's OWN
+        hand carried the commanded object and RELEASED it -- proprioception, no privilege.  So the
+        delivered object is the scene blob NEAREST the release point (near_xy).  Its CHROMA is NOT
+        required to still match the bound class: a thin object reads washed-out when it settles
+        (measured: the delivered long object classified as the U's cyan / a grey phantom while its
+        blob sat 4-15mm from the hand -> an appearance gate wrongly said 'not seen').  Among several
+        blobs AT the hand, prefer the one that DOES match the bound class (tie-break), else the
+        nearest.  The one measured FALSE POSITIVE (a class blob near the wish while the true object
+        sat 57mm away) is handled by continuity itself: the hand tracks the FAILED object, so the
+        near-hand blob is the true one and self_d reads large.  Without an anchor (near_xy None) fall
+        back to appearance: the class match, unique or most confident."""
         if colour_key is None and shape_key is None:
             self._last = {"abstain": True}
             return None, None, False
-        if not cands:
-            self._last = {"found": False}
+        cands = [d for d in dets if d.get("pos") is not None]
+
+        def _near(d):
+            return float(np.linalg.norm(np.asarray(d["pos"], float) - np.asarray(near_xy, float)))
+
+        def _mine(d):
+            return colour_key is not None and colours is not None \
+                and colours.classify(d["chroma"])[0] == colour_key
+
+        best = None
+        if near_xy is not None:                               # CONTINUITY: the blob the hand let go
+            nearby = [d for d in cands if _near(d) < near_r]
+            if nearby:
+                mine = [d for d in nearby if _mine(d)]        # tie-break: my class among the near
+                best = min(mine or nearby, key=_near)         #   blobs, else the plain nearest
+        if best is None:                                      # nothing at the hand / no anchor ->
+            strict = []                                       #   APPEARANCE fallback (e.g. object slid
+            if colour_key is not None and colours is not None:   # to the wish, hand ended elsewhere)
+                strict = [d for d in cands if colours.classify(d["chroma"])[0] == colour_key]
+            if not strict and shape_key is not None:
+                strict = [d for d in cands if d.get("shape") == shape_key]
+            if len(strict) == 1:
+                best = strict[0]
+            elif len(strict) > 1:
+                best = (min(strict, key=_near) if near_xy is not None
+                        else (min(strict, key=lambda d: colours.classify(d["chroma"])[1])
+                              if colour_key is not None and colours is not None
+                              else max(strict, key=lambda d: d.get("prob", 0.0))))
+        diag = {"n_dets": len(dets), "n_cands": len(cands),
+                "n_strict": sum(1 for d in cands if colour_key is not None and colours is not None
+                                and colours.classify(d["chroma"])[0] == colour_key),
+                "near_xy": None if near_xy is None else np.round(np.asarray(near_xy, float), 3).tolist(),
+                "cand_pos": [np.round(np.asarray(d["pos"], float), 3).tolist() for d in cands[:6]]}
+        if best is None:
+            self._last = {"found": False, **diag}
             return False, None, False
         pos = np.asarray(best["pos"], float)
         e = (lgoal.z_g - lgoal.encode_world(pos)) / lgoal.zsd
         dxy = np.real(e @ lgoal.D)                        # the wish-offset through the LEARNED inverse
         d = float(np.linalg.norm(dxy))
         ok = d < self.tol
-        self._last = {"found": True, "pos": pos, "self_d": d, "ok": ok}
+        self._last = {"found": True, "pos": pos, "self_d": d, "ok": ok, **diag}
         self.set_out("valence", [-d]); self.set_out("success", [1.0 if ok else 0.0])
         return ok, d, True
 

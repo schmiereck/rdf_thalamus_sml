@@ -821,6 +821,19 @@ def run_self_learning_steering(headless=False):
     # lifelong state survives).
     colours = (_loaded.get("colours") if _loaded is not None else None) or ColourOpenSetModule()
     colour_of_body = dict(_loaded.get("colour_of_body", {})) if _loaded is not None else {}
+    # SELF-HEAL pre-0a539ac collision damage in persisted states: birth names were len+1, so a
+    # name could be re-issued -> DUPLICATE entries in the list / entries without a class (index/
+    # remove then operate on the wrong occurrence).  Sync the list to the dict, once, at load.
+    _cn = [n for n in dict.fromkeys(colours.names) if n in colours.classes]
+    if _cn != colours.names:
+        print(f"  [Persistenz] Farbklassen-Liste repariert ({len(colours.names)} -> {len(_cn)} "
+              f"Einträge: Duplikate/Verwaiste aus der Vor-Fix-Ära entfernt)", flush=True)
+        colours.names = _cn
+    _stale = {b: c for b, c in colour_of_body.items() if c not in colours.classes}
+    for b in _stale:                                           # a binding to a merged-away class can
+        del colour_of_body[b]                                  #   never match again -> drop, re-binds
+    if _stale:                                                 #   itself at the next discovery glance
+        print(f"  [Persistenz] verwaiste Farb-Bindungen entfernt: {_stale}", flush=True)
 
     def save_state():
         """Persist the four learners + the self-discovered command objects (every episode; cheap)."""
@@ -1428,6 +1441,8 @@ def run_self_learning_steering(headless=False):
                            lifelong=True, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
                            arm_reset=False)
         _save(f"{body}_1after_runcombined")
+        hxy_end = sim.grasp_pos()[:2].copy()  # where the agent's own hand ENDED (~= release point;
+        #   the soft release retreats vertically) -- the self-judge's CONTINUITY anchor, proprioceptive
         drive_home()                          # retreat FIRST: restoring an object under the still-lowered arm
         #   could re-create contact under the claw; and the next episode then starts from ~home WITHOUT a reset
         # CONTINUITY + keep the shapes UPRIGHT: leave the COMMANDED object where the action left it (delivered
@@ -1455,18 +1470,24 @@ def run_self_learning_steering(headless=False):
         jdets = shape_clf.perceive_all(sim)
         sim.d.mocap_pos[:] = saved_mc; mujoco.mj_forward(sim.m, sim.d)
         s_ok, s_d, s_found = seval.judge(jdets, lgoal, colour_key=colour_of_body.get(body),
-                                         colours=colours, shape_key=state.SHAPE_KEY.get(body))
+                                         colours=colours, shape_key=state.SHAPE_KEY.get(body),
+                                         near_xy=hxy_end)
         if s_ok is None:
             print(f"    [Selbst-Urteil] enthalten -- noch keine eigene Klasse für {body}", flush=True)
         else:
             tally = seval.record(s_ok, res.get("ok", False))
             verdict = (f"geliefert ({s_d * 1000:.0f}mm vom Wunsch)" if s_ok
                        else (f"nicht geliefert ({s_d * 1000:.0f}mm vom Wunsch)" if s_found
-                             else "nicht geliefert (Objekt nicht gesehen)"))
+                             else "nicht geliefert (Objekt nicht am Loslass-Punkt gesehen)"))
             wv = "geliefert" if res.get("ok", False) else "nicht geliefert"
             mark = "=" if bool(s_ok) == bool(res.get("ok", False)) else "!="
             print(f"    [Selbst-Urteil] {verdict}  {mark}  Welt: {wv}  (Übereinstimmung {tally})",
                   flush=True)
+            if mark == "!=" and os.environ.get("ACT23_DEBUG", "0") == "1":
+                le = seval._last
+                print(f"      [su-dbg] hand={np.round(hxy_end,3).tolist()} obj_true="
+                      f"{np.round(sim.obj_pos(body)[:2],3).tolist()} strict={le.get('n_strict')} "
+                      f"cands={le.get('n_cands')} cand_pos={le.get('cand_pos')}", flush=True)
         # SCENE housekeeping (user-observed degeneration over long auto runs): an object DRAGGED outside
         # the reachable workspace by a failed grasp stays out FOREVER (the restore puts non-commanded
         # objects back on their pre-command = out pose; a commanded one keeps its end pose) -- every
