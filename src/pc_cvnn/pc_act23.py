@@ -1525,16 +1525,39 @@ def run_self_learning_steering(headless=False):
                   for nm in ("obj_L", "obj_U", "obj_T")}   # the exact failure mode: a resized first geom
             print(f"    [dbg] L/U/T half : {hs}  (XML: L [7,28,12] U [7,14,12] T [21,7,12])", flush=True)
         _save(f"{body}_2after_restore")
-        # LIFELONG loop (EVERY object): every command IS a trial.  Log the perceived situation, the FULL
-        # action that actually ran (self-selected [offset, wrist, grip, gentle], OR the teacher's choices
-        # -- wrist via run_combined._wrist_tgt, grip/gentle = its old rules, logged as demonstrations)
-        # and the OWN outcome, then refit the ensemble.  The model keeps learning from its acting: an
-        # action it currently believes in but that is unreliable gets corrected by its own failures.
-        # ONLY on FSM-driven episodes (use_net False): while the runtime policy is immature, its failed
-        # episodes would be logged as (situation, action, 0) although the ACTION was fine and the
-        # CHOREOGRAPHY failed -- mis-credited labels POISONED the world model in the user's long run
-        # (sigma stayed 0.4-0.9 everywhere, LCB picks went random-ish, curiosity fed on the noise).
-        if fe is not None and not use_net:
+        # LIFELONG loop (EVERY object): every command IS a trial for the world model (situation -> action
+        # -> outcome).  STEP 2 (prediction-checkpoint CREDIT ROUTING, user's self-improvement plan): the
+        # crude "learn only in FSM mode" gate is replaced by TWO self-measured checkpoints that decide
+        # WHOSE decision failed, so the world model learns in the NORMAL (Netz) mode too -- from the
+        # episodes where its OWN decision (the grasp: wrist/offset/grip/gentle) was actually put to the
+        # test.  The four cases (poisoning fix, now precise):
+        #   - NOT lifted            -> the grasp never happened: the POLICY/choreography missed -> ABSTAIN.
+        #   - lifted + delivered    -> the grasp+carry worked -> world model +1 SUCCESS.
+        #   - lifted + SLIPPED      -> the grip lost the object mid-carry -> world model +1 FAILURE.
+        #   - lifted, held, off-goal-> the place AIM was wrong though the grip held -> POLICY -> ABSTAIN.
+        # The outcome label is the agent's OWN verdict (step 1 SelfEval) -> fully self-supervised.
+        # ACT23_WORLD_LABEL=welt forces the privileged label; ACT23_CREDIT=0 restores the FSM-only gate.
+        maxcz = float(getattr(act16.run_combined, "_maxcz", 0.0))
+        slipped = bool(getattr(act16.run_combined, "_slipped", False))
+        rest_z = float(snap[body][1]) if body in snap else 0.012
+        lifted = maxcz > rest_z + 0.02                          # object clearly left the table = grasp tested
+        if os.environ.get("ACT23_WORLD_LABEL", "selbst") == "welt" or s_ok is None:
+            delivered = bool(res.get("ok", False)); lbl_src = "Welt"
+        else:
+            delivered = bool(s_ok); lbl_src = "Selbst"          # self-judged (step 1) -> self-supervised
+        if os.environ.get("ACT23_CREDIT", "1") == "1":
+            if not lifted:
+                route, outcome = "nicht gegriffen (Policy)", None
+            elif delivered:
+                route, outcome = "geliefert", True
+            elif slipped:
+                route, outcome = "verrutscht (Griff)", False
+            else:
+                route, outcome = "daneben platziert (Policy)", None
+        else:                                                   # old gate: FSM only, privileged label
+            outcome = bool(res.get("ok", False)) if not use_net else None
+            route = "FSM" if not use_net else "Netz (aus)"
+        if fe is not None and outcome is not None:
             if a_exec is not None:
                 a_obs, src = a_exec, "Selbst"
             else:
@@ -1543,14 +1566,14 @@ def run_self_learning_steering(headless=False):
                     0.0, 0.0, float(w_obs), grip=(0.3 if u_cmd else 0.0), gentle=float(u_cmd))
                 src = "Teacher"
             if a_obs is not None:
-                world.observe(fe, a_obs, res.get("ok", False))
+                world.observe(fe, a_obs, outcome)
                 world.train(epochs=600)
-                print(f"    [lifelong] Welt-Modell +1 Versuch ({src}: Wrist "
-                      f"{np.degrees(wrist_of(a_obs)) % 180.0:.0f} Grad, Offset "
-                      f"[{a_obs[0] * 1000:.0f},{a_obs[1] * 1000:.0f}]mm, Grip {a_obs[4]:.2f}"
+                print(f"    [Kredit] {route} -> Welt-Modell +1 ({src}, Label {lbl_src}: Wrist "
+                      f"{np.degrees(wrist_of(a_obs)) % 180.0:.0f} Grad, Grip {a_obs[4]:.2f}"
                       f"{', sanft' if a_obs[5] > 0.5 else ''}, "
-                      f"{'geliefert' if res.get('ok', False) else 'nicht geliefert'}) -> "
-                      f"{world.n()} Versuche, nachtrainiert", flush=True)
+                      f"{'geliefert' if outcome else 'nicht geliefert'}) -> {world.n()} Versuche", flush=True)
+        elif fe is not None:
+            print(f"    [Kredit] {route} -- Welt-Modell enthält sich (Aktion nicht schuld)", flush=True)
         # STAGE 2 lifelong: refit the choreography on the aggregated teacher labels; on FSM-driven
         # episodes report the SHADOW divergence (what the net WOULD have done vs the teacher).
         div = runtime.shadow_divergence_mm()

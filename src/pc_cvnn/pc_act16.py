@@ -340,12 +340,23 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         wrist_hold = None                                    # last aligned joint_4 (held through the grip)
         guard_minz = 1.0; guard_stall = 0                    # close-guard: deepest descent + stall counter
         last_phase = phase; phase_age = 0                    # STALL-ESCAPE: don't hang in one phase forever
+        run_combined._maxcz = float(obj_h)                   # CHECKPOINTS (act23 credit routing): two
+        run_combined._slipped = False                        #   self-measurable predictions per episode.
+        #   _maxcz = highest the object rose (GRASP checkpoint: did the grasp actually happen?).
+        #   _slipped = while carried, did the object SEPARATE from the hand (CARRY checkpoint: did the
+        #   grip hold?).  Together they route the outcome to the learner whose prediction broke: no lift
+        #   -> choreography missed the grasp (policy); slip -> the grip failed (world-model action); held
+        #   but off-goal -> the place aim failed (policy).  The world model is only blamed for a slip.
         for k in range(cap):
             phase_age = phase_age + 1 if phase == last_phase else 0
             last_phase = phase
             if phase_age > PHASE_STALL:                       # stuck (e.g. can't reach the believed object)
                 break                                         # -> give up this episode instead of looping
             c_true = sim.obj_pos(cmd)[:2]; cz = sim.obj_pos(cmd)[2]; h = sim.grasp_pos(); hxy = h[:2]; hz = h[2]
+            if cz > run_combined._maxcz:
+                run_combined._maxcz = float(cz)
+            if cz > obj_h + 0.02 and float(np.linalg.norm(c_true - hxy)) > 0.045:
+                run_combined._slipped = True                 # lifted but the object is far from the claw
             tgt_eff = tgt                                     # routed carry target (obstacle): once the
             if carry_target_fn is not None and cz > 0.03:     # object is lifted, follow the planned route
                 _wp = carry_target_fn(hxy, tgt_true)          # AROUND the perceived board instead of going
