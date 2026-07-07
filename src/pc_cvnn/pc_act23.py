@@ -64,6 +64,7 @@ from pc_cvnn.arm_modules.colour_openset import ColourOpenSetModule
 from pc_cvnn.arm_modules.planner import GoalModule2D, LO as GOAL_LO, HI as GOAL_HI
 from pc_cvnn.arm_modules.latent_goal import LatentGoalServo
 from pc_cvnn.arm_modules.curiosity import DistanceNovelty
+from pc_cvnn.arm_modules.self_eval import SelfEvalModule
 import pc_cvnn.pc_act16 as act16
 
 CAM = "overview"
@@ -645,6 +646,10 @@ def run_self_learning_steering(headless=False):
                     _p = _t.servo(np.array([0.02, 0.14]))
                     if _p.shape != (2,) or not np.all(np.isfinite(_p)):
                         return "Ziel-Latent-Servo liefert Unsinn"
+            if b.get("self_eval") is not None:                 # optional self-judge (step 1)
+                _ok, _d, _f = b["self_eval"].judge([], None, colour_key="x")
+                if _ok is not False or _f is not False:
+                    return "Selbst-Urteil-Smoke fehlgeschlagen"
         except Exception as e:
             return f"Funktionstest: {type(e).__name__}: {e}"
         return None
@@ -779,6 +784,13 @@ def run_self_learning_steering(headless=False):
     if _loaded is not None:
         dream_nov.seen = [np.asarray(z) for z in _loaded.get("dream_seen", [])]
 
+    # SELF-JUDGED OUTCOME (step 1 of the self-improvement plan, user request): after every episode
+    # the agent judges its own result -- commanded object found via its SELF-LABELLED classes, the
+    # distance to the wish measured as GOAL-LATENT difference through the learned latent-inverse.
+    # This step only INSTALLS the judge and MEASURES agreement with the privileged verdict; the
+    # learners' outcome labels stay privileged until the agreement is proven (steps 2/3).
+    seval = (_loaded.get("self_eval") if _loaded is not None else None) or SelfEvalModule(tol=act16.TOL)
+
     # self-supervised world model for the GRASP WRIST (collect own trials, then train).
     # OPEN-WORLD situation features -- ONE camera perception path (|F| pipeline) for EVERY object:
     #   [pos(2), cos/sin(2*yaw), cos/sin(4*yaw4), desc_embed(NH)]
@@ -822,6 +834,7 @@ def run_self_learning_steering(headless=False):
                     "colours": colours, "colour_of_body": dict(colour_of_body),
                     "latent_goal": _lg_pack(lgoal),
                     "dream_seen": [np.asarray(z) for z in dream_nov.seen],
+                    "self_eval": seval,
 
                     "objects": [o for o in state.OBJECTS if o[1] not in base],
                     "shape_key": {k: v for k, v in state.SHAPE_KEY.items()
@@ -1408,7 +1421,8 @@ def run_self_learning_steering(headless=False):
                            policy_fn=(runtime.predict if use_net else None),
                            log_fn=(None if use_net else choreo_log),
                            teacher_log_fn=(choreo_log if use_net else None),
-                           post_goal_fn=((lambda c, o, g: lgoal.set_goal(g)) if use_latent else None),
+                           post_goal_fn=(lambda c, o, g: lgoal.set_goal(g)),   # ALWAYS: the self-judge
+                           #   (seval) needs the episode's goal latent even in "Ziel: Koord" mode
                            place_servo_fn=((lambda hxy: lgoal.servo(hxy, gain=0.6)) if use_latent else None),
                            servo=(method in ("color", "shape")), rescatter=False, episode_end_fn=ep_end,
                            lifelong=True, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
@@ -1434,6 +1448,25 @@ def run_self_learning_steering(headless=False):
                 cp = sim.obj_pos(nm)[:2].copy(); cz = snap[nm][1]
                 sim.set_object(nm, cp, z=cz, yaw=sim.obj_yaw(nm))
         mujoco.mj_forward(sim.m, sim.d); state.sync_active()
+        # SELF-JUDGEMENT (before the housekeeping below MOVES a flung object -- the judge must see
+        # the true outcome scene): the agent's own verdict via its self-labelled classes + the goal
+        # latent; agreement with the privileged verdict is tallied per episode.
+        saved_mc = sim.d.mocap_pos.copy()
+        jdets = shape_clf.perceive_all(sim)
+        sim.d.mocap_pos[:] = saved_mc; mujoco.mj_forward(sim.m, sim.d)
+        s_ok, s_d, s_found = seval.judge(jdets, lgoal, colour_key=colour_of_body.get(body),
+                                         colours=colours, shape_key=state.SHAPE_KEY.get(body))
+        if s_ok is None:
+            print(f"    [Selbst-Urteil] enthalten -- noch keine eigene Klasse für {body}", flush=True)
+        else:
+            tally = seval.record(s_ok, res.get("ok", False))
+            verdict = (f"geliefert ({s_d * 1000:.0f}mm vom Wunsch)" if s_ok
+                       else (f"nicht geliefert ({s_d * 1000:.0f}mm vom Wunsch)" if s_found
+                             else "nicht geliefert (Objekt nicht gesehen)"))
+            wv = "geliefert" if res.get("ok", False) else "nicht geliefert"
+            mark = "=" if bool(s_ok) == bool(res.get("ok", False)) else "!="
+            print(f"    [Selbst-Urteil] {verdict}  {mark}  Welt: {wv}  (Übereinstimmung {tally})",
+                  flush=True)
         # SCENE housekeeping (user-observed degeneration over long auto runs): an object DRAGGED outside
         # the reachable workspace by a failed grasp stays out FOREVER (the restore puts non-commanded
         # objects back on their pre-command = out pose; a commanded one keeps its end pose) -- every
