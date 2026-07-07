@@ -63,6 +63,7 @@ from pc_cvnn.arm_modules import colour_openset
 from pc_cvnn.arm_modules.colour_openset import ColourOpenSetModule
 from pc_cvnn.arm_modules.planner import GoalModule2D, LO as GOAL_LO, HI as GOAL_HI
 from pc_cvnn.arm_modules.latent_goal import LatentGoalServo
+from pc_cvnn.arm_modules.curiosity import DistanceNovelty
 import pc_cvnn.pc_act16 as act16
 
 CAM = "overview"
@@ -767,6 +768,17 @@ def run_self_learning_steering(headless=False):
         print(f"  [Stufe 4] Ziel-Latent bereit (RoPE-Latent={_gm.rope}): "
               f"Latent-Inverse-Babble {_rec:.1f} mm", flush=True)
 
+    # STAGE 4b: the planner DREAMS its practice targets (act21 CuriosityPlanner.dream, wired into the
+    # auto-run): candidate goals are scored by DISTANCE-NOVELTY in the GOAL-LATENT space -- the SAME
+    # latent the 4a place servo executes on (lgoal.encode_world; one latent space for dreaming AND
+    # acting; the dreamed latent IS the executed z_g, since post_goal_fn encodes the same position).
+    # The dream memory (visited latents) PERSISTS across sessions -- the agent remembers what it has
+    # already practiced.  ACT23_DREAM=0 restores the coordinate-novelty target pick.
+    DREAM = os.environ.get("ACT23_DREAM", "1") == "1"
+    dream_nov = DistanceNovelty()
+    if _loaded is not None:
+        dream_nov.seen = [np.asarray(z) for z in _loaded.get("dream_seen", [])]
+
     # self-supervised world model for the GRASP WRIST (collect own trials, then train).
     # OPEN-WORLD situation features -- ONE camera perception path (|F| pipeline) for EVERY object:
     #   [pos(2), cos/sin(2*yaw), cos/sin(4*yaw4), desc_embed(NH)]
@@ -809,6 +821,7 @@ def run_self_learning_steering(headless=False):
                     "bm": bm, "shape_clf": shape_clf, "world": world, "runtime": runtime,
                     "colours": colours, "colour_of_body": dict(colour_of_body),
                     "latent_goal": _lg_pack(lgoal),
+                    "dream_seen": [np.asarray(z) for z in dream_nov.seen],
 
                     "objects": [o for o in state.OBJECTS if o[1] not in base],
                     "shape_key": {k: v for k, v in state.SHAPE_KEY.items()
@@ -1533,21 +1546,32 @@ def run_self_learning_steering(headless=False):
         _sc, lp_best, sd_best, k, lbl = scores[int(crng.choice(len(scores), p=w / w.sum()))]
         state.sel = k
         bodies = [nm for _l2, nm, _m2 in state.OBJECTS]
-        best_p, best_nov = None, -1.0
-        for _ in range(24):                                    # target = most NOVEL reachable spot
-            p = _rand_xy(crng)
+        best_p, best_z, best_nov = None, None, -1.0
+        for _ in range(24):                                    # target = most NOVEL reachable spot;
+            p = _rand_xy(crng)                                 #   4b: novelty in the GOAL-LATENT space
             if float(np.linalg.norm(p)) < BASE_CLEAR or any(
                     float(np.linalg.norm(p - sim.obj_pos(o)[:2])) < 0.05 for o in bodies):
                 continue
-            nov = min(float(np.linalg.norm(p - q)) for q in tgt_visited)
+            if DREAM:
+                z = lgoal.encode_world(p)                      # the candidate's latent on the shared
+                nov = dream_nov.score(z)                       #   dream/act manifold
+            else:
+                z, nov = None, min(float(np.linalg.norm(p - q)) for q in tgt_visited)
             if nov > best_nov:
-                best_p, best_nov = p, nov
+                best_p, best_z, best_nov = p, z, nov
         if best_p is not None:
             state.target_idx = int(crng.integers(len(state.MARKERS)))
             state.set_marker_xy(state.target_idx, best_p); state.sync_active()
-            tgt_visited.append(np.asarray(best_p, float)); del tgt_visited[:-40]
+            if DREAM:
+                dream_nov.visit(best_z); del dream_nov.seen[:-40]   # bounded like tgt_visited: old
+                #   practice fades, the workspace stays forever explorable (no novelty starvation)
+            else:
+                tgt_visited.append(np.asarray(best_p, float)); del tgt_visited[:-40]
+        verb = "träumt Ziel" if DREAM else "neues Ziel"
         return (f"[curiosity] übt '{lbl}' (Fortschritt {lp_best:+.2f}, σ={sd_best:.2f})"
-                + (f", neues Ziel [{best_p[0]:.2f},{best_p[1]:.2f}]" if best_p is not None else ""))
+                + (f", {verb} [{best_p[0]:.2f},{best_p[1]:.2f}]"
+                   + (f" (Latent-Neuheit {best_nov:.2f})" if DREAM else "")
+                   if best_p is not None else ""))
 
     if headless:
         def _intro_and_command():
