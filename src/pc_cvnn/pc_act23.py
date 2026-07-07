@@ -1429,11 +1429,15 @@ def run_self_learning_steering(headless=False):
         # difference to the hand's latent.  Works under FSM AND Netz (the policy state's target
         # follows the servo'd tgt via tgt_eff).  "Ziel: Koord" = both hooks off, classic place.
         use_latent = state.goalmode == "latent"
+        pol_trace = []                                         # STEP 3: (state, action) the POLICY drives
+        #   this episode -> becomes self-imitation demonstrations IF the agent self-judges a delivery
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_fn,
                            policy_fn=(runtime.predict if use_net else None),
                            log_fn=(None if use_net else choreo_log),
                            teacher_log_fn=(choreo_log if use_net else None),
+                           policy_log_fn=((lambda s, out: pol_trace.append((s.copy(), out.copy())))
+                                          if use_net else None),
                            post_goal_fn=(lambda c, o, g: lgoal.set_goal(g)),   # ALWAYS: the self-judge
                            #   (seval) needs the episode's goal latent even in "Ziel: Koord" mode
                            place_servo_fn=((lambda hxy: lgoal.servo(hxy, gain=0.6)) if use_latent else None),
@@ -1574,6 +1578,26 @@ def run_self_learning_steering(headless=False):
                       f"{'geliefert' if outcome else 'nicht geliefert'}) -> {world.n()} Versuche", flush=True)
         elif fe is not None:
             print(f"    [Kredit] {route} -- Welt-Modell enthält sich (Aktion nicht schuld)", flush=True)
+        # STEP 3: SELF-IMITATION GATE.  On a Netz episode the POLICY drove; if the agent self-judges a
+        # CONFIDENT delivery the (state, action) pairs the policy actually took become its OWN
+        # demonstrations, reinforcing what worked FOR IT (blended with DAgger at fit time).  The bar is
+        # STRICTER than the plain delivery verdict: self_d < IMIT_TOL (well inside the 25mm tolerance),
+        # NOT merely < TOL.  Reason (measured): the self-judge can read an elongated object's perceived
+        # blob centroid up to ~30mm off its true body centre, so a borderline "delivered 23mm" was
+        # actually a 53mm MISS -- a false-positive that, at the plain bar, imitated a FAILED trajectory.
+        # A tight bar only reinforces trajectories we are confident delivered; a skipped real success
+        # just loses a sample, an imitated failure would poison.  ACT23_SELFIMIT=0 disables;
+        # ACT23_IMIT_TOL sets the bar.
+        imit_tol = float(os.environ.get("ACT23_IMIT_TOL", "0.015"))
+        if (use_net and pol_trace and lifted and delivered and not slipped
+                and s_d is not None and s_d < imit_tol
+                and os.environ.get("ACT23_SELFIMIT", "1") == "1"):
+            added = runtime.imitate([s for s, _a in pol_trace], [a for _s, a in pol_trace])
+            print(f"    [Selbst-Imitation] sichere Lieferung ({s_d * 1000:.0f}mm) -> +{added} "
+                  f"Demo-Schritte ({runtime.n_imit()} im Selbst-Puffer)", flush=True)
+        elif use_net and pol_trace and lifted and delivered:
+            print(f"    [Selbst-Imitation] Lieferung zu unsicher ({s_d * 1000:.0f}mm >= "
+                  f"{imit_tol * 1000:.0f}mm) -- nicht imitiert", flush=True)
         # STAGE 2 lifelong: refit the choreography on the aggregated teacher labels; on FSM-driven
         # episodes report the SHADOW divergence (what the net WOULD have done vs the teacher).
         div = runtime.shadow_divergence_mm()

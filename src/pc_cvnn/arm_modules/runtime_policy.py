@@ -29,6 +29,12 @@ CORE = 8000            # the FIRST samples (teacher-driven demos) are PROTECTED 
 #                        plain FIFO would wash the happy-path demos out of the buffer and the policy
 #                        would forget the path it never visits (act19 anchored on the demos for the
 #                        same reason).  Eviction only applies beyond the core.
+IMIT_CAP = 12000       # SELF-IMITATION buffer (step 3): the (state, action) pairs the POLICY ITSELF
+#                        drove on episodes the agent SELF-JUDGED a success -- reinforcement of what
+#                        worked FOR IT, blended with the DAgger teacher labels at fit time.
+IMIT_WEIGHT = int(__import__("os").environ.get("ACT23_SELFIMIT_W", "2"))   # how many times a self-
+#                        imitation pair is repeated vs a DAgger sample (own validated successes count
+#                        more; the teacher is training wheels, the baby's own working moves lead)
 
 
 class RuntimePolicyModule(ArmModule):
@@ -37,6 +43,8 @@ class RuntimePolicyModule(ArmModule):
         self.net = Policy(rng=rng or np.random.default_rng(4))
         self._X: list[np.ndarray] = []
         self._Y: list[np.ndarray] = []
+        self._Xi: list[np.ndarray] = []               # self-imitation buffer (own self-judged successes)
+        self._Yi: list[np.ndarray] = []
         self._k = 0                                   # subsample counter
         self.trained = False
         self._div: list[float] = []                   # shadow |aim_pred - aim_teacher| (m), per observe
@@ -59,13 +67,42 @@ class RuntimePolicyModule(ArmModule):
             cut = len(self._X) - CAP
             del self._X[CORE:CORE + cut]; del self._Y[CORE:CORE + cut]
 
+    # -- self-imitation (step 3): reinforce the policy's OWN validated successes --
+    def imitate(self, states, actions) -> int:
+        """Add (state, action) pairs the POLICY actually drove on a SELF-JUDGED successful episode.
+        These are the agent's own working moves -- blended with the DAgger teacher labels at fit
+        time and weighted IMIT_WEIGHT (own successes lead, the teacher is a floor).  Subsampled like
+        DAgger (neighbouring steps are near-duplicates).  getattr guards a pre-step-3 pickled policy."""
+        if getattr(self, "_Xi", None) is None:
+            self._Xi, self._Yi = [], []
+        added = 0
+        for j, (s, a) in enumerate(zip(states, actions)):
+            if j % SUBSAMPLE:
+                continue
+            self._Xi.append(np.asarray(s, float).copy())
+            self._Yi.append(np.asarray(a, float).copy())
+            added += 1
+        if len(self._Xi) > IMIT_CAP:                          # plain FIFO: keep the freshest successes
+            cut = len(self._Xi) - IMIT_CAP
+            del self._Xi[:cut]; del self._Yi[:cut]
+        return added
+
     def n(self) -> int:
         return len(self._X)
+
+    def n_imit(self) -> int:
+        return len(getattr(self, "_Xi", []))
 
     def train(self, epochs=120, quiet=True) -> None:
         if len(self._X) < 500:
             return                                    # too little to fit anything meaningful
-        self.net.fit(np.array(self._X), np.array(self._Y), epochs=epochs, quiet=quiet)
+        Xi, Yi = getattr(self, "_Xi", []), getattr(self, "_Yi", [])
+        if Xi:                                        # DAgger labels + weighted self-imitation successes
+            X = np.array(self._X + Xi * IMIT_WEIGHT)
+            Y = np.array(self._Y + Yi * IMIT_WEIGHT)
+        else:
+            X, Y = np.array(self._X), np.array(self._Y)
+        self.net.fit(X, Y, epochs=epochs, quiet=quiet)
         self.trained = True
 
     # -- runtime --

@@ -172,7 +172,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                  episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None,
                  ood_rate=0.0, ood_rng=None, size_fn=None, tol=None, carry_target_fn=None,
                  post_goal_fn=None, macro_log_fn=None, servo=False, rescatter=True, orient_fn=None,
-                 carry_gentle=False, grip_close=None, wrist_fn=None, arm_reset=True):
+                 carry_gentle=False, grip_close=None, wrist_fn=None, arm_reset=True, policy_log_fn=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -472,6 +472,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             policy_wrist = float(wrist_fn(state)) if wrist_fn is not None else None
             if policy_fn is not None and not route_carry:     # planned waypoints (FSM servo); the LEARNED
                 out = policy_fn(state); aim = np.asarray(out[:3], float); j5 = float(out[3]); via = "policy"
+                if policy_log_fn is not None:                  # SELF-IMITATION (act23 step 3): log the state
+                    policy_log_fn(state, np.asarray(out, float))   # + the action the POLICY ITSELF drove
             elif route_carry:                                 # policy carries to a STATIC goal only, so it
                 via = "route"                                 # cannot follow side-waypoints -> servo the route
             # (#4) GRASP REFLEX -- active-inference framing: once the hand is positioned OVER the object the
