@@ -1545,17 +1545,28 @@ def run_self_learning_steering(headless=False):
         slipped = bool(getattr(act16.run_combined, "_slipped", False))
         rest_z = float(snap[body][1]) if body in snap else 0.012
         lifted = maxcz > rest_z + 0.02                          # object clearly left the table = grasp tested
+        imit_tol = float(os.environ.get("ACT23_IMIT_TOL", "0.015"))
+        # `delivered` = the (self- or privileged-) judged delivery verdict (< TOL 25mm).  `confident` is
+        # the STRICTER bar (self_d < IMIT_TOL 15mm): only a confident delivery earns a world-model SUCCESS
+        # label or a self-imitation.  Measured leak (fixed here): the self-judge reads an elongated
+        # object's blob ~30mm off its true centre, so a borderline "delivered 20-24mm" can be a real MISS;
+        # the tight bar already protected self-imitation, now it also gates the world-model positive label
+        # (a self-judged-delivered-but-not-confident episode ABSTAINS instead of crediting the action).
         if os.environ.get("ACT23_WORLD_LABEL", "selbst") == "welt" or s_ok is None:
-            delivered = bool(res.get("ok", False)); lbl_src = "Welt"
-        else:
-            delivered = bool(s_ok); lbl_src = "Selbst"          # self-judged (step 1) -> self-supervised
+            delivered = bool(res.get("ok", False)); confident = delivered; lbl_src = "Welt"
+        else:                                                   # self-judged (step 1) -> self-supervised
+            delivered = bool(s_ok)
+            confident = delivered and s_d is not None and s_d < imit_tol
+            lbl_src = "Selbst"
         if os.environ.get("ACT23_CREDIT", "1") == "1":
             if not lifted:
                 route, outcome = "nicht gegriffen (Policy)", None
-            elif delivered:
-                route, outcome = "geliefert", True
+            elif confident:
+                route, outcome = "sicher geliefert", True
             elif slipped:
                 route, outcome = "verrutscht (Griff)", False
+            elif delivered:                                     # judged delivered but NOT confident ->
+                route, outcome = "unsichere Lieferung", None    #   don't credit the action either way
             else:
                 route, outcome = "daneben platziert (Policy)", None
         else:                                                   # old gate: FSM only, privileged label
@@ -1579,25 +1590,18 @@ def run_self_learning_steering(headless=False):
         elif fe is not None:
             print(f"    [Kredit] {route} -- Welt-Modell enthält sich (Aktion nicht schuld)", flush=True)
         # STEP 3: SELF-IMITATION GATE.  On a Netz episode the POLICY drove; if the agent self-judges a
-        # CONFIDENT delivery the (state, action) pairs the policy actually took become its OWN
-        # demonstrations, reinforcing what worked FOR IT (blended with DAgger at fit time).  The bar is
-        # STRICTER than the plain delivery verdict: self_d < IMIT_TOL (well inside the 25mm tolerance),
-        # NOT merely < TOL.  Reason (measured): the self-judge can read an elongated object's perceived
-        # blob centroid up to ~30mm off its true body centre, so a borderline "delivered 23mm" was
-        # actually a 53mm MISS -- a false-positive that, at the plain bar, imitated a FAILED trajectory.
-        # A tight bar only reinforces trajectories we are confident delivered; a skipped real success
-        # just loses a sample, an imitated failure would poison.  ACT23_SELFIMIT=0 disables;
-        # ACT23_IMIT_TOL sets the bar.
-        imit_tol = float(os.environ.get("ACT23_IMIT_TOL", "0.015"))
-        if (use_net and pol_trace and lifted and delivered and not slipped
-                and s_d is not None and s_d < imit_tol
+        # CONFIDENT delivery (the same tight bar as the world-model success label, + not-slipped) the
+        # (state, action) pairs the policy actually took become its OWN demonstrations, reinforcing what
+        # worked FOR IT (blended with DAgger at fit time).  A skipped real success just loses a sample;
+        # an imitated failure would poison -- hence the tight bar.  ACT23_SELFIMIT=0 disables.
+        if (use_net and pol_trace and lifted and confident and not slipped
                 and os.environ.get("ACT23_SELFIMIT", "1") == "1"):
             added = runtime.imitate([s for s, _a in pol_trace], [a for _s, a in pol_trace])
             print(f"    [Selbst-Imitation] sichere Lieferung ({s_d * 1000:.0f}mm) -> +{added} "
                   f"Demo-Schritte ({runtime.n_imit()} im Selbst-Puffer)", flush=True)
         elif use_net and pol_trace and lifted and delivered:
-            print(f"    [Selbst-Imitation] Lieferung zu unsicher ({s_d * 1000:.0f}mm >= "
-                  f"{imit_tol * 1000:.0f}mm) -- nicht imitiert", flush=True)
+            print(f"    [Selbst-Imitation] Lieferung zu unsicher ({(s_d or 0) * 1000:.0f}mm) -- "
+                  f"nicht imitiert", flush=True)
         # STAGE 2 lifelong: refit the choreography on the aggregated teacher labels; on FSM-driven
         # episodes report the SHADOW divergence (what the net WOULD have done vs the teacher).
         div = runtime.shadow_divergence_mm()
@@ -1673,6 +1677,34 @@ def run_self_learning_steering(headless=False):
                 + (f", {verb} [{best_p[0]:.2f},{best_p[1]:.2f}]"
                    + (f" (Latent-Neuheit {best_nov:.2f})" if DREAM else "")
                    if best_p is not None else ""))
+
+    if headless and int(os.environ.get("ACT23_AUTO_N", "0")) > 0:
+        # HEADLESS AUTO-RUN (for A/B measurement without the GUI): run N curiosity-picked episodes in
+        # the requested choreo mode with the rolling Bilanz scoreboard -- the same loop the GUI Auto
+        # button drives, minus rendering.  ACT23_CHOREO=netz + this = a long self-improvement run.
+        N = int(os.environ.get("ACT23_AUTO_N"))
+        state.auto = True
+        print(f"  headless AUTO-Lauf: {N} Episoden, Choreo {state.choreo}, "
+              f"Selbst-Imitation {'aus' if os.environ.get('ACT23_SELFIMIT','1')=='0' else 'an'}", flush=True)
+        bilanz = {"fsm": [], "netz": []}
+        for ep in range(N):
+            pick = curious_pick() if AUTO_CURIOUS else None
+            if pick is None:
+                state.sel = int(crng.integers(len(state.OBJECTS)))
+                state.target_idx = int(crng.integers(len(state.MARKERS)))
+                state.place_selected_random(crng)
+            else:
+                print(f"    {pick}", flush=True)
+            print(f"  [Auto {ep}] {state.label()} ...", flush=True)
+            ok, err = run_one()
+            print(f"  [Auto {ep}] {'GELIEFERT' if ok else 'NICHT geliefert'}  |  Abstand {err:.0f} mm",
+                  flush=True)
+            bilanz["netz" if state.choreo == "netz" else "fsm"].append(bool(ok))
+            if (ep + 1) % 10 == 0:
+                parts = [f"{lbl} {sum(bilanz[md][-30:])}/{len(bilanz[md][-30:])}"
+                         for md, lbl in (("fsm", "FSM"), ("netz", "Netz")) if bilanz[md]]
+                print(f"    [Bilanz] letzte 30 je Modus: " + ", ".join(parts), flush=True)
+        return
 
     if headless:
         def _intro_and_command():
