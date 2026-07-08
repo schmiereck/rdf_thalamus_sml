@@ -53,7 +53,8 @@ for _k, _v in (("ACT_REACH_X0", "-0.12"), ("ACT_REACH_X1", "0.12"),
 os.environ.setdefault("ACT_GOAL_ROPE", "1")   # STAGE 4a: RoPE goal-latent (near-linear in position ->
 #   the learned latent-inverse is near-exact; measured in act21: servo isolated ~0mm vs 4.4mm blob)
 from pc_cvnn.pc_act14 import BracketArmSim, HOME, ARM3
-from pc_cvnn.pc_act18 import F as HEX_F
+from pc_cvnn.pc_act18 import F as HEX_F, warp_gaze_delta
+from pc_cvnn.test_pc_act10 import com2d
 from pc_cvnn.arm_modules.body_model import BodyModelModule
 from pc_cvnn.arm_modules.shape_classifier import ShapeClassifierModule
 from pc_cvnn.arm_modules.object_orientation import ObjectOrientationModule
@@ -68,6 +69,12 @@ from pc_cvnn.arm_modules.self_eval import SelfEvalModule
 import pc_cvnn.pc_act16 as act16
 
 CAM = "overview"
+# LEARNED FOVEA GAZE (opt-in): the net's own active-inference centering drives the gaze of the form/
+# class tracker, the detector only re-anchors identity every FOVEA_ANCHOR frames.  DEFAULT OFF -- the
+# gaze is attention only (grasp target comes from the detector regardless), so this cannot regress
+# delivery; it makes "where to look" a net decision (the user's goal).  ACT23_FOVEA_NET=1 enables.
+FOVEA_NET = os.environ.get("ACT23_FOVEA_NET", "0") == "1"
+FOVEA_ANCHOR = int(os.environ.get("ACT23_FOVEA_ANCHOR", "6"))
 BODY = {"cube": "obj_red", "L": "obj_L", "U": "obj_U"}
 ALL = ["obj_red", "obj_green", "obj_blue", "obj_L", "obj_U"]
 TARGET = np.array([0.0, 0.10])
@@ -1286,13 +1293,47 @@ def run_self_learning_steering(headless=False):
                 if float(np.linalg.norm(np.asarray(near["px"]) - mem["px"])) < 40.0:   # follow the blob in px
                     mem["px"] = np.asarray(near["px"], float)
             if mem["px"] is not None:                          # form tracker drives the hex fovea view
-                gaze = np.clip(mem["px"], HEX_F * vc.fovea.K, RES - HEX_F * vc.fovea.K)
+                lo, hi = HEX_F * vc.fovea.K, RES - HEX_F * vc.fovea.K
+                if FOVEA_NET:
+                    # LEARNED FOVEA GAZE (user's goal: WHERE to look is a NET decision, like the arm
+                    # servos -- not a detector hand-off).  The gaze is its own state, DRIVEN each frame
+                    # by centering the OCCUPANCY the hex net perceives under the fovea (RGB saturation
+                    # com -> warp_gaze_delta, the same active-inference centering track_step uses, but on
+                    # occupancy so it works for shapes/classes the hex net has no colour code for).  The
+                    # DETECTOR only RE-ANCHORS the identity every FOVEA_ANCHOR frames (saccadic
+                    # correction), so the net carries attention between anchors instead of being pinned.
+                    if mem.get("gaze") is None:
+                        mem["gaze"] = np.asarray(mem["px"], float)   # seed from the first detection
+                    mem["_fc"] = mem.get("_fc", 0) + 1
+                    if mem["_fc"] % FOVEA_ANCHOR == 0:              # re-anchor to the commanded object
+                        mem["gaze"] = 0.5 * mem["gaze"] + 0.5 * np.asarray(mem["px"], float)
+                    gaze = np.clip(mem["gaze"], lo, hi)
+                else:
+                    gaze = np.clip(mem["px"], lo, hi)              # detector-set gaze (default, unchanged)
                 vc._P["state"]["gaze"] = gaze
                 img = sim.render(CAM)
                 arr = vc.fovea.step(img, gaze, vc._P["state"]["cmd"], True)
+                if FOVEA_NET:                                       # NET-DRIVEN centering + ZOOM (active
+                    occ = np.ptp(np.real(arr[:, :, 1:]), axis=2)   #   inference on the perceived occupancy)
+                    com = com2d(occ); ctr = (HEX_F - 1) / 2.0
+                    if com is not None and float(occ.sum()) > 0.3:
+                        mem["gaze"] = np.clip(np.asarray(gaze, float)
+                                              + warp_gaze_delta(com, ctr, vc.fovea._ek()), lo, hi)
+                    # NET-STEERABLE ZOOM (ACT_FOVEA_ZOOM=1; else _zoom_step is a no-op): confident lock
+                    # (object bright + centred under the fovea) -> zoom IN for detail; lost / off-centre
+                    # -> zoom OUT for an overview to re-find it.  The zoom conf mirrors track_step's.
+                    mass = float(np.clip(occ.max(), 0.0, 1.0))
+                    centrality = float(np.exp(-np.linalg.norm(com - ctr) / 4.0)) if com is not None else 0.0
+                    vc.fovea._zoom_step(mass * centrality)
+                    if _dbg:                                        # net-gaze tracking quality + zoom use
+                        vc._fovea_drift = getattr(vc, "_fovea_drift", [])   # gaze<->detector px (small=tracks)
+                        vc._fovea_drift.append(float(np.linalg.norm(
+                            np.asarray(gaze, float) - np.asarray(mem["px"], float))))
+                        vc._fovea_zoom = getattr(vc, "_fovea_zoom", [])
+                        vc._fovea_zoom.append(float(vc.fovea.z))
                 if vc.viz is not None:
                     vc.viz.fovea(img, gaze, vc.fovea._ek(), np.clip(arr[:, :, 1:], 0, 1),
-                                 f"Form-Tracker folgt {key or body}")
+                                 f"{'Netz-Blick' if FOVEA_NET else 'Form-Tracker'} folgt {key or body}")
                 plot_surprise()
             else:
                 track_and_plot()                               # nothing tracked yet -> the colour follow frame
@@ -1445,6 +1486,12 @@ def run_self_learning_steering(headless=False):
                            lifelong=True, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
                            arm_reset=False)
         _save(f"{body}_1after_runcombined")
+        if _dbg and FOVEA_NET and getattr(vc, "_fovea_drift", None):   # net-gaze tracking quality + zoom
+            d = vc._fovea_drift; zz = getattr(vc, "_fovea_zoom", []) or [1.0]
+            print(f"    [Netz-Blick] Drift Blick<->Objekt: mittel {np.mean(d):.1f}px, "
+                  f"max {np.max(d):.0f}px | Zoom z {np.min(zz):.2f}..{np.max(zz):.2f} "
+                  f"(mittel {np.mean(zz):.2f}) ({len(d)} Frames)", flush=True)
+            vc._fovea_drift = []; vc._fovea_zoom = []
         hxy_end = sim.grasp_pos()[:2].copy()  # where the agent's own hand ENDED (~= release point;
         #   the soft release retreats vertically) -- the self-judge's CONTINUITY anchor, proprioceptive
         drive_home()                          # retreat FIRST: restoring an object under the still-lowered arm
