@@ -53,7 +53,7 @@ for _k, _v in (("ACT_REACH_X0", "-0.12"), ("ACT_REACH_X1", "0.12"),
 os.environ.setdefault("ACT_GOAL_ROPE", "1")   # STAGE 4a: RoPE goal-latent (near-linear in position ->
 #   the learned latent-inverse is near-exact; measured in act21: servo isolated ~0mm vs 4.4mm blob)
 from pc_cvnn.pc_act14 import BracketArmSim, HOME, ARM3
-from pc_cvnn.pc_act18 import F as HEX_F, warp_gaze_delta
+from pc_cvnn.pc_act18 import F as HEX_F, warp_gaze_delta, fovea_gradient
 from pc_cvnn.test_pc_act10 import com2d
 from pc_cvnn.arm_modules.body_model import BodyModelModule
 from pc_cvnn.arm_modules.shape_classifier import ShapeClassifierModule
@@ -1294,35 +1294,49 @@ def run_self_learning_steering(headless=False):
                     mem["px"] = np.asarray(near["px"], float)
             if mem["px"] is not None:                          # form tracker drives the hex fovea view
                 lo, hi = HEX_F * vc.fovea.K, RES - HEX_F * vc.fovea.K
+                # IDENTITY-CONDITIONED net gaze: point the hex fovea at the commanded object's OWN
+                # self-labelled COLOUR CLASS (centroid chroma) -- fovea_gradient then drives toward THAT
+                # object (no detector needed for the drive's identity, only a light occlusion re-anchor).
+                id_mu = colours.classes.get(colour_of_body.get(body), {}).get("mu") if FOVEA_NET else None
                 if FOVEA_NET:
-                    # LEARNED FOVEA GAZE (user's goal: WHERE to look is a NET decision, like the arm
-                    # servos -- not a detector hand-off).  The gaze is its own state, DRIVEN each frame
-                    # by centering the OCCUPANCY the hex net perceives under the fovea (RGB saturation
-                    # com -> warp_gaze_delta, the same active-inference centering track_step uses, but on
-                    # occupancy so it works for shapes/classes the hex net has no colour code for).  The
-                    # DETECTOR only RE-ANCHORS the identity every FOVEA_ANCHOR frames (saccadic
-                    # correction), so the net carries attention between anchors instead of being pinned.
+                    # LEARNED FOVEA GAZE (user's goal: WHERE to look is a NET decision like the arm servos).
+                    # The gaze is its own state, DRIVEN by the net's active-inference gradient on the sel
+                    # channel (class-conditioned saliency, id_mu) + centring the perceived blob.  The
+                    # DETECTOR only re-anchors every FOVEA_ANCHOR frames (occlusion recovery).
                     if mem.get("gaze") is None:
                         mem["gaze"] = np.asarray(mem["px"], float)   # seed from the first detection
                     mem["_fc"] = mem.get("_fc", 0) + 1
-                    if mem["_fc"] % FOVEA_ANCHOR == 0:              # re-anchor to the commanded object
+                    if mem["_fc"] % FOVEA_ANCHOR == 0:
                         mem["gaze"] = 0.5 * mem["gaze"] + 0.5 * np.asarray(mem["px"], float)
                     gaze = np.clip(mem["gaze"], lo, hi)
                 else:
                     gaze = np.clip(mem["px"], lo, hi)              # detector-set gaze (default, unchanged)
                 vc._P["state"]["gaze"] = gaze
                 img = sim.render(CAM)
-                arr = vc.fovea.step(img, gaze, vc._P["state"]["cmd"], True)
-                if FOVEA_NET:                                       # NET-DRIVEN centering + ZOOM (active
-                    occ = np.ptp(np.real(arr[:, :, 1:]), axis=2)   #   inference on the perceived occupancy)
-                    com = com2d(occ); ctr = (HEX_F - 1) / 2.0
-                    if com is not None and float(occ.sum()) > 0.3:
-                        mem["gaze"] = np.clip(np.asarray(gaze, float)
-                                              + warp_gaze_delta(com, ctr, vc.fovea._ek()), lo, hi)
-                    # NET-STEERABLE ZOOM (ACT_FOVEA_ZOOM=1; else _zoom_step is a no-op): confident lock
-                    # (object bright + centred under the fovea) -> zoom IN for detail; lost / off-centre
-                    # -> zoom OUT for an overview to re-find it.  The zoom conf mirrors track_step's.
-                    mass = float(np.clip(occ.max(), 0.0, 1.0))
+                if id_mu is not None:                              # class-conditioned perception (sel = the
+                    arr = vc.fovea.step_id(img, gaze, id_mu, True)  #   commanded colour class' saliency)
+                else:
+                    arr = vc.fovea.step(img, gaze, vc._P["state"]["cmd"], True)
+                if FOVEA_NET:
+                    ctr = (HEX_F - 1) / 2.0
+                    sel = np.real(arr[:, :, 0]) if id_mu is not None else None
+                    if sel is not None and float(sel.sum()) > 0.3:  # IDENTITY drive: class-colour saliency
+                        com = com2d(sel)                            #   present -> fovea_gradient toward it
+                        drive = -fovea_gradient(vc.fovea.cells)     # net active-inference gaze drive
+                        if com is not None:
+                            mem["gaze"] = np.clip(np.asarray(gaze, float)
+                                                  + warp_gaze_delta(com, ctr, vc.fovea._ek())
+                                                  + np.clip(drive * 6.0, -2, 2), lo, hi)
+                        mass = float(np.clip(sel.max(), 0.0, 1.0))
+                    else:                                          # HYBRID fallback: the class colour is
+                        occ = np.ptp(np.real(arr[:, :, 1:]), axis=2)   # occluded/weak this frame -> keep the
+                        com = com2d(occ)                           #   gaze ON the object via raw occupancy
+                        if com is not None and float(occ.sum()) > 0.3:
+                            mem["gaze"] = np.clip(np.asarray(gaze, float)
+                                                  + warp_gaze_delta(com, ctr, vc.fovea._ek()), lo, hi)
+                        mass = float(np.clip(occ.max(), 0.0, 1.0))
+                    # NET-STEERABLE ZOOM (ACT_FOVEA_ZOOM=1; else a no-op): confident lock -> zoom IN, lost
+                    # -> zoom OUT for an overview.
                     centrality = float(np.exp(-np.linalg.norm(com - ctr) / 4.0)) if com is not None else 0.0
                     vc.fovea._zoom_step(mass * centrality)
                     if _dbg:                                        # net-gaze tracking quality + zoom use

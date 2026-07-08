@@ -471,6 +471,22 @@ class HexFovea:
             self.hist["total"].append(r["total_error"]); self.hist["relax"].append(r["relax_steps"])
         return arr
 
+    def step_id(self, img, gaze, target_rgb, learn=True):
+        """Like step(), but the sel channel is CONDITIONED on an ARBITRARY colour (a self-labelled
+        colour-class centroid) via the cosine match, NOT the fixed command-code sel_head.  Lets
+        fovea_gradient drive the gaze toward the agent's OWN self-labelled identity -- the fovea net
+        can be pointed at any colour it has a class for, not just the three trained command codes."""
+        arr = hex_sample(img, gaze, self._ek())
+        arr[:, :, 0] = _match_target(arr, target_rgb)        # class-conditioned colour saliency
+        set_sheet4(self.cells, arr)
+        r = self.net.step(learn=learn); self.net.commit_step()
+        self.last_diag = r
+        if np.isfinite(r["sensor_error"]):
+            self.se.append(r["sensor_error"])
+            self.hist["sensor"].append(r["sensor_error"]); self.hist["state"].append(r["state_error"])
+            self.hist["total"].append(r["total_error"]); self.hist["relax"].append(r["relax_steps"])
+        return arr
+
     def warmup(self, render_fn, scenes, scatter_fn, rng, viz=None):
         """Pre-train the PC net (the selection head is trained separately, before this, so the
         sel channel the net reconstructs is already meaningful)."""
