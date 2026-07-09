@@ -66,6 +66,7 @@ from pc_cvnn.arm_modules.planner import GoalModule2D, LO as GOAL_LO, HI as GOAL_
 from pc_cvnn.arm_modules.latent_goal import LatentGoalServo
 from pc_cvnn.arm_modules.curiosity import DistanceNovelty
 from pc_cvnn.arm_modules.self_eval import SelfEvalModule
+from pc_cvnn.arm_modules.object_memory import ObjectMemoryModule
 import pc_cvnn.pc_act16 as act16
 
 CAM = "overview"
@@ -75,6 +76,10 @@ CAM = "overview"
 # delivery; it makes "where to look" a net decision (the user's goal).  ACT23_FOVEA_NET=1 enables.
 FOVEA_NET = os.environ.get("ACT23_FOVEA_NET", "0") == "1"
 FOVEA_ANCHOR = int(os.environ.get("ACT23_FOVEA_ANCHOR", "6"))
+# PREDICTIVE OBJECT MEMORY: replaces the detector re-anchor with a proprioceptive belief so the
+# net-driven gaze follows the object through grasp OCCLUSION + CARRY with NO detector.  Default ON
+# when the learned gaze is active (itself opt-in).  ACT23_FOVEA_MEM=0 falls back to the detector anchor.
+FOVEA_MEM = FOVEA_NET and os.environ.get("ACT23_FOVEA_MEM", "1") == "1"
 BODY = {"cube": "obj_red", "L": "obj_L", "U": "obj_U"}
 ALL = ["obj_red", "obj_green", "obj_blue", "obj_L", "obj_U"]
 TARGET = np.array([0.0, 0.10])
@@ -693,7 +698,21 @@ def run_self_learning_steering(headless=False):
         panel = CommandPanel23(state, CAM, RES, rng=np.random.default_rng(7))
         panel.update(sim.render(CAM), "Training: Farb-Wahrnehmung (Würfel + Formen als Distraktoren streuen) ...")
     os.environ["ACT18_SCATTER_EXTRA"] = "obj_L,obj_U"   # scatter the shapes too during vc warmup (consistency)
-    vc, _P = VisualCortexModule.from_sim(sim, CAM, RES, headless=True,
+    # PERSIST the fovea net (task 3): reuse a saved, already-warmed+class-trained HexFovea -> skip the
+    # ~2-3 min startup warmup + selection training.  Only meaningful with the learned gaze (FOVEA_NET).
+    _pf = (_loaded.get("fovea") if (_loaded is not None and FOVEA_NET) else None)
+    if _pf is not None:                                # structural check: a grid/K change since the save
+        try:                                           #   makes the persisted net incompatible -> fall back
+            ok = (hasattr(_pf, "net") and hasattr(_pf, "sel_head") and len(_pf.cells) == HEX_F * HEX_F
+                  and int(_pf.K) == int(os.environ.get("ACT_FOVEA_K", "4")))
+        except Exception:
+            ok = False
+        if not ok:
+            print("  [Persistenz] gespeicherte Fovea passt nicht (Gitter/K geändert) -- Warmup läuft neu",
+                  flush=True)
+            _pf = None
+    _fovea_loaded = _pf is not None
+    vc, _P = VisualCortexModule.from_sim(sim, CAM, RES, headless=True, pretrained_fovea=_pf,
                                          viz=(panel.fov_viz if panel is not None else None))
     def _fresh_shape_clf():
         if panel is not None:
@@ -797,6 +816,7 @@ def run_self_learning_steering(headless=False):
     # This step only INSTALLS the judge and MEASURES agreement with the privileged verdict; the
     # learners' outcome labels stay privileged until the agreement is proven (steps 2/3).
     seval = (_loaded.get("self_eval") if _loaded is not None else None) or SelfEvalModule(tol=act16.TOL)
+    objmem = ObjectMemoryModule()                             # per-episode predictive belief for the gaze
 
     # self-supervised world model for the GRASP WRIST (collect own trials, then train).
     # OPEN-WORLD situation features -- ONE camera perception path (|F| pipeline) for EVERY object:
@@ -859,6 +879,9 @@ def run_self_learning_steering(headless=False):
                     "objects": [o for o in state.OBJECTS if o[1] not in base],
                     "shape_key": {k: v for k, v in state.SHAPE_KEY.items()
                                   if k not in CommandState23.SHAPE_KEY}}
+            if FOVEA_NET:                                      # task 3: persist the warmed+class-trained
+                blob["fovea"] = vc.fovea                        #   hex fovea (only when the learned gaze is
+                #   used) so later sessions skip the ~2-3 min warmup + selection + class training
             with open(STATE_PATH, "wb") as f:
                 pickle.dump(blob, f)
         except Exception as e:
@@ -1201,7 +1224,8 @@ def run_self_learning_steering(headless=False):
         print(f"  [Netz-Blick] Fovea auf {len(items)} Farbklassen umtrainiert "
               f"({rounds} Runden) -- Blick-Trieb verstärkt", flush=True)
 
-    if FOVEA_NET and os.environ.get("ACT23_FOVEA_TRAIN", "1") == "1":
+    if (FOVEA_NET and not _fovea_loaded            # a loaded fovea was already class-trained -> skip
+            and os.environ.get("ACT23_FOVEA_TRAIN", "1") == "1"):
         train_fovea_classes()
 
     sel_off = {"dxy": None}                                    # the self-selected grasp-point OFFSET (dx,dy)
@@ -1303,6 +1327,7 @@ def run_self_learning_steering(headless=False):
         #   (the long object used to be seeded PRIVILEGED here; stage 3: perceive() now always writes
         #   _sel_seed for it too -- colour-class localization, or its explicit fallback -- so the lazy
         #   seed below covers key=None as well)
+        objmem.reset()                                         # fresh predictive belief per episode
         vc.fovea.z = 1.0                                       # defined DETAIL zoom for the form view
 
         def _track():
@@ -1346,12 +1371,13 @@ def run_self_learning_steering(headless=False):
                 if FOVEA_NET:
                     # LEARNED FOVEA GAZE (user's goal: WHERE to look is a NET decision like the arm servos).
                     # The gaze is its own state, DRIVEN by the net's active-inference gradient on the sel
-                    # channel (class-conditioned saliency, id_mu) + centring the perceived blob.  The
-                    # DETECTOR only re-anchors every FOVEA_ANCHOR frames (occlusion recovery).
+                    # channel (class-conditioned saliency, id_mu) + centring the perceived blob.  Recovery
+                    # from occlusion/carry: the PREDICTIVE MEMORY (belief -> hand while carrying) if enabled,
+                    # else the DETECTOR re-anchors every FOVEA_ANCHOR frames.
                     if mem.get("gaze") is None:
                         mem["gaze"] = np.asarray(mem["px"], float)   # seed from the first detection
                     mem["_fc"] = mem.get("_fc", 0) + 1
-                    if mem["_fc"] % FOVEA_ANCHOR == 0:
+                    if not FOVEA_MEM and mem["_fc"] % FOVEA_ANCHOR == 0:
                         mem["gaze"] = 0.5 * mem["gaze"] + 0.5 * np.asarray(mem["px"], float)
                     gaze = np.clip(mem["gaze"], lo, hi)
                 else:
@@ -1384,6 +1410,17 @@ def run_self_learning_steering(headless=False):
                     # -> zoom OUT for an overview.
                     centrality = float(np.exp(-np.linalg.norm(com - ctr) / 4.0)) if com is not None else 0.0
                     vc.fovea._zoom_step(mass * centrality)
+                    if FOVEA_MEM:                                  # PREDICTIVE MEMORY drives recovery (no
+                        visible = com is not None and mass > 0.15  #   detector): seen -> belief snaps to the
+                        obs = mem["gaze"] if visible else None     #   net's centred estimate; hidden while
+                        try:                                       #   carrying -> belief follows the hand
+                            hand_px = shape_clf._world_to_px(sim.grasp_pos()[:2])[0]
+                        except Exception:
+                            hand_px = None
+                        carrying = bool(sim.d.qpos[sim.jqadr["joint_5"]] < act16.J5_CLOSED_TH)
+                        belief, _mode = objmem.update(obs, hand_px, carrying)
+                        if not visible and belief is not None:     # lost -> gaze toward the belief
+                            mem["gaze"] = np.clip(np.asarray(belief, float), lo, hi)
                     if _dbg:                                        # net-gaze tracking quality + zoom use
                         vc._fovea_drift = getattr(vc, "_fovea_drift", [])   # gaze<->detector px (small=tracks)
                         vc._fovea_drift.append(float(np.linalg.norm(

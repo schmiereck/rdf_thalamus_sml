@@ -659,14 +659,20 @@ class HexFovea:
 
 
 # --------------------------------------------------------------------------- #
-def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=True, viz=None):
+def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=True, viz=None,
+                          pretrained_fovea=None):
     """Factored-out act18 perception: a LEARNED hex-fovea PC-net that perceives the camera + an
     error-driven FOLLOWING gaze, warmed up and calibrated (world<->px).  Returns a dict with
     `perceive`/`track`/`viz` ready for act16.run_combined, plus `fovea`/`render_perc`/`grid`/
     `px_to_world` for perception-only use.  This lets other acts (e.g. act19) reuse the FOLLOWING
-    fovea AND its live hex display instead of privileged sim-state perception."""
+    fovea AND its live hex display instead of privileged sim-state perception.
+
+    pretrained_fovea: a persisted, already-warmed HexFovea -> reuse it and SKIP the selection-head
+    training + warmup (the homography calibration + closures are still rebuilt, they depend on the
+    camera not the net weights).  Saves the ~2-3 min startup training on later sessions."""
     from pc_cvnn.pc_act15 import detect_px
-    fovea = HexFovea(K=int(os.environ.get("ACT_FOVEA_K", "4")), rng=np.random.default_rng(7))
+    fovea = pretrained_fovea if pretrained_fovea is not None \
+        else HexFovea(K=int(os.environ.get("ACT_FOVEA_K", "4")), rng=np.random.default_rng(7))
     perc_opt = mujoco.MjvOption(); perc_opt.geomgroup[1] = 0       # hide the arm -> clean object colour
 
     def render_perc():
@@ -746,19 +752,22 @@ def setup_following_fovea(sim, CAM="overview", RES=240, headless=False, verbose=
         except Exception as e:
             print(f"  [viz] {e}")
 
-    if LEARN_SEL:                                              # train the command-conditioned selection
-        if verbose:                                            # head FIRST (so the warmup net sees a
-            print("  training the command-conditioned selection head ...")   # meaningful sel channel)
-        px_of = lambda nm: world_to_px(sim.obj_pos(nm)[:2])
-        fovea.train_selection(render_train, scatter_train, px_of, list(CMD_COLOR),
-                              np.random.default_rng(13), steps=int(os.environ.get("ACT_SEL_STEPS", "4000")), viz=viz)
-
-    if verbose:
-        print("  warming up the hex perception net on the camera ...")
-    fovea.warmup(render_train, 500, scatter_train, np.random.default_rng(9), viz=viz)
-    if verbose:
-        q = max(1, len(fovea.se) // 8)
-        print(f"  net sensor_error (camera scene): {np.mean(fovea.se[:q]):.3f} -> {np.mean(fovea.se[-q:]):.3f}")
+    if pretrained_fovea is not None:
+        if verbose:
+            print("  hex perception net aus gespeichertem Zustand geladen -- Warmup übersprungen")
+    else:
+        if LEARN_SEL:                                          # train the command-conditioned selection
+            if verbose:                                        # head FIRST (so the warmup net sees a
+                print("  training the command-conditioned selection head ...")   # meaningful sel channel)
+            px_of = lambda nm: world_to_px(sim.obj_pos(nm)[:2])
+            fovea.train_selection(render_train, scatter_train, px_of, list(CMD_COLOR),
+                                  np.random.default_rng(13), steps=int(os.environ.get("ACT_SEL_STEPS", "4000")), viz=viz)
+        if verbose:
+            print("  warming up the hex perception net on the camera ...")
+        fovea.warmup(render_train, 500, scatter_train, np.random.default_rng(9), viz=viz)
+        if verbose and fovea.se:
+            q = max(1, len(fovea.se) // 8)
+            print(f"  net sensor_error (camera scene): {np.mean(fovea.se[:q]):.3f} -> {np.mean(fovea.se[-q:]):.3f}")
 
     state = {"gaze": np.array([RES / 2.0, RES / 2.0]), "cmd": "obj_red"}
 
