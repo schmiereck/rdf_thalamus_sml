@@ -982,6 +982,12 @@ def run_self_learning_steering(headless=False):
         print(f"  [Persistenz] Zustand geladen: Welt-Modell {world.n()} Versuche, Runtime-Policy "
               f"{runtime.n()} Samples, offene Klassen {shape_clf.open_names} — Startup-Training übersprungen",
               flush=True)
+        _bad = runtime.sanitize()                              # HEAL a DAgger buffer polluted by off-table
+        if _bad:                                               # perception-glitch states (897ca5a servo bug
+            runtime.train(epochs=200)                          # logged px-as-metres -> a quarter of the buffer
+            save_state()                                       # went absurd + wrecked the fitted policy)
+            print(f"  [Reparatur] {_bad} vergiftete Policy-Samples (off-table) entfernt + Policy neu "
+                  f"trainiert ({runtime.n()} sauber) — Netz-Choreo war daneben-greifend", flush=True)
     else:
         collect_trials(LONG, "langes Objekt", np.pi)
         collect_trials("obj_red", "Würfel, auch diagonal", np.pi / 2)   # cube yaw mod pi/2 (square symmetry);

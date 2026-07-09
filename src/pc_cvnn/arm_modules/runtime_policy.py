@@ -35,6 +35,12 @@ IMIT_CAP = 12000       # SELF-IMITATION buffer (step 3): the (state, action) pai
 IMIT_WEIGHT = int(__import__("os").environ.get("ACT23_SELFIMIT_W", "2"))   # how many times a self-
 #                        imitation pair is repeated vs a DAgger sample (own validated successes count
 #                        more; the teacher is training wheels, the baby's own working moves lead)
+SANE_M = 1.0           # POSITION SANITY BOUND (m): the hand/object/target all live on a <=0.3 m table,
+#                        so any coord beyond 1 m is a PERCEPTION GLITCH, never a real state.  A grasp-
+#                        belief servo fed px-as-metres (the 897ca5a bug) drove obj coords to ~50-176 m;
+#                        DAgger logged those and a quarter of the buffer went absurd, wrecking the policy.
+#                        Guard the buffer at the source + a load-time sanitize heal the damage.
+_POS_COLS = (0, 1, 2, 3, 4, 6, 7)   # hand xyz, obj xy, target xy (cz/j5/obj_h/obj_fp are not positions)
 
 
 class RuntimePolicyModule(ArmModule):
@@ -56,12 +62,16 @@ class RuntimePolicyModule(ArmModule):
         """One VISITED state + the reactive teacher's label.  Also tracks the SHADOW divergence
         (what would the policy have done here?) so FSM-driven runs report how close the net is."""
         self._k += 1
+        s = np.asarray(state, float)
+        if np.any(np.abs(s[list(_POS_COLS)]) > SANE_M):   # perception-glitch state (off-table coords) ->
+            return                                        # never log it: one bad servo frame must not
+            #                                               poison the lifelong DAgger buffer (897ca5a)
         if self.trained:
             p = self.net.predict(state)
             self._div.append(float(np.linalg.norm(p[:3] - np.asarray(subgoal, float)[:3])))
         if self._k % SUBSAMPLE:
             return
-        self._X.append(np.asarray(state, float).copy())
+        self._X.append(s.copy())
         self._Y.append(np.asarray(subgoal, float).copy())
         if len(self._X) > CAP:                                # evict the oldest NON-core samples
             cut = len(self._X) - CAP
@@ -86,6 +96,25 @@ class RuntimePolicyModule(ArmModule):
             cut = len(self._Xi) - IMIT_CAP
             del self._Xi[:cut]; del self._Yi[:cut]
         return added
+
+    def sanitize(self) -> int:
+        """One-time HEAL of a buffer polluted by off-table (perception-glitch) states -- e.g. the 897ca5a
+        px-as-metres servo bug drove ~26% of the DAgger buffer to |coord|~50-176 m and wrecked the fitted
+        policy.  Drops every (state, label) pair whose positions exceed SANE_M, from BOTH the DAgger and the
+        self-imitation buffers.  Returns the number of pairs removed; the caller retrains if it is > 0."""
+        removed = 0
+        for Xn, Yn in (("_X", "_Y"), ("_Xi", "_Yi")):
+            X = getattr(self, Xn, None); Y = getattr(self, Yn, None)
+            if not X:
+                continue
+            keepX, keepY = [], []
+            for s, y in zip(X, Y):
+                if np.any(np.abs(np.asarray(s, float)[list(_POS_COLS)]) > SANE_M):
+                    removed += 1
+                else:
+                    keepX.append(s); keepY.append(y)
+            setattr(self, Xn, keepX); setattr(self, Yn, keepY)
+        return removed
 
     def n(self) -> int:
         return len(self._X)
