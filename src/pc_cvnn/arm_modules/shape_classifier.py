@@ -57,6 +57,15 @@ MERGE_MARGIN = 1.7                                                      # birth-
 #   DISTANCE BETWEEN TWO DIFFERENT novel forms (long-I vs T measured p10 ~12.6: 2.0*th=14.6 FUSED them
 #   in the user's GUI session -> the T never got its own class); 1.7*th ~ 12.4 splits both measured sets)
 OPEN_CAP = 80                                                           # max stored exemplars per self-labelled class
+# STARVATION / CAP (phantom over-birth control): scattered transient sightings (edge/occlusion/odd-pose
+# renders) can birth open classes that then NEVER get claimed again -- the user's neu-* piled to 45+.  A
+# class that goes STARVE_N glances without a fresh claim AND stays SMALL (<= STARVE_MIN_EX exemplars,
+# i.e. was never reinforced by real repeated sightings) is a phantom and is pruned; a real object's
+# class keeps getting claimed (age resets) and accumulates exemplars, so it survives.  Bound-command
+# classes are additionally PROTECTED (passed in).  A hard CAP bounds the total (prune the most-starved).
+STARVE_N = int(os.environ.get("ACT_OPEN_STARVE", "25"))
+STARVE_MIN_EX = int(os.environ.get("ACT_OPEN_STARVE_EX", "6"))
+MAX_OPEN = int(os.environ.get("ACT_OPEN_MAX", "12"))
 SAT_TH = 0.15
 GRIP_PX = 18                                             # gripper-sized window (px) for the densest-grip-point search
 RED = np.array([0.9, 0.1, 0.1])
@@ -367,7 +376,7 @@ class ShapeClassifierModule(ArmModule):
             return best_nm, best_d
         return None, min(dk, best_d)
 
-    def observe_scene(self, sim, min_area=40, bounds=None):
+    def observe_scene(self, sim, min_area=40, bounds=None, protect=None):
         """OPEN-SET self-labelling GLANCE: segment+resolve the scene; every NOVEL blob feeds the candidate
         buffer, and once NOVEL_CONFIRM sightings AGREE (mutual z-distance < novel_th -- the same PERSISTENT
         form, not a glint or an occlusion artefact) a new class is COMMITTED and self-named ("neu-1", ...).
@@ -392,6 +401,9 @@ class ShapeClassifierModule(ArmModule):
             if nm is not None and nm not in SHAPES:          # open-class match -> grow its exemplar set
                 self.last_events.append(("claim", nm, None if det["pos"] is None
                                          else np.round(det["pos"], 3).tolist()))
+                if getattr(self, "_age", None) is None:
+                    self._age = {}
+                self._age[nm] = 0                            # a fresh claim keeps the class alive (starvation)
                 if len(self.open[nm]) < OPEN_CAP:
                     self.open[nm].append(z)
             elif nm is None:                                 # NOVEL sighting -> temporal-consistency buffer
@@ -441,7 +453,31 @@ class ShapeClassifierModule(ArmModule):
                     self.open[a] = (self.open[a] + self.open[b])[:OPEN_CAP]
                     del self.open[b]; self.open_names.remove(b)
                     born = [nm for nm in born if nm != b]
+        self._starve_and_cap(born, protect)
         return born
+
+    def _starve_and_cap(self, born=(), protect=None):
+        """Age every open class this glance; prune small, long-unclaimed phantoms (never a bound
+        command); then enforce the hard cap by dropping the most-starved.  Newborns start at age 0,
+        so a class gets STARVE_N glances to be reinforced before it can die."""
+        prot = set(protect or ())
+        if getattr(self, "_age", None) is None:
+            self._age = {}
+        for nm in self.open_names:
+            self._age[nm] = 0 if nm in born else self._age.get(nm, 0) + 1
+
+        def _prunable(nm):
+            return nm not in prot and len(self.open.get(nm, [])) <= STARVE_MIN_EX
+
+        for nm in [n for n in self.open_names if _prunable(n) and self._age.get(n, 0) > STARVE_N]:
+            del self.open[nm]; self.open_names.remove(nm); self._age.pop(nm, None)
+        if len(self.open_names) > MAX_OPEN:                  # HARD cap: over the limit, drop the most-
+            over = len(self.open_names) - MAX_OPEN           #   STARVED UNPROTECTED classes -- ANY size
+            #   (duplicate big classes of the same form that consolidation never merged pile up too; a
+            #   bound command is protected, an unbound one is just re-discovered if it is ever seen again)
+            for nm in sorted((n for n in self.open_names if n not in prot),
+                             key=lambda n: -self._age.get(n, 0))[:over]:
+                del self.open[nm]; self.open_names.remove(nm); self._age.pop(nm, None)
 
     # ------------------------------------------------------------------
     def perceive(self, sim):

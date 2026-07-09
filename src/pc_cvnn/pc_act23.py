@@ -1079,7 +1079,8 @@ def run_self_learning_steering(headless=False):
         if shape_clf.novel_th is None:
             return []
         saved = sim.d.mocap_pos.copy()                         # observe_scene parks the markers -> restore
-        born = shape_clf.observe_scene(sim, bounds=(-0.115, 0.115, 0.075, 0.235))   # only inside the
+        born = shape_clf.observe_scene(sim, bounds=(-0.115, 0.115, 0.075, 0.235),   # only inside the
+                                       protect=set(state.SHAPE_KEY.values()))       # bound commands never starve
         sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)   # calibrated workspace (5mm inside
         #   REACH_XY; anything beyond lies where a knocked/mis-dropped object renders clipped or
         #   distorted and would read consistently-"novel" for a boring reason)
