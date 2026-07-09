@@ -1159,6 +1159,50 @@ def run_self_learning_steering(headless=False):
     act16.OBJS = [nm for _l, nm, _m in state.OBJECTS]
     act16.SCENE_N = len(act16.OBJS)
 
+    def train_fovea_classes(rounds=None):
+        """DETECTOR-FREE GAZE (user's goal): retrain the hex fovea net so its sel-channel dynamics
+        handle EVERY self-labelled colour class, not just the 3 fixed command codes the warmup used.
+        The measured limit was that step_id's injected class-colour sel is OFF-DISTRIBUTION for the
+        net, so fovea_gradient's drive was too weak to carry the gaze without the detector re-anchor.
+        Here the net LEARNS (net.step(learn=True)) to reconstruct the class-conditioned sel at
+        centred objects (positive) + near-empty sel on background (negative), across all classes and
+        random poses -- so the identity drive strengthens and the gaze can follow with a far sparser
+        (ideally no) detector anchor.  Runs only when the learned gaze is active."""
+        from pc_cvnn.pc_act14 import _rand_xy
+        items = [(nm, np.asarray(colours.classes[c]["mu"], float))
+                 for nm, c in colour_of_body.items() if c in colours.classes]
+        if not items:
+            return
+        rounds = int(os.environ.get("ACT23_FOVEA_TRAIN_N", "80")) if rounds is None else rounds
+        K = vc.fovea.K; lo, hi = HEX_F * K, RES - HEX_F * K
+        snap = {nm: (sim.obj_pos(nm)[:2].copy(), float(sim.obj_pos(nm)[2]), float(sim.obj_yaw(nm)))
+                for _l, nm, _m in state.OBJECTS}
+        saved = sim.d.mocap_pos.copy(); shape_clf._park_markers(sim); vc.fovea.z = 1.0
+        for i in range(rounds):
+            for body, mu in items:
+                p = _rand_xy(crng)
+                sim.set_object(body, p, z=0.012, yaw=float(crng.uniform(0, 2 * np.pi)))
+                mujoco.mj_forward(sim.m, sim.d)
+                img = sim.render(CAM)
+                try:
+                    px = np.asarray(shape_clf._world_to_px(np.asarray(p, float))[0], float)
+                except Exception:
+                    continue
+                gz = np.clip(px + crng.uniform(-4, 4, 2), lo, hi)
+                vc.fovea.step_id(img, gz, mu, learn=True)          # positive: class-sel blob ON the object
+                bg = crng.uniform([lo, lo], [hi, hi])
+                vc.fovea.step_id(img, bg, mu, learn=True)          # negative: sel ~empty off the object
+            if panel is not None and i % 10 == 0:
+                panel.update(sim.render(CAM), f"Blick-Netz auf Farbklassen trainieren {i}/{rounds} ...")
+        for nm, (xy, z, yaw) in snap.items():
+            sim.set_object(nm, xy.tolist(), z=z, yaw=yaw)
+        sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+        print(f"  [Netz-Blick] Fovea auf {len(items)} Farbklassen umtrainiert "
+              f"({rounds} Runden) -- Blick-Trieb verstärkt", flush=True)
+
+    if FOVEA_NET and os.environ.get("ACT23_FOVEA_TRAIN", "1") == "1":
+        train_fovea_classes()
+
     sel_off = {"dxy": None}                                    # the self-selected grasp-point OFFSET (dx,dy)
     #   of the CURRENT command: perceive() and the form tracker's servo obs both add it, so the executed
     #   grasp target is (perceived point + learned offset) consistently through approach corrections
