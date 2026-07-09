@@ -479,6 +479,25 @@ class ShapeClassifierModule(ArmModule):
                              key=lambda n: -self._age.get(n, 0))[:over]:
                 del self.open[nm]; self.open_names.remove(nm); self._age.pop(nm, None)
 
+    def enforce_cap_on_load(self, protect=None):
+        """Apply the hard MAX_OPEN cap to a LOADED phantom pile.  The per-glance starvation only runs in
+        observe_scene, which is SKIPPED when a state is loaded (startup training skipped), so a persisted
+        state keeps every phantom it ever bred.  Drops the THINNEST unprotected classes first (fewest
+        exemplars = least-reinforced) until <= MAX_OPEN; bound commands (protect) are always kept.
+        Returns the dropped names."""
+        prot = set(protect or ())
+        if getattr(self, "_age", None) is None:
+            self._age = {}
+        dropped = []
+        while len(self.open_names) > MAX_OPEN:
+            cand = [n for n in self.open_names if n not in prot]
+            if not cand:
+                break                                            # only protected commands left -> stop
+            nm = min(cand, key=lambda n: len(self.open.get(n, [])))
+            del self.open[nm]; self.open_names.remove(nm); self._age.pop(nm, None)
+            dropped.append(nm)
+        return dropped
+
     # ------------------------------------------------------------------
     def perceive(self, sim):
         """Perceive the (single, in-view) object's shape + orientation from the camera."""

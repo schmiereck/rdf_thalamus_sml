@@ -1173,6 +1173,10 @@ def run_self_learning_steering(headless=False):
             if panel is not None:                              #   registered here so "Neue Form" survives
                 panel.add_discovered(len(state.OBJECTS) - 1)   #   the restart as a commandable object
         state.SHAPE_KEY.update(_loaded.get("shape_key", {}))
+        _dropped = shape_clf.enforce_cap_on_load(protect=set(state.SHAPE_KEY.values()))
+        if _dropped:                                            # the cap never ran on this persisted pile
+            print(f"  [Aufräumen] {len(_dropped)} verwaiste Phantom-Klassen verworfen "
+                  f"-> {shape_clf.open_names}", flush=True)
     if panel is not None:
         panel._randomize_fn = randomize_objects     # wire "Objekte neu" (panel built before randomize_objects existed)
         panel._introduce_fn = introduce_object      # wire "Objekt hinzufügen" (open-set discovery)
@@ -1412,13 +1416,16 @@ def run_self_learning_steering(headless=False):
                     vc.fovea._zoom_step(mass * centrality)
                     if FOVEA_MEM:                                  # PREDICTIVE MEMORY drives recovery (no
                         visible = com is not None and mass > 0.15  #   detector): seen -> belief snaps to the
-                        obs = mem["gaze"] if visible else None     #   net's centred estimate; hidden while
+                        # NB: a PIXEL observation for the memory ONLY -- must NOT reuse `obs`, which is the
+                        # world-xy grasp servo obs returned below (clobbering it fed px-as-metres to the
+                        # grasp servo -> the arm flew off, never grasped: the 897ca5a "alles kaputt" bug).
+                        obs_mem = mem["gaze"] if visible else None  #   net's centred estimate; hidden while
                         try:                                       #   carrying -> belief follows the hand
                             hand_px = shape_clf._world_to_px(sim.grasp_pos()[:2])[0]
                         except Exception:
                             hand_px = None
                         carrying = bool(sim.d.qpos[sim.jqadr["joint_5"]] < act16.J5_CLOSED_TH)
-                        belief, _mode = objmem.update(obs, hand_px, carrying)
+                        belief, _mode = objmem.update(obs_mem, hand_px, carrying)
                         if not visible and belief is not None:     # lost -> gaze toward the belief
                             mem["gaze"] = np.clip(np.asarray(belief, float), lo, hi)
                     if _dbg:                                        # net-gaze tracking quality + zoom use
