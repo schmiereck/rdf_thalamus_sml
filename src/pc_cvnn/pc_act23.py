@@ -1589,6 +1589,8 @@ def run_self_learning_steering(headless=False):
         use_latent = state.goalmode == "latent"
         pol_trace = []                                         # STEP 3: (state, action) the POLICY drives
         #   this episode -> becomes self-imitation demonstrations IF the agent self-judges a delivery
+        runtime.begin_episode()                                # PEND the teacher rows; committed only if
+        #   this episode is NOT a self-validated success (teacher corrects failures, see end_episode)
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_fn,
                            policy_fn=(runtime.predict if use_net else None),
@@ -1758,14 +1760,21 @@ def run_self_learning_steering(headless=False):
         # (state, action) pairs the policy actually took become its OWN demonstrations, reinforcing what
         # worked FOR IT (blended with DAgger at fit time).  A skipped real success just loses a sample;
         # an imitated failure would poison -- hence the tight bar.  ACT23_SELFIMIT=0 disables.
+        imitated = False
         if (use_net and pol_trace and lifted and confident and not slipped
                 and os.environ.get("ACT23_SELFIMIT", "1") == "1"):
-            added = runtime.imitate([s for s, _a in pol_trace], [a for _s, a in pol_trace])
+            added = runtime.imitate([s for s, _a in pol_trace], [a for _s, a in pol_trace], key=body)
+            imitated = added > 0
+            mix = ", ".join(f"{k or 'alt'} {v}" for k, v in
+                            sorted(runtime.imit_mix().items(), key=lambda kv: -kv[1]))
             print(f"    [Selbst-Imitation] sichere Lieferung ({s_d * 1000:.0f}mm) -> +{added} "
-                  f"Demo-Schritte ({runtime.n_imit()} im Selbst-Puffer)", flush=True)
+                  f"Demo-Schritte ({runtime.n_imit()} im Selbst-Puffer: {mix}); "
+                  f"Teacher-Zeilen dieser Episode verworfen (eigener Erfolg zählt)", flush=True)
         elif use_net and pol_trace and lifted and delivered:
             print(f"    [Selbst-Imitation] Lieferung zu unsicher ({(s_d or 0) * 1000:.0f}mm) -- "
                   f"nicht imitiert", flush=True)
+        runtime.end_episode(keep=not imitated)                 # failure/uncertain -> the teacher's
+        #   correction rows enter DAgger; a self-validated success keeps ONLY its own actions
         # STAGE 2 lifelong: refit the choreography on the aggregated teacher labels; report the SHADOW
         # divergence |policy - teacher| over this episode's VISITED states in BOTH modes -- on FSM
         # episodes it says how close the net is to the teacher, on NETZ episodes it says how far the
@@ -1873,13 +1882,29 @@ def run_self_learning_steering(headless=False):
               f"Selbst-Imitation {'aus' if os.environ.get('ACT23_SELFIMIT','1')=='0' else 'an'}", flush=True)
         bilanz = {"fsm": [], "netz": []}
         obj_hist = []
+        force_list = [s.strip() for s in os.environ.get("ACT23_AUTO_OBJ", "").split(",") if s.strip()]
+        #   measurement knob: pin the auto pick to one object (label substring) or CYCLE a comma list
+        #   ("U-Form,Gruenes" = interleaved practice, the interference probe); curiosity mix confounds
+        #   per-object trends.  ACT23_AUTO_PLACE=0 keeps the scene AS THE LAST EPISODE LEFT IT (the
+        #   inheritance probe: failures shove/wedge the object and the next episode starts from that).
         for ep in range(N):
-            pick = curious_pick() if AUTO_CURIOUS else None
-            if pick is None:
+            if force_list:
+                want = force_list[ep % len(force_list)]
+                ks = [k for k, (l, _n, _m) in enumerate(state.OBJECTS) if want.lower() in l.lower()]
+                if not ks:
+                    raise SystemExit(f"ACT23_AUTO_OBJ '{want}' matcht kein Objekt")
+                state.sel = ks[0]
+                state.target_idx = int(crng.integers(len(state.MARKERS)))
+                if os.environ.get("ACT23_AUTO_PLACE", "1") == "1":
+                    state.place_selected_random(crng)
+                pick = None
+            else:
+                pick = curious_pick() if AUTO_CURIOUS else None
+            if pick is None and not force_list:
                 state.sel = int(crng.integers(len(state.OBJECTS)))
                 state.target_idx = int(crng.integers(len(state.MARKERS)))
                 state.place_selected_random(crng)
-            else:
+            elif pick is not None:
                 print(f"    {pick}", flush=True)
             print(f"  [Auto {ep}] {state.label()} ...", flush=True)
             ok, err = run_one()
