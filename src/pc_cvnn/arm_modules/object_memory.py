@@ -43,7 +43,7 @@ class ObjectMemoryModule(ArmModule):
              .add_out("belief_px", 2, "predicted object image position to gaze at"))
 
     def reset(self) -> None:
-        self.belief = None; self.conf = 0.0
+        self.belief = None; self.conf = 0.0; self._last = None; self.err_px = float("nan")
 
     def update(self, obs_px, hand_px, carrying):
         """One frame.  Returns (belief_px, mode) where mode in {'sicht','getragen','gehalten'}."""

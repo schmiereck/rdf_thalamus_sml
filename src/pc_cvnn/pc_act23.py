@@ -1302,7 +1302,10 @@ def run_self_learning_steering(headless=False):
             q3 = sim.arm3_angles()                             # body-model FK surprise: predicted vs real hand
             bmm = float(np.linalg.norm(bm.body.fk(q3) - sim.grasp_pos())) * 1000.0   # (was always 0: wrong attr)
             if s is not None:
-                panel.surp_viz.push(s["sensor"], s["state"], s["total"], s["relax"], bmm)
+                m = objmem._last                               # ObjectMemory chart curves (nan while inactive,
+                panel.surp_viz.push(s["sensor"], s["state"], s["total"], s["relax"], bmm,   # i.e. FOVEA_MEM off
+                                    mem_err=getattr(objmem, "err_px", None),                # or no belief yet)
+                                    mem_conf=None if m is None else m["conf"])
 
     def track_and_plot():
         obs = vc.track()
@@ -1434,6 +1437,11 @@ def run_self_learning_steering(headless=False):
                         belief, _mode = objmem.update(obs_mem, hand_px, carrying)
                         if not visible and belief is not None:     # lost -> gaze toward the belief
                             mem["gaze"] = np.clip(np.asarray(belief, float), lo, hi)
+                        # chart diagnostic: the memory's PREDICTION ERROR vs the detector's last fix --
+                        # rises while the belief coasts through carry/occlusion, snaps down on a sighting
+                        objmem.err_px = (float(np.linalg.norm(np.asarray(belief, float)
+                                                              - np.asarray(mem["px"], float)))
+                                         if belief is not None else float("nan"))
                     if _dbg:                                        # net-gaze tracking quality + zoom use
                         vc._fovea_drift = getattr(vc, "_fovea_drift", [])   # gaze<->detector px (small=tracks)
                         vc._fovea_drift.append(float(np.linalg.norm(
@@ -1758,15 +1766,19 @@ def run_self_learning_steering(headless=False):
         elif use_net and pol_trace and lifted and delivered:
             print(f"    [Selbst-Imitation] Lieferung zu unsicher ({(s_d or 0) * 1000:.0f}mm) -- "
                   f"nicht imitiert", flush=True)
-        # STAGE 2 lifelong: refit the choreography on the aggregated teacher labels; on FSM-driven
-        # episodes report the SHADOW divergence (what the net WOULD have done vs the teacher).
+        # STAGE 2 lifelong: refit the choreography on the aggregated teacher labels; report the SHADOW
+        # divergence |policy - teacher| over this episode's VISITED states in BOTH modes -- on FSM
+        # episodes it says how close the net is to the teacher, on NETZ episodes it says how far the
+        # policy drifted from the teacher ALONG ITS OWN TRAJECTORY (the oscillating-Bilanz diagnostic:
+        # a Bilanz trough with a Schatten spike = the lifelong refit moved the policy, not bad luck).
         div = runtime.shadow_divergence_mm()
         runtime.train(epochs=200)                              # act19's DAgger refits used 300; 80 underfit
         #   the shifting aggregate (user watched the net under-CLOSE the gripper -- the BC smoothing
         #   artefact that stronger refits + DAgger labels at the visited close-states sharpen)
-        if not use_net and np.isfinite(div):
-            print(f"    [Stufe 2] Choreo-Schatten: |Netz-Teacher| {div:.0f} mm "
-                  f"({runtime.n()} Samples, nachtrainiert)", flush=True)
+        if np.isfinite(div):
+            print(f"    [Stufe 2] Choreo-Schatten ({'Netz' if use_net else 'FSM'}-Lauf): "
+                  f"|Netz-Teacher| {div:.0f} mm ({runtime.n()} DAgger + {runtime.n_imit()} Selbst, "
+                  f"nachtrainiert)", flush=True)
         save_state()                                           # lifelong progress survives a restart
         return res.get("ok", False), res.get("err", float("nan")) * 1000.0
 
@@ -1834,6 +1846,23 @@ def run_self_learning_steering(headless=False):
                    + (f" (Latent-Neuheit {best_nov:.2f})" if DREAM else "")
                    if best_p is not None else ""))
 
+    def bilanz_line(bilanz, obj_hist):
+        """Rolling scoreboard, per MODE + per OBJECT (worst first).  MEASURED (150-ep run with the
+        Schatten diagnostic): the Bilanz swings 13-43% while the policy's shadow stays flat ~10-12mm --
+        the oscillation is mostly the CURIOSITY OBJECT MIX (corr Bilanz vs U+L share -0.68; a fixed-
+        per-object-rate expectation reproduces it at r=+0.70), NOT learning instability.  Without the
+        per-object split the scoreboard conflates task difficulty mix with skill."""
+        parts = [f"{lbl} {sum(bilanz[md][-30:])}/{len(bilanz[md][-30:])}"
+                 for md, lbl in (("fsm", "FSM"), ("netz", "Netz")) if bilanz[md]]
+        per = {}
+        for o, okv in obj_hist[-30:]:
+            s, t = per.get(o, (0, 0)); per[o] = (s + okv, t + 1)
+        objs = " · ".join(
+            f"{o.replace(' Wuerfel', '').replace(' Objekt', '').replace('Neue Form ', 'Form-')} {s}/{t}"
+            for o, (s, t) in sorted(per.items(), key=lambda kv: kv[1][0] / kv[1][1]))
+        return ("    [Bilanz] letzte 30 je Modus: " + ", ".join(parts)
+                + (f"  |  je Objekt: {objs}" if objs else ""))
+
     if headless and int(os.environ.get("ACT23_AUTO_N", "0")) > 0:
         # HEADLESS AUTO-RUN (for A/B measurement without the GUI): run N curiosity-picked episodes in
         # the requested choreo mode with the rolling Bilanz scoreboard -- the same loop the GUI Auto
@@ -1843,6 +1872,7 @@ def run_self_learning_steering(headless=False):
         print(f"  headless AUTO-Lauf: {N} Episoden, Choreo {state.choreo}, "
               f"Selbst-Imitation {'aus' if os.environ.get('ACT23_SELFIMIT','1')=='0' else 'an'}", flush=True)
         bilanz = {"fsm": [], "netz": []}
+        obj_hist = []
         for ep in range(N):
             pick = curious_pick() if AUTO_CURIOUS else None
             if pick is None:
@@ -1856,10 +1886,9 @@ def run_self_learning_steering(headless=False):
             print(f"  [Auto {ep}] {'GELIEFERT' if ok else 'NICHT geliefert'}  |  Abstand {err:.0f} mm",
                   flush=True)
             bilanz["netz" if state.choreo == "netz" else "fsm"].append(bool(ok))
+            obj_hist.append((state.OBJECTS[state.sel][0], bool(ok)))
             if (ep + 1) % 10 == 0:
-                parts = [f"{lbl} {sum(bilanz[md][-30:])}/{len(bilanz[md][-30:])}"
-                         for md, lbl in (("fsm", "FSM"), ("netz", "Netz")) if bilanz[md]]
-                print(f"    [Bilanz] letzte 30 je Modus: " + ", ".join(parts), flush=True)
+                print(bilanz_line(bilanz, obj_hist), flush=True)
         return
 
     if headless:
@@ -1902,6 +1931,7 @@ def run_self_learning_steering(headless=False):
     ep = 0
     bilanz = {"fsm": [], "netz": []}                           # rolling per-mode delivery record: without
     #   a scoreboard slow DAgger progress is indistinguishable from noise (user: "so la la")
+    obj_hist = []                                              # (object, ok) for the per-object split
     while not state.exit:
         if not (state.go or state.auto):
             panel.plt.pause(0.05); continue
@@ -1925,13 +1955,9 @@ def run_self_learning_steering(headless=False):
         line = f"[{tag} {ep}] {'GELIEFERT' if ok else 'NICHT geliefert'}  |  Abstand {err:.0f} mm"
         print("  " + line); panel.update(sim.render(CAM), line); ep += 1
         bilanz["netz" if state.choreo == "netz" else "fsm"].append(bool(ok))
-        if ep % 10 == 0:                                       # rolling last-30 scoreboard per mode
-            parts = []
-            for md, lbl in (("fsm", "FSM"), ("netz", "Netz")):
-                h = bilanz[md][-30:]
-                if h:
-                    parts.append(f"{lbl} {sum(h)}/{len(h)}")
-            print(f"    [Bilanz] letzte 30 je Modus: " + ", ".join(parts), flush=True)
+        obj_hist.append((state.OBJECTS[state.sel][0], bool(ok)))
+        if ep % 10 == 0:                                       # rolling last-30 scoreboard per mode+object
+            print(bilanz_line(bilanz, obj_hist), flush=True)
         if panel._pending_randomize:                           # deferred mid-episode clicks run NOW,
             panel._pending_randomize = False                   #   between episodes (see state.busy)
             randomize_objects(); panel.update(sim.render(CAM), "Objekte neu gewürfelt"); panel._refresh()

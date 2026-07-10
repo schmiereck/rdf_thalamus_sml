@@ -338,6 +338,7 @@ class SurpriseViz:
         self._k = 0; self._redraw_every = max(1, int(redraw_every)); self._win = int(window)
         self.t = []; self.sensor = []; self.state = []; self.total = []; self.relax = []; self.body = []
         self.planner = []                                   # Planner module surprise (act20; nan in act19)
+        self.mem_err = []; self.mem_conf = []               # ObjectMemory: |belief-detector| px + confidence
         for ax in (self.axE, self.axR):
             ax.set_facecolor("#0e0e12"); ax.grid(True, color="#333", lw=0.4)
             ax.tick_params(colors="w"); [s.set_color("#555") for s in ax.spines.values()]
@@ -354,6 +355,10 @@ class SurpriseViz:
                            "MODULE: Körpermodell (ArmBodyModel3D)   +   VisualCortex relax effort",
                            color="#88ff88", fontsize=9)
         (self.lR,) = self.axR.plot([], [], color="#33ccff", lw=1.2, label="relax_steps (VisualCortex)")
+        (self.lM,) = self.axR.plot([], [], color="#ff77cc", lw=1.1,
+                                   label="Objekt-Gedächtnis |Belief−Detektor| (px)")
+        (self.lMc,) = self.axR.plot([], [], color="#ff77cc", lw=0.8, ls=":", alpha=0.7,
+                                    label="Gedächtnis-Konfidenz ×100")
         self.axR.set_ylabel("relax steps", color="#33ccff"); self.axR.set_xlabel("perception step", color="w")
         self.axRb = self.axR.twinx(); self.axRb.tick_params(colors="#88ff88")
         (self.lB,) = self.axRb.plot([], [], color="#88ff88", lw=1.2, label="Körpermodell FK surprise (mm)")
@@ -365,12 +370,15 @@ class SurpriseViz:
         if not self._embedded:
             self.fig.tight_layout(rect=(0, 0.085, 1, 0.95))
 
-    def push(self, sensor, state, total, relax, body_mm=None, planner=None):
+    def push(self, sensor, state, total, relax, body_mm=None, planner=None,
+             mem_err=None, mem_conf=None):
         self._k += 1
         self.t.append(self._k); self.sensor.append(float(sensor)); self.state.append(float(state))
         self.total.append(float(total)); self.relax.append(float(relax))
         self.body.append(float(body_mm) if body_mm is not None else np.nan)
         self.planner.append(float(planner) if planner is not None else np.nan)
+        self.mem_err.append(float(mem_err) if mem_err is not None else np.nan)
+        self.mem_conf.append(float(mem_conf) * 100.0 if mem_conf is not None else np.nan)
         if self._k % self._redraw_every == 0:
             self.redraw()
 
@@ -393,6 +401,7 @@ class SurpriseViz:
         self.lU.set_data(t, self.total[-w:]); self.lR.set_data(t, self.relax[-w:])
         self.lP.set_data(t, self.planner[-w:])
         self.lB.set_data(t, self.body[-w:])
+        self.lM.set_data(t, self.mem_err[-w:]); self.lMc.set_data(t, self.mem_conf[-w:])
         for ax in (self.axE, self.axR, self.axRb):
             ax.relim(); ax.autoscale_view()
         if self.readout is not None:
