@@ -78,7 +78,7 @@ class SelfEvalModule(ArmModule):
         return float(min(np.median(r[key]), self.REF_CAP))
 
     def judge(self, dets, lgoal, colour_key=None, colours=None, shape_key=None,
-              near_xy=None, near_r=0.05, key=None):
+              near_xy=None, near_r=0.05, key=None, exp_area=None):
         """Judge the settled scene.  Returns (self_ok, self_d_m, found):
         self_ok False+found False = object not seen (lost/hanging/occluded) -> not delivered;
         returns (None, None, False) = ABSTAIN when the agent has no own class to identify the
@@ -135,6 +135,22 @@ class SelfEvalModule(ArmModule):
             self._last = {"found": False, **diag}
             return False, None, False
         pos = np.asarray(best["pos"], float)
+        merged = False
+        # MERGED-BLOB RECOVERY (measured root cause of the L judge misreads, NOT the image edge):
+        # an object DELIVERED next to a neighbour (<~40mm) fuses with it into ONE component, whose
+        # centroid lies BETWEEN the two bodies (34mm off in the measured episode).  Detection is
+        # self-supervised: the agent saw ITS object seconds ago at episode start (exp_area = that
+        # detection's pixel area, same camera); a delivery blob reading FAR larger is a fusion
+        # (measured: merged area = sum of the parts, 794 vs 529+271).  Recovery = CONTINUITY again:
+        # my object is the part of the blob AT MY HAND -> centroid of the component's material
+        # within 35mm of the release point, not the merged whole.
+        if (exp_area is not None and near_xy is not None and best.get("wpx") is not None
+                and float(best.get("area", 0.0)) > 1.35 * float(exp_area)):
+            Wm = np.asarray(best["wpx"], float)
+            dd = np.linalg.norm(Wm - np.asarray(near_xy, float), axis=1)
+            local = Wm[dd < 0.035]
+            if len(local) >= 8:                           # enough of MY material at the hand
+                pos = local.mean(0); merged = True
         anchored = near_xy is not None and float(np.linalg.norm(
             pos - np.asarray(near_xy, float))) < near_r
         ref_mm = 0.0
@@ -154,7 +170,8 @@ class SelfEvalModule(ArmModule):
         dxy = np.real(e @ lgoal.D)                        # the wish-offset through the LEARNED inverse
         d = float(np.linalg.norm(dxy))
         ok = d < self.tol
-        self._last = {"found": True, "pos": pos, "self_d": d, "ok": ok, "ref_mm": ref_mm, **diag}
+        self._last = {"found": True, "pos": pos, "self_d": d, "ok": ok, "ref_mm": ref_mm,
+                      "merged": merged, **diag}
         self.set_out("valence", [-d]); self.set_out("success", [1.0 if ok else 0.0])
         return ok, d, True
 

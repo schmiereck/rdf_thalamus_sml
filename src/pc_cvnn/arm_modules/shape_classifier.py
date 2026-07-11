@@ -513,7 +513,7 @@ class ShapeClassifierModule(ArmModule):
         self.set_out("shape_logits", logits); self.set_out("shape_id", [k]); self.set_out("shape_yaw", [yaw])
         return SHAPES[k]
 
-    def perceive_all(self, sim, min_area=40, cands=False):
+    def perceive_all(self, sim, min_area=40, cands=False, wpx=False):
         """Localise + classify EVERY object under distractors: segment the colour-agnostic occupancy into
         CONNECTED COMPONENTS (one blob = one object), then classify each by its own form descriptor (rings
         sampled ONLY on that component, so neighbours don't leak in).  Returns a list of detections:
@@ -577,7 +577,8 @@ class ShapeClassifierModule(ArmModule):
                         "chroma": chroma,
                         "px": np.array([xs.mean(), ys.mean()]),
                         "grasp_cands": gcands,                 # perception-grounded grasp-point candidates
-                        "desc": desc})                         # the raw rotation-invariant |F| descriptor --
+                        "wpx": (W[::3] if (wpx and self.H is not None) else None),   # component material in
+                        "desc": desc})                         #   world coords (judge: merged-blob recovery)
         return out                                             #   OPEN-WORLD (any object yields one, no class slot)
 
     def desc_embed(self, desc):

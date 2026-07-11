@@ -1663,17 +1663,21 @@ def run_self_learning_steering(headless=False):
         # the true outcome scene): the agent's own verdict via its self-labelled classes + the goal
         # latent; agreement with the privileged verdict is tallied per episode.
         saved_mc = sim.d.mocap_pos.copy()
-        jdets = shape_clf.perceive_all(sim)
+        jdets = shape_clf.perceive_all(sim, wpx=True)      # material px: merged-blob recovery needs them
         sim.d.mocap_pos[:] = saved_mc; mujoco.mj_forward(sim.m, sim.d)
-        s_ok, s_d, s_found = seval.judge(jdets, lgoal, colour_key=colour_of_body.get(body),
-                                         colours=colours, shape_key=state.SHAPE_KEY.get(body),
-                                         near_xy=hxy_end, key=body)
+        det0 = getattr(situation_feats, "last_det", None)  # the object's OWN start-of-episode detection:
+        s_ok, s_d, s_found = seval.judge(jdets, lgoal, colour_key=colour_of_body.get(body),   # its area is
+                                         colours=colours, shape_key=state.SHAPE_KEY.get(body),  # the merge
+                                         near_xy=hxy_end, key=body,                             # reference
+                                         exp_area=(None if det0 is None else det0.get("area")))
         if s_ok is None:
             print(f"    [Selbst-Urteil] enthalten -- noch keine eigene Klasse für {body}", flush=True)
         else:
             tally = seval.record(s_ok, res.get("ok", False))
             ref = (seval._last or {}).get("ref_mm", 0.0)   # self-calibrated perception radius applied
             refs = f", Ref-Korrektur {ref:.0f}mm" if ref >= 1.0 else ""
+            if (seval._last or {}).get("merged"):
+                refs += ", Blob-Verschmelzung erkannt"     # judged on MY material at the hand, not the fused centroid
             verdict = (f"geliefert ({s_d * 1000:.0f}mm vom Wunsch{refs})" if s_ok
                        else (f"nicht geliefert ({s_d * 1000:.0f}mm vom Wunsch{refs})" if s_found
                              else "nicht geliefert (Objekt nicht am Loslass-Punkt gesehen)"))
