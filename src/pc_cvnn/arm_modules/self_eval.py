@@ -55,8 +55,30 @@ class SelfEvalModule(ArmModule):
              .add_out("success", 1, "self-judged delivered (1/0)"))
 
     # ------------------------------------------------------------------ #
+    # SELF-CALIBRATED DELIVERY REFERENCE -- MEASURED NEGATIVE, DEFAULT OFF (ACT23_SELFREF=1 to
+    # experiment).  Hypothesis was: the L-Form's true deliveries self_d-read 18-25mm past the
+    # confidence gate because of a CONSTANT per-class blob offset (centroid vs grasp geometry), so
+    # calibrate the radius |blob - hand_release| per class and pull the blob toward the release
+    # point.  The mobile-L probe DISCONFIRMED it: the misreads have EPISODE-DEPENDENT causes --
+    # (a) edge-clipped segmentation shifted the blob 34mm (delivery near the workspace x-edge),
+    # (b) the blob was CORRECT and the object genuinely settled 25mm off (the pull then produced a
+    # confident FALSE POSITIVE "geliefert 8mm" = the one poisoning direction), (c) the object
+    # rolled 44mm past the anchor radius (conservative not-seen).  A constant radius cannot
+    # separate "perception reads off" from "object truly lies off"; the real lever is the judge's
+    # IDENTITY/segmentation at the edges, not the distance metric.  Kept behind the knob for
+    # future orientation-aware attempts.
+    REF_MIN_N = 3                                         # samples before the correction applies
+    REF_CAP = 0.03                                        # max credited radius (m): beyond this it
+    #                                                       is a real miss, not perception geometry
+
+    def _ref_radius(self, key):
+        r = getattr(self, "ref", None)
+        if not r or key not in r or len(r[key]) < self.REF_MIN_N:
+            return 0.0
+        return float(min(np.median(r[key]), self.REF_CAP))
+
     def judge(self, dets, lgoal, colour_key=None, colours=None, shape_key=None,
-              near_xy=None, near_r=0.05):
+              near_xy=None, near_r=0.05, key=None):
         """Judge the settled scene.  Returns (self_ok, self_d_m, found):
         self_ok False+found False = object not seen (lost/hanging/occluded) -> not delivered;
         returns (None, None, False) = ABSTAIN when the agent has no own class to identify the
@@ -113,11 +135,26 @@ class SelfEvalModule(ArmModule):
             self._last = {"found": False, **diag}
             return False, None, False
         pos = np.asarray(best["pos"], float)
+        anchored = near_xy is not None and float(np.linalg.norm(
+            pos - np.asarray(near_xy, float))) < near_r
+        ref_mm = 0.0
+        if anchored and key is not None and __import__("os").environ.get("ACT23_SELFREF", "0") == "1":
+            nxy = np.asarray(near_xy, float)
+            v = nxy - pos                                 # toward the proprioceptive release point
+            gap = float(np.linalg.norm(v))
+            r = self._ref_radius(key)                     # the class' learned perception radius
+            if r > 0.0:
+                pos = nxy.copy() if gap <= r else pos + v * (r / gap)
+                ref_mm = min(r, gap) * 1000.0
+            if getattr(self, "ref", None) is None:        # RECORD after correcting (this episode's
+                self.ref = {}                             #   sample must not judge itself); additive
+            h = self.ref.setdefault(key, [])              #   attr, old pickles load fine
+            h.append(min(gap, 0.05)); del h[:-20]
         e = (lgoal.z_g - lgoal.encode_world(pos)) / lgoal.zsd
         dxy = np.real(e @ lgoal.D)                        # the wish-offset through the LEARNED inverse
         d = float(np.linalg.norm(dxy))
         ok = d < self.tol
-        self._last = {"found": True, "pos": pos, "self_d": d, "ok": ok, **diag}
+        self._last = {"found": True, "pos": pos, "self_d": d, "ok": ok, "ref_mm": ref_mm, **diag}
         self.set_out("valence", [-d]); self.set_out("success", [1.0 if ok else 0.0])
         return ok, d, True
 

@@ -1258,7 +1258,13 @@ def run_self_learning_steering(headless=False):
             if det is not None:
                 _sel_seed.update(key=state.SHAPE_KEY[body], xy=np.asarray(det["pos"], float),
                                  px=np.asarray(det["px"], float))
+                if os.environ.get("ACT23_DEBUG", "0") == "1":
+                    print(f"    [dbg] {body} via Formklasse: Greifziel "
+                          f"{np.round(_off(det['grasp_xy']), 3).tolist()} "
+                          f"(wahr {np.round(sim.obj_pos(body)[:2], 3).tolist()})", flush=True)
                 return _off(det["grasp_xy"]), None, "grasp"
+            if os.environ.get("ACT23_DEBUG", "0") == "1":
+                print(f"    [dbg] {body}: Formklasse NICHT gefunden -> privilegierter Rückfall", flush=True)
             return _off(sim.obj_pos(body)[:2]), None, "grasp"  # perception missed -> privileged fallback
         if method in ("long", "color"):                        # STAGE 3 de-crutching, now for the CUBES too:
             # localise by the SELF-LABELLED colour class (bound at discovery) instead of the trained vc
@@ -1559,6 +1565,10 @@ def run_self_learning_steering(headless=False):
             a_exec = a; wf = (lambda s, _w=wrist_of(a): _w)
             if float(np.linalg.norm(a[:2])) > 1e-9:
                 sel_off["dxy"] = np.asarray(a[:2], float)
+            if _dbg:
+                print(f"    [dbg] Aktion (Welt-Modell): Offset {np.round(a[:2] * 1000, 1).tolist()}mm, "
+                      f"Wrist {np.degrees(wrist_of(a)) % 180.0:.0f} Grad, Grip {a[4]:.2f}"
+                      f"{', sanft' if a[5] > 0.5 else ''}", flush=True)
         # CLOSED-LOOP fovea: servo=True lets the live tracker CORRECT the grasp-target belief during the
         # reach (+ occlusion memory).  L/U track via the FORM-aware tracker (make_shape_track:
         # perceive_all per frame, matched by SHAPE class); CUBES with a bound colour class track via the
@@ -1641,13 +1651,15 @@ def run_self_learning_steering(headless=False):
         sim.d.mocap_pos[:] = saved_mc; mujoco.mj_forward(sim.m, sim.d)
         s_ok, s_d, s_found = seval.judge(jdets, lgoal, colour_key=colour_of_body.get(body),
                                          colours=colours, shape_key=state.SHAPE_KEY.get(body),
-                                         near_xy=hxy_end)
+                                         near_xy=hxy_end, key=body)
         if s_ok is None:
             print(f"    [Selbst-Urteil] enthalten -- noch keine eigene Klasse für {body}", flush=True)
         else:
             tally = seval.record(s_ok, res.get("ok", False))
-            verdict = (f"geliefert ({s_d * 1000:.0f}mm vom Wunsch)" if s_ok
-                       else (f"nicht geliefert ({s_d * 1000:.0f}mm vom Wunsch)" if s_found
+            ref = (seval._last or {}).get("ref_mm", 0.0)   # self-calibrated perception radius applied
+            refs = f", Ref-Korrektur {ref:.0f}mm" if ref >= 1.0 else ""
+            verdict = (f"geliefert ({s_d * 1000:.0f}mm vom Wunsch{refs})" if s_ok
+                       else (f"nicht geliefert ({s_d * 1000:.0f}mm vom Wunsch{refs})" if s_found
                              else "nicht geliefert (Objekt nicht am Loslass-Punkt gesehen)"))
             wv = "geliefert" if res.get("ok", False) else "nicht geliefert"
             mark = "=" if bool(s_ok) == bool(res.get("ok", False)) else "!="
@@ -1724,8 +1736,15 @@ def run_self_learning_steering(headless=False):
             delivered = bool(s_ok)
             confident = delivered and s_d is not None and s_d < imit_tol
             lbl_src = "Selbst"
+        attempted = bool(getattr(act16.run_combined, "_attempted", False))
         if os.environ.get("ACT23_CREDIT", "1") == "1":
-            if not lifted:
+            if not lifted and attempted:
+                # the claw CLOSED at the object and it never rose: the choreography ARRIVED, the
+                # ACTION's grasp geometry (wrist/grip) failed -> the action gets a FAILURE label.
+                # Without this route a grasp-PREVENTING wrist was unfalsifiable (always "nicht
+                # gegriffen" -> abstain) and the world model froze on it (L-Form wrist-112 deadlock).
+                route, outcome = "Griff am Objekt fehlgeschlagen (Aktion)", False
+            elif not lifted:
                 route, outcome = "nicht gegriffen (Policy)", None
             elif confident:
                 route, outcome = "sicher geliefert", True
@@ -1896,7 +1915,24 @@ def run_self_learning_steering(headless=False):
                 state.sel = ks[0]
                 state.target_idx = int(crng.integers(len(state.MARKERS)))
                 if os.environ.get("ACT23_AUTO_PLACE", "1") == "1":
-                    state.place_selected_random(crng)
+                    state.place_selected_random(crng)          # random target MARKER position ...
+                    # ... and MOVE THE OBJECT ITSELF to a random clear pose: place_selected_random
+                    # only places the target, objects otherwise sit at their XML slots forever in a
+                    # pinned probe (measured: the L stayed at the top-edge slot across ALL probes --
+                    # a spot where even the guarded teacher cannot ARRIVE -- and every per-object
+                    # probe silently measured that one unreachable pose).
+                    from pc_cvnn.pc_act14 import _rand_xy
+                    from pc_cvnn.pc_act16 import BASE_CLEAR
+                    _pb = state.OBJECTS[state.sel][1]
+                    _others = [nm for _l, nm, _m in state.OBJECTS if nm != _pb]
+                    for _ in range(200):
+                        _p = _rand_xy(crng)
+                        if float(np.linalg.norm(_p)) >= BASE_CLEAR and all(
+                                float(np.linalg.norm(_p - sim.obj_pos(o)[:2])) > 0.05 for o in _others):
+                            break
+                    sim.set_object(_pb, [float(_p[0]), float(_p[1])],
+                                   yaw=float(crng.uniform(0.0, np.pi)))
+                    mujoco.mj_forward(sim.m, sim.d)
                 pick = None
             else:
                 pick = curious_pick() if AUTO_CURIOUS else None

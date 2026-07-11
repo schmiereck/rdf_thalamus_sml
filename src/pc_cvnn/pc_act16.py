@@ -340,13 +340,19 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         wrist_hold = None                                    # last aligned joint_4 (held through the grip)
         guard_minz = 1.0; guard_stall = 0                    # close-guard: deepest descent + stall counter
         last_phase = phase; phase_age = 0                    # STALL-ESCAPE: don't hang in one phase forever
-        run_combined._maxcz = float(obj_h)                   # CHECKPOINTS (act23 credit routing): two
+        run_combined._maxcz = float(obj_h)                   # CHECKPOINTS (act23 credit routing): three
         run_combined._slipped = False                        #   self-measurable predictions per episode.
+        run_combined._attempted = False
         #   _maxcz = highest the object rose (GRASP checkpoint: did the grasp actually happen?).
         #   _slipped = while carried, did the object SEPARATE from the hand (CARRY checkpoint: did the
-        #   grip hold?).  Together they route the outcome to the learner whose prediction broke: no lift
-        #   -> choreography missed the grasp (policy); slip -> the grip failed (world-model action); held
-        #   but off-goal -> the place aim failed (policy).  The world model is only blamed for a slip.
+        #   grip hold?).  _attempted = the claw CLOSED low AT the believed object while it still sat on
+        #   the table -- the choreography ARRIVED and gripped; if the object then never lifts, the
+        #   ACTION (wrist/grip geometry) failed, not the aim.  Without this the not-lifted route always
+        #   abstained and a grasp-preventing wrist could NEVER be disconfirmed (measured: the world
+        #   model froze on wrist 112deg for the L, 0/29 across probes, LCB never updated).  Together
+        #   they route the outcome to the learner whose prediction broke: never arrived -> choreography
+        #   (policy); closed at the object + no lift OR slip -> the world-model action; held but
+        #   off-goal -> the place aim (policy).
         for k in range(cap):
             phase_age = phase_age + 1 if phase == last_phase else 0
             last_phase = phase
@@ -386,6 +392,12 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             # the true position is used once the cube is grabbed / for the fallback and the measure.
             grasp_src = obj_belief if (servo and obj_belief is not None) else cube_plan
             c = grasp_src if (grasp_src is not None and phase in ("over", "lower", "close")) else c_true
+            if (not run_combined._attempted and cz < obj_h + 0.02
+                    and float(np.linalg.norm(hxy - c_true)) < 0.03
+                    and hz < obj_h + GRASP_OFFSET + 0.02
+                    and sim.d.qpos[sim.jqadr["joint_5"]] < J5_CLOSED_TH):
+                run_combined._attempted = True                # claw closed low AT the object, object still
+                #                                               down -> the grasp was TESTED (see header)
             if via == "push" and np.linalg.norm(c - tgt) < tol:  # pushed home -> done
                 break
             if policy_fn is not None and np.linalg.norm(c_true - tgt_true) < tol and cz < 0.035:
