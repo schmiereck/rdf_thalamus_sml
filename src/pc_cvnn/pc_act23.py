@@ -893,10 +893,13 @@ def run_self_learning_steering(headless=False):
 
     def situation_feats(cmd):
         """PERCEIVED situation of `cmd` for the world model (None if the camera can't find it).  The
-        privileged position is only a MATCHING aid; the features themselves are the detection's."""
+        privileged position is only a MATCHING aid; the features themselves are the detection's.
+        The matched detection (incl. its mask-sampled grasp_cands) is kept on
+        situation_feats.last_det for the grasp-point candidate selection in run_one."""
         p_ref = sim.obj_pos(cmd)[:2]
+        situation_feats.last_det = None
         saved = sim.d.mocap_pos.copy()                     # perceive_all parks the markers -> restore
-        dets = shape_clf.perceive_all(sim)
+        dets = shape_clf.perceive_all(sim, cands=True)
         sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
         dets = [d for d in dets if d["pos"] is not None]
         if not dets:
@@ -904,6 +907,7 @@ def run_self_learning_steering(headless=False):
         best = min(dets, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"]) - p_ref)))
         if float(np.linalg.norm(np.asarray(best["pos"]) - p_ref)) > 0.05:
             return None                                    # nearest blob is a DIFFERENT object -> no honest read
+        situation_feats.last_det = best
         y2, y4 = float(best["yaw"]), float(best["yaw4"])
         return np.concatenate([np.asarray(best["pos"], float),
                                [np.cos(2 * y2), np.sin(2 * y2), np.cos(4 * y4), np.sin(4 * y4)],
@@ -1561,14 +1565,26 @@ def run_self_learning_steering(headless=False):
             #   grip regimes) -- the user watched a young model pick edge offsets + non-closing grips.
             #   NOT on Netz episodes: the world model gets NO outcome labels there (poisoning fix), so
             #   random candidates are pure risk without learning -- exploit the model's best action.
-            a, _, _ = world.select_action(fe, n=n_cand, lam=LAM)
+            offs = None
+            det = getattr(situation_feats, "last_det", None)
+            if os.environ.get("ACT23_GRASP_CANDS", "1") == "1" and det is not None and det.get("grasp_cands"):
+                # GRASP-POINT DISCOVERY (user's standing goal): the candidates are REAL places on the
+                # perceived material (mask-sampled), expressed as offsets from the heuristic point the
+                # execution/servo uses as reference.  The world model SCORES them (LCB) against the
+                # heuristic prior; credit routing (incl. the _attempted failure route) labels whatever
+                # gets tried -- where to grip becomes the model's own, perception-grounded decision.
+                g0 = np.asarray(det["grasp_xy"], float)
+                offs = [np.asarray(p, float) - g0 for p in det["grasp_cands"]]
+                offs = [o for o in offs if float(np.linalg.norm(o)) <= 0.05]
+            a, _, _ = world.select_action(fe, n=n_cand, lam=LAM, offsets=offs)
             a_exec = a; wf = (lambda s, _w=wrist_of(a): _w)
             if float(np.linalg.norm(a[:2])) > 1e-9:
                 sel_off["dxy"] = np.asarray(a[:2], float)
             if _dbg:
                 print(f"    [dbg] Aktion (Welt-Modell): Offset {np.round(a[:2] * 1000, 1).tolist()}mm, "
                       f"Wrist {np.degrees(wrist_of(a)) % 180.0:.0f} Grad, Grip {a[4]:.2f}"
-                      f"{', sanft' if a[5] > 0.5 else ''}", flush=True)
+                      f"{', sanft' if a[5] > 0.5 else ''} | {0 if offs is None else len(offs)} "
+                      f"Masken-Kandidaten", flush=True)
         # CLOSED-LOOP fovea: servo=True lets the live tracker CORRECT the grasp-target belief during the
         # reach (+ occlusion memory).  L/U track via the FORM-aware tracker (make_shape_track:
         # perceive_all per frame, matched by SHAPE class); CUBES with a bound colour class track via the
@@ -1738,11 +1754,13 @@ def run_self_learning_steering(headless=False):
             lbl_src = "Selbst"
         attempted = bool(getattr(act16.run_combined, "_attempted", False))
         if os.environ.get("ACT23_CREDIT", "1") == "1":
-            if not lifted and attempted:
+            if not lifted and attempted and not delivered:
                 # the claw CLOSED at the object and it never rose: the choreography ARRIVED, the
                 # ACTION's grasp geometry (wrist/grip) failed -> the action gets a FAILURE label.
                 # Without this route a grasp-PREVENTING wrist was unfalsifiable (always "nicht
                 # gegriffen" -> abstain) and the world model froze on it (L-Form wrist-112 deadlock).
+                # `not delivered` guard (measured): a never-lifted episode can still SHOVE the object
+                # onto the goal -- that must not label the action a failure (abstain below instead).
                 route, outcome = "Griff am Objekt fehlgeschlagen (Aktion)", False
             elif not lifted:
                 route, outcome = "nicht gegriffen (Policy)", None

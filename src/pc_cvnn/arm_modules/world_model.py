@@ -103,22 +103,32 @@ class WorldModelModule(ArmModule):
         P = np.array([[float(member.predict(x)[0]) for x in X] for member in self.members])  # (K, N)
         return P.mean(0), P.std(0)
 
-    def candidates(self, n):
+    def candidates(self, n, offsets=None):
         """Structured GRID (offset-0 wrists x grip regimes, so teacher-like actions are always
-        representable) + n random (offset, wrist, grip, gentle) samples."""
+        representable) + n random (offset, wrist, grip, gentle) samples.  `offsets` = optional
+        PERCEPTION-GROUNDED grasp-point candidates (dx,dy relative to the heuristic point, e.g.
+        sampled from the perceived material mask): each is crossed with the wrist x grip grid, so
+        the model SCORES real places on the object instead of blind random nudges -- the user's
+        self-discovered-grasp-points goal.  The offset-0 grid always stays in the set (the
+        heuristic point remains the prior, and untrained models keep returning it)."""
         A = [action_vec(0.0, 0.0, w, g, ge)
              for w in np.linspace(0, np.pi, self.wrist_grid, endpoint=False)
              for g, ge in GRIP_MODES]
+        if offsets is not None:
+            A += [action_vec(float(o[0]), float(o[1]), w, g, ge)
+                  for o in offsets if float(np.linalg.norm(np.asarray(o, float))) > 1e-9
+                  for w in np.linspace(0, np.pi, self.wrist_grid, endpoint=False)
+                  for g, ge in GRIP_MODES]
         for _ in range(int(n)):
             dx, dy = self.rng.uniform(-self.off_max, self.off_max, 2)
             A.append(action_vec(dx, dy, self.rng.uniform(0, np.pi),
                                 grip=self.rng.uniform(0.0, 0.4), gentle=float(self.rng.integers(2))))
         return np.array(A)
 
-    def select_action(self, feats, n=40, lam=1.0):
+    def select_action(self, feats, n=40, lam=1.0, offsets=None):
         """Uncertainty-aware (LCB) action: argmax (mu - lam*sigma) over the candidate set.
         Returns (action, mu, sigma).  Untrained -> the offset-0 / wrist-0 default."""
-        A = self.candidates(n)
+        A = self.candidates(n, offsets=offsets)
         if self.n() == 0:
             return A[0], 0.0, 0.0
         mu, sd = self.predict(feats, A)

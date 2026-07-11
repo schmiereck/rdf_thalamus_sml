@@ -513,11 +513,16 @@ class ShapeClassifierModule(ArmModule):
         self.set_out("shape_logits", logits); self.set_out("shape_id", [k]); self.set_out("shape_yaw", [yaw])
         return SHAPES[k]
 
-    def perceive_all(self, sim, min_area=40):
+    def perceive_all(self, sim, min_area=40, cands=False):
         """Localise + classify EVERY object under distractors: segment the colour-agnostic occupancy into
         CONNECTED COMPONENTS (one blob = one object), then classify each by its own form descriptor (rings
         sampled ONLY on that component, so neighbours don't leak in).  Returns a list of detections:
-        {shape, id, prob, pos (world xy, overview), yaw, px}.  No colour, no privileged positions."""
+        {shape, id, prob, pos (world xy, overview), yaw, px}.  No colour, no privileged positions.
+        cands=True additionally samples GRASP-POINT CANDIDATES from the component's material (the user's
+        goal: the agent DISCOVERS where to grip from its own perception + outcomes, the densest-point
+        heuristic degrades to one candidate among them): distance-transform the component, keep locally
+        THICK points (both fingers find material), greedily pick up to 6 diverse ones (>=12mm apart,
+        thickest first) in world coords.  Off by default -- the form tracker calls this per frame."""
         from scipy import ndimage
         self._park_markers(sim)
         img = self._render_u8(sim)
@@ -547,9 +552,22 @@ class ShapeClassifierModule(ArmModule):
             # gripper spans cleanly.  Best for the thin-bar shapes (the cube-built / tip / wrist variants were
             # all marginal; this v1 grasped the thin-bar L well).  No wrist (orientation gave no gain).
             grasp = ctr
+            gcands = []
             if self.H is not None:
                 W = self._px_to_world(np.column_stack([xs, ys]))            # world coords of the component px
                 grasp = W[int(np.argmin(np.linalg.norm(W - ctr, axis=1)))]  # nearest material to the centroid
+                if cands:                                                   # grasp-point candidate SAMPLING
+                    dist = ndimage.distance_transform_edt(comp)             # local material thickness (px)
+                    dv = dist[ys, xs]
+                    order = np.argsort(-dv)
+                    for i in order:
+                        if dv[i] < max(2.0, 0.45 * float(dv[order[0]])):
+                            break                                           # thin rim: fingers find no hold
+                        p = W[i]
+                        if all(float(np.linalg.norm(p - q)) > 0.012 for q in gcands):
+                            gcands.append(p)
+                        if len(gcands) >= 6:
+                            break
             rgb = img[ys, xs].astype(float).mean(0) / 255.0     # component CHROMATICITY (stage-3 colour
             csum = float(rgb.sum())                             #   open-set: brightness-normalised, so
             chroma = rgb / csum if csum > 1e-6 else rgb         #   shading/position largely cancel)
@@ -558,6 +576,7 @@ class ShapeClassifierModule(ArmModule):
                         "yaw": self._yaw_from(F), "yaw4": self._yaw4_from(F), "area": float(comp.sum()),
                         "chroma": chroma,
                         "px": np.array([xs.mean(), ys.mean()]),
+                        "grasp_cands": gcands,                 # perception-grounded grasp-point candidates
                         "desc": desc})                         # the raw rotation-invariant |F| descriptor --
         return out                                             #   OPEN-WORLD (any object yields one, no class slot)
 
