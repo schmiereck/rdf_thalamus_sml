@@ -1445,7 +1445,11 @@ def run_self_learning_steering(headless=False):
                             hand_px = None
                         carrying = bool(sim.d.qpos[sim.jqadr["joint_5"]] < act16.J5_CLOSED_TH)
                         belief, _mode = objmem.update(obs_mem, hand_px, carrying)
-                        if not visible and belief is not None:     # lost -> gaze toward the belief
+                        # CONFIDENCE GATE (user-observed): after the release the belief HELD the last
+                        # hand px, so the gaze parked on the ROBOT and never returned to the object.
+                        # A decayed belief must release the gaze -> the occupancy/identity centering
+                        # above re-acquires the object.
+                        if not visible and belief is not None and objmem.conf >= 0.25:
                             mem["gaze"] = np.clip(np.asarray(belief, float), lo, hi)
                         # chart diagnostic: the memory's PREDICTION ERROR vs the detector's last fix --
                         # rises while the belief coasts through carry/occlusion, snaps down on a sighting
@@ -1757,8 +1761,18 @@ def run_self_learning_steering(headless=False):
             confident = delivered and s_d is not None and s_d < imit_tol
             lbl_src = "Selbst"
         attempted = bool(getattr(act16.run_combined, "_attempted", False))
+        # the attempted-failure route only under the RELIABLE (FSM) choreography: there a close at
+        # the object that never lifts isolates the ACTION's grasp geometry (wrist/grip).  Under the
+        # LEARNED choreography the same signal is AMBIGUOUS -- the policy grazes the object and
+        # closes at the wrong moment, and the wrist gets the blame.  MEASURED in the user's live
+        # netz run: ~38 failure labels in 120 eps flooded the world model (798->886, mostly
+        # negative), ensemble sigma inflated 0.5-0.9 -> 0.9-1.6, LCB wrist choice churned
+        # (user-observed diagonal grips) and the Bilanz slid 18/30 -> 10/30 -- the fd6e526
+        # poisoning symptom through a physically-gated door.  Ambiguity -> abstain (the credit
+        # principle); ACT23_ATTEMPT_NETZ=1 re-enables for experiments.
+        att_ok = (not use_net) or os.environ.get("ACT23_ATTEMPT_NETZ", "0") == "1"
         if os.environ.get("ACT23_CREDIT", "1") == "1":
-            if not lifted and attempted and not delivered:
+            if not lifted and attempted and not delivered and att_ok:
                 # the claw CLOSED at the object and it never rose: the choreography ARRIVED, the
                 # ACTION's grasp geometry (wrist/grip) failed -> the action gets a FAILURE label.
                 # Without this route a grasp-PREVENTING wrist was unfalsifiable (always "nicht
