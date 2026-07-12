@@ -106,7 +106,10 @@ FOVEA_B = float(os.environ.get("ACT_FOVEA_B", "1.0"))         # peripheral expan
 ZOOM = os.environ.get("ACT_FOVEA_ZOOM", "0") == "1"            # DEFAULT OFF (A/B: hurt acquisition here --
 #   the overview rarely triggers in this small workspace, and the scale-invariant training it needs
 #   dilutes the z=1 precision; enable for a LARGER workspace where objects fall outside the FOV)
-ZOOM_MAX = float(os.environ.get("ACT_FOVEA_ZOOM_MAX", "1.4142"))   # max linear factor (area up to ~2x)
+ZOOM_MAX = float(os.environ.get("ACT_FOVEA_ZOOM_MAX", "2.0"))   # widest sampling: 2x spacing = 50% "size"
+ZOOM_MIN = float(os.environ.get("ACT_FOVEA_ZOOM_MIN", "0.5"))   # finest sampling: 0.5x = 200% detail
+#   (user request: zoom BOTH ways around the default z=1 -- confident lock narrows below 1 for
+#    detail, a lost object widens above 1 up to the full overview; was [1.0, 1.41] outward-only)
 
 
 def _warp(t):
@@ -440,12 +443,14 @@ class HexFovea:
 
     def _zoom_step(self, conf):
         """Drive the zoom from the net's localization CONFIDENCE: low conf (object not found / not
-        centred / occluded) -> zoom OUT for an overview; confident lock -> zoom IN for detail.
-        Active-inference-style: widen the receptive field to resolve uncertainty, narrow to exploit."""
+        centred / occluded) -> zoom OUT for an overview (up to ZOOM_MAX); confident lock -> zoom IN
+        for detail (down to ZOOM_MIN, below the z=1 default).  Active-inference-style: widen the
+        receptive field to resolve uncertainty, narrow to exploit."""
         if not ZOOM:
             return
-        z_target = 1.0 + (ZOOM_MAX - 1.0) * (1.0 - float(np.clip(conf, 0.0, 1.0)))
-        self.z = float(np.clip(self.z + 0.3 * (z_target - self.z), 1.0, ZOOM_MAX))
+        c = float(np.clip(conf, 0.0, 1.0))
+        z_target = ZOOM_MAX - c * (ZOOM_MAX - ZOOM_MIN)
+        self.z = float(np.clip(self.z + 0.3 * (z_target - self.z), ZOOM_MIN, ZOOM_MAX))
 
     def _fill_sel(self, arr, cmd):
         """Fill the sel channel: LEARNED head (command code -> selection) or the scripted match.
@@ -504,7 +509,7 @@ class HexFovea:
             if i % 3 == 0:
                 scatter_fn()
             img = render_fn(); cmd = names[i % len(names)]
-            self.z = 1.0 + (ZOOM_MAX - 1.0) * rng.random() if ZOOM else 1.0   # learn scale-invariance
+            self.z = ZOOM_MIN + (ZOOM_MAX - ZOOM_MIN) * rng.random() if ZOOM else 1.0   # learn scale-invariance
             gaze = rng.uniform([F * self.K, F * self.K], [img.shape[1] - F * self.K, img.shape[0] - F * self.K])
             arr = self.step(img, gaze, cmd)
             if i % 20 == 0:
@@ -537,7 +542,7 @@ class HexFovea:
             else:                                           # some random background crops too
                 g = rng.uniform([F * K, F * K], [img.shape[1] - F * K, img.shape[0] - F * K])
             g = np.clip(g, F * K, np.array([img.shape[1], img.shape[0]]) - F * K)
-            zk = K * (1.0 + (ZOOM_MAX - 1.0) * rng.random()) if ZOOM else K   # train across zoom levels
+            zk = K * (ZOOM_MIN + (ZOOM_MAX - ZOOM_MIN) * rng.random()) if ZOOM else K   # train across zoom levels
             arr = hex_sample(img, g, zk)
             cmds = list(names) if centred else [names[int(rng.integers(len(names)))]]
             for cmd in cmds:                                # positive (matching code) + negatives (others)

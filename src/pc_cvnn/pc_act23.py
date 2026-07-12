@@ -53,7 +53,8 @@ for _k, _v in (("ACT_REACH_X0", "-0.12"), ("ACT_REACH_X1", "0.12"),
 os.environ.setdefault("ACT_GOAL_ROPE", "1")   # STAGE 4a: RoPE goal-latent (near-linear in position ->
 #   the learned latent-inverse is near-exact; measured in act21: servo isolated ~0mm vs 4.4mm blob)
 from pc_cvnn.pc_act14 import BracketArmSim, HOME, ARM3
-from pc_cvnn.pc_act18 import F as HEX_F, warp_gaze_delta, fovea_gradient
+from pc_cvnn.pc_act18 import (F as HEX_F, warp_gaze_delta, fovea_gradient,
+                              ZOOM as FOVEA_ZOOM, ZOOM_MIN, ZOOM_MAX)
 from pc_cvnn.test_pc_act10 import com2d
 from pc_cvnn.arm_modules.body_model import BodyModelModule
 from pc_cvnn.arm_modules.shape_classifier import ShapeClassifierModule
@@ -1218,6 +1219,9 @@ def run_self_learning_steering(headless=False):
         saved = sim.d.mocap_pos.copy(); shape_clf._park_markers(sim); vc.fovea.z = 1.0
         for i in range(rounds):
             for body, mu in items:
+                # SCALE INVARIANCE across the zoom span (user request 0.5..2.0): the search zooms
+                # OUT to re-find the class saliency and IN for detail -- sel must stay readable there.
+                vc.fovea.z = (ZOOM_MIN + (ZOOM_MAX - ZOOM_MIN) * crng.random()) if FOVEA_ZOOM else 1.0
                 p = _rand_xy(crng)
                 sim.set_object(body, p, z=0.012, yaw=float(crng.uniform(0, 2 * np.pi)))
                 mujoco.mj_forward(sim.m, sim.d)
@@ -1235,11 +1239,20 @@ def run_self_learning_steering(headless=False):
         for nm, (xy, z, yaw) in snap.items():
             sim.set_object(nm, xy.tolist(), z=z, yaw=yaw)
         sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+        vc.fovea.z = 1.0
+        vc.fovea._zoom_trained = (ZOOM_MIN, ZOOM_MAX) if FOVEA_ZOOM else None   # persisted marker: a
+        #   fovea trained on ANOTHER zoom span retrains once on load (world-consistency pattern)
         print(f"  [Netz-Blick] Fovea auf {len(items)} Farbklassen umtrainiert "
-              f"({rounds} Runden) -- Blick-Trieb verstärkt", flush=True)
+              f"({rounds} Runden, Zoom {ZOOM_MIN if FOVEA_ZOOM else 1.0:.2f}-"
+              f"{ZOOM_MAX if FOVEA_ZOOM else 1.0:.2f}) -- Blick-Trieb verstärkt", flush=True)
 
-    if (FOVEA_NET and not _fovea_loaded            # a loaded fovea was already class-trained -> skip
-            and os.environ.get("ACT23_FOVEA_TRAIN", "1") == "1"):
+    _zoom_span = (ZOOM_MIN, ZOOM_MAX) if FOVEA_ZOOM else None
+    if (FOVEA_NET and os.environ.get("ACT23_FOVEA_TRAIN", "1") == "1"
+            and (not _fovea_loaded                 # a loaded fovea was already class-trained -> skip,
+                 or getattr(vc.fovea, "_zoom_trained", "nie") != _zoom_span)):   # UNLESS the zoom span
+        if _fovea_loaded:                          # changed since it was trained (sel must stay
+            print(f"  [Netz-Blick] geladene Fovea kennt Zoom-Spanne {_zoom_span} nicht -- "
+                  f"trainiere Klassen einmalig nach", flush=True)   # readable across the search zoom)
         train_fovea_classes()
 
     sel_off = {"dxy": None}                                    # the self-selected grasp-point OFFSET (dx,dy)
@@ -1415,22 +1428,31 @@ def run_self_learning_steering(headless=False):
                     ctr = (HEX_F - 1) / 2.0
                     sel = np.real(arr[:, :, 0]) if id_mu is not None else None
                     if sel is not None and float(sel.sum()) > 0.3:  # IDENTITY drive: class-colour saliency
-                        com = com2d(sel)                            #   present -> fovea_gradient toward it
+                        mem["_lost"] = 0                            #   present -> fovea_gradient toward it
+                        com = com2d(sel)
                         drive = -fovea_gradient(vc.fovea.cells)     # net active-inference gaze drive
                         if com is not None:
                             mem["gaze"] = np.clip(np.asarray(gaze, float)
                                                   + warp_gaze_delta(com, ctr, vc.fovea._ek())
                                                   + np.clip(drive * 6.0, -2, 2), lo, hi)
                         mass = float(np.clip(sel.max(), 0.0, 1.0))
-                    else:                                          # HYBRID fallback: the class colour is
-                        occ = np.ptp(np.real(arr[:, :, 1:]), axis=2)   # occluded/weak this frame -> keep the
-                        com = com2d(occ)                           #   gaze ON the object via raw occupancy
+                    elif mem.get("_lost", 0) < 4:                  # BRIEF loss (occlusion flicker): keep the
+                        mem["_lost"] = mem.get("_lost", 0) + 1     #   gaze on the material via raw occupancy
+                        occ = np.ptp(np.real(arr[:, :, 1:]), axis=2)
+                        com = com2d(occ)
                         if com is not None and float(occ.sum()) > 0.3:
                             mem["gaze"] = np.clip(np.asarray(gaze, float)
                                                   + warp_gaze_delta(com, ctr, vc.fovea._ek()), lo, hi)
                         mass = float(np.clip(occ.max(), 0.0, 1.0))
-                    # NET-STEERABLE ZOOM (ACT_FOVEA_ZOOM=1; else a no-op): confident lock -> zoom IN, lost
-                    # -> zoom OUT for an overview.
+                    else:                                          # SUSTAINED identity loss = the material
+                        mem["_lost"] = mem.get("_lost", 0) + 1     #   under the fovea is NOT the commanded
+                        com = None; mass = 0.0                     #   object (user-observed: occupancy
+                        #   centering LOCKED onto a wrong object and held itself there).  Release the
+                        #   lock (no centering) and SEARCH: zoom_step(0) below widens the view toward
+                        #   ZOOM_MAX until the class saliency re-enters the crop -- the identity branch
+                        #   then re-acquires and the zoom narrows back in.  Active inference, no detector.
+                    # NET-STEERABLE ZOOM (ACT_FOVEA_ZOOM=1; else a no-op): confident lock -> zoom IN
+                    # (down to ZOOM_MIN detail), lost -> zoom OUT for the search overview.
                     centrality = float(np.exp(-np.linalg.norm(com - ctr) / 4.0)) if com is not None else 0.0
                     vc.fovea._zoom_step(mass * centrality)
                     if FOVEA_MEM:                                  # PREDICTIVE MEMORY drives recovery (no
