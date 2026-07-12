@@ -241,6 +241,43 @@ class ShapeClassifierModule(ArmModule):
         mask = self._mask(img_u8)
         return None if mask.sum() < 6 else self._harmonics_at(mask, self._centroid(mask))
 
+    def yaw_at(self, sim, world_xy, mu=None, th=0.12, win_px=36):
+        """FOVEA-path orientation read (user's orientation-through-the-fovea goal): angular harmonics
+        on a LOCAL window around `world_xy` (the gaze / tracked object), pixels optionally IDENTITY-
+        gated by a self-labelled colour-class centroid `mu` (chromaticity distance < th, the colour
+        open-set metric) so neighbours inside the window drop out.  This is what the fovea SEES at a
+        lock -- local + identity-conditioned -- vs the overview path's global CC segmentation.
+        Returns (yaw2, yaw4, n_px) or None if too little material in view."""
+        self._park_markers(sim)
+        img = self._render_u8(sim)
+        mask = self._mask(img).astype(float)
+        try:
+            px = np.asarray(self._world_to_px(np.asarray(world_xy, float))[0], float)
+        except Exception:
+            return None
+        Hh, Ww = mask.shape
+        x0, x1 = max(0, int(px[0]) - win_px), min(Ww, int(px[0]) + win_px)
+        y0, y1 = max(0, int(px[1]) - win_px), min(Hh, int(px[1]) + win_px)
+        local = np.zeros_like(mask)
+        local[y0:y1, x0:x1] = mask[y0:y1, x0:x1]
+        if mu is not None:                                   # identity gate: keep MY material only
+            rgb = img.astype(float)
+            chroma = rgb / (rgb.sum(axis=2, keepdims=True) + 1e-6)
+            local *= (np.linalg.norm(chroma - np.asarray(mu, float), axis=2) < th)
+        if local.sum() < 6:
+            return None
+        ctr = self._centroid(local)
+        F = self._harmonics_at(local, ctr)
+        # PCA long axis of the local material in WORLD coords -- measured FAR more consistent than
+        # the k=2 ring phase for elongated shapes (the act "STEP C" perceive_long_axis lesson).
+        ys, xs = np.nonzero(local > 0)
+        Wp = (self._px_to_world(np.column_stack([xs, ys])) if self.H is not None
+              else np.column_stack([xs, ys]).astype(float))
+        Wc = Wp - Wp.mean(0)
+        _, _, Vt = np.linalg.svd(Wc, full_matrices=False)
+        yaw_pca = float(np.arctan2(Vt[0, 1], Vt[0, 0])) % np.pi
+        return yaw_pca, self._yaw4_from(F), float(local.sum())
+
     def descriptor(self, img_u8):
         F = self._harmonics(img_u8)
         return None if F is None else np.abs(F).ravel()

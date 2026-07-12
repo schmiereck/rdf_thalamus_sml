@@ -910,6 +910,21 @@ def run_self_learning_steering(headless=False):
             return None                                    # nearest blob is a DIFFERENT object -> no honest read
         situation_feats.last_det = best
         y2, y4 = float(best["yaw"]), float(best["yaw4"])
+        # ORIENTATION THROUGH THE FOVEA (user's long-term goal, first wired lever): the k=2 RING
+        # PHASE the overview path reads is NOISY (measured consistency p50: long 36deg, L 21, T 45,
+        # U 26); the FOVEA-style read -- local window at the tracked object + identity chroma gate +
+        # PCA long axis in world coords -- reads long 1.0deg, L 1.1, T 4.9, U 11.8.  Replace the k=2
+        # slots (same dims, no schema break; the old rows' yaw was ~noise, the model had little to
+        # unlearn).  Cubes keep the k=4 ring phase (PCA is degenerate for squares).
+        if os.environ.get("ACT23_FOVEA_YAW", "1") == "1":
+            _c = colour_of_body.get(cmd)
+            _mu = (np.asarray(colours.classes[_c]["mu"], float)
+                   if _c is not None and _c in colours.classes else None)
+            saved = sim.d.mocap_pos.copy()                 # yaw_at parks the markers -> restore
+            _r = shape_clf.yaw_at(sim, np.asarray(best["pos"], float), mu=_mu)
+            sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+            if _r is not None:
+                y2 = float(_r[0])
         return np.concatenate([np.asarray(best["pos"], float),
                                [np.cos(2 * y2), np.sin(2 * y2), np.cos(4 * y4), np.sin(4 * y4)],
                                shape_clf.desc_embed(best["desc"])])
