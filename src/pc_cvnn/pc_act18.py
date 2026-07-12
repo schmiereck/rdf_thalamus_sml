@@ -201,12 +201,59 @@ def onehot_cmd(cmd):
 def _match_target(rgb_sheet, true_rgb):
     """The OLD scripted cosine colour-match selection, kept ONLY as the SelectionHead's TRAINING
     target: luminance where a cell's colour matches `true_rgb`, else 0.  (true_rgb is used to make
-    the target — the head's INPUT never sees it.)"""
+    the target — the head's INPUT never sees it.)  NB: correct for the SATURATED command codes;
+    WRONG for self-labelled class CHROMATICITIES (grey table reaches cos>MATCH_TH vs unsaturated
+    centroids and its brightness dominates) -- class-conditioned paths use _match_chroma."""
     cn = np.asarray(true_rgb, float); cn = cn / (np.linalg.norm(cn) + 1e-9)
     rgb = rgb_sheet[:, :, 1:]                              # (F,F,3)
     lum = rgb.sum(2)
     cos = (rgb @ cn) / (np.linalg.norm(rgb, axis=2) + 1e-6)
     return np.where((lum > 0.18) & (cos > MATCH_TH), lum, 0.0)   # (F,F)
+
+
+def _match_chroma(rgb_sheet, mu, th=0.12):
+    """Identity saliency for a self-labelled colour-CLASS centroid (a CHROMATICITY): luminance where
+    the cell's chromaticity lies within the colour-open-set acceptance radius of mu -- the metric
+    the classes were BORN with.  MEASURED vs the cosine gate on the cell-yaw readout: 30-45deg noise
+    -> 1-9deg (the cosine let the grey table through and its luminance dominated the weights; the
+    same dilution fed step_id's sel = the gaze identity drive)."""
+    rgb = rgb_sheet[:, :, 1:]
+    lum = rgb.sum(2)
+    chroma = rgb / (rgb.sum(axis=2, keepdims=True) + 1e-6)
+    d = np.linalg.norm(chroma - np.asarray(mu, float), axis=2)
+    return np.where((lum > 0.18) & (d < th), lum, 0.0)
+
+
+def fovea_cell_yaw(img, gaze, mu, px_to_world, k_eff=None):
+    """Orientation THROUGH THE FOVEA (user's long-term goal): the object's long axis read from the
+    fovea's OWN hex cells -- identity-gated (_match_chroma) cell saliency, weighted PCA over the
+    CELL world positions.  MEASURED == the raw-pixel PCA reference (long 1.0deg, L 2.0, T 7.4,
+    U 9.4 median consistency; U p90 BETTER than raw -- the cell pooling denoises), and F=16
+    SUFFICES (F24/F32 identical: the object fits the sheet, the lever was the identity gate, not
+    resolution).  k_eff defaults to K*0.5 = the detail-zoom sampling (best measured)."""
+    if k_eff is None:
+        k_eff = float(os.environ.get("ACT_FOVEA_K", "4")) * 0.5
+    ctr = (F - 1) / 2.0
+    arr = np.zeros((F, F, 4))
+    pxs = np.zeros((F, F, 2))
+    for r in range(F):
+        ir = r - ctr
+        cy = gaze[1] + _warp(ir) * k_eff * HEX_DY
+        sp_y = _warp_spacing(ir) * k_eff * HEX_DY
+        for c in range(F):
+            ic = c + 0.5 * (r & 1) - ctr
+            cx = gaze[0] + _warp(ic) * k_eff
+            half = max(1, int(round(0.25 * (_warp_spacing(ic) * k_eff + sp_y))))
+            arr[r, c, 1:] = patch_mean(img, cx, cy, half)
+            pxs[r, c] = (cx, cy)
+    w = _match_chroma(arr, mu).ravel()
+    if w.sum() < 0.5 or int((w > 0).sum()) < 4:
+        return None                                       # too little of MY material under the fovea
+    W = px_to_world(pxs.reshape(-1, 2))
+    m = (W * w[:, None]).sum(0) / w.sum()
+    D = (W - m) * np.sqrt(w[:, None])
+    _, _, Vt = np.linalg.svd(D, full_matrices=False)
+    return float(np.arctan2(Vt[0, 1], Vt[0, 0])) % np.pi
 
 
 class SelectionHead:
@@ -491,7 +538,9 @@ class HexFovea:
         fovea_gradient drive the gaze toward the agent's OWN self-labelled identity -- the fovea net
         can be pointed at any colour it has a class for, not just the three trained command codes."""
         arr = hex_sample(img, gaze, self._ek())
-        arr[:, :, 0] = _match_target(arr, target_rgb)        # class-conditioned colour saliency
+        arr[:, :, 0] = _match_chroma(arr, target_rgb)        # class-conditioned IDENTITY saliency
+        #   (chroma distance, the colour-open-set metric -- the cosine gate let the grey table
+        #    through vs unsaturated class centroids and diluted the gaze identity drive)
         set_sheet4(self.cells, arr)
         r = self.net.step(learn=learn); self.net.commit_step()
         self.last_diag = r

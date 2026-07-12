@@ -241,13 +241,17 @@ class ShapeClassifierModule(ArmModule):
         mask = self._mask(img_u8)
         return None if mask.sum() < 6 else self._harmonics_at(mask, self._centroid(mask))
 
-    def yaw_at(self, sim, world_xy, mu=None, th=0.12, win_px=36):
+    def yaw_at(self, sim, world_xy, mu=None, th=0.12, win_px=36, engine="cells"):
         """FOVEA-path orientation read (user's orientation-through-the-fovea goal): angular harmonics
         on a LOCAL window around `world_xy` (the gaze / tracked object), pixels optionally IDENTITY-
         gated by a self-labelled colour-class centroid `mu` (chromaticity distance < th, the colour
         open-set metric) so neighbours inside the window drop out.  This is what the fovea SEES at a
         lock -- local + identity-conditioned -- vs the overview path's global CC segmentation.
-        Returns (yaw2, yaw4, n_px) or None if too little material in view."""
+        Returns (yaw2, yaw4, n_px) or None if too little material in view.
+        engine="cells" (default): yaw2 comes from the FOVEA'S OWN HEX CELLS (pc_act18.fovea_cell_yaw,
+        identity-gated cell saliency + weighted PCA over cell world positions) -- measured equal to
+        the raw-pixel PCA (U p90 even better: pooling denoises); falls back to the pixel PCA when
+        the cell read has too little material.  engine="px" forces the raw-pixel path."""
         self._park_markers(sim)
         img = self._render_u8(sim)
         mask = self._mask(img).astype(float)
@@ -255,6 +259,10 @@ class ShapeClassifierModule(ArmModule):
             px = np.asarray(self._world_to_px(np.asarray(world_xy, float))[0], float)
         except Exception:
             return None
+        yaw_cells = None
+        if engine == "cells" and mu is not None and self.H is not None:
+            from pc_cvnn.pc_act18 import fovea_cell_yaw
+            yaw_cells = fovea_cell_yaw(img, px, np.asarray(mu, float), self._px_to_world)
         Hh, Ww = mask.shape
         x0, x1 = max(0, int(px[0]) - win_px), min(Ww, int(px[0]) + win_px)
         y0, y1 = max(0, int(px[1]) - win_px), min(Hh, int(px[1]) + win_px)
@@ -276,7 +284,7 @@ class ShapeClassifierModule(ArmModule):
         Wc = Wp - Wp.mean(0)
         _, _, Vt = np.linalg.svd(Wc, full_matrices=False)
         yaw_pca = float(np.arctan2(Vt[0, 1], Vt[0, 0])) % np.pi
-        return yaw_pca, self._yaw4_from(F), float(local.sum())
+        return (yaw_cells if yaw_cells is not None else yaw_pca), self._yaw4_from(F), float(local.sum())
 
     def descriptor(self, img_u8):
         F = self._harmonics(img_u8)

@@ -921,7 +921,8 @@ def run_self_learning_steering(headless=False):
             _mu = (np.asarray(colours.classes[_c]["mu"], float)
                    if _c is not None and _c in colours.classes else None)
             saved = sim.d.mocap_pos.copy()                 # yaw_at parks the markers -> restore
-            _r = shape_clf.yaw_at(sim, np.asarray(best["pos"], float), mu=_mu)
+            _r = shape_clf.yaw_at(sim, np.asarray(best["pos"], float), mu=_mu,
+                                  engine=os.environ.get("ACT23_YAW_SRC", "cells"))
             sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
             if _r is not None:
                 y2 = float(_r[0])
@@ -1255,19 +1256,22 @@ def run_self_learning_steering(headless=False):
             sim.set_object(nm, xy.tolist(), z=z, yaw=yaw)
         sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
         vc.fovea.z = 1.0
-        vc.fovea._zoom_trained = (ZOOM_MIN, ZOOM_MAX) if FOVEA_ZOOM else None   # persisted marker: a
-        #   fovea trained on ANOTHER zoom span retrains once on load (world-consistency pattern)
+        vc.fovea._zoom_trained = _zoom_span                # persisted marker: a fovea trained on another
+        #   zoom span OR another sel primitive retrains once on load (world-consistency pattern)
         print(f"  [Netz-Blick] Fovea auf {len(items)} Farbklassen umtrainiert "
               f"({rounds} Runden, Zoom {ZOOM_MIN if FOVEA_ZOOM else 1.0:.2f}-"
               f"{ZOOM_MAX if FOVEA_ZOOM else 1.0:.2f}) -- Blick-Trieb verstärkt", flush=True)
 
-    _zoom_span = (ZOOM_MIN, ZOOM_MAX) if FOVEA_ZOOM else None
+    _zoom_span = ("chroma",) + ((ZOOM_MIN, ZOOM_MAX) if FOVEA_ZOOM else (None,))
+    #   "chroma" tags the sel PRIMITIVE the classes were trained with: step_id switched from the
+    #   cosine match (grey table leaked through vs unsaturated class centroids) to _match_chroma,
+    #   so a fovea class-trained on the old cosine-sel retrains once.
     if (FOVEA_NET and os.environ.get("ACT23_FOVEA_TRAIN", "1") == "1"
             and (not _fovea_loaded                 # a loaded fovea was already class-trained -> skip,
-                 or getattr(vc.fovea, "_zoom_trained", "nie") != _zoom_span)):   # UNLESS the zoom span
-        if _fovea_loaded:                          # changed since it was trained (sel must stay
-            print(f"  [Netz-Blick] geladene Fovea kennt Zoom-Spanne {_zoom_span} nicht -- "
-                  f"trainiere Klassen einmalig nach", flush=True)   # readable across the search zoom)
+                 or getattr(vc.fovea, "_zoom_trained", "nie") != _zoom_span)):   # UNLESS zoom span or
+        if _fovea_loaded:                          # sel primitive changed since it was trained
+            print(f"  [Netz-Blick] geladene Fovea kennt {_zoom_span} nicht -- "
+                  f"trainiere Klassen einmalig nach", flush=True)
         train_fovea_classes()
 
     sel_off = {"dxy": None}                                    # the self-selected grasp-point OFFSET (dx,dy)
