@@ -1571,7 +1571,16 @@ def run_self_learning_steering(headless=False):
             #   random candidates are pure risk without learning -- exploit the model's best action.
             offs = None
             det = getattr(situation_feats, "last_det", None)
-            if os.environ.get("ACT23_GRASP_CANDS", "1") == "1" and det is not None and det.get("grasp_cands"):
+            # FALSIFIABILITY COUPLING (measured in the user's 260-ep netz run: Bilanz collapsed to
+            # 3-6/30 with broad "nicht gegriffen" floods while sigma stayed inflated 0.9-2.0): with
+            # the netz failure-route abstaining, a mask OFFSET that PREVENTS the lift never gets a
+            # label -- the same unfalsifiability trap as the wrist, reopened through the offset door;
+            # inflated sigma pushes LCB exactly into those unlabeled extrapolation offsets (model
+            # exploitation, the act22 lesson).  Candidates are only OFFERED where the failure route
+            # can label them: FSM episodes (or ACT23_ATTEMPT_NETZ=1).
+            cands_ok = (not use_net) or os.environ.get("ACT23_ATTEMPT_NETZ", "0") == "1"
+            if (os.environ.get("ACT23_GRASP_CANDS", "1") == "1" and cands_ok
+                    and det is not None and det.get("grasp_cands")):
                 # GRASP-POINT DISCOVERY (user's standing goal): the candidates are REAL places on the
                 # perceived material (mask-sampled), expressed as offsets from the heuristic point the
                 # execution/servo uses as reference.  The world model SCORES them (LCB) against the
