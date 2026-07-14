@@ -2114,7 +2114,57 @@ def run_self_learning_steering(headless=False):
     print("  Steering beendet.")
 
 
+class _Tee:
+    """Mirror a console stream into a log file (user request: every session leaves a log).
+    The FILE skips carriage-return progress spam (warmup/train tickers) and writes UTF-8
+    regardless of the console codepage; the CONSOLE stream is passed through untouched."""
+
+    def __init__(self, stream, fh):
+        self._s = stream
+        self._f = fh
+
+    def write(self, data):
+        try:                                           # a dying console pipe (e.g. truncated by the
+            self._s.write(data)                        # shell) must not kill the FILE log, and vice
+        except Exception:                              # versa -- each side fails independently
+            pass
+        if "\r" not in data:
+            try:
+                self._f.write(data)
+                self._f.flush()
+            except Exception:
+                pass
+
+    def flush(self):
+        try:
+            self._s.flush()
+        except Exception:
+            pass
+        try:
+            self._f.flush()
+        except Exception:
+            pass
+
+    def __getattr__(self, name):                       # encoding, isatty, buffer, ...
+        return getattr(self._s, name)
+
+
+def _start_session_log():
+    """Tee stdout+stderr into log/pc_act23_<timestamp>.txt at the repo root (ACT23_LOG=0 off)."""
+    if os.environ.get("ACT23_LOG", "1") != "1":
+        return
+    import datetime
+    d = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "log"))
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, f"pc_act23_{datetime.datetime.now():%Y-%m-%d_%H-%M-%S}.txt")
+    fh = open(path, "a", encoding="utf-8", errors="replace")
+    sys.stdout = _Tee(sys.stdout, fh)
+    sys.stderr = _Tee(sys.stderr, fh)
+    print(f"  [Log] Konsole wird mitgeschrieben: {path}", flush=True)
+
+
 if __name__ == "__main__":
+    _start_session_log()
     if os.environ.get("ACT23_VIZ", "0") == "1":
         run_self_learning_steering(headless=(os.environ.get("ACT23_VIZ_HEADLESS", "0") == "1"))
     elif os.environ.get("ACT23_MODE", "diag").lower() == "shapes":
