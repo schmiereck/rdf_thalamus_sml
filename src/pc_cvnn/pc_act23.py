@@ -71,11 +71,18 @@ from pc_cvnn.arm_modules.object_memory import ObjectMemoryModule
 import pc_cvnn.pc_act16 as act16
 
 CAM = "overview"
+# FOVEA-DRIVEN SERVO (this branch's goal): the approach corrections come from the NET's own gaze
+# belief instead of the algorithmic detector (perceive_all stays as fallback + identity re-anchor
+# only) -- the first load-bearing de-crutching of the detector.  Modes: "1" = while the fovea's
+# IDENTITY lock holds its belief IS the servo obs, "shadow" = compute + log |net - detector| but let
+# the detector keep driving (measurement mode), "0" = main behaviour (gaze = attention only).
+# Requires the learned gaze, so any mode != "0" forces FOVEA_NET on.
+FOVEA_SERVO = os.environ.get("ACT23_FOVEA_SERVO", "1")
 # LEARNED FOVEA GAZE (opt-in): the net's own active-inference centering drives the gaze of the form/
-# class tracker, the detector only re-anchors identity every FOVEA_ANCHOR frames.  DEFAULT OFF -- the
-# gaze is attention only (grasp target comes from the detector regardless), so this cannot regress
+# class tracker, the detector only re-anchors identity every FOVEA_ANCHOR frames.  Without FOVEA_SERVO
+# the gaze is attention only (grasp target comes from the detector regardless), so this cannot regress
 # delivery; it makes "where to look" a net decision (the user's goal).  ACT23_FOVEA_NET=1 enables.
-FOVEA_NET = os.environ.get("ACT23_FOVEA_NET", "0") == "1"
+FOVEA_NET = os.environ.get("ACT23_FOVEA_NET", "0") == "1" or FOVEA_SERVO != "0"
 FOVEA_ANCHOR = int(os.environ.get("ACT23_FOVEA_ANCHOR", "6"))
 # PREDICTIVE OBJECT MEMORY: replaces the detector re-anchor with a proprioceptive belief so the
 # net-driven gaze follows the object through grasp OCCLUSION + CARRY with NO detector.  Default ON
@@ -1293,7 +1300,9 @@ def run_self_learning_steering(headless=False):
             sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
             if det is not None:
                 _sel_seed.update(key=state.SHAPE_KEY[body], xy=np.asarray(det["pos"], float),
-                                 px=np.asarray(det["px"], float))
+                                 px=np.asarray(det["px"], float),
+                                 gxy=np.asarray(det["grasp_xy"], float))   # raw seed grasp point: the
+                #   fovea servo shifts THIS by the gaze's world motion (grasp geometry preserved)
                 if os.environ.get("ACT23_DEBUG", "0") == "1":
                     print(f"    [dbg] {body} via Formklasse: Greifziel "
                           f"{np.round(_off(det['grasp_xy']), 3).tolist()} "
@@ -1318,14 +1327,16 @@ def run_self_learning_steering(headless=False):
                 if cands:
                     best = min(cands, key=lambda d: colours.classify(d["chroma"])[1])
                     _sel_seed.update(key=None, xy=np.asarray(best["pos"], float),
-                                     px=np.asarray(best["px"], float))
+                                     px=np.asarray(best["px"], float),
+                                     gxy=np.asarray(best["grasp_xy"], float))
                     if os.environ.get("ACT23_DEBUG", "0") == "1":
                         print(f"    [dbg] {body} via Farbklasse '{cname}' lokalisiert", flush=True)
                     return _off(best["grasp_xy"]), None, "grasp"
             if method == "long":
                 p0 = np.asarray(sim.obj_pos(body)[:2], float)  # fallback: class unborn / not in sight
                 try:
-                    _sel_seed.update(key=None, xy=p0, px=np.asarray(shape_clf._world_to_px(p0)[0], float))
+                    _sel_seed.update(key=None, xy=p0, gxy=p0,
+                                     px=np.asarray(shape_clf._world_to_px(p0)[0], float))
                 except Exception:
                     pass
                 return _off(p0), None, "grasp"
@@ -1384,6 +1395,8 @@ def run_self_learning_steering(headless=False):
         #   seed below covers key=None as well)
         objmem.reset()                                         # fresh predictive belief per episode
         vc.fovea.z = 1.0                                       # defined DETAIL zoom for the form view
+        vc._fsv = {"d": [], "nf": 0, "nd": 0}                  # fovea-servo stats (per episode): frames
+        #   with a net obs / a detector obs, and |net - detector| mm where both exist (shadow metric)
 
         def _track():
             if mem["px"] is None and _sel_seed.get("key", "__unset__") == key:
@@ -1413,6 +1426,7 @@ def run_self_learning_steering(headless=False):
                             else float(np.clip(1.0 - colours.classify(best["chroma"])[1]
                                                / (2.0 * colour_openset.TH), 0.0, 1.0)))
                     mem["xy"] = np.asarray(best["pos"], float); mem["px"] = np.asarray(best["px"], float)
+                    vc._fsv["nd"] += 1
             if obs is None and mem["px"] is not None and dets:  # class match failed (lifted/mis-class/long) ->
                 near = min(dets, key=lambda d: float(np.linalg.norm(np.asarray(d["px"]) - mem["px"])))
                 if float(np.linalg.norm(np.asarray(near["px"]) - mem["px"])) < 40.0:   # follow the blob in px
@@ -1455,6 +1469,38 @@ def run_self_learning_steering(headless=False):
                                                   + warp_gaze_delta(com, ctr, vc.fovea._ek())
                                                   + np.clip(drive * 6.0, -2, 2), lo, hi)
                         mass = float(np.clip(sel.max(), 0.0, 1.0))
+                        # FOVEA-DRIVEN SERVO (the branch goal): while THIS identity lock holds, the
+                        # net's own gaze belief -- not the detector -- supplies the approach obs: the
+                        # seeded grasp point shifted by the gaze's world motion since the FIRST lock
+                        # (anchor fs0, so a constant gaze<->centroid offset cancels and the grasp
+                        # geometry survives -- a U's centre is a hole).  Same 5cm jump gate as the
+                        # detector path; the sustained-loss branch below never reaches here, so a
+                        # wrong-object fixation (user-observed) cannot steer the arm: the lock IS the
+                        # gate.  "shadow" only measures |net - detector|.
+                        if (FOVEA_SERVO != "0" and com is not None and shape_clf.H is not None
+                                and _sel_seed.get("gxy") is not None
+                                and _sel_seed.get("key", "__unset__") == key
+                                and sim.d.qpos[sim.jqadr["joint_5"]] >= act16.J5_CLOSED_TH):
+                            # gripper-open gate: while CARRYING, the table-plane px->world map is wrong
+                            # for the lifted object (run_combined ignores servo obs outside over/lower
+                            # anyway, pc_act16 ~379 -- the gate keeps the shadow STATS honest and the
+                            # anchor fs0 from being dragged by a carried object)
+                            wg = shape_clf._px_to_world(np.asarray(mem["gaze"], float))[0]
+                            if mem.get("fs0") is None:
+                                mem["fs0"] = wg
+                            dxy = wg - mem["fs0"]
+                            pos_f = _sel_seed["xy"] + dxy
+                            if mem["xy"] is None or float(np.linalg.norm(pos_f - mem["xy"])) <= 0.05:
+                                obs_f = _off(_sel_seed["gxy"] + dxy)
+                                vc._fsv["nf"] += 1
+                                if obs is not None:
+                                    vc._fsv["d"].append(float(np.linalg.norm(obs_f - obs)) * 1000.0)
+                                if FOVEA_SERVO == "1":
+                                    # the identity LOCK is the confidence statement; map mass into
+                                    # [0.5, 1] so a held lock always clears SERVO_CONF=0.5 (mass is a
+                                    # saliency MAGNITUDE, not a class probability -- raw mass < 0.5
+                                    # would count as "lost" and trigger detector re-acquire saccades)
+                                    obs, conf = obs_f, 0.5 + 0.5 * mass
                     elif mem.get("_lost", 0) < 4:                  # BRIEF loss (occlusion flicker): keep the
                         mem["_lost"] = mem.get("_lost", 0) + 1     #   gaze on the material via raw occupancy
                         occ = np.ptp(np.real(arr[:, :, 1:]), axis=2)
@@ -1505,7 +1551,7 @@ def run_self_learning_steering(headless=False):
                         vc._fovea_zoom.append(float(vc.fovea.z))
                 if vc.viz is not None:
                     vc.viz.fovea(img, gaze, vc.fovea._ek(), np.clip(arr[:, :, 1:], 0, 1),
-                                 f"{'Netz-Blick' if FOVEA_NET else 'Form-Tracker'} folgt {key or body}")
+                                 f"{'Netz-Servo' if FOVEA_SERVO == '1' else ('Netz-Blick' if FOVEA_NET else 'Form-Tracker')} folgt {key or body}")
                 plot_surprise()
             else:
                 track_and_plot()                               # nothing tracked yet -> the colour follow frame
@@ -1659,6 +1705,7 @@ def run_self_learning_steering(headless=False):
             track_fn = make_shape_track(body, ckey=cube_ckey)  #   servo tracker (stage 3 de-crutching)
         else:
             track_fn = track_and_plot
+            vc._fsv = None                                     # no form tracker -> no fovea-servo stats
         if a_exec is not None:                                 # SELF: the model's grip + gentle dims
             grip_exec = float(np.clip(a_exec[4], 0.0, 0.45)); gentle_exec = bool(a_exec[5] > 0.5)
         else:                                                  # TEACHER: the old rules, now demonstrations
@@ -1691,6 +1738,14 @@ def run_self_learning_steering(headless=False):
                            lifelong=True, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
                            arm_reset=False)
         _save(f"{body}_1after_runcombined")
+        _fsv = getattr(vc, "_fsv", None)
+        if FOVEA_SERVO != "0" and _fsv and (_fsv["nf"] or _fsv["nd"]):
+            # measurement line (shadow AND live): how often the net belief carried the servo vs the
+            # detector, and how far apart the two were when both existed
+            print(f"    [Fovea-Servo{' Schatten' if FOVEA_SERVO == 'shadow' else ''}] "
+                  f"Netz-Obs {_fsv['nf']} / Detektor-Obs {_fsv['nd']} Frames"
+                  + (f", |Netz-Detektor| mittel {np.mean(_fsv['d']):.1f} mm, "
+                     f"max {np.max(_fsv['d']):.0f} mm" if _fsv["d"] else ""), flush=True)
         if _dbg and FOVEA_NET and getattr(vc, "_fovea_drift", None):   # net-gaze tracking quality + zoom
             d = vc._fovea_drift; zz = getattr(vc, "_fovea_zoom", []) or [1.0]
             print(f"    [Netz-Blick] Drift Blick<->Objekt: mittel {np.mean(d):.1f}px, "
