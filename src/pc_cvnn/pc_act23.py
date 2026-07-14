@@ -1634,6 +1634,12 @@ def run_self_learning_steering(headless=False):
             a_exec = a; wf = (lambda s, _w=wrist_of(a): _w)
             if float(np.linalg.norm(a[:2])) > 1e-9:
                 sel_off["dxy"] = np.asarray(a[:2], float)
+            if os.environ.get("ACT23_YAW_AB", "0") == "1":
+                # A/B measurement ONLY (never fed to a learner): the PRIVILEGED true long axis next
+                # to the model's chosen wrist, so an offline script can test whether the choice is
+                # yaw-CONDITIONED (concentration of wrist-yaw) with vs without the fovea yaw read.
+                print(f"    [YawAB] {body} wrist {np.degrees(wrist_of(a)) % 180.0:.1f} "
+                      f"yaw {np.degrees(sim.obj_yaw(body)) % 180.0:.1f}", flush=True)
             if _dbg:
                 print(f"    [dbg] Aktion (Welt-Modell): Offset {np.round(a[:2] * 1000, 1).tolist()}mm, "
                       f"Wrist {np.degrees(wrist_of(a)) % 180.0:.0f} Grad, Grip {a[4]:.2f}"
