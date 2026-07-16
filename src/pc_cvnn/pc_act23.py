@@ -1684,8 +1684,26 @@ def run_self_learning_steering(headless=False):
                 # A/B measurement ONLY (never fed to a learner): the PRIVILEGED true long axis next
                 # to the model's chosen wrist, so an offline script can test whether the choice is
                 # yaw-CONDITIONED (concentration of wrist-yaw) with vs without the fovea yaw read.
-                print(f"    [YawAB] {body} wrist {np.degrees(wrist_of(a)) % 180.0:.1f} "
-                      f"yaw {np.degrees(sim.obj_yaw(body)) % 180.0:.1f}", flush=True)
+                yaw_t = np.degrees(sim.obj_yaw(body))
+                line = (f"    [YawAB] {body} wrist {np.degrees(wrist_of(a)) % 180.0:.1f} "
+                        f"yaw {yaw_t % 180.0:.1f}")
+                if body in ("obj_L", "obj_U"):
+                    # PRONG-SHAPE extension (user-observed failure: the claw approaches the L along
+                    # the long prong but DIAGONAL -> the form slips and spins away): L/U are not
+                    # 180-deg symmetric, so log the full 360-deg yaw, the PLANNED grasp point rotated
+                    # into the OBJECT frame (which prong / where on it: L long prong = local +y at
+                    # x~-7mm, foot at y=-21mm; U prongs = local +y at x=+-19mm, base bar y=-14mm),
+                    # and the wrist RELATIVE to the yaw -- offline pairing with GELIEFERT/dyaw tests
+                    # whether alignment + grasp placement predict the slip, before anything learns.
+                    line += f" yaw360 {yaw_t % 360.0:.1f}"
+                    if det is not None and det.get("grasp_xy") is not None:
+                        gp = np.asarray(det["grasp_xy"], float) + np.asarray(a[:2], float)
+                        rel = gp - sim.obj_pos(body)[:2]
+                        cy, sy = np.cos(-sim.obj_yaw(body)), np.sin(-sim.obj_yaw(body))
+                        lo = np.array([cy * rel[0] - sy * rel[1], sy * rel[0] + cy * rel[1]]) * 1e3
+                        line += (f" grasp_obj {lo[0]:.0f},{lo[1]:.0f}"
+                                 f" relwrist {(np.degrees(wrist_of(a)) - yaw_t) % 180.0:.1f}")
+                print(line, flush=True)
             if _dbg:
                 print(f"    [dbg] Aktion (Welt-Modell): Offset {np.round(a[:2] * 1000, 1).tolist()}mm, "
                       f"Wrist {np.degrees(wrist_of(a)) % 180.0:.0f} Grad, Grip {a[4]:.2f}"
@@ -1738,6 +1756,13 @@ def run_self_learning_steering(headless=False):
                            lifelong=True, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
                            arm_reset=False)
         _save(f"{body}_1after_runcombined")
+        if os.environ.get("ACT23_YAW_AB", "0") == "1" and body in ("obj_L", "obj_U", "obj_blue"):
+            # measurement companion to [YawAB]: how much the commanded shape ROTATED over the episode
+            # (privileged, wrapped to +-180).  On FAILED episodes this is the pure slip-spin signature
+            # the user watches in the GUI (diagonal contact torques the L away); on deliveries it also
+            # contains the carry.  The offline script pairs it with relwrist/grasp_obj + the outcome.
+            dy = (np.degrees(sim.obj_yaw(body) - snap[body][2]) + 180.0) % 360.0 - 180.0
+            print(f"    [YawAB-End] {body} dyaw {dy:+.1f}", flush=True)
         _fsv = getattr(vc, "_fsv", None)
         if FOVEA_SERVO != "0" and _fsv and (_fsv["nf"] or _fsv["nd"]):
             # measurement line (shadow AND live): how often the net belief carried the servo vs the
