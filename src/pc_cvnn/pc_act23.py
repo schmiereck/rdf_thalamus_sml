@@ -1680,12 +1680,35 @@ def run_self_learning_steering(headless=False):
             a_exec = a; wf = (lambda s, _w=wrist_of(a): _w)
             if float(np.linalg.norm(a[:2])) > 1e-9:
                 sel_off["dxy"] = np.asarray(a[:2], float)
+            # A/B FORCE knobs (probe arms, PRIVILEGED, default off -- never a runtime rule): measure the
+            # CAUSAL value of a correct wrist / a material-centred grasp point for the prong shapes
+            # before anything is allowed to learn it.  ACT23_FORCE_WRIST=priv aligns the wrist to the
+            # true yaw (relwrist=0 -- the direction the 40-ep YawAB probe found suggestive for L);
+            # ACT23_FORCE_GRASP=prong replaces the model's grasp offset so the planned point sits ON
+            # MATERIAL (L: centre of the free long-prong part, local (-7,+7)mm; U: base-bar centre
+            # (0,-14)mm, the proven balanced grip) instead of the form centre (U's form centre = the
+            # OPEN SLOT between the prongs, measured a coin flip).  a_exec is updated so credit labels
+            # describe what actually RAN; probes run on disposable state copies only.
+            if os.environ.get("ACT23_FORCE_WRIST", "") == "priv":
+                wp = float(sim.obj_yaw(body)) % np.pi
+                a_exec = a_exec.copy(); a_exec[2], a_exec[3] = np.cos(2 * wp), np.sin(2 * wp)
+                wf = (lambda s, _w=wp: _w)
+            if (os.environ.get("ACT23_FORCE_GRASP", "") == "prong" and body in ("obj_L", "obj_U")
+                    and det is not None and det.get("grasp_xy") is not None):
+                loc = np.array([-0.007, 0.007]) if body == "obj_L" else np.array([0.0, -0.014])
+                yr = float(sim.obj_yaw(body)); cy, sy = np.cos(yr), np.sin(yr)
+                tgt = sim.obj_pos(body)[:2] + np.array([cy * loc[0] - sy * loc[1],
+                                                        sy * loc[0] + cy * loc[1]])
+                sel_off["dxy"] = tgt - np.asarray(det["grasp_xy"], float)
+                a_exec = a_exec.copy(); a_exec[0], a_exec[1] = sel_off["dxy"]
             if os.environ.get("ACT23_YAW_AB", "0") == "1":
                 # A/B measurement ONLY (never fed to a learner): the PRIVILEGED true long axis next
-                # to the model's chosen wrist, so an offline script can test whether the choice is
-                # yaw-CONDITIONED (concentration of wrist-yaw) with vs without the fovea yaw read.
+                # to the EXECUTED wrist/offset (after any force knob), so an offline script can test
+                # whether the choice is yaw-CONDITIONED (concentration of wrist-yaw).
+                w_used = wrist_of(a_exec)
+                off_used = sel_off["dxy"] if sel_off["dxy"] is not None else np.zeros(2)
                 yaw_t = np.degrees(sim.obj_yaw(body))
-                line = (f"    [YawAB] {body} wrist {np.degrees(wrist_of(a)) % 180.0:.1f} "
+                line = (f"    [YawAB] {body} wrist {np.degrees(w_used) % 180.0:.1f} "
                         f"yaw {yaw_t % 180.0:.1f}")
                 if body in ("obj_L", "obj_U"):
                     # PRONG-SHAPE extension (user-observed failure: the claw approaches the L along
@@ -1697,12 +1720,12 @@ def run_self_learning_steering(headless=False):
                     # whether alignment + grasp placement predict the slip, before anything learns.
                     line += f" yaw360 {yaw_t % 360.0:.1f}"
                     if det is not None and det.get("grasp_xy") is not None:
-                        gp = np.asarray(det["grasp_xy"], float) + np.asarray(a[:2], float)
+                        gp = np.asarray(det["grasp_xy"], float) + np.asarray(off_used, float)
                         rel = gp - sim.obj_pos(body)[:2]
                         cy, sy = np.cos(-sim.obj_yaw(body)), np.sin(-sim.obj_yaw(body))
                         lo = np.array([cy * rel[0] - sy * rel[1], sy * rel[0] + cy * rel[1]]) * 1e3
                         line += (f" grasp_obj {lo[0]:.0f},{lo[1]:.0f}"
-                                 f" relwrist {(np.degrees(wrist_of(a)) - yaw_t) % 180.0:.1f}")
+                                 f" relwrist {(np.degrees(w_used) - yaw_t) % 180.0:.1f}")
                 print(line, flush=True)
             if _dbg:
                 print(f"    [dbg] Aktion (Welt-Modell): Offset {np.round(a[:2] * 1000, 1).tolist()}mm, "
