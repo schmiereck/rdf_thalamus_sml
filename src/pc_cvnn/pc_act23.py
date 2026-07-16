@@ -1689,8 +1689,16 @@ def run_self_learning_steering(headless=False):
             # (0,-14)mm, the proven balanced grip) instead of the form centre (U's form centre = the
             # OPEN SLOT between the prongs, measured a coin flip).  a_exec is updated so credit labels
             # describe what actually RAN; probes run on disposable state copies only.
-            if os.environ.get("ACT23_FORCE_WRIST", "") == "priv":
-                wp = float(sim.obj_yaw(body)) % np.pi
+            _fw = os.environ.get("ACT23_FORCE_WRIST", "")
+            if _fw in ("priv", "pair"):
+                # "pair" = the shape-dependent pair hypothesis the two single-knob A/Bs uncovered:
+                # L wants the wrist PARALLEL to the long prong (W arm 14/20 vs 9/20) while U wants it
+                # QUER across the base bar (in the G arm 4 of 5 U deliveries had relwrist 61-72 deg,
+                # aligned wrists at the bar failed) -- so pair adds 90 deg for obj_U, else = priv.
+                wp = float(sim.obj_yaw(body))
+                if _fw == "pair" and body == "obj_U":
+                    wp += 0.5 * np.pi
+                wp %= np.pi
                 a_exec = a_exec.copy(); a_exec[2], a_exec[3] = np.cos(2 * wp), np.sin(2 * wp)
                 wf = (lambda s, _w=wp: _w)
             if (os.environ.get("ACT23_FORCE_GRASP", "") == "prong" and body in ("obj_L", "obj_U")
