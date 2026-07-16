@@ -30,10 +30,29 @@ principle).
 """
 from __future__ import annotations
 
+import os
+
 import numpy as np
 
 from pc_cvnn.pc_act19 import Policy
 from .base import ArmModule
+
+# ALIGNMENT CROSS-FEATURE (ACT23_WORLD_CROSS=1, default off until A/B-measured): append the
+# rotation INVARIANTS cos2(w-yaw), sin2(w-yaw) -- derived from the PERCEIVED yaw dims (feats 2,3)
+# and the model's OWN wrist action dims, nothing privileged -- to the joint input at fit/predict
+# time.  WHY (measured, capacity probe 2026-07-16): the wrist->success rule for the L-form lives
+# in exactly this bilinear term; the plain MLP needs ~3000 clean rows to find it among ~20 input
+# dims, but WITH the invariant as an explicit input it learns at n~150 (the user's rotation=phase
+# insight applied to action conditioning -- representation, not depth, was the bottleneck).
+# Stored _X rows stay RAW (no schema break); members with a stale input width are rebuilt+refit
+# from _X on the next train() (handles state pickles from before this feature / knob toggles).
+CROSS = os.environ.get("ACT23_WORLD_CROSS", "0") == "1"
+
+
+def cross_augment(X2d, fd):
+    cy, sy = X2d[:, 2], X2d[:, 3]
+    cw, sw = X2d[:, fd + 2], X2d[:, fd + 3]
+    return np.column_stack([X2d, cw * cy + sw * sy, sw * cy - cw * sy])
 
 FEAT_DIM = 7          # [pos(2), cos2yaw, sin2yaw, shape_onehot(3)]
 ACT_DIM = 6           # [dx, dy, cos2w, sin2w, grip, gentle]
@@ -91,6 +110,12 @@ class WorldModelModule(ArmModule):
         if not self._X:
             return
         X = np.array(self._X); Y = np.array(self._Y); m = len(X)
+        if CROSS:
+            X = cross_augment(X, self.feat_dim)
+        if self.members[0].W1.shape[1] != X.shape[1]:  # knob toggled / pre-cross pickle: rebuild
+            self.members = [Policy(din=X.shape[1], dout=1, hid=64,
+                                   rng=np.random.default_rng(int(self.rng.integers(1 << 30))))
+                            for _ in self.members]
         for member in self.members:
             idx = self.rng.integers(0, m, m)          # bootstrap resample -> ensemble diversity
             member.fit(X[idx], Y[idx], epochs=epochs, quiet=True)
@@ -100,6 +125,13 @@ class WorldModelModule(ArmModule):
         """actions: (N, ACT_DIM) -> (mu (N,), sigma (N,)) over the ensemble."""
         actions = np.atleast_2d(actions)
         X = np.column_stack([np.tile(np.asarray(feats, float), (len(actions), 1)), actions])
+        if CROSS:
+            Xc = cross_augment(X, self.feat_dim)
+            if self.members[0].W1.shape[1] == Xc.shape[1]:
+                X = Xc                                # members not yet rebuilt -> raw until train()
+        if self.members[0].W1.shape[1] != X.shape[1] and self._X:
+            self.train(epochs=300)                    # pickle from the OTHER knob setting: one lazy
+            return self.predict(feats, actions)       #   rebuild+refit, then answer normally
         P = np.array([[float(member.predict(x)[0]) for x in X] for member in self.members])  # (K, N)
         return P.mean(0), P.std(0)
 
