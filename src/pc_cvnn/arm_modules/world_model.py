@@ -37,7 +37,10 @@ import numpy as np
 from pc_cvnn.pc_act19 import Policy
 from .base import ArmModule
 
-# ALIGNMENT CROSS-FEATURE (ACT23_WORLD_CROSS=1, default off until A/B-measured): append the
+# ALIGNMENT CROSS-FEATURE (ACT23_WORLD_CROSS, default ON since the measured overnight run
+# 2026-07-17: 600 L self-play episodes -> 177 fresh labels -> netz eval 27/40 = 67.5% vs 45%
+# baseline at the 70% forced ceiling; internal control: aligned picks deliver 89%, non-aligned
+# 48% = baseline, so the gain is the CONDITIONING, not state maturation.  =0 restores): append the
 # rotation INVARIANTS cos2(w-yaw), sin2(w-yaw) -- derived from the PERCEIVED yaw dims (feats 2,3)
 # and the model's OWN wrist action dims, nothing privileged -- to the joint input at fit/predict
 # time.  WHY (measured, capacity probe 2026-07-16): the wrist->success rule for the L-form lives
@@ -46,7 +49,7 @@ from .base import ArmModule
 # insight applied to action conditioning -- representation, not depth, was the bottleneck).
 # Stored _X rows stay RAW (no schema break); members with a stale input width are rebuilt+refit
 # from _X on the next train() (handles state pickles from before this feature / knob toggles).
-CROSS = os.environ.get("ACT23_WORLD_CROSS", "0") == "1"
+CROSS = os.environ.get("ACT23_WORLD_CROSS", "1") == "1"
 
 
 def cross_augment(X2d, fd):
