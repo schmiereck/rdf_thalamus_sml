@@ -938,7 +938,11 @@ def run_self_learning_steering(headless=False):
                                shape_clf.desc_embed(best["desc"])])
 
     bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, LONG)
-    crng = np.random.default_rng(7); act16.run_combined._quiet = True
+    # ACT23_SEED (default 7 = historical behaviour): scene placement + auto target picks.  Parallel
+    # label-harvest WORKERS (act23_dose_workers.py) start from the SAME state pickle with the same
+    # pickled module rngs -- without distinct seeds here they would replay bit-identical episodes
+    # and the parallelism would collect the same data W times (user's 8%-CPU observation).
+    crng = np.random.default_rng(int(os.environ.get("ACT23_SEED", "7"))); act16.run_combined._quiet = True
 
     def park_all():
         sim.reset_home()
