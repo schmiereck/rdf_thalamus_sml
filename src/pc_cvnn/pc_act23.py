@@ -1727,7 +1727,8 @@ def run_self_learning_steering(headless=False):
                     # the long prong but DIAGONAL -> the form slips and spins away): L/U are not
                     # 180-deg symmetric, so log the full 360-deg yaw, the PLANNED grasp point rotated
                     # into the OBJECT frame (which prong / where on it: L long prong = local +y at
-                    # x~-7mm, foot at y=-21mm; U prongs = local +y at x=+-19mm, base bar y=-14mm),
+                    # x~-7mm, foot at y=-21mm; U prongs = local +y at x=+-23mm (32mm slot since
+                    # 2026-07-18, was +-19), base bar y=-14mm),
                     # and the wrist RELATIVE to the yaw -- offline pairing with GELIEFERT/dyaw tests
                     # whether alignment + grasp placement predict the slip, before anything learns.
                     line += f" yaw360 {yaw_t % 360.0:.1f}"
@@ -1919,17 +1920,26 @@ def run_self_learning_steering(headless=False):
         rest_z = float(snap[body][1]) if body in snap else 0.012
         lifted = maxcz > rest_z + 0.02                          # object clearly left the table = grasp tested
         imit_tol = float(os.environ.get("ACT23_IMIT_TOL", "0.015"))
-        # `delivered` = the (self- or privileged-) judged delivery verdict (< TOL 25mm).  `confident` is
-        # the STRICTER bar (self_d < IMIT_TOL 15mm): only a confident delivery earns a world-model SUCCESS
-        # label or a self-imitation.  Measured leak (fixed here): the self-judge reads an elongated
-        # object's blob ~30mm off its true centre, so a borderline "delivered 20-24mm" can be a real MISS;
-        # the tight bar already protected self-imitation, now it also gates the world-model positive label
-        # (a self-judged-delivered-but-not-confident episode ABSTAINS instead of crediting the action).
+        # ASYMMETRIC confidence bars (user request 2026-07-18; measured on the 415-ep session log):
+        # the judge's DISTANCE estimate is nearly unbiased (median |self-true| 0-3mm) but a single
+        # 15mm bar discarded 48% of TRUE deliveries (77/159) -- exactly the "sieht fuer mich OK
+        # abgelegt aus, Log sagt unsicher" episodes the user watched.  In the 15-25mm band the
+        # judge's "geliefert" is right 85-100% per object EXCEPT the U (62%: its blob merges with
+        # the claw/slot), so:  WORLD-MODEL success label accepts up to ACT23_WORLD_TOL (25mm; the
+        # ensemble tolerates the ~13% label noise, and positives were the measured yield
+        # bottleneck), SELF-IMITATION keeps the strict imit_tol bar (an imitated failure poisons
+        # the policy directly), and the U keeps the strict bar for BOTH (re-measure the band after
+        # the 32mm slot widening).
+        world_tol = float(os.environ.get("ACT23_WORLD_TOL", "0.025"))
+        if body == "obj_U":
+            world_tol = min(world_tol, imit_tol)
         if os.environ.get("ACT23_WORLD_LABEL", "selbst") == "welt" or s_ok is None:
             delivered = bool(res.get("ok", False)); confident = delivered; lbl_src = "Welt"
+            world_conf = delivered
         else:                                                   # self-judged (step 1) -> self-supervised
             delivered = bool(s_ok)
             confident = delivered and s_d is not None and s_d < imit_tol
+            world_conf = delivered and s_d is not None and s_d < world_tol
             lbl_src = "Selbst"
         attempted = bool(getattr(act16.run_combined, "_attempted", False))
         # the attempted-failure route only under the RELIABLE (FSM) choreography: there a close at
@@ -1953,7 +1963,7 @@ def run_self_learning_steering(headless=False):
                 route, outcome = "Griff am Objekt fehlgeschlagen (Aktion)", False
             elif not lifted:
                 route, outcome = "nicht gegriffen (Policy)", None
-            elif confident:
+            elif world_conf:
                 route, outcome = "sicher geliefert", True
             elif slipped:
                 route, outcome = "verrutscht (Griff)", False
@@ -1982,7 +1992,8 @@ def run_self_learning_steering(headless=False):
         elif fe is not None:
             print(f"    [Kredit] {route} -- Welt-Modell enthält sich (Aktion nicht schuld)", flush=True)
         # STEP 3: SELF-IMITATION GATE.  On a Netz episode the POLICY drove; if the agent self-judges a
-        # CONFIDENT delivery (the same tight bar as the world-model success label, + not-slipped) the
+        # CONFIDENT delivery (the STRICT imit_tol bar -- deliberately tighter than the world-model's
+        # world_tol since the asymmetric split, + not-slipped) the
         # (state, action) pairs the policy actually took become its OWN demonstrations, reinforcing what
         # worked FOR IT (blended with DAgger at fit time).  A skipped real success just loses a sample;
         # an imitated failure would poison -- hence the tight bar.  ACT23_SELFIMIT=0 disables.
