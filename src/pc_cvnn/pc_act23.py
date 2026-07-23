@@ -65,6 +65,7 @@ from pc_cvnn.arm_modules import colour_openset
 from pc_cvnn.arm_modules.colour_openset import ColourOpenSetModule
 from pc_cvnn.arm_modules.planner import GoalModule2D, LO as GOAL_LO, HI as GOAL_HI
 from pc_cvnn.arm_modules.latent_goal import LatentGoalServo, LatentGoalLanguage
+from pc_cvnn.arm_modules.latent_dynamics import LatentDynamicsModule
 from pc_cvnn.arm_modules.curiosity import DistanceNovelty
 from pc_cvnn.arm_modules.self_eval import SelfEvalModule
 from pc_cvnn.arm_modules.object_memory import ObjectMemoryModule
@@ -807,6 +808,10 @@ def run_self_learning_steering(headless=False):
         print(f"  [Stufe 4] Ziel-Latent bereit (RoPE-Latent={_gm.rope}): "
               f"Latent-Inverse-Babble {_rec:.1f} mm", flush=True)
     lgoal_lang = LatentGoalLanguage(lgoal)
+    lat_dyn = LatentDynamicsModule(latent_dim=10, action_dim=4, rng=np.random.default_rng(8))
+    if _loaded is not None and "latent_dynamics" in _loaded:
+        lat_dyn.unpack(_loaded["latent_dynamics"])
+        print("  [Etappe 2] Latent-Dynamics Übergangsmodell aus Zustand geladen", flush=True)
 
     # STAGE 4b: the planner DREAMS its practice targets (act21 CuriosityPlanner.dream, wired into the
     # auto-run): candidate goals are scored by DISTANCE-NOVELTY in the GOAL-LATENT space -- the SAME
@@ -882,6 +887,7 @@ def run_self_learning_steering(headless=False):
                     "bm": bm, "shape_clf": shape_clf, "world": world, "runtime": runtime,
                     "colours": colours, "colour_of_body": dict(colour_of_body),
                     "latent_goal": _lg_pack(lgoal),
+                    "latent_dynamics": lat_dyn.pack(),
                     "dream_seen": [np.asarray(z) for z in dream_nov.seen],
                     "self_eval": seval,
 
@@ -1879,6 +1885,17 @@ def run_self_learning_steering(headless=False):
                 print(f"      [su-dbg] hand={np.round(hxy_end,3).tolist()} obj_true="
                       f"{np.round(sim.obj_pos(body)[:2],3).tolist()} strict={le.get('n_strict')} "
                       f"cands={le.get('n_cands')} cand_pos={le.get('cand_pos')}", flush=True)
+        # ETAPPE 2 (Latent Dynamics): Observe transition (z_t, action, z_next) & train transition dynamics
+        try:
+            z_t_dyn = lgoal.get_goal_vector()
+            if z_t_dyn is not None:
+                z_next_dyn = lgoal.encode_world(sim.obj_pos(body)[:2])
+                lat_dyn.observe(z_t_dyn, action, z_next_dyn)
+                surp = lat_dyn.predict_surprise(z_t_dyn, action, z_next_dyn)
+                loss_d = lat_dyn.train(epochs=5)
+                print(f"    [Latent-Dynamics] Übergang beobachtet -> Surprise S={surp:.3f} | MSE={loss_d:.5f}", flush=True)
+        except Exception as e:
+            pass
         # SCENE housekeeping (user-observed degeneration over long auto runs): an object DRAGGED outside
         # the reachable workspace by a failed grasp stays out FOREVER (the restore puts non-commanded
         # objects back on their pre-command = out pose; a commanded one keeps its end pose) -- every

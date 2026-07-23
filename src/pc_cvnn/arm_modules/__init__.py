@@ -11,7 +11,8 @@ from .planner import GoalModule2D, PlannerModule, rule_mirror, rule_centre
 from .motor import MotorModule
 from .inverse_kinematics import LearnedInverseKinematics
 from .curiosity import DistanceNovelty, CuriosityPlanner
-from .latent_goal import LatentGoalServo
+from .latent_goal import LatentGoalServo, LatentGoalLanguage
+from .latent_dynamics import LatentDynamicsModule
 from .obstacle_vision import ObstacleVisionModule
 from .obstacle import ObstacleModule
 from .wrist import WristRollModule
@@ -20,5 +21,6 @@ from .shape_classifier import ShapeClassifierModule, SHAPES
 __all__ = ["Port", "ArmModule", "ArmAgent", "VisualCortexModule", "BodyModelModule",
            "GoalModule2D", "PlannerModule", "rule_mirror", "rule_centre", "MotorModule",
            "LearnedInverseKinematics", "DistanceNovelty", "CuriosityPlanner", "LatentGoalServo",
+           "LatentGoalLanguage", "LatentDynamicsModule",
            "ObstacleVisionModule", "ObstacleModule", "WristRollModule",
            "ShapeClassifierModule", "SHAPES"]
