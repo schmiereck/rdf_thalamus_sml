@@ -81,8 +81,15 @@ class LatentGoalServo:
         target_z = self.z_g if z_g is None else np.asarray(z_g)
         if target_z is None:
             return np.array([0.0, 0.15])
-        grid_pos = self.gm.decode_dream(target_z)
-        return grid_to_world(grid_pos)
+        if self.gm is not None:
+            grid_pos = self.gm.decode_dream(target_z)
+            return grid_to_world(grid_pos)
+        if hasattr(self, "_grid_z") and self._grid_z is not None:
+            diffs = np.linalg.norm(self._grid_z - target_z, axis=-1)
+            y_idx, x_idx = np.unravel_index(np.argmin(diffs), diffs.shape)
+            grid_pos = np.array([self._gx[x_idx], self._gx[y_idx]])
+            return grid_to_world(grid_pos)
+        return np.array([0.0, 0.15])
 
     def latent_error(self, obj_xy):
         return float(np.linalg.norm(self.z_g - self.encode_world(obj_xy)))
