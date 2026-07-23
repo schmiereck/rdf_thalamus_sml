@@ -66,6 +66,7 @@ from pc_cvnn.arm_modules.colour_openset import ColourOpenSetModule
 from pc_cvnn.arm_modules.planner import GoalModule2D, LO as GOAL_LO, HI as GOAL_HI
 from pc_cvnn.arm_modules.latent_goal import LatentGoalServo, LatentGoalLanguage
 from pc_cvnn.arm_modules.latent_dynamics import LatentDynamicsModule
+from pc_cvnn.arm_modules.latent_attractor import LatentAttractorController
 from pc_cvnn.arm_modules.curiosity import DistanceNovelty
 from pc_cvnn.arm_modules.self_eval import SelfEvalModule
 from pc_cvnn.arm_modules.object_memory import ObjectMemoryModule
@@ -812,6 +813,8 @@ def run_self_learning_steering(headless=False):
     if _loaded is not None and "latent_dynamics" in _loaded:
         lat_dyn.unpack(_loaded["latent_dynamics"])
         print("  [Etappe 2] Latent-Dynamics Übergangsmodell aus Zustand geladen", flush=True)
+    lat_attractor = LatentAttractorController(lgoal, lat_dyn, rng=np.random.default_rng(9))
+    print("  [Etappe 3] Latent-Attraktor Steuerung bereit (kontinuierliches Latent-Planning)", flush=True)
 
     # STAGE 4b: the planner DREAMS its practice targets (act21 CuriosityPlanner.dream, wired into the
     # auto-run): candidate goals are scored by DISTANCE-NOVELTY in the GOAL-LATENT space -- the SAME
@@ -1794,7 +1797,9 @@ def run_self_learning_steering(headless=False):
                                           if use_net else None),
                            post_goal_fn=(lambda c, o, g: lgoal.set_goal_vector(g) if (isinstance(g, np.ndarray) and g.ndim==1 and len(g)>2) else lgoal.set_goal(g)),
                            #   (seval) needs the episode's goal latent even in "Ziel: Koord" mode
-                           place_servo_fn=((lambda hxy: lgoal.servo(hxy, gain=0.6)) if use_latent else None),
+                           place_servo_fn=((lambda hxy: lat_attractor.plan_step(lgoal.encode_world(hxy), lgoal.get_goal_vector(), hxy)[2])
+                                            if state.choreo == "attractor" else
+                                            ((lambda hxy: lgoal.servo(hxy, gain=0.6)) if use_latent else None)),
                            servo=(method in ("color", "shape")), rescatter=False, episode_end_fn=ep_end,
                            lifelong=True, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
                            arm_reset=False)
