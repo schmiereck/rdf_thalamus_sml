@@ -1924,14 +1924,18 @@ def run_self_learning_steering(headless=False):
         # the judge's DISTANCE estimate is nearly unbiased (median |self-true| 0-3mm) but a single
         # 15mm bar discarded 48% of TRUE deliveries (77/159) -- exactly the "sieht fuer mich OK
         # abgelegt aus, Log sagt unsicher" episodes the user watched.  In the 15-25mm band the
-        # judge's "geliefert" is right 85-100% per object, so:  WORLD-MODEL success label accepts
-        # up to ACT23_WORLD_TOL (25mm; the ensemble tolerates the ~13% label noise, and positives
-        # were the measured yield bottleneck), SELF-IMITATION keeps the strict imit_tol bar (an
-        # imitated failure poisons the policy directly).  The U initially kept the strict bar for
-        # both (band precision 62%: its blob merged with the claw in the 24mm slot); re-measured
-        # after the 32mm slot widening (498-ep run 2026-07-20) the U band is 92% = cube level, so
-        # the clamp is lifted -- U now uses the same bars as every object.
+        # judge's "geliefert" is right 85-100% per object EXCEPT the U, so:  WORLD-MODEL success
+        # label accepts up to ACT23_WORLD_TOL (25mm; the ensemble tolerates the ~13% label noise,
+        # and positives were the measured yield bottleneck), SELF-IMITATION keeps the strict
+        # imit_tol bar (an imitated failure poisons the policy directly), and the U keeps the strict
+        # bar for BOTH.  The U band was briefly un-clamped after the 32mm slot (498-ep run showed
+        # 92%, 12/13) but that did NOT replicate: the 746-ep run 2026-07-21 measured 54% (7/13,
+        # pooled 73%) with 6 false-positive success labels leaking in -- U's blob still merges with
+        # the claw, and U's bottleneck is mechanical (5 dose runs), not the action, so extra U
+        # labels have low value.  Clamp re-instated.
         world_tol = float(os.environ.get("ACT23_WORLD_TOL", "0.025"))
+        if body == "obj_U":
+            world_tol = min(world_tol, imit_tol)
         if os.environ.get("ACT23_WORLD_LABEL", "selbst") == "welt" or s_ok is None:
             delivered = bool(res.get("ok", False)); confident = delivered; lbl_src = "Welt"
             world_conf = delivered
