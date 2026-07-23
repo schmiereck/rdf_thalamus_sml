@@ -64,7 +64,7 @@ from pc_cvnn.arm_modules.runtime_policy import RuntimePolicyModule
 from pc_cvnn.arm_modules import colour_openset
 from pc_cvnn.arm_modules.colour_openset import ColourOpenSetModule
 from pc_cvnn.arm_modules.planner import GoalModule2D, LO as GOAL_LO, HI as GOAL_HI
-from pc_cvnn.arm_modules.latent_goal import LatentGoalServo
+from pc_cvnn.arm_modules.latent_goal import LatentGoalServo, LatentGoalLanguage
 from pc_cvnn.arm_modules.curiosity import DistanceNovelty
 from pc_cvnn.arm_modules.self_eval import SelfEvalModule
 from pc_cvnn.arm_modules.object_memory import ObjectMemoryModule
@@ -806,6 +806,7 @@ def run_self_learning_steering(headless=False):
         _rec = lgoal.train(steps=4000)
         print(f"  [Stufe 4] Ziel-Latent bereit (RoPE-Latent={_gm.rope}): "
               f"Latent-Inverse-Babble {_rec:.1f} mm", flush=True)
+    lgoal_lang = LatentGoalLanguage(lgoal)
 
     # STAGE 4b: the planner DREAMS its practice targets (act21 CuriosityPlanner.dream, wired into the
     # auto-run): candidate goals are scored by DISTANCE-NOVELTY in the GOAL-LATENT space -- the SAME
@@ -1785,7 +1786,7 @@ def run_self_learning_steering(headless=False):
                            teacher_log_fn=(choreo_log if use_net else None),
                            policy_log_fn=((lambda s, out: pol_trace.append((s.copy(), out.copy())))
                                           if use_net else None),
-                           post_goal_fn=(lambda c, o, g: lgoal.set_goal(g)),   # ALWAYS: the self-judge
+                           post_goal_fn=(lambda c, o, g: lgoal.set_goal_vector(g) if (isinstance(g, np.ndarray) and g.ndim==1 and len(g)>2) else lgoal.set_goal(g)),
                            #   (seval) needs the episode's goal latent even in "Ziel: Koord" mode
                            place_servo_fn=((lambda hxy: lgoal.servo(hxy, gain=0.6)) if use_latent else None),
                            servo=(method in ("color", "shape")), rescatter=False, episode_end_fn=ep_end,
@@ -2097,14 +2098,17 @@ def run_self_learning_steering(headless=False):
             state.target_idx = int(crng.integers(len(state.MARKERS)))
             state.set_marker_xy(state.target_idx, best_p); state.sync_active()
             if DREAM:
+                lgoal.set_goal_vector(best_z)
                 dream_nov.visit(best_z); del dream_nov.seen[:-40]   # bounded like tgt_visited: old
                 #   practice fades, the workspace stays forever explorable (no novelty starvation)
             else:
+                lgoal.set_goal(best_p)
                 tgt_visited.append(np.asarray(best_p, float)); del tgt_visited[:-40]
         verb = "träumt Ziel" if DREAM else "neues Ziel"
+        lang_info = f" | {lgoal_lang.format_latent_message(best_z, tag='z_g')}" if DREAM and best_z is not None else ""
         return (f"[curiosity] übt '{lbl}' (Fortschritt {lp_best:+.2f}, σ={sd_best:.2f})"
                 + (f", {verb} [{best_p[0]:.2f},{best_p[1]:.2f}]"
-                   + (f" (Latent-Neuheit {best_nov:.2f})" if DREAM else "")
+                   + (f" (Latent-Neuheit {best_nov:.2f}){lang_info}" if DREAM else "")
                    if best_p is not None else ""))
 
     def bilanz_line(bilanz, obj_hist):

@@ -68,6 +68,22 @@ class LatentGoalServo:
     def set_goal(self, goal_xy):
         self.z_g = self.encode_world(goal_xy)
 
+    def set_goal_vector(self, z_g):
+        """Set the goal directly as a latent vector (first-class latent goal)."""
+        self.z_g = np.asarray(z_g)
+
+    def get_goal_vector(self):
+        """Return the current latent goal vector."""
+        return self.z_g
+
+    def decode_goal_vector(self, z_g=None):
+        """Decode a latent goal vector back into (x, y) world coordinates via dream decode."""
+        target_z = self.z_g if z_g is None else np.asarray(z_g)
+        if target_z is None:
+            return np.array([0.0, 0.15])
+        grid_pos = self.gm.decode_dream(target_z)
+        return grid_to_world(grid_pos)
+
     def latent_error(self, obj_xy):
         return float(np.linalg.norm(self.z_g - self.encode_world(obj_xy)))
 
@@ -82,6 +98,39 @@ class LatentGoalServo:
         return np.clip(np.asarray(obj_xy, float) + dpos, LO, HI)
 
 
+class LatentGoalLanguage:
+    """Etappe 1: Vectorial Latent Language & Goal Composition.
+
+    Allows specifying goals via latent vector algebra z_goal = z_base + alpha * z_offset,
+    decoding latent vectors, and formatting latent messages for communication.
+    """
+
+    def __init__(self, servo: LatentGoalServo):
+        self.servo = servo
+
+    def compose_goal(self, base_xy, delta_xy=None, alpha=1.0):
+        """Compose a latent goal vector z_g from a base position and an optional latent offset vector."""
+        z_base = self.servo.encode_world(base_xy)
+        if delta_xy is None:
+            return z_base
+        z_delta = self.servo.encode_world(np.clip(np.asarray(base_xy) + np.asarray(delta_xy), LO, HI)) - z_base
+        return z_base + alpha * z_delta
+
+    def format_latent_message(self, z_g, tag="Latent-Goal"):
+        """Format a human-readable latent message summarizing vector norm, phase/energy, and decoded xy."""
+        z_arr = np.asarray(z_g)
+        norm_val = float(np.linalg.norm(z_arr))
+        is_complex = np.iscomplexobj(z_arr)
+        real_norm = float(np.linalg.norm(np.real(z_arr)))
+        decoded_xy = self.servo.decode_goal_vector(z_arr)
+        if is_complex:
+            mean_phase = float(np.angle(z_arr).mean())
+            return (f"[{tag}] z_g dim={len(z_arr)} (RoPE complex) | |z|={norm_val:.3f} "
+                    f"| phase={mean_phase:+.2f} rad | xy_dec=[{decoded_xy[0]:.3f}, {decoded_xy[1]:.3f}]")
+        return (f"[{tag}] z_g dim={len(z_arr)} (real) | |z|={norm_val:.3f} "
+                f"| xy_dec=[{decoded_xy[0]:.3f}, {decoded_xy[1]:.3f}]")
+
+
 # --------------------------------------------------------------------------- #
 def main():
     """Standalone: latent-servo convergence + robustness vs open-loop decode under a decode bias."""
@@ -90,6 +139,8 @@ def main():
     gm = GoalModule2D(rng=np.random.default_rng(7)); gm.pretrain(int(os.environ.get("LG_GM_STEPS", "8000")))
     servo = LatentGoalServo(gm, rng=np.random.default_rng(1))
     rec = servo.train(steps=4000)
+    lang = LatentGoalLanguage(servo)
+
     print("=" * 72)
     print("  LatentGoalServo — execute on the latent difference (goal-as-prior)")
     print(f"  GoalModule decode error {gm.decode_error():.2f} grid-units;  latent-inverse babble {rec:.1f} mm")
@@ -98,7 +149,11 @@ def main():
     lo, hi = LO + 0.1 * SPAN, HI - 0.1 * SPAN
     ls_err, ol_err = [], []
     for _ in range(40):
-        goal = rng.uniform(lo, hi); servo.set_goal(goal)
+        goal = rng.uniform(lo, hi)
+        # Etappe 1: Set goal vector directly
+        z_goal = servo.encode_world(goal)
+        servo.set_goal_vector(z_goal)
+
         # open-loop: decode the goal latent once (carries the decode reconstruction bias)
         ol = grid_to_world(gm.decode_dream(servo.z_g))
         ol_err.append(np.linalg.norm(ol - goal) * 1000)
@@ -112,6 +167,8 @@ def main():
     print(f"  reach the TRUE goal:  open-loop decode  {np.mean(ol_err):5.1f} mm")
     print(f"                        latent servo      {np.mean(ls_err):5.1f} mm")
     print("-" * 72)
+    msg = lang.format_latent_message(z_goal, tag="Etappe-1 Test")
+    print(f"  Latent Language Message: {msg}")
     print("  Read: the closed-loop latent servo converges to where the CURRENT object's latent matches")
     print("  the goal latent -> it reaches the true goal, side-stepping decode_dream's reconstruction bias.")
     print("=" * 72)
@@ -119,3 +176,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
