@@ -1799,6 +1799,18 @@ def run_self_learning_steering(headless=False):
             # contains the carry.  The offline script pairs it with relwrist/grasp_obj + the outcome.
             dy = (np.degrees(sim.obj_yaw(body) - snap[body][2]) + 180.0) % 360.0 - 180.0
             print(f"    [YawAB-End] {body} dyaw {dy:+.1f}", flush=True)
+            # PLACE diagnosis (measurement-only, 2026-07-23): the 746-ep + dose logs showed L place
+            # error is GRASP-driven (central+aligned grasp -> median 19mm/70% delivered; off-centre or
+            # mirrored -> ~48% gross) EXCEPT a ~5% residual that flings the object 100-285mm despite a
+            # perfect grasp -- bimodal = a discrete event (release-flick / lift-whip / skitter off the
+            # small table), not gradual place scatter.  Flag those: end position outside the reach area
+            # = flung off, so the GUI watcher knows which episodes to inspect for the mechanism.
+            _e = sim.obj_pos(body)[:2]
+            _rb = [float(os.environ["ACT_REACH_X0"]), float(os.environ["ACT_REACH_X1"]),
+                   float(os.environ["ACT_REACH_Y0"]), float(os.environ["ACT_REACH_Y1"])]
+            _off = not (_rb[0] - 0.01 <= _e[0] <= _rb[1] + 0.01 and _rb[2] - 0.01 <= _e[1] <= _rb[3] + 0.01)
+            _trav = 1000.0 * float(np.linalg.norm(_e - snap[body][0][:2]))
+            print(f"    [PlaceAB] {body} Weg {_trav:.0f}mm{'  VON-FLAECHE-GEFLOGEN' if _off else ''}", flush=True)
         _fsv = getattr(vc, "_fsv", None)
         if FOVEA_SERVO != "0" and _fsv and (_fsv["nf"] or _fsv["nd"]):
             # measurement line (shadow AND live): how often the net belief carried the servo vs the
