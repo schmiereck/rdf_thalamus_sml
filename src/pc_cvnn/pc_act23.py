@@ -413,7 +413,7 @@ class CommandState23:
     def label(self):
         act = "Greifen" if self.action == "grasp" else "Schieben"
         pol = "Selbst-gelernt" if self.policy == "self" else "Teacher"
-        ch = "Netz" if self.choreo == "netz" else "FSM"
+        ch = {"netz": "Netz", "attractor": "Attraktor"}.get(self.choreo, "FSM")
         zl = " (latent)" if self.goalmode == "latent" else ""
         return f"{self.selected()[0]} | {act} | Greifer: {pol} | Choreo: {ch} | Ziel {self.target_idx + 1}{zl}"
 
@@ -531,10 +531,14 @@ class CommandPanel23:
         self.bAuto.ax.set_facecolor(self.bAuto.color); self.fig.canvas.draw_idle()
 
     def _toggle_choreo(self, _e):
-        self.state.choreo = "netz" if self.state.choreo == "fsm" else "fsm"
-        net = self.state.choreo == "netz"
-        self.bCh.label.set_text("Choreo: Netz" if net else "Choreo: FSM")
-        self.bCh.color = "#2a5a7a" if net else "#5a3a3a"
+        # cycle FSM -> Netz -> Attractor (Etappe 3: latent-attractor place planning replaces the
+        # latent servo; still net-family, the runtime policy drives the grasp) -> FSM
+        nxt = {"fsm": "netz", "netz": "attractor", "attractor": "fsm"}
+        self.state.choreo = nxt.get(self.state.choreo, "fsm")
+        lbl = {"fsm": "Choreo: FSM", "netz": "Choreo: Netz", "attractor": "Choreo: Attraktor"}
+        col = {"fsm": "#5a3a3a", "netz": "#2a5a7a", "attractor": "#5a2a7a"}
+        self.bCh.label.set_text(lbl[self.state.choreo])
+        self.bCh.color = col[self.state.choreo]
         self.bCh.ax.set_facecolor(self.bCh.color); self._refresh()
 
     def _toggle_goalmode(self, _e):
@@ -1663,7 +1667,9 @@ def run_self_learning_steering(headless=False):
         # rules (the user's no-runtime-rules principle: the net decides, conditioned on the perceived
         # form descriptor).  L/U/T get own startup trials now; the teacher path below remains as pure
         # TRAINING scripting whose choices are logged as demonstrations.
-        use_net = state.choreo == "netz" and runtime.trained   # decided HERE: it also gates exploration
+        use_net = state.choreo in ("netz", "attractor") and runtime.trained   # decided HERE: it also gates
+        #   exploration.  "attractor" is a NETZ-family mode: the runtime policy still drives the grasp;
+        #   only the latent PLACE servo is replaced by the model-based attractor plan (Etappe 3, below).
         if state.policy == "self" and fe is not None:
             n_cand = 24 if (state.auto and not use_net) else 0  # EXPLORE only in the Auto self-play (random
             #   offset/grip candidates); a MANUAL command EXPLOITS the structured grid (offset-0 wrists x
@@ -1777,7 +1783,7 @@ def run_self_learning_steering(headless=False):
         # STAGE 2: "Choreo: Netz" -> the learned runtime policy drives the sub-goals; the reactive
         # teacher LABELS the visited states either way (log_fn on FSM runs = behaviour data, teacher_
         # log_fn on policy runs = true DAgger), so every episode trains the choreography lifelong.
-        if state.choreo == "netz" and not runtime.trained:
+        if state.choreo in ("netz", "attractor") and not runtime.trained:
             print("    [Stufe 2] Choreo-Netz noch nicht trainiert -- FSM fährt", flush=True)
         # STAGE 4a: "Ziel: Latent" -> the committed goal becomes a LATENT (post_goal_fn encodes it
         # once); while the object is carried, place_servo_fn drives the place target by the latent
@@ -1890,17 +1896,27 @@ def run_self_learning_steering(headless=False):
                 print(f"      [su-dbg] hand={np.round(hxy_end,3).tolist()} obj_true="
                       f"{np.round(sim.obj_pos(body)[:2],3).tolist()} strict={le.get('n_strict')} "
                       f"cands={le.get('n_cands')} cand_pos={le.get('cand_pos')}", flush=True)
-        # ETAPPE 2 (Latent Dynamics): Observe transition (z_t, action, z_next) & train transition dynamics
-        try:
-            z_t_dyn = lgoal.get_goal_vector()
-            if z_t_dyn is not None:
-                z_next_dyn = lgoal.encode_world(sim.obj_pos(body)[:2])
-                lat_dyn.observe(z_t_dyn, action, z_next_dyn)
-                surp = lat_dyn.predict_surprise(z_t_dyn, action, z_next_dyn)
+        # ETAPPE 2 (Latent Dynamics): observe THIS episode's latent transition -- the object moved from
+        # its start pose to its end pose under the executed action -- and train the transition model.
+        # BUGFIX 2026-07-24: the previous code used an undefined name `action` (the action is `a_exec`)
+        # inside a bare `except: pass`, so it raised a NameError EVERY episode and trained NOTHING for
+        # the whole 314-ep run (the [Latent-Dynamics] line never printed).  Now: real (z_start, a_exec,
+        # z_end) transition, skip teacher episodes (a_exec None), and errors are LOGGED not swallowed.
+        # NOTE: this is an EPISODE-LEVEL transition (one per episode), not per-step -- coarse but honest;
+        # a_exec is the 6-dim world-model action (the dynamics module truncates to its action_dim).
+        if a_exec is not None:
+            try:
+                _a_dyn = np.asarray(a_exec, float)
+                z_start_dyn = lgoal.encode_world(snap[body][0][:2])
+                z_end_dyn = lgoal.encode_world(sim.obj_pos(body)[:2])
+                lat_dyn.observe(z_start_dyn, _a_dyn, z_end_dyn)
+                surp = lat_dyn.predict_surprise(z_start_dyn, _a_dyn, z_end_dyn)
                 loss_d = lat_dyn.train(epochs=5)
-                print(f"    [Latent-Dynamics] Übergang beobachtet -> Surprise S={surp:.3f} | MSE={loss_d:.5f}", flush=True)
-        except Exception as e:
-            pass
+                if os.environ.get("ACT23_YAW_AB", "0") == "1":
+                    print(f"    [Latent-Dynamics] Übergang beobachtet -> Surprise S={surp:.3f} | "
+                          f"MSE={loss_d:.5f} | Puffer {len(lat_dyn.buffer_z)}", flush=True)
+            except Exception as e:
+                print(f"    [Latent-Dynamics] FEHLER: {type(e).__name__}: {e}", flush=True)
         # SCENE housekeeping (user-observed degeneration over long auto runs): an object DRAGGED outside
         # the reachable workspace by a failed grasp stays out FOREVER (the restore puts non-commanded
         # objects back on their pre-command = out pose; a commanded one keeps its end pose) -- every
@@ -2205,7 +2221,7 @@ def run_self_learning_steering(headless=False):
             ok, err = run_one()
             print(f"  [Auto {ep}] {'GELIEFERT' if ok else 'NICHT geliefert'}  |  Abstand {err:.0f} mm",
                   flush=True)
-            bilanz["netz" if state.choreo == "netz" else "fsm"].append(bool(ok))
+            bilanz["netz" if state.choreo in ("netz", "attractor") else "fsm"].append(bool(ok))
             obj_hist.append((state.OBJECTS[state.sel][0], bool(ok)))
             if (ep + 1) % 10 == 0:
                 print(bilanz_line(bilanz, obj_hist), flush=True)
