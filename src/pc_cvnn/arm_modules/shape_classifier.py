@@ -597,22 +597,29 @@ class ShapeClassifierModule(ArmModule):
             # gripper spans cleanly.  Best for the thin-bar shapes (the cube-built / tip / wrist variants were
             # all marginal; this v1 grasped the thin-bar L well).  No wrist (orientation gave no gain).
             grasp = ctr
+            grasp_dense = ctr                                              # DENSEST material point (distance-
+            #   transform max) = the solid BASE of a concave shape; the nearest-material grasp above lands on
+            #   the THIN inner rim of a U (centroid sits in the concavity) -> "greift ins Leere".  Exposed so
+            #   a caller can grip the base instead (ACT23_U_DENSEGRASP; 746-log U mechanism-ID 2026-07-24).
             gcands = []
             if self.H is not None:
                 W = self._px_to_world(np.column_stack([xs, ys]))            # world coords of the component px
                 grasp = W[int(np.argmin(np.linalg.norm(W - ctr, axis=1)))]  # nearest material to the centroid
-                if cands:                                                   # grasp-point candidate SAMPLING
+                want_dense = cands or os.environ.get("ACT23_U_DENSEGRASP", "1") != "0"
+                if want_dense:                                             # grasp-point candidate SAMPLING
                     dist = ndimage.distance_transform_edt(comp)             # local material thickness (px)
                     dv = dist[ys, xs]
-                    order = np.argsort(-dv)
-                    for i in order:
-                        if dv[i] < max(2.0, 0.45 * float(dv[order[0]])):
-                            break                                           # thin rim: fingers find no hold
-                        p = W[i]
-                        if all(float(np.linalg.norm(p - q)) > 0.012 for q in gcands):
-                            gcands.append(p)
-                        if len(gcands) >= 6:
-                            break
+                    grasp_dense = W[int(np.argmax(dv))]                     # thickest = solid base
+                    if cands:                                              # grasp-point candidate SAMPLING
+                        order = np.argsort(-dv)
+                        for i in order:
+                            if dv[i] < max(2.0, 0.45 * float(dv[order[0]])):
+                                break                                       # thin rim: fingers find no hold
+                            p = W[i]
+                            if all(float(np.linalg.norm(p - q)) > 0.012 for q in gcands):
+                                gcands.append(p)
+                            if len(gcands) >= 6:
+                                break
             rgb = img[ys, xs].astype(float).mean(0) / 255.0     # component CHROMATICITY (stage-3 colour
             csum = float(rgb.sum())                             #   open-set: brightness-normalised, so
             chroma = rgb / csum if csum > 1e-6 else rgb         #   shading/position largely cancel)
@@ -622,6 +629,7 @@ class ShapeClassifierModule(ArmModule):
                         "chroma": chroma,
                         "px": np.array([xs.mean(), ys.mean()]),
                         "grasp_cands": gcands,                 # perception-grounded grasp-point candidates
+                        "grasp_dense": grasp_dense,            # densest (base) point; ACT23_U_DENSEGRASP griff
                         "wpx": (W[::3] if (wpx and self.H is not None) else None),   # component material in
                         "desc": desc})                         #   world coords (judge: merged-blob recovery)
         return out                                             #   OPEN-WORLD (any object yields one, no class slot)

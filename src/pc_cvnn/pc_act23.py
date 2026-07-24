@@ -793,6 +793,71 @@ def run_self_learning_steering(headless=False):
     else:
         shape_clf = _fresh_shape_clf()
 
+    # ACT23_UDIAG=1: U-GRASP-POINT diagnosis (mechanism-ID, no fix).  The 746-log showed U fails
+    # mostly as "greift ins Leere" (47% nicht-gegriffen, |dyaw|~7).  Hypothesis (code-grounded,
+    # shape_classifier:599-603): select() returns grasp_xy = MATERIAL nearest the CENTROID, and a U's
+    # centroid sits in its concavity -> the grasp lands on a THIN inner rim, not the solid base.  This
+    # renders the U occupancy + overlays centroid, the select() grasp point (nearest-material, what
+    # runs now) and the DENSEST point (distance-transform max = base) with their material thickness,
+    # so the claim is SEEN before any change.  Writes log/u_grasp_diag.png and exits.
+    if os.environ.get("ACT23_UDIAG") == "1":
+        import matplotlib; matplotlib.use("Agg")
+        import matplotlib.pyplot as _plt
+        from scipy import ndimage as _ndi
+        sc = shape_clf
+        saved_mp = sim.d.mocap_pos.copy()
+        poses = [((0.0, 0.15), 0.0), ((0.05, 0.18), 0.9), ((-0.03, 0.13), 2.2)]
+        fig, axes = _plt.subplots(1, len(poses), figsize=(4.2 * len(poses), 4.4))
+        for ax, (xy, yaw) in zip(np.atleast_1d(axes), poses):
+            for o in ALL:
+                sim.set_object(o, [0.5, -0.6], z=0.012)
+            sim.set_object("obj_U", list(xy), z=0.012, yaw=yaw)
+            mujoco.mj_forward(sim.m, sim.d)
+            img = sc._render_u8(sim); mask = sc._mask(img)
+            labels, n = _ndi.label(mask)
+            # largest component = the U
+            comp = None; best_a = 0
+            for lab in range(1, n + 1):
+                c = (labels == lab).astype(np.float32)
+                if c.sum() > best_a:
+                    best_a = c.sum(); comp = c
+            ys, xs = np.nonzero(comp)
+            dist = _ndi.distance_transform_edt(comp)                    # material thickness (px)
+            dv = dist[ys, xs]
+            i_dense = int(np.argmax(dv))                                # thickest = solid base
+            if sc.H is not None:
+                ctr_w = sc._centroid(comp)
+                W = sc._px_to_world(np.column_stack([xs, ys]))
+                i_sel = int(np.argmin(np.linalg.norm(W - ctr_w, axis=1)))   # what select() uses
+                move_mm = 1000.0 * float(np.linalg.norm(W[i_sel] - W[i_dense]))
+                unit = "mm"
+            else:                                                       # no homography -> px space
+                cpx = np.array([xs.mean(), ys.mean()])
+                i_sel = int(np.argmin(np.linalg.norm(np.column_stack([xs, ys]) - cpx, axis=1)))
+                move_mm = float(np.hypot(xs[i_sel] - xs[i_dense], ys[i_sel] - ys[i_dense]))
+                unit = "px"
+            # centroid in px (mean of component)
+            cx, cy = xs.mean(), ys.mean()
+            thick_sel = float(dist[ys[i_sel], xs[i_sel]])
+            thick_dense = float(dv[i_dense])
+            ax.imshow(mask, cmap="gray", origin="upper")
+            ax.plot(cx, cy, "b+", ms=14, mew=2.5, label="Schwerpunkt (Konkavität)")
+            ax.plot(xs[i_sel], ys[i_sel], "rx", ms=13, mew=2.8,
+                    label=f"select()-Griff  Dicke {thick_sel:.1f}px")
+            ax.plot(xs[i_dense], ys[i_dense], "go", ms=11, mfc="none", mew=2.6,
+                    label=f"dichtester (Basis)  Dicke {thick_dense:.1f}px")
+            ax.set_title(f"U yaw {yaw:.1f} | Griff->Basis {move_mm:.0f}{unit}", fontsize=9)
+            ax.legend(fontsize=7, loc="upper right")
+            ax.axis("off")
+            print(f"  [UDIAG] yaw {yaw:.2f}: select-Dicke {thick_sel:.1f}px  "
+                  f"dichtest-Dicke {thick_dense:.1f}px  Griff->Basis {move_mm:.0f}{unit}", flush=True)
+        sim.d.mocap_pos[:] = saved_mp; mujoco.mj_forward(sim.m, sim.d)
+        outp = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__)))), "log", "u_grasp_diag.png")
+        fig.tight_layout(); fig.savefig(outp, dpi=110)
+        print(f"  [UDIAG] geschrieben -> {outp}", flush=True)
+        raise SystemExit(0)
+
     # STAGE 4a: the place TARGET as a LATENT state (the act6 goal-as-prior, wired into the GUI).
     # The commanded goal is ENCODED once into the goal-module latent; while the object is carried,
     # the place target is DRIVEN by the latent DIFFERENCE between goal latent and the hand's latent
@@ -1310,6 +1375,17 @@ def run_self_learning_steering(headless=False):
         """Add the model's self-selected grasp-point offset to a perceived grasp target (stage 1)."""
         return np.asarray(xy, float) + (sel_off["dxy"] if sel_off["dxy"] is not None else 0.0)
 
+    U_DENSEGRASP = os.environ.get("ACT23_U_DENSEGRASP", "1") != "0"   # DEFAULT ON (U-only A/B 2026-07-24:
+    #   +11pp Lieferung, 16->25/80; the win is real flat U carries; ACT23_U_DENSEGRASP=0 restores the rim grip)
+
+    def _gp(det, body):
+        """Grasp point of a detection: the DENSEST (solid-base) point for the U under ACT23_U_DENSEGRASP
+        -- the default nearest-material grasp_xy lands on the U's thin inner rim (centroid in the
+        concavity) -> 'greift ins Leere' (746-log U mechanism-ID).  Every other object keeps grasp_xy."""
+        if U_DENSEGRASP and body == "obj_U" and det.get("grasp_dense") is not None:
+            return det["grasp_dense"]
+        return det["grasp_xy"]
+
     def perceive(cmd):
         _l, body, method = state.selected()
         if method == "shape":                                  # L/U: FORM perception (shape classifier)
@@ -1319,13 +1395,13 @@ def run_self_learning_steering(headless=False):
             if det is not None:
                 _sel_seed.update(key=state.SHAPE_KEY[body], xy=np.asarray(det["pos"], float),
                                  px=np.asarray(det["px"], float),
-                                 gxy=np.asarray(det["grasp_xy"], float))   # raw seed grasp point: the
+                                 gxy=np.asarray(_gp(det, body), float))    # raw seed grasp point: the
                 #   fovea servo shifts THIS by the gaze's world motion (grasp geometry preserved)
                 if os.environ.get("ACT23_DEBUG", "0") == "1":
                     print(f"    [dbg] {body} via Formklasse: Greifziel "
-                          f"{np.round(_off(det['grasp_xy']), 3).tolist()} "
+                          f"{np.round(_off(_gp(det, body)), 3).tolist()} "
                           f"(wahr {np.round(sim.obj_pos(body)[:2], 3).tolist()})", flush=True)
-                return _off(det["grasp_xy"]), None, "grasp"
+                return _off(_gp(det, body)), None, "grasp"
             if os.environ.get("ACT23_DEBUG", "0") == "1":
                 print(f"    [dbg] {body}: Formklasse NICHT gefunden -> privilegierter Rückfall", flush=True)
             return _off(sim.obj_pos(body)[:2]), None, "grasp"  # perception missed -> privileged fallback
@@ -1439,7 +1515,7 @@ def run_self_learning_steering(headless=False):
                 else:                                          # tracking: nearest to the belief
                     best = min(cands, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"]) - mem["xy"])))
                 if mem["xy"] is None or float(np.linalg.norm(np.asarray(best["pos"]) - mem["xy"])) <= 0.05:
-                    obs = _off(best["grasp_xy"])               # correct toward the GRASP point (+ the learned
+                    obs = _off(_gp(best, body))                # correct toward the GRASP point (+ the learned
                     conf = (float(best["prob"]) if key is not None   # offset, else the servo would fight it)
                             else float(np.clip(1.0 - colours.classify(best["chroma"])[1]
                                                / (2.0 * colour_openset.TH), 0.0, 1.0)))
@@ -1986,7 +2062,13 @@ def run_self_learning_steering(headless=False):
         # labels have low value.  Clamp re-instated.
         world_tol = float(os.environ.get("ACT23_WORLD_TOL", "0.025"))
         if body == "obj_U":
-            world_tol = min(world_tol, imit_tol)
+            # U was clamped to imit_tol (15mm) after the 746-run's 6 false-positives (U blob merges with
+            # the claw).  But the U-densegrasp fix (2026-07-24) delivers the U FLAT at ~18-20mm -- real wins
+            # (self==Welt) that the 15mm bar discarded, starving the world model of exactly the grasps the
+            # fix enabled.  User decision: loosen the WORLD-MODEL bar to 22mm to credit them (the ensemble
+            # tolerates the noise); SELF-IMITATION keeps the strict 15mm imit_tol below (a borderline U grip
+            # must not be imitated straight into the policy).  FP risk re-opened -> WATCH the next full run.
+            world_tol = float(os.environ.get("ACT23_U_WORLD_TOL", "0.022"))
         if os.environ.get("ACT23_WORLD_LABEL", "selbst") == "welt" or s_ok is None:
             delivered = bool(res.get("ok", False)); confident = delivered; lbl_src = "Welt"
             world_conf = delivered
@@ -2015,6 +2097,14 @@ def run_self_learning_steering(headless=False):
                 # `not delivered` guard (measured): a never-lifted episode can still SHOVE the object
                 # onto the goal -- that must not label the action a failure (abstain below instead).
                 route, outcome = "Griff am Objekt fehlgeschlagen (Aktion)", False
+            elif world_conf and os.environ.get("ACT23_CREDIT_FLAT", "1") != "0":
+                # A CONFIDENT delivery (self-judge <world_tol; U=15mm) is a SUCCESS even when the object
+                # never rose >20mm.  The U-densegrasp A/B (2026-07-24) exposed this: the base grip carries
+                # the U FLAT to the goal (dyaw +-30-60, PlaceAB Weg ~65mm), delivering ~20mm WITHOUT tripping
+                # the lift gate -> the old "elif not lifted -> abstain" discarded the win (12 of 25 on-arm
+                # deliveries), starving the world model of exactly the grasps the fix enabled.  Guarded by
+                # world_conf (a shove-to-goal rarely lands <15mm) + reversible (ACT23_CREDIT_FLAT=0).
+                route, outcome = "sicher geliefert", True
             elif not lifted:
                 route, outcome = "nicht gegriffen (Policy)", None
             elif world_conf:
