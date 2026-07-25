@@ -35,6 +35,8 @@ IMIT_CAP = 12000       # SELF-IMITATION buffer (step 3): the (state, action) pai
 IMIT_WEIGHT = int(__import__("os").environ.get("ACT23_SELFIMIT_W", "2"))   # how many times a self-
 #                        imitation pair is repeated vs a DAgger sample (own validated successes count
 #                        more; the teacher is training wheels, the baby's own working moves lead)
+GRADED_IMIT = __import__("os").environ.get("ACT23_IMIT_GRADED", "1") != "0"   # weight each self-imitation
+#                        demo by the episode's placement QUALITY instead of a flat in/out bar (see train)
 _IMIT_BAL = __import__("os").environ.get("ACT23_IMIT_BAL", "0") == "1"     # per-key balanced imitation
 #                        mass at fit time (see train).  DEFAULT OFF (measured, U/cube alternation
 #                        ablations): the success-protection gate (end_episode) alone keeps the rare
@@ -111,7 +113,15 @@ class RuntimePolicyModule(ArmModule):
         return len(pend)
 
     # -- self-imitation (step 3): reinforce the policy's OWN validated successes --
-    def imitate(self, states, actions, key=None) -> int:
+    def _quals(self):
+        """Per-sample imitation QUALITY, migrating a pre-quality pickle to full weight (1.0)."""
+        q = getattr(self, "_Xq", None)
+        if q is None or len(q) != len(getattr(self, "_Xi", [])):
+            q = [1.0] * len(getattr(self, "_Xi", []))
+            self._Xq = q
+        return np.asarray(q, float)
+
+    def imitate(self, states, actions, key=None, qual=1.0) -> int:
         """Add (state, action) pairs the POLICY actually drove on a SELF-JUDGED successful episode.
         These are the agent's own working moves -- blended with the DAgger teacher labels at fit
         time and weighted IMIT_WEIGHT (own successes lead, the teacher is a floor).  Subsampled like
@@ -129,6 +139,7 @@ class RuntimePolicyModule(ArmModule):
             self._Xi, self._Yi = [], []
         if getattr(self, "_Xk", None) is None or len(self._Xk) != len(self._Xi):
             self._Xk = [None] * len(self._Xi)                 # migrate a pre-key pickle: unlabeled bucket
+        qs = self._quals().tolist()                           # migrate a pre-quality pickle (all 1.0)
         added = 0
         for j, (s, a) in enumerate(zip(states, actions)):
             if j % SUBSAMPLE:
@@ -136,12 +147,14 @@ class RuntimePolicyModule(ArmModule):
             self._Xi.append(np.asarray(s, float).copy())
             self._Yi.append(np.asarray(a, float).copy())
             self._Xk.append(key)
+            qs.append(float(qual))                            # how GOOD this episode was (see train)
             added += 1
         from collections import Counter
         while len(self._Xi) > IMIT_CAP:                       # evict the OLDEST sample of the FULLEST key
             top = Counter(self._Xk).most_common(1)[0][0]
             i = self._Xk.index(top)
-            del self._Xi[i]; del self._Yi[i]; del self._Xk[i]
+            del self._Xi[i]; del self._Yi[i]; del self._Xk[i]; del qs[i]
+        self._Xq = qs
         return added
 
     def imit_mix(self) -> dict:
@@ -185,7 +198,29 @@ class RuntimePolicyModule(ArmModule):
         if len(self._X) < 500:
             return                                    # too little to fit anything meaningful
         Xi, Yi = getattr(self, "_Xi", []), getattr(self, "_Yi", [])
-        if Xi and _IMIT_BAL:                          # DAgger labels + PER-KEY BALANCED self-imitation.
+        if Xi and GRADED_IMIT:
+            # GRADED SELF-IMITATION (the user's idea, 2026-07-25): weight each demo by HOW WELL that
+            # episode placed instead of letting a flat imit_tol bar decide in/out.  Measured on the
+            # 120-ep log: the strict 15mm bar discards 11 of 43 genuine hits (<=25mm), while widening
+            # it to 20mm would add 47% more demos at UNCHANGED one bad one -- graded weighting gets
+            # that without the either/or, since a 24mm demo simply pulls ~half as hard as a 5mm one.
+            # Uses the SAME AWR `w` hook as the key balance below and multiplies with it when both are
+            # on, so the two effects compose instead of overriding each other.  ACT23_IMIT_GRADED=0
+            # restores the flat behaviour.  Legacy pickles migrate at 1.0 (see _quals).
+            q = self._quals()
+            bal = np.ones(len(Xi))
+            if _IMIT_BAL:
+                from collections import Counter
+                K = getattr(self, "_Xk", None)
+                if K is None or len(K) != len(Xi):
+                    K = [None] * len(Xi)
+                cnt = Counter(K); mean = len(Xi) / len(cnt)
+                bk = {k: min(mean / c, 4.0) for k, c in cnt.items()}   # balance factor WITHOUT the
+                bal = np.array([bk[k] for k in K], float)              #   IMIT_WEIGHT (applied once below)
+            X = np.array(self._X + Xi); Y = np.array(self._Y + Yi)
+            w = np.concatenate([np.ones(len(self._X)), IMIT_WEIGHT * q * bal])
+            self.net.fit(X, Y, epochs=epochs, quiet=quiet, w=w)
+        elif Xi and _IMIT_BAL:                        # DAgger labels + PER-KEY BALANCED self-imitation.
             # MEASURED (U/cube alternation): balanced EVICTION alone does not save a rare skill -- its
             # few demos (~1-2% of the buffer) have no PULL against 24000 teacher rows whose labels
             # guard-free actively fight the learned close (the teacher hovers for the disabled reflex).

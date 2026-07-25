@@ -2453,20 +2453,35 @@ def run_self_learning_steering(headless=False):
         # (state, action) pairs the policy actually took become its OWN demonstrations, reinforcing what
         # worked FOR IT (blended with DAgger at fit time).  A skipped real success just loses a sample;
         # an imitated failure would poison -- hence the tight bar.  ACT23_SELFIMIT=0 disables.
+        # GRADED (user's idea): the flat imit_tol bar discarded 11 of 43 genuine hits (<=25mm) in the
+        # 120-ep log.  Graded, a demo no longer has to be all-or-nothing -- it enters with a WEIGHT
+        # (world_model.quality: 5mm ~0.96, 15mm 0.70, 24mm ~0.40), so a merely-ok placement pulls the
+        # policy proportionally less instead of being thrown away.  The admission bar widens to
+        # ACT23_IMIT_BAR (25mm).  ACT23_IMIT_GRADED=0 restores the flat imit_tol gate.
+        _gimit = os.environ.get("ACT23_IMIT_GRADED", "1") != "0"
+        imit_bar = float(os.environ.get("ACT23_IMIT_BAR", "0.025")) if _gimit else imit_tol
+        imit_ok = delivered and s_d is not None and s_d < imit_bar
         imitated = False
-        if (use_net and pol_trace and lifted and confident and not slipped
+        if (use_net and pol_trace and lifted and imit_ok and not slipped
                 and os.environ.get("ACT23_SELFIMIT", "1") == "1"):
-            added = runtime.imitate([s for s, _a in pol_trace], [a for _s, a in pol_trace], key=body)
+            _q = wm_quality(s_d) if _gimit else 1.0
+            added = runtime.imitate([s for s, _a in pol_trace], [a for _s, a in pol_trace],
+                                    key=body, qual=_q)
             imitated = added > 0
             mix = ", ".join(f"{k or 'alt'} {v}" for k, v in
                             sorted(runtime.imit_mix().items(), key=lambda kv: -kv[1]))
-            print(f"    [Selbst-Imitation] sichere Lieferung ({s_d * 1000:.0f}mm) -> +{added} "
-                  f"Demo-Schritte ({runtime.n_imit()} im Selbst-Puffer: {mix}); "
-                  f"Teacher-Zeilen dieser Episode verworfen (eigener Erfolg zählt)", flush=True)
+            print(f"    [Selbst-Imitation] Lieferung {s_d * 1000:.0f}mm (Gewicht {_q:.2f}) -> +{added} "
+                  f"Demo-Schritte ({runtime.n_imit()} im Selbst-Puffer: {mix})"
+                  f"{'; Teacher-Zeilen verworfen (eigener Erfolg zählt)' if confident else ''}",
+                  flush=True)
         elif use_net and pol_trace and lifted and delivered:
             print(f"    [Selbst-Imitation] Lieferung zu unsicher ({(s_d or 0) * 1000:.0f}mm) -- "
                   f"nicht imitiert", flush=True)
-        runtime.end_episode(keep=not imitated)                 # failure/uncertain -> the teacher's
+        # ENTKOPPELT: the widened bar must NOT also widen which episodes DISPLACE the teacher.  Dropping
+        # the teacher's correction rows stays tied to the STRICT confident bar (imit_tol) -- a merely-ok
+        # episode now contributes its own demos AND keeps the teacher's correction, which is exactly the
+        # regime where both signals are useful.  keep-behaviour is therefore unchanged from before.
+        runtime.end_episode(keep=not (imitated and confident))   # failure/uncertain -> the teacher's
         #   correction rows enter DAgger; a self-validated success keeps ONLY its own actions
         # STAGE 2 lifelong: refit the choreography on the aggregated teacher labels; report the SHADOW
         # divergence |policy - teacher| over this episode's VISITED states in BOTH modes -- on FSM
