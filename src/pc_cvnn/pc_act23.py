@@ -948,6 +948,161 @@ def run_self_learning_steering(headless=False):
     if _stale:                                                 #   itself at the next discovery glance
         print(f"  [Persistenz] verwaiste Farb-Bindungen entfernt: {_stale}", flush=True)
 
+    # ACT23_REDDIAG=1: RED<->L CONFUSION diagnosis (mechanism-ID, no fix).  The user watched the red
+    # cube command grasp the nearby L instead; the 24-ep GUI log shows red LOSING the fovea servo in
+    # 5 of 6 episodes (the [Fovea-Servo] line only prints on >0 frames -> the colour-keyed tracker
+    # found ZERO candidates all episode) and twice reporting "Blob-Verschmelzung erkannt".  The
+    # persisted classes are CLEAN (farbe-1 sits 0.023 from true red), so this is NOT class drift.
+    # Code-grounded hypothesis (shape_classifier:623): a component's chroma is the MEAN over all its
+    # pixels -- red fused with the orange L into ONE component averages to a mixed tone matching
+    # NEITHER class -> 0 candidates -> perceive() falls back to the old trained vc hex code (:1437),
+    # which is documented to fire on foreign objects.  Fix candidate to validate here: split the
+    # component's PIXELS by the self-learned colour classes (the same continuity idea self_eval uses
+    # after release, but anchored on COLOUR so it works BEFORE the grasp, with no hand anchor).
+    # Writes log/red_l_diag.png and exits.
+    if os.environ.get("ACT23_REDDIAG") == "1":
+        import matplotlib; matplotlib.use("Agg")
+        import matplotlib.pyplot as _plt
+        from scipy import ndimage as _ndi
+        sc = shape_clf
+        saved_mp = sim.d.mocap_pos.copy()
+        ck_red, ck_L = colour_of_body.get("obj_red"), colour_of_body.get("obj_L")
+        cnames = [n for n in colours.names if n in colours.classes]
+        MU = np.array([colours.classes[n]["mu"] for n in cnames])   # vectorised per-pixel classify
+        print(f"  [REDDIAG] Bindungen: obj_red='{ck_red}' obj_L='{ck_L}' | {len(cnames)} Farbklassen "
+              f"| TH={colour_openset.TH}", flush=True)
+        gaps = [0.070, 0.050, 0.038, 0.028]
+        fig, axes = _plt.subplots(1, len(gaps), figsize=(4.3 * len(gaps), 4.8))
+        for ax, gap in zip(np.atleast_1d(axes), gaps):
+            for o in ALL:
+                sim.set_object(o, [0.5, -0.6], z=0.012)
+            rp = np.array([-0.015, 0.155])
+            sim.set_object("obj_red", rp.tolist(), z=0.012)
+            sim.set_object("obj_L", (rp + np.array([gap, 0.0])).tolist(), z=0.012, yaw=0.4)
+            mujoco.mj_forward(sim.m, sim.d)
+            truth = np.asarray(sim.obj_pos("obj_red")[:2], float)
+            # (a) what the agent ACTUALLY sees today: whole-component chroma -> class
+            dets = sc.perceive_all(sim)
+            hits = [d for d in dets if colours.classify(d["chroma"])[0] == ck_red]
+            # (b) the same scene at pixel level, to test the colour split
+            sc._park_markers(sim)
+            img = sc._render_u8(sim); mask = sc._mask(img)
+            labels, n = _ndi.label(mask)
+            # the component containing the true red centre
+            rpx = sc._world_to_px(truth[None, :])[0] if sc.H is not None else None
+            lab_red = 0
+            if rpx is not None:
+                yy, xx = int(round(rpx[1])), int(round(rpx[0]))
+                if 0 <= yy < labels.shape[0] and 0 <= xx < labels.shape[1]:
+                    lab_red = int(labels[yy, xx])
+            if lab_red == 0:                                    # centre landed off-mask -> largest comp
+                sizes = _ndi.sum(mask, labels, range(1, n + 1))
+                lab_red = int(np.argmax(sizes)) + 1 if n else 0
+            comp = (labels == lab_red)
+            ys, xs = np.nonzero(comp)
+            prgb = img[ys, xs].astype(float)
+            psum = prgb.sum(1, keepdims=True)
+            pch = np.divide(prgb, psum, out=np.zeros_like(prgb), where=psum > 1e-6)
+            dmat = np.linalg.norm(pch[:, None, :] - MU[None, :, :], axis=2)   # (npx, nclass)
+            nearest = dmat.argmin(1); ndist = dmat.min(1)
+            assigned = np.where(ndist <= colour_openset.TH, nearest, -1)
+            i_red = cnames.index(ck_red) if ck_red in cnames else -2
+            sel = assigned == i_red
+            # component-level truth: is this ONE blob holding BOTH objects?
+            comp_ch = prgb.mean(0) / max(prgb.mean(0).sum(), 1e-6)
+            comp_cls, comp_d = colours.classify(comp_ch)
+            comp_ctr = sc._centroid(comp.astype(np.float32)) if sc.H is not None else None
+            err_whole = (1000.0 * float(np.linalg.norm(np.asarray(comp_ctr, float) - truth))
+                         if comp_ctr is not None else float("nan"))
+            err_split = float("nan"); split_ctr = None
+            if sel.sum() >= 8 and sc.H is not None:
+                Wsel = sc._px_to_world(np.column_stack([xs[sel], ys[sel]]))
+                split_ctr = Wsel.mean(0)
+                err_split = 1000.0 * float(np.linalg.norm(split_ctr - truth))
+            # (c) the SHIPPED method on the same scene -- validates the real code path, not this rehearsal
+            real = sc.perceive_colour(sim, colours, ck_red)
+            err_real, n_real = float("nan"), 0
+            if real:
+                rbest = min(real, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"]) - truth)))
+                err_real = 1000.0 * float(np.linalg.norm(np.asarray(rbest["pos"]) - truth))
+                n_real = int(rbest["area"])
+            print(f"  [REDDIAG] Lücke {gap*1000:.0f}mm: {n} Komponenten, Rot-Komp {comp.sum():.0f}px "
+                  f"-> Klasse '{comp_cls}' (d={comp_d:.3f}); perceive_all-Treffer auf '{ck_red}': "
+                  f"{len(hits)} | Pixel-Split: {sel.sum()}/{len(xs)} px als '{ck_red}' | "
+                  f"Fehler ganz {err_whole:.0f}mm vs Split {err_split:.0f}mm | "
+                  f"perceive_colour(): {len(real)} Det, {n_real}px, Fehler {err_real:.0f}mm", flush=True)
+            ov = np.zeros(mask.shape + (3,), float)
+            ov[..., 0] = mask * 0.35
+            ov[..., 1] = mask * 0.35
+            ov[..., 2] = mask * 0.35
+            ov[ys[sel], xs[sel]] = [1.0, 0.2, 0.2]              # pixels the split calls RED
+            ax.imshow(ov, origin="upper")
+            if rpx is not None:
+                ax.plot(rpx[0], rpx[1], "w+", ms=15, mew=2.5, label="wahres Rot")
+            ax.plot(xs.mean(), ys.mean(), "yo", ms=10, mfc="none", mew=2.4,
+                    label=f"Komp-Schwerpunkt ({err_whole:.0f}mm)")
+            if split_ctr is not None:
+                spx = sc._world_to_px(split_ctr[None, :])[0]
+                ax.plot(spx[0], spx[1], "cs", ms=10, mfc="none", mew=2.4,
+                        label=f"Farb-Split ({err_split:.0f}mm)")
+            ax.set_title(f"Lücke {gap*1000:.0f}mm | {n} Komp | Komp-Klasse '{comp_cls}'", fontsize=9)
+            ax.legend(fontsize=7, loc="upper right"); ax.axis("off")
+        sim.d.mocap_pos[:] = saved_mp; mujoco.mj_forward(sim.m, sim.d)
+        outp = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__)))), "log", "red_l_diag.png")
+        fig.tight_layout(); fig.savefig(outp, dpi=110)
+        print(f"  [REDDIAG] geschrieben -> {outp}", flush=True)
+
+        # BENCH: the same question END-TO-END over many random neighbour constellations, WITHOUT the
+        # learning loop.  A full A/B could not answer it: both arms ran bit-identical until the split
+        # first fired, then the trajectories diverged (different curiosity picks, different object
+        # counts) and the delivery delta became trajectory noise -- and the red/L fusion never even
+        # occurred headless.  This isolates PERCEPTION: place the L at a random offset around the red
+        # cube, ask what the colour path returns with and without the split, and score against truth.
+        rng = np.random.default_rng(int(os.environ.get("ACT23_SEED", "11")))
+        N = int(os.environ.get("ACT23_REDBENCH_N", "120"))
+        stat = {"fused": 0, "old_ok": 0, "old_err": [], "new_ok": 0, "new_err": [], "rec": 0}
+        for _ in range(N):
+            for o in ALL:
+                sim.set_object(o, [0.5, -0.6], z=0.012)
+            rp = np.array([rng.uniform(-0.08, 0.08), rng.uniform(0.11, 0.20)])
+            ang = rng.uniform(0, 2 * np.pi)
+            gap = rng.uniform(0.022, 0.075)                # spans fused .. clearly separate
+            sim.set_object("obj_red", rp.tolist(), z=0.012)
+            sim.set_object("obj_L", (rp + gap * np.array([np.cos(ang), np.sin(ang)])).tolist(),
+                           z=0.012, yaw=float(rng.uniform(0, 2 * np.pi)))
+            mujoco.mj_forward(sim.m, sim.d)
+            truth = np.asarray(sim.obj_pos("obj_red")[:2], float)
+            saved2 = sim.d.mocap_pos.copy()
+            dets = sc.perceive_all(sim)
+            old = [d for d in dets if d["pos"] is not None
+                   and colours.classify(d["chroma"])[0] == ck_red]
+            if not old:
+                stat["fused"] += 1                         # today: 0 candidates -> vc fallback (grasps L)
+                new = sc.perceive_colour(sim, colours, ck_red)
+                if new:
+                    stat["rec"] += 1
+                    b = min(new, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"]) - truth)))
+                    e = 1000.0 * float(np.linalg.norm(np.asarray(b["pos"]) - truth))
+                    stat["new_err"].append(e); stat["new_ok"] += int(e < 15.0)
+            else:
+                b = min(old, key=lambda d: colours.classify(d["chroma"])[1])
+                e = 1000.0 * float(np.linalg.norm(np.asarray(b["pos"]) - truth))
+                stat["old_err"].append(e); stat["old_ok"] += int(e < 15.0)
+            sim.d.mocap_pos[:] = saved2; mujoco.mj_forward(sim.m, sim.d)
+        sim.d.mocap_pos[:] = saved_mp; mujoco.mj_forward(sim.m, sim.d)
+        ne, oe = stat["new_err"], stat["old_err"]
+        print(f"\n  [REDBENCH] {N} zufällige Rot+L-Konstellationen (Lücke 22-75mm, kein Lernen):", flush=True)
+        print(f"    nicht verschmolzen: {N - stat['fused']}  -> alter Pfad findet Rot, "
+              f"Median {np.median(oe) if oe else float('nan'):.0f}mm, <15mm: {stat['old_ok']}/{len(oe)}",
+              flush=True)
+        print(f"    VERSCHMOLZEN      : {stat['fused']}  -> alter Pfad findet 0 Kandidaten "
+              f"(= vc-Rückfall, greift den Nachbarn)", flush=True)
+        print(f"      davon vom Farb-Split gerettet: {stat['rec']}/{stat['fused']}, "
+              f"Median {np.median(ne) if ne else float('nan'):.0f}mm, <15mm: {stat['new_ok']}/{len(ne)}",
+              flush=True)
+        raise SystemExit(0)
+
     def save_state():
         """Persist the four learners + the self-discovered command objects (every episode; cheap)."""
         if not PERSIST_STATE:
@@ -1377,6 +1532,10 @@ def run_self_learning_steering(headless=False):
 
     U_DENSEGRASP = os.environ.get("ACT23_U_DENSEGRASP", "1") != "0"   # DEFAULT ON (U-only A/B 2026-07-24:
     #   +11pp Lieferung, 16->25/80; the win is real flat U carries; ACT23_U_DENSEGRASP=0 restores the rim grip)
+    COLOUR_SPLIT = os.environ.get("ACT23_COLOUR_SPLIT", "1") != "0"   # MERGED-BLOB recovery for the colour
+    #   path (shape_classifier.perceive_colour): when a cube fuses with a neighbour and no component's mean
+    #   chroma matches its class, split the occupancy per PIXEL instead of dropping to the vc hex code that
+    #   grasps the neighbour.  ACT23_COLOUR_SPLIT=0 restores the old fallback.  Measured: 25mm -> 6mm.
 
     def _gp(det, body):
         """Grasp point of a detection: the DENSEST (solid-base) point for the U under ACT23_U_DENSEGRASP
@@ -1415,9 +1574,18 @@ def run_self_learning_steering(headless=False):
             if cname is not None and os.environ.get(knob, "0") != "1":
                 saved = sim.d.mocap_pos.copy()
                 dets = shape_clf.perceive_all(sim)
-                sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
                 cands = [d for d in dets if d["pos"] is not None
                          and colours.classify(d["chroma"])[0] == cname]
+                if not cands and COLOUR_SPLIT:
+                    # MERGED BLOB: this object fused with a neighbour, so no component's MEAN chroma
+                    # matches its class any more (measured: red next to the L reads as the L's class).
+                    # Recover it by splitting the occupancy per PIXEL instead of dropping through to the
+                    # old vc hex code, which grasps the neighbour (see perceive_colour docstring).
+                    cands = shape_clf.perceive_colour(sim, colours, cname)
+                    if cands and os.environ.get("ACT23_DEBUG", "0") == "1":
+                        print(f"    [dbg] {body}: Blob verschmolzen -> Farb-Pixel-Split "
+                              f"({len(cands)} Teil(e), {cands[0]['area']:.0f}px)", flush=True)
+                sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
                 if cands:
                     best = min(cands, key=lambda d: colours.classify(d["chroma"])[1])
                     _sel_seed.update(key=None, xy=np.asarray(best["pos"], float),
@@ -1499,15 +1667,19 @@ def run_self_learning_steering(headless=False):
                 #   (key=None = the long object; its seed now comes from perceive() too, stage 3)
             saved = sim.d.mocap_pos.copy()                     # perceive_all parks the markers -> restore
             dets = shape_clf.perceive_all(sim)
-            sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
             obs, conf = None, 0.0
             if key is not None:                                # SHAPE-keyed servo cands (L/U)
                 cands = [d for d in dets if d["shape"] == key and d["pos"] is not None]
             elif ckey is not None:                             # COLOUR-CLASS-keyed servo cands (cubes)
                 cands = [d for d in dets if d["pos"] is not None
                          and colours.classify(d["chroma"])[0] == ckey]
+                if not cands and COLOUR_SPLIT:                 # fused with a neighbour -> recover by the
+                    cands = shape_clf.perceive_colour(sim, colours, ckey)   # PIXEL colour split, else the
+                    #   servo goes blind for the whole episode (measured: red lost the fovea in 5 of 6
+                    #   GUI episodes -- the [Fovea-Servo] line was missing entirely)
             else:
                 cands = []                                     # long: display-only blob follower
+            sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
             if cands:
                 if mem["xy"] is None:                          # first sighting: most confident match
                     best = (max(cands, key=lambda d: d["prob"]) if key is not None

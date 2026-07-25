@@ -634,6 +634,69 @@ class ShapeClassifierModule(ArmModule):
                         "desc": desc})                         #   world coords (judge: merged-blob recovery)
         return out                                             #   OPEN-WORLD (any object yields one, no class slot)
 
+    def perceive_colour(self, sim, colours, cname, min_px=40):
+        """MERGED-BLOB RECOVERY for the COLOUR path: localise the objects of ONE self-labelled colour class
+        by splitting the occupancy at PIXEL level, instead of trusting a component's MEAN chroma.
+
+        WHY (measured, log/red_l_diag.png, 2026-07-24): perceive_all averages chroma over a whole connected
+        component (:623).  Two objects closer than ~40mm fuse into ONE component, and the mean lands on
+        whichever object has MORE pixels -- the red cube next to the (larger) orange L reads as the L's
+        class 'farbe-4' (d=0.100 < TH), so the red command finds ZERO candidates, loses its fovea servo
+        for the whole episode and falls back to the old trained vc hex code, which grasps the L (the
+        user watched exactly this).  Measured over gaps 70/50/38/28mm: whole-component centroid error
+        0/0/25/20mm, this pixel split 6/6/6/5mm, and it recovers ~180 red px in every case (the cube's
+        true size) whether or not the blobs touch.
+
+        Same CONTINUITY idea self_eval uses after a release, but anchored on COLOUR instead of the hand,
+        so it works BEFORE the grasp (no hand anchor exists yet).  Kept as a FALLBACK, not a replacement:
+        while the blobs are separate the component mean is exact (0mm) and this split is slightly worse
+        (6mm -- it drops shaded/edge pixels), so callers use it only when the normal match came up empty.
+
+        Returns perceive_all-shaped detections (form fields are None/0: this is a COLOUR localiser, and
+        the fused occupancy carries no usable form descriptor for the part anyway)."""
+        from scipy import ndimage
+        from .colour_openset import TH as _CTH
+        if self.H is None or colours is None or cname is None:
+            return []
+        names = [n for n in colours.names if n in colours.classes]
+        if cname not in names:
+            return []
+        self._park_markers(sim)
+        img = self._render_u8(sim)
+        ys, xs = np.nonzero(self._mask(img) > 0)
+        if len(xs) == 0:
+            return []
+        MU = np.array([colours.classes[n]["mu"] for n in names])
+        rgb = img[ys, xs].astype(float)
+        s = rgb.sum(1, keepdims=True)
+        ch = np.divide(rgb, s, out=np.zeros_like(rgb), where=s > 1e-6)   # per-PIXEL chromaticity
+        d = np.linalg.norm(ch[:, None, :] - MU[None, :, :], axis=2)      # (npx, nclass)
+        keep = (d.argmin(1) == names.index(cname)) & (d.min(1) <= _CTH)  # unambiguously THIS colour
+        if int(keep.sum()) < min_px:
+            return []
+        sub = np.zeros(img.shape[:2], bool)                    # re-label the kept pixels so that two
+        sub[ys[keep], xs[keep]] = True                         #   objects of the SAME colour stay apart
+        labels, n = ndimage.label(sub)
+        out = []
+        for lab in range(1, n + 1):
+            comp = labels == lab
+            if comp.sum() < min_px:
+                continue                                       # speck / colour-bleed at a fusion seam
+            cys, cxs = np.nonzero(comp)
+            W = self._px_to_world(np.column_stack([cxs, cys]))
+            ctr = W.mean(0)
+            grasp = W[int(np.argmin(np.linalg.norm(W - ctr, axis=1)))]
+            crgb = img[cys, cxs].astype(float).mean(0)
+            csum = float(crgb.sum())
+            out.append({"shape": None, "id": -1, "prob": 0.0,
+                        "pos": ctr, "grasp_xy": grasp, "grasp_dense": grasp, "grasp_yaw": 0.0,
+                        "yaw": 0.0, "yaw4": 0.0, "area": float(comp.sum()),
+                        "chroma": crgb / csum if csum > 1e-6 else crgb,
+                        "px": np.array([cxs.mean(), cys.mean()]),
+                        "grasp_cands": [], "wpx": None, "desc": None,
+                        "split": True})                        # marks a colour-split detection (diagnostics)
+        return out
+
     def desc_embed(self, desc):
         """Compact OPEN-WORLD shape embedding from the raw |F| descriptor: standardise by the training
         stats (fmu/fsd), then average over the rings per harmonic -> NH dims.  Unlike a class one-hot this
