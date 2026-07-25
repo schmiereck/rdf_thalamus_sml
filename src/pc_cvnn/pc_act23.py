@@ -1582,8 +1582,9 @@ def run_self_learning_steering(headless=False):
                     # Recover it by splitting the occupancy per PIXEL instead of dropping through to the
                     # old vc hex code, which grasps the neighbour (see perceive_colour docstring).
                     cands = shape_clf.perceive_colour(sim, colours, cname)
-                    if cands and os.environ.get("ACT23_DEBUG", "0") == "1":
-                        print(f"    [dbg] {body}: Blob verschmolzen -> Farb-Pixel-Split "
+                    if cands:                                  # ALWAYS logged (not DEBUG-gated): this is the
+                        #   only visible marker that the recovery fired, and a GUI run must stay auditable
+                        print(f"    [Farb-Split] {body}: Blob verschmolzen -> Pixel-Split rettet das Ziel "
                               f"({len(cands)} Teil(e), {cands[0]['area']:.0f}px)", flush=True)
                 sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
                 if cands:
@@ -1677,6 +1678,9 @@ def run_self_learning_steering(headless=False):
                     cands = shape_clf.perceive_colour(sim, colours, ckey)   # PIXEL colour split, else the
                     #   servo goes blind for the whole episode (measured: red lost the fovea in 5 of 6
                     #   GUI episodes -- the [Fovea-Servo] line was missing entirely)
+                    if cands:                                  # COUNT per frame (printing every frame would
+                        vc._fsv["split"] = vc._fsv.get("split", 0) + 1   # flood the log) -> reported once
+                        #   in the per-episode [Fovea-Servo] line below
             else:
                 cands = []                                     # long: display-only blob follower
             sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
@@ -2084,7 +2088,9 @@ def run_self_learning_steering(headless=False):
             print(f"    [Fovea-Servo{' Schatten' if FOVEA_SERVO == 'shadow' else ''}] "
                   f"Netz-Obs {_fsv['nf']} / Detektor-Obs {_fsv['nd']} Frames"
                   + (f", |Netz-Detektor| mittel {np.mean(_fsv['d']):.1f} mm, "
-                     f"max {np.max(_fsv['d']):.0f} mm" if _fsv["d"] else ""), flush=True)
+                     f"max {np.max(_fsv['d']):.0f} mm" if _fsv["d"] else "")
+                  + (f", Farb-Split trug {_fsv['split']} Frames" if _fsv.get("split") else ""),
+                  flush=True)
         if _dbg and FOVEA_NET and getattr(vc, "_fovea_drift", None):   # net-gaze tracking quality + zoom
             d = vc._fovea_drift; zz = getattr(vc, "_fovea_zoom", []) or [1.0]
             print(f"    [Netz-Blick] Drift Blick<->Objekt: mittel {np.mean(d):.1f}px, "
