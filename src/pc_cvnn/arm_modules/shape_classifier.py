@@ -634,7 +634,7 @@ class ShapeClassifierModule(ArmModule):
                         "desc": desc})                         #   world coords (judge: merged-blob recovery)
         return out                                             #   OPEN-WORLD (any object yields one, no class slot)
 
-    def perceive_colour(self, sim, colours, cname, min_px=40):
+    def perceive_colour(self, sim, colours, cname, min_px=40, with_form=False):
         """MERGED-BLOB RECOVERY for the COLOUR path: localise the objects of ONE self-labelled colour class
         by splitting the occupancy at PIXEL level, instead of trusting a component's MEAN chroma.
 
@@ -688,12 +688,28 @@ class ShapeClassifierModule(ArmModule):
             grasp = W[int(np.argmin(np.linalg.norm(W - ctr, axis=1)))]
             crgb = img[cys, cxs].astype(float).mean(0)
             csum = float(crgb.sum())
-            out.append({"shape": None, "id": -1, "prob": 0.0,
+            name, k, prob, yaw, yaw4, desc = None, -1, 0.0, 0.0, 0.0, None
+            if with_form:
+                # FORM on the SEPARATED part: the whole fused component's descriptor is destroyed by the
+                # neighbour (measured, obj_T: recognised as its own class 56% alone but only 8.8% when
+                # fused), so classify the harmonics of THIS colour's material only.  Same rings/resolve
+                # as perceive_all -- the colour split just supplies a clean footprint.
+                F = self._harmonics_at(comp.astype(np.float32), ctr)
+                desc = np.abs(F).ravel()
+                name, ndist = self.resolve(desc)
+                if name in SHAPES:
+                    logits = self.classify(desc); k = int(logits.argmax())
+                    prob = float(_softmax(logits)[k])
+                elif name is not None:
+                    k = len(SHAPES) + self.open_names.index(name)
+                    prob = float(np.clip(1.0 - ndist / (2.0 * self.novel_th), 0.05, 1.0))
+                yaw, yaw4 = self._yaw_from(F), self._yaw4_from(F)
+            out.append({"shape": name, "id": k, "prob": prob,
                         "pos": ctr, "grasp_xy": grasp, "grasp_dense": grasp, "grasp_yaw": 0.0,
-                        "yaw": 0.0, "yaw4": 0.0, "area": float(comp.sum()),
+                        "yaw": yaw, "yaw4": yaw4, "area": float(comp.sum()),
                         "chroma": crgb / csum if csum > 1e-6 else crgb,
                         "px": np.array([cxs.mean(), cys.mean()]),
-                        "grasp_cands": [], "wpx": None, "desc": None,
+                        "grasp_cands": [], "wpx": None, "desc": desc,
                         "split": True})                        # marks a colour-split detection (diagnostics)
         return out
 

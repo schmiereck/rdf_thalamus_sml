@@ -1103,6 +1103,90 @@ def run_self_learning_steering(headless=False):
               flush=True)
         raise SystemExit(0)
 
+    # ACT23_TDIAG=1: FORM-BLINDNESS diagnosis for the open-class object (mechanism-ID, no fix).  In the
+    # 120-ep GUI run "Neue Form 7" lost the fovea servo in 7 of 13 episodes (54%) vs 3 of 107 for every
+    # other object (p<1e-5) -- the tracker keys on d["shape"]==key and found ZERO candidates all episode.
+    # Unlike the red/L case this is the FORM path, so the colour split cannot help.  Class OVERBIRTH is
+    # ruled out (0 class pairs closer than novel_th), but neu-72 sits at EXACTLY novel_th (7.72) from the
+    # bound class neu-9, with neu-34/78/98/95 at 11-13.  Hypothesis: the descriptor of obj_T WANDERS with
+    # pose/neighbour, so resolve() lands on a competitor or on None (novel) instead of neu-9.  This renders
+    # obj_T over many poses -- alone and with a close neighbour -- and tallies what it is actually called.
+    if os.environ.get("ACT23_TDIAG") == "1":
+        sc = shape_clf
+        _sk = dict((_loaded or {}).get("shape_key", {}))       # persisted body -> open-class binding
+        NOVEL_BODY = next(iter(_sk), "obj_T")                  # (NOVEL_BODY itself is defined further down)
+        key = _sk.get(NOVEL_BODY)
+        print(f"  [TDIAG] {NOVEL_BODY} gebunden an Formklasse '{key}' | novel_th={sc.novel_th:.2f} "
+              f"| offene Klassen {len(sc.open)}", flush=True)
+        saved_mp = sim.d.mocap_pos.copy()
+        rng = np.random.default_rng(int(os.environ.get("ACT23_SEED", "11")))
+        N = int(os.environ.get("ACT23_TDIAG_N", "80"))
+        import collections
+        for scenario in ("allein", "mit Nachbarn"):
+            tally = collections.Counter(); dists = {"eigen": [], "beste_fremd": []}
+            tally_fix = collections.Counter()
+            found = 0
+            for _ in range(N):
+                for o in ALL + [NOVEL_BODY]:
+                    sim.set_object(o, [0.5, -0.6], z=0.012)
+                tp = np.array([rng.uniform(-0.08, 0.08), rng.uniform(0.11, 0.20)])
+                sim.set_object(NOVEL_BODY, tp.tolist(), z=0.012, yaw=float(rng.uniform(0, 2*np.pi)))
+                if scenario != "allein":                       # a neighbour at fusion distance
+                    ang = rng.uniform(0, 2*np.pi)
+                    gap = rng.uniform(0.022, 0.055)
+                    sim.set_object("obj_L", (tp + gap*np.array([np.cos(ang), np.sin(ang)])).tolist(),
+                                   z=0.012, yaw=float(rng.uniform(0, 2*np.pi)))
+                mujoco.mj_forward(sim.m, sim.d)
+                dets = sc.perceive_all(sim)
+                if not dets:
+                    tally["KEINE Detektion"] += 1; continue
+                # the detection nearest the true obj_T position is the one that matters
+                d = min(dets, key=lambda q: 1e9 if q["pos"] is None
+                        else float(np.linalg.norm(np.asarray(q["pos"]) - tp)))
+                if d["pos"] is None or float(np.linalg.norm(np.asarray(d["pos"]) - tp)) > 0.05:
+                    tally["nicht lokalisiert"] += 1; continue
+                found += 1
+                nm = d["shape"]
+                tally[nm if nm is not None else "None (novel)"] += 1
+                # how far is this descriptor from its OWN class vs the best competitor?
+                de = sc.desc_embed(d["desc"]) if d.get("desc") is not None else None
+                if d.get("desc") is not None:
+                    best = {}
+                    for cn, ex in sc.open.items():
+                        A = np.asarray(ex, float)
+                        best[cn] = float(np.linalg.norm(A - np.asarray(d["desc"], float), axis=1).min())
+                    if key in best:
+                        dists["eigen"].append(best[key])
+                        others = [v for c, v in best.items() if c != key]
+                        if others:
+                            dists["beste_fremd"].append(min(others))
+                # the SHIPPED recovery (ACT23_FORM_SPLIT) on the same scene, for the A/B in one view
+                ck = colour_of_body.get(NOVEL_BODY)
+                sp = sc.perceive_colour(sim, colours, ck, with_form=True) if ck else []
+                if sp:
+                    b = min(sp, key=lambda q: float(np.linalg.norm(np.asarray(q["pos"]) - tp)))
+                    tally_fix[b["shape"] if b["shape"] is not None else "None (novel)"] += 1
+                else:
+                    tally_fix["kein Farb-Split"] += 1
+            print(f"\n  [TDIAG] {scenario}: {N} Posen, lokalisiert {found}")
+            for nm, c in tally.most_common():
+                mark = "  <== KORREKT" if nm == key else ("  <== BLIND" if nm != key else "")
+                print(f"      als '{nm}' erkannt: {c:3d} = {100.0*c/N:5.1f}%{mark}", flush=True)
+            if dists["eigen"]:
+                e = np.array(dists["eigen"]); f = np.array(dists["beste_fremd"])
+                print(f"      Deskriptor-Abstand zu '{key}': median {np.median(e):.2f} "
+                      f"p90 {np.percentile(e,90):.2f} | bester Fremd-Abstand median {np.median(f):.2f}"
+                      f" | novel_th {sc.novel_th:.2f}")
+                print(f"      Anteil mit Abstand>novel_th zur eigenen Klasse: "
+                      f"{100.0*np.mean(e > sc.novel_th):.0f}%  (= wird NOVEL statt '{key}')")
+                print(f"      Anteil wo ein FREMD naeher liegt: {100.0*np.mean(f < e):.0f}%")
+            print(f"    -- MIT Form-Split (ACT23_FORM_SPLIT: Form auf dem farb-getrennten Teil) --")
+            for nm, c in tally_fix.most_common():
+                mark = "  <== KORREKT" if nm == key else ""
+                print(f"      als '{nm}': {c:3d} = {100.0*c/N:5.1f}%{mark}", flush=True)
+        sim.d.mocap_pos[:] = saved_mp; mujoco.mj_forward(sim.m, sim.d)
+        raise SystemExit(0)
+
     def save_state():
         """Persist the four learners + the self-discovered command objects (every episode; cheap)."""
         if not PERSIST_STATE:
@@ -1532,6 +1616,12 @@ def run_self_learning_steering(headless=False):
 
     U_DENSEGRASP = os.environ.get("ACT23_U_DENSEGRASP", "1") != "0"   # DEFAULT ON (U-only A/B 2026-07-24:
     #   +11pp Lieferung, 16->25/80; the win is real flat U carries; ACT23_U_DENSEGRASP=0 restores the rim grip)
+    FORM_SPLIT = os.environ.get("ACT23_FORM_SPLIT", "1") != "0"      # the same MERGED-BLOB recovery for the
+    #   FORM path (L/U/open classes): a fused component's form descriptor is destroyed, so re-read the form
+    #   on the colour-separated part (perceive_colour(with_form=True)).  Measured on obj_T over 80 poses:
+    #   own class 56%->95% alone, 8.8%->81% with a close neighbour, residual errors are ABSTENTIONS (never
+    #   mislabels).  Also cuts how often the shape branch drops to its PRIVILEGED true-position fallback.
+    #   ACT23_FORM_SPLIT=0 restores the old behaviour.
     COLOUR_SPLIT = os.environ.get("ACT23_COLOUR_SPLIT", "1") != "0"   # MERGED-BLOB recovery for the colour
     #   path (shape_classifier.perceive_colour): when a cube fuses with a neighbour and no component's mean
     #   chroma matches its class, split the occupancy per PIXEL instead of dropping to the vc hex code that
@@ -1550,6 +1640,20 @@ def run_self_learning_steering(headless=False):
         if method == "shape":                                  # L/U: FORM perception (shape classifier)
             saved = sim.d.mocap_pos.copy()                     # select() PARKS the mocap markers -> restore the
             det = shape_clf.select(sim, state.SHAPE_KEY[body])  #   target markers, else goal_fn returns a parked goal
+            if det is None and FORM_SPLIT:
+                # FUSED BLOB on the FORM path: a neighbour closer than ~40mm merges into one component and
+                # DESTROYS the form descriptor -- measured on obj_T (ACT23_TDIAG): recognised as its own
+                # class 56% alone but only 8.8% when fused, the rest read as novel or as a foreign class.
+                # Recover the same way the colour path does, then classify the FORM on the separated part
+                # (measured: 56->95% alone, 8.8->81% fused, and the residual errors are abstentions, never
+                # mislabels).  Without this the branch below falls back to the PRIVILEGED true position.
+                _ck = colour_of_body.get(body)
+                _m = [d for d in shape_clf.perceive_colour(sim, colours, _ck, with_form=True)
+                      if d["shape"] == state.SHAPE_KEY[body]] if _ck else []
+                if _m:
+                    det = max(_m, key=lambda d: float(d["prob"]))
+                    print(f"    [Form-Split] {body}: Blob verschmolzen -> Form auf dem farb-getrennten "
+                          f"Teil erkannt als '{det['shape']}' ({det['area']:.0f}px)", flush=True)
             sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
             if det is not None:
                 _sel_seed.update(key=state.SHAPE_KEY[body], xy=np.asarray(det["pos"], float),
@@ -1669,8 +1773,15 @@ def run_self_learning_steering(headless=False):
             saved = sim.d.mocap_pos.copy()                     # perceive_all parks the markers -> restore
             dets = shape_clf.perceive_all(sim)
             obs, conf = None, 0.0
-            if key is not None:                                # SHAPE-keyed servo cands (L/U)
+            if key is not None:                                # SHAPE-keyed servo cands (L/U, open classes)
                 cands = [d for d in dets if d["shape"] == key and d["pos"] is not None]
+                if not cands and FORM_SPLIT:                   # fused -> form descriptor destroyed; re-read
+                    _ck = colour_of_body.get(body)             #   the FORM on the colour-separated part
+                    if _ck:                                    #   (measured obj_T: 8.8% -> 81% when fused)
+                        cands = [d for d in shape_clf.perceive_colour(sim, colours, _ck, with_form=True)
+                                 if d["shape"] == key and d["pos"] is not None]
+                        if cands:                              # counted SEPARATELY from the colour split so
+                            vc._fsv["fsplit"] = vc._fsv.get("fsplit", 0) + 1   # a run can tell them apart
             elif ckey is not None:                             # COLOUR-CLASS-keyed servo cands (cubes)
                 cands = [d for d in dets if d["pos"] is not None
                          and colours.classify(d["chroma"])[0] == ckey]
@@ -2089,7 +2200,8 @@ def run_self_learning_steering(headless=False):
                   f"Netz-Obs {_fsv['nf']} / Detektor-Obs {_fsv['nd']} Frames"
                   + (f", |Netz-Detektor| mittel {np.mean(_fsv['d']):.1f} mm, "
                      f"max {np.max(_fsv['d']):.0f} mm" if _fsv["d"] else "")
-                  + (f", Farb-Split trug {_fsv['split']} Frames" if _fsv.get("split") else ""),
+                  + (f", Farb-Split trug {_fsv['split']} Frames" if _fsv.get("split") else "")
+                  + (f", Form-Split trug {_fsv['fsplit']} Frames" if _fsv.get("fsplit") else ""),
                   flush=True)
         if _dbg and FOVEA_NET and getattr(vc, "_fovea_drift", None):   # net-gaze tracking quality + zoom
             d = vc._fovea_drift; zz = getattr(vc, "_fovea_zoom", []) or [1.0]
