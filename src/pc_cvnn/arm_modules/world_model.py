@@ -51,6 +51,18 @@ from .base import ArmModule
 # from _X on the next train() (handles state pickles from before this feature / knob toggles).
 CROSS = os.environ.get("ACT23_WORLD_CROSS", "1") == "1"
 
+# GRADED OUTCOME (see observe()): a delivery is scored by its distance instead of a flat 1.0.
+# sigma = the confidence bar the credit routing uses (ACT23_WORLD_TOL, 25mm), so a placement AT the
+# bar still counts clearly positive (0.37) while a bullseye counts ~1.0 -- the model can finally tell
+# a precise action from a lucky one.  Curve: 0mm->1.00, 10mm->0.85, 15mm->0.70, 20mm->0.53, 25mm->0.37.
+GRADED = os.environ.get("ACT23_WORLD_GRADED", "1") != "0"
+QUAL_SIGMA = float(os.environ.get("ACT23_WORLD_QUAL_SIGMA", "0.025"))
+
+
+def quality(dist_m):
+    """Graded outcome in (0, 1] from a placement distance in metres (1.0 = dead on target)."""
+    return float(np.exp(-(float(dist_m) / QUAL_SIGMA) ** 2))
+
 
 def cross_augment(X2d, fd):
     cy, sy = X2d[:, 2], X2d[:, 3]
@@ -102,9 +114,31 @@ class WorldModelModule(ArmModule):
              .add_out("uncertainty", 1, "ensemble-std (epistemic)"))
 
     # -- self-supervised data --
-    def observe(self, feats, action, delivered):
+    def observe(self, feats, action, delivered, dist=None):
+        """One outcome for (situation, action).  `dist` = the SELF-JUDGED placement distance (m).
+
+        GRADED LABEL (the user's idea, 2026-07-25): with `dist` a SUCCESS is scored by HOW WELL it
+        landed instead of a flat 1.0 -- quality() below.  The members are MSE regressors on a scalar
+        target, so this needs no architecture change; it only stops throwing away the difference
+        between a 5mm and a 24mm placement, which is exactly the information the wrist/grip choice
+        needs (which action places PRECISELY, not merely "somewhere near").
+
+        Measured motivation (120-ep run): the self-judge tracks the true distance almost perfectly
+        (r=0.98, median bias +0mm), so `dist` is trustworthy -- yet every success collapsed onto the
+        same 1.0.  FAILURES stay a hard 0.0: the credit routing already decides WHETHER an outcome
+        is the action's fault, and softening negatives would blunt exactly the falsifying signal a
+        bad grip geometry needs.  So: the routing decides IF, the distance decides HOW MUCH.
+        ACT23_WORLD_GRADED=0 restores flat 0/1 labels.
+
+        NOTE on the existing buffer: rows logged before this are flat 0/1.  They stay valid (0 and 1
+        are the endpoints of the same scale), but old successes read as "perfect"; the bias dilutes
+        as graded rows accumulate."""
+        if GRADED and dist is not None and delivered:
+            y = quality(dist)
+        else:
+            y = float(delivered)
         self._X.append(np.concatenate([np.asarray(feats, float), np.asarray(action, float)]))
-        self._Y.append([float(delivered)])
+        self._Y.append([y])
 
     def n(self):
         return len(self._X)

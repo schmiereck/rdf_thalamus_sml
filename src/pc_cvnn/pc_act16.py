@@ -343,6 +343,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         run_combined._maxcz = float(obj_h)                   # CHECKPOINTS (act23 credit routing): three
         run_combined._slipped = False                        #   self-measurable predictions per episode.
         run_combined._attempted = False
+        run_combined._release = None       # release snapshot (see the step loop)
         #   _maxcz = highest the object rose (GRASP checkpoint: did the grasp actually happen?).
         #   _slipped = while carried, did the object SEPARATE from the hand (CARRY checkpoint: did the
         #   grip hold?).  _attempted = the claw CLOSED low AT the believed object while it still sat on
@@ -515,6 +516,20 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 log_fn(state, np.asarray(aim, float), float(j5))
             if macro_log_fn is not None:                      # EXECUTED step + the FSM phase (for macro
                 macro_log_fn(state, np.asarray(aim, float), float(j5), phase)   # sub-goal segmentation)
+            # RELEASE SNAPSHOT (measurement only, no behaviour): the FIRST step at which the claw re-opens
+            # while the object is still LIFTED tells us how the placement actually ends -- released high
+            # (object then FALLS and rolls) vs set down and let go.  The 120-ep run showed 27.5% "daneben
+            # platziert" at a median of 34mm after a real 126mm carry, and the policy buffer says the place
+            # branch aims 16mm too high; this separates "dropped from height" from "missed laterally".
+            # Take the LAST step at which the claw still HELD the lifted object -- overwritten every such
+            # step, so what survives is the instant before the release.  (A first-open trigger is wrong:
+            # the claw sits above J5_CLOSED_TH for much of the carry anyway, so it fired at lift-off and
+            # reported a constant 14mm "fall" = the lift threshold itself.)
+            if j5 < J5_CLOSED_TH and cz > obj_h + 0.014:
+                run_combined._release = {"hz": float(hz), "cz": float(cz),
+                                         "obj_h": float(obj_h),
+                                         "cxy": np.asarray(c_true, float).copy(),
+                                         "tgt": np.asarray(tgt_true, float).copy()}
             sim.target("joint_5", j5)
             gentle = abs(j5 - J5_PUSH) < 0.2 and aim[2] < PUSH_Z + 0.02   # spread gripper + low = a PUSH
             # GENTLE CARRY: a concave object (e.g. a perceived U) is gripped OFF its centre-of-mass (its COM

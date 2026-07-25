@@ -59,7 +59,8 @@ from pc_cvnn.test_pc_act10 import com2d
 from pc_cvnn.arm_modules.body_model import BodyModelModule
 from pc_cvnn.arm_modules.shape_classifier import ShapeClassifierModule
 from pc_cvnn.arm_modules.object_orientation import ObjectOrientationModule
-from pc_cvnn.arm_modules.world_model import WorldModelModule, feats_from, action_vec, wrist_of
+from pc_cvnn.arm_modules.world_model import (WorldModelModule, feats_from, action_vec, wrist_of,
+                                             quality as wm_quality)
 from pc_cvnn.arm_modules.runtime_policy import RuntimePolicyModule
 from pc_cvnn.arm_modules import colour_openset
 from pc_cvnn.arm_modules.colour_openset import ColourOpenSetModule
@@ -2192,6 +2193,20 @@ def run_self_learning_steering(headless=False):
             _off = not (_rb[0] - 0.01 <= _e[0] <= _rb[1] + 0.01 and _rb[2] - 0.01 <= _e[1] <= _rb[3] + 0.01)
             _trav = 1000.0 * float(np.linalg.norm(_e - snap[body][0][:2]))
             print(f"    [PlaceAB] {body} Weg {_trav:.0f}mm{'  VON-FLAECHE-GEFLOGEN' if _off else ''}", flush=True)
+        _rel = getattr(act16.run_combined, "_release", None)
+        if _rel is not None:
+            # ABLAGE-MESSUNG (nur Diagnose): trennt "zu hoch losgelassen" von "seitlich verfehlt".
+            # fall  = wie hoch das OBJEKT beim Oeffnen der Klaue noch ueber seiner Ruhelage stand
+            # drift = wie weit es sich danach noch bewegt hat (Fallen + Rollen)
+            # ab_ziel_beim_Oeffnen = der seitliche Fehler, den die Policy schon VOR dem Loslassen hatte
+            _end = np.asarray(sim.obj_pos(body)[:2], float)
+            _fall = 1000.0 * max(0.0, _rel["cz"] - _rel["obj_h"])
+            _drift = 1000.0 * float(np.linalg.norm(_end - _rel["cxy"]))
+            _lat = 1000.0 * float(np.linalg.norm(_rel["cxy"] - _rel["tgt"]))
+            _fin = 1000.0 * float(np.linalg.norm(_end - _rel["tgt"]))
+            print(f"    [Ablage] {body}: beim Oeffnen Objekt {_fall:.0f}mm ueber Ruhelage, "
+                  f"seitlich {_lat:.0f}mm vom Ziel -> danach {_drift:.0f}mm gedriftet, "
+                  f"final {_fin:.0f}mm", flush=True)
         _fsv = getattr(vc, "_fsv", None)
         if FOVEA_SERVO != "0" and _fsv and (_fsv["nf"] or _fsv["nd"]):
             # measurement line (shadow AND live): how often the net belief carried the servo vs the
@@ -2417,12 +2432,19 @@ def run_self_learning_steering(headless=False):
                     0.0, 0.0, float(w_obs), grip=(0.3 if u_cmd else 0.0), gentle=float(u_cmd))
                 src = "Teacher"
             if a_obs is not None:
-                world.observe(fe, a_obs, outcome)
+                # GRADED: pass the SELF-JUDGED distance so a success is scored by how well it landed
+                # (world_model.quality) instead of a flat 1.0.  Only when the agent judged it itself --
+                # under ACT23_WORLD_LABEL=welt there is no self-distance and the label stays binary.
+                _qd = s_d if (lbl_src == "Selbst" and s_d is not None) else None
+                world.observe(fe, a_obs, outcome, dist=_qd)
                 world.train(epochs=600)
+                _qs = ("" if (_qd is None or not outcome)
+                       else f", Guete {wm_quality(_qd):.2f} bei {_qd*1000:.0f}mm")
                 print(f"    [Kredit] {route} -> Welt-Modell +1 ({src}, Label {lbl_src}: Wrist "
                       f"{np.degrees(wrist_of(a_obs)) % 180.0:.0f} Grad, Grip {a_obs[4]:.2f}"
                       f"{', sanft' if a_obs[5] > 0.5 else ''}, "
-                      f"{'geliefert' if outcome else 'nicht geliefert'}) -> {world.n()} Versuche", flush=True)
+                      f"{'geliefert' if outcome else 'nicht geliefert'}{_qs}) -> {world.n()} Versuche",
+                      flush=True)
         elif fe is not None:
             print(f"    [Kredit] {route} -- Welt-Modell enthält sich (Aktion nicht schuld)", flush=True)
         # STEP 3: SELF-IMITATION GATE.  On a Netz episode the POLICY drove; if the agent self-judges a
