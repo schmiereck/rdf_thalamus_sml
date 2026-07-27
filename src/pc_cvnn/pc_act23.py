@@ -2525,7 +2525,9 @@ def run_self_learning_steering(headless=False):
             fe = situation_feats(nm)
             if fe is None:
                 continue                                       # camera can't find it -> not a candidate
-            _mu, sd = world.predict(fe, world.candidates(0))   # sigma over the action grid HERE
+            _mu, sd = world.predict(fe, world.candidates(0, yaw=world.yaw_of(fe)))   # sigma over the
+            #   action grid HERE -- same OBJECT-RELATIVE grid the choice uses, so the curiosity score
+            #   measures uncertainty over the actions actually available (not a different world-frame set)
             s = float(sd.max())
             h = sig_hist.setdefault(_l, []); h.append(s); del h[:-8]
             lp = float(np.mean(h[:len(h) // 2]) - np.mean(h[len(h) // 2:])) if len(h) >= 6 else 0.0

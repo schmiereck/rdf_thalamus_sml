@@ -64,6 +64,12 @@ def quality(dist_m):
     return float(np.exp(-(float(dist_m) / QUAL_SIGMA) ** 2))
 
 
+# OBJECT-RELATIVE WRIST GRID (see candidates()): span the structured wrist candidates around the
+# perceived object axis instead of around the world frame, so parallel/perpendicular grips are
+# always representable.  ACT23_WRIST_REL=0 restores the absolute grid.
+WRIST_REL = os.environ.get("ACT23_WRIST_REL", "1") != "0"
+
+
 def cross_augment(X2d, fd):
     cy, sy = X2d[:, 2], X2d[:, 3]
     cw, sw = X2d[:, fd + 2], X2d[:, fd + 3]
@@ -143,6 +149,15 @@ class WorldModelModule(ArmModule):
     def n(self):
         return len(self._X)
 
+    @staticmethod
+    def yaw_of(feats):
+        """Recover the perceived object axis (rad, mod pi) from the situation features' (cos2yaw,
+        sin2yaw) pair -- so callers that already hold `feats` need not carry the yaw separately."""
+        f = np.asarray(feats, float).ravel()
+        if f.size < 4:
+            return None
+        return 0.5 * float(np.arctan2(f[3], f[2]))
+
     def train(self, epochs=500):
         if not self._X:
             return
@@ -172,21 +187,36 @@ class WorldModelModule(ArmModule):
         P = np.array([[float(member.predict(x)[0]) for x in X] for member in self.members])  # (K, N)
         return P.mean(0), P.std(0)
 
-    def candidates(self, n, offsets=None):
+    def candidates(self, n, offsets=None, yaw=None):
         """Structured GRID (offset-0 wrists x grip regimes, so teacher-like actions are always
         representable) + n random (offset, wrist, grip, gentle) samples.  `offsets` = optional
         PERCEPTION-GROUNDED grasp-point candidates (dx,dy relative to the heuristic point, e.g.
         sampled from the perceived material mask): each is crossed with the wrist x grip grid, so
         the model SCORES real places on the object instead of blind random nudges -- the user's
         self-discovered-grasp-points goal.  The offset-0 grid always stays in the set (the
-        heuristic point remains the prior, and untrained models keep returning it)."""
+        heuristic point remains the prior, and untrained models keep returning it).
+
+        `yaw` = the PERCEIVED object axis (rad).  With it the wrist grid is spanned RELATIVE to the
+        object, so gripping PARALLEL and PERPENDICULAR to its axis are always in the candidate set.
+
+        WHY (measured, 610-ep run 2026-07-27): the grid used to be 8 ABSOLUTE world angles, and 100%
+        of chosen wrists sat exactly on it -- the random candidates never won.  Since the object yaw
+        is arbitrary, the RELATIVE angle was therefore not freely selectable and 27% of grasps landed
+        in the 30-60deg "diagonal" band, which delivers 17% against 35% for aligned grasps (p=0.015;
+        the user watched exactly this: "greift schraeg in die Zinken und das Objekt rutscht heraus").
+        The preferred alignment is SHAPE-dependent and opposite between forms (U better perpendicular
+        32% vs 13%, L better parallel 56% vs 36%), so this does NOT hard-code an angle: it only makes
+        both alignments REPRESENTABLE -- the model still decides which wins by predicted success,
+        exactly as GRIP_MODES above.  ACT23_WRIST_REL=0 restores the absolute grid."""
+        w0 = float(yaw) if (yaw is not None and WRIST_REL) else 0.0
+        grid = w0 + np.linspace(0, np.pi, self.wrist_grid, endpoint=False)
         A = [action_vec(0.0, 0.0, w, g, ge)
-             for w in np.linspace(0, np.pi, self.wrist_grid, endpoint=False)
+             for w in grid
              for g, ge in GRIP_MODES]
         if offsets is not None:
             A += [action_vec(float(o[0]), float(o[1]), w, g, ge)
                   for o in offsets if float(np.linalg.norm(np.asarray(o, float))) > 1e-9
-                  for w in np.linspace(0, np.pi, self.wrist_grid, endpoint=False)
+                  for w in grid
                   for g, ge in GRIP_MODES]
         for _ in range(int(n)):
             dx, dy = self.rng.uniform(-self.off_max, self.off_max, 2)
@@ -196,8 +226,10 @@ class WorldModelModule(ArmModule):
 
     def select_action(self, feats, n=40, lam=1.0, offsets=None):
         """Uncertainty-aware (LCB) action: argmax (mu - lam*sigma) over the candidate set.
-        Returns (action, mu, sigma).  Untrained -> the offset-0 / wrist-0 default."""
-        A = self.candidates(n, offsets=offsets)
+        Returns (action, mu, sigma).  Untrained -> the offset-0 / wrist-0 default.
+        The object axis is READ BACK from the situation features (cos2yaw, sin2yaw) and passed to
+        candidates(), so the wrist grid is object-relative without changing this method's callers."""
+        A = self.candidates(n, offsets=offsets, yaw=self.yaw_of(feats))
         if self.n() == 0:
             return A[0], 0.0, 0.0
         mu, sd = self.predict(feats, A)
