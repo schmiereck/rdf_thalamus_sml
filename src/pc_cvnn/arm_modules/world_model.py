@@ -50,6 +50,7 @@ from .base import ArmModule
 # Stored _X rows stay RAW (no schema break); members with a stale input width are rebuilt+refit
 # from _X on the next train() (handles state pickles from before this feature / knob toggles).
 CROSS = os.environ.get("ACT23_WORLD_CROSS", "1") == "1"
+SHARP = os.environ.get("ACT23_WORLD_SHARP", "1") != "0"   # add |cos2(w-yaw)| (see cross_augment)
 
 # GRADED OUTCOME (see observe()): a delivery is scored by its distance instead of a flat 1.0.
 # sigma = the confidence bar the credit routing uses (ACT23_WORLD_TOL, 25mm), so a placement AT the
@@ -73,7 +74,24 @@ WRIST_REL = os.environ.get("ACT23_WRIST_REL", "1") != "0"
 def cross_augment(X2d, fd):
     cy, sy = X2d[:, 2], X2d[:, 3]
     cw, sw = X2d[:, fd + 2], X2d[:, fd + 3]
-    return np.column_stack([X2d, cw * cy + sw * sy, sw * cy - cw * sy])
+    c = cw * cy + sw * sy                                  # cos2(w-yaw)  -- Re(z_w * conj(z_yaw))
+    s = sw * cy - cw * sy                                  # sin2(w-yaw)  -- Im(...)
+    cols = [X2d, c, s]
+    if SHARP:
+        # ALIGNMENT SHARPNESS |cos2(w-yaw)|: 1 when the claw is PARALLEL *or* PERPENDICULAR to the
+        # object axis, 0 when it sits diagonally between them.  Measured (610-ep run 2026-07-27):
+        # diagonal grasps (30-60deg) deliver 17% against 35% for aligned ones (p=0.015) -- the user
+        # watched the claw "schraeg in die Zinken" grasp and the object slip out.  cos2 alone cannot
+        # express this: it is +1 parallel, -1 perpendicular, 0 diagonal, so "good" is its MAGNITUDE,
+        # a non-monotone function the MLP demonstrably did not extract -- a diagnosis on the stored
+        # model showed the predicted quality varying only 0.038 over the WHOLE angle (6.3%) against
+        # 0.289 for the grip mode alone, and even preferring 45deg.  Same medicine as the cross term
+        # itself (comment above: with the invariant explicit it learns at n~150 instead of ~3000).
+        # NOTE: sharpness says "aligned", not WHICH alignment -- the preferred direction is shape-
+        # dependent and OPPOSITE between forms (U perpendicular 32% vs 13%, L parallel 56% vs 36%),
+        # so the model still needs the shape features to pick the side.  ACT23_WORLD_SHARP=0 removes.
+        cols.append(np.abs(c))
+    return np.column_stack(cols)
 
 FEAT_DIM = 7          # [pos(2), cos2yaw, sin2yaw, shape_onehot(3)]
 ACT_DIM = 6           # [dx, dy, cos2w, sin2w, grip, gentle]
