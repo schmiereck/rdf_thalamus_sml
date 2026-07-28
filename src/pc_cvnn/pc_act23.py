@@ -2392,7 +2392,32 @@ def run_self_learning_steering(headless=False):
         # (user-observed diagonal grips) and the Bilanz slid 18/30 -> 10/30 -- the fd6e526
         # poisoning symptom through a physically-gated door.  Ambiguity -> abstain (the credit
         # principle); ACT23_ATTEMPT_NETZ=1 re-enables for experiments.
-        att_ok = (not use_net) or os.environ.get("ACT23_ATTEMPT_NETZ", "0") == "1"
+        # FEHLGRIFF-LABEL UNTER NETZ, ABER GEDAEMPFT (2026-07-27).  Messung 610-Ep-Lauf: das Welt-Modell
+        # sieht 36% der Episoden (220 Fehlgriffe) GAR NICHT, weil sie hier abstrahiert werden -- und lernt
+        # die Ausrichtungs-Regel dadurch VERKEHRT (Puffer: schraeg Label 0.813 vs ausgerichtet 0.768,
+        # waehrend die Realitaet 17% vs 35% Lieferung sagt).  Die Information sitzt NICHT in einer
+        # Teilmenge: geschobene und unberuehrte Fehlgriffe sind gleich schraeg (34% vs 32%, p=1.0), aber
+        # BEIDE liegen bei ~33% gegen nur 15% bei den Erfolgen -- die Fehlgriffe als GANZES tragen sie.
+        # Das historische Problem beim Einschalten war nicht Falschheit, sondern FLUT: ~38 fast durchweg
+        # negative Labels blaehten Sigma 0.5-0.9 -> 0.9-1.6 und liessen die LCB-Wahl flattern.  Deshalb
+        # kommt das Label jetzt mit GEWICHT ACT23_FAIL_W (default 0.3) statt gar nicht: das Signal ist da,
+        # die unsichere Kausalzuordnung (Anfahrt vs Griffgeometrie) steckt im Gewicht.  ACT23_FAIL_W=0
+        # schaltet es faktisch ab, ACT23_ATTEMPT_NETZ=1 gibt volles Gewicht (altes Experiment).
+        obs_w = 1.0                                    # fit weight of THIS episode's world-model row
+        # MESSUNG 423-Ep-Lauf (2026-07-28): DEFAULT ZURUECK AUF 0 -- der Versuch ist GESCHEITERT.
+        # Gegen das Backup ohne Fehlgriff-Labels: die Ausrichtungs-Praeferenz KIPPTE von richtig
+        # (-0.010, bevorzugt ausgerichtet) auf falsch (+0.017, bevorzugt schraeg), Sigma stieg
+        # 0.297 -> 0.395, die Lieferrate fiel ueber den Lauf 47% -> 35% (NICHT durch die Curiosity-
+        # Zuteilung erklaert: bei D1-Objektraten waeren 46% zu erwarten) und die L-Form kollabierte
+        # 52% -> 13% (p=0.021).  URSACHE (User-Beobachtungen am Bild): ein Fehlgriff entsteht oft
+        # durch ein NACHBAROBJEKT im Weg, durch Distanz oder durch die Anfahrt -- das Label gibt
+        # aber der AKTION (Wrist/Grip) die Schuld.  Das Gewicht 0.3 daempft diese Fehlzuordnung
+        # nicht genug: sie ist nicht nur unsicher, sondern oft schlicht falsch.  Genau die
+        # Mehrdeutigkeit, vor der der Kommentar unten warnt.  ACT23_FAIL_W>0 reaktiviert das
+        # Experiment; die Gewichts-Infrastruktur (world_model _W) bleibt und ist unabhaengig nutzbar.
+        fail_w = float(os.environ.get("ACT23_FAIL_W", "0"))
+        att_full = (not use_net) or os.environ.get("ACT23_ATTEMPT_NETZ", "0") == "1"
+        att_ok = att_full or fail_w > 0.0
         if os.environ.get("ACT23_CREDIT", "1") == "1":
             if not lifted and attempted and not delivered and att_ok:
                 # the claw CLOSED at the object and it never rose: the choreography ARRIVED, the
@@ -2402,6 +2427,7 @@ def run_self_learning_steering(headless=False):
                 # `not delivered` guard (measured): a never-lifted episode can still SHOVE the object
                 # onto the goal -- that must not label the action a failure (abstain below instead).
                 route, outcome = "Griff am Objekt fehlgeschlagen (Aktion)", False
+                obs_w = 1.0 if att_full else fail_w     # gedaempft, solange die Zuordnung unsicher ist
             elif world_conf and os.environ.get("ACT23_CREDIT_FLAT", "1") != "0":
                 # A CONFIDENT delivery (self-judge <world_tol; U=15mm) is a SUCCESS even when the object
                 # never rose >20mm.  The U-densegrasp A/B (2026-07-24) exposed this: the base grip carries
@@ -2436,10 +2462,12 @@ def run_self_learning_steering(headless=False):
                 # (world_model.quality) instead of a flat 1.0.  Only when the agent judged it itself --
                 # under ACT23_WORLD_LABEL=welt there is no self-distance and the label stays binary.
                 _qd = s_d if (lbl_src == "Selbst" and s_d is not None) else None
-                world.observe(fe, a_obs, outcome, dist=_qd)
+                world.observe(fe, a_obs, outcome, dist=_qd, weight=obs_w)
                 world.train(epochs=600)
                 _qs = ("" if (_qd is None or not outcome)
                        else f", Guete {wm_quality(_qd):.2f} bei {_qd*1000:.0f}mm")
+                if obs_w != 1.0:
+                    _qs += f", Gewicht {obs_w:.2f}"
                 print(f"    [Kredit] {route} -> Welt-Modell +1 ({src}, Label {lbl_src}: Wrist "
                       f"{np.degrees(wrist_of(a_obs)) % 180.0:.0f} Grad, Grip {a_obs[4]:.2f}"
                       f"{', sanft' if a_obs[5] > 0.5 else ''}, "

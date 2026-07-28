@@ -138,7 +138,7 @@ class WorldModelModule(ArmModule):
              .add_out("uncertainty", 1, "ensemble-std (epistemic)"))
 
     # -- self-supervised data --
-    def observe(self, feats, action, delivered, dist=None):
+    def observe(self, feats, action, delivered, dist=None, weight=1.0):
         """One outcome for (situation, action).  `dist` = the SELF-JUDGED placement distance (m).
 
         GRADED LABEL (the user's idea, 2026-07-25): with `dist` a SUCCESS is scored by HOW WELL it
@@ -163,6 +163,15 @@ class WorldModelModule(ArmModule):
             y = float(delivered)
         self._X.append(np.concatenate([np.asarray(feats, float), np.asarray(action, float)]))
         self._Y.append([y])
+        self._weights(len(self._X) - 1).append(float(weight))
+
+    def _weights(self, upto):
+        """Per-row fit weight, padded to `upto` entries with 1.0 -- migrates pre-weight pickles."""
+        if getattr(self, "_W", None) is None:
+            self._W = []
+        while len(self._W) < upto:
+            self._W.append(1.0)
+        return self._W
 
     def n(self):
         return len(self._X)
@@ -186,9 +195,11 @@ class WorldModelModule(ArmModule):
             self.members = [Policy(din=X.shape[1], dout=1, hid=64,
                                    rng=np.random.default_rng(int(self.rng.integers(1 << 30))))
                             for _ in self.members]
+        W = np.asarray(self._weights(m), float)
         for member in self.members:
             idx = self.rng.integers(0, m, m)          # bootstrap resample -> ensemble diversity
-            member.fit(X[idx], Y[idx], epochs=epochs, quiet=True)
+            member.fit(X[idx], Y[idx], epochs=epochs, quiet=True,
+                       w=(W[idx] if not np.allclose(W, 1.0) else None))
 
     # -- prediction with uncertainty --
     def predict(self, feats, actions):
