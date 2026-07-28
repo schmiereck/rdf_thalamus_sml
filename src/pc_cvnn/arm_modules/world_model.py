@@ -114,10 +114,44 @@ def cross_augment(X2d, fd):
         car = cw * ca + sw * sa                                    # cos2(w - alpha)
         sar = sw * ca - cw * sa                                    # sin2(w - alpha)
         cols += [car, sar, np.abs(car), np.sqrt(r2) * car]
+    if TILT_ACTION and X2d.shape[1] >= fd + 8:
+        # ABWEICHUNG der GEWUENSCHTEN Neigung von der KINEMATISCH ERZWUNGENEN, als komplexes
+        # Produkt z_tilt * conj(z_kin) -> (cos d, sin d).  z_kin folgt aus dem Radius: gemessen
+        # (2026-07-28, Reach-Controller ueber ein Positionsgitter) ist die erzwungene Neigung nahezu
+        # exakt linear im Radius, Korrelation +1.00 -- 1 Grad bei 0.12m .. 45 Grad bei 0.27m, also
+        # ~293 Grad/m ab ~0.117m.  Das ist eine KALIBRIERUNG dieses Arms, keine Regel: sie sagt nur,
+        # welche Haltung der Arm hier von sich aus einnimmt, nicht welche gut ist.  Der Agent lernt
+        # aus den Outcomes, ob es sich lohnt, davon abzuweichen (d nahe 0 = er nimmt die natuerliche
+        # Haltung, |d| gross = er kaempft dagegen und zahlt mit Positionsfehler).
+        ct, st_ = X2d[:, fd + 6], X2d[:, fd + 7]
+        tk = np.clip((np.sqrt(r2) - TILT_R0) * np.radians(TILT_SLOPE), 0.0, np.pi / 2)
+        ck, sk = np.cos(tk), np.sin(tk)
+        cols += [ct * ck + st_ * sk, st_ * ck - ct * sk]       # cos(tilt-tk), sin(tilt-tk)
     return np.column_stack(cols)
 
 FEAT_DIM = 7          # [pos(2), cos2yaw, sin2yaw, shape_onehot(3)]
-ACT_DIM = 6           # [dx, dy, cos2w, sin2w, grip, gentle]
+# TILT = die ANFAHR-NEIGUNG der Klaue gegen die Senkrechte, als AKTION (ACT23_TILT_ACTION).
+# WARUM (User-Beobachtung 423-Ep-Lauf + Messung 2026-07-28): dir_ref stand FEST auf senkrecht
+# (0,0,-1), und bei grossem Radius ist das kinematisch unerreichbar -- die Klaue kippt zwangslaeufig
+# (gemessen, Korrelation +1.00: 1 Grad bei r=0.12m, 25 bei 0.21, 45 bei 0.27).  Dann kommt "ein
+# Finger von unten und einer von oben" (User) und der Griff scheitert.  Das Gewicht hochzudrehen
+# erzwingt zwar die Senkrechte, kostet aber die Position (WDIR 0.4 -> 53mm Reach-Fehler), ist also
+# kein Weg.  Stattdessen wird das ZIEL waehlbar: waehlt der Agent eine Neigung, die bei diesem
+# Radius ohnehin erreichbar ist, entfaellt der Konflikt und er bekommt die Haltung OHNE
+# Positionsverlust.  Er erleidet die Neigung nicht mehr, sondern waehlt sie.
+# ALS PHASE kodiert (User-Wunsch, konsistent zum Wrist und zur RoPE-Linie des Projekts):
+# z_tilt = e^{i*tilt} -> (cos tilt, sin tilt).  Anders als der Wrist ist die Neigung NICHT mod pi
+# (30 Grad nach aussen ist nicht dasselbe wie 30 nach innen), daher die volle Phase statt 2*Winkel.
+# ANGEHAENGT statt eingefuegt, damit bestehende Zeilen migrierbar bleiben: alte Zeilen bekommen
+# (1,0) = 0 Grad = exakt das bisherige Verhalten.  ACT23_TILT_ACTION=0 schaltet die Dimension ab.
+TILT_ACTION = os.environ.get("ACT23_TILT_ACTION", "1") != "0"
+TILT_MAX = float(os.environ.get("ACT23_TILT_MAX", "55"))     # Grad, Obergrenze des Kandidatengitters
+TILT_GRID = int(os.environ.get("ACT23_TILT_GRID", "4"))      # Stufen (nur ohne Radius-Info)
+TILT_OFFSETS = [float(x) for x in os.environ.get("ACT23_TILT_OFFSETS", "-12,0,12,25").split(",")]
+#   Grad RELATIV zur natuerlichen Neigung; 0 = die kostenlose Haltung, negativ = gegen die Kinematik
+TILT_R0 = float(os.environ.get("ACT23_TILT_R0", "0.117"))    # Radius, ab dem die Klaue zu kippen beginnt
+TILT_SLOPE = float(os.environ.get("ACT23_TILT_SLOPE", "293"))  # Grad pro Meter (gemessen, s. cross_augment)
+ACT_DIM = 8 if TILT_ACTION else 6     # [dx, dy, cos2w, sin2w, grip, gentle] (+ cos_tilt, sin_tilt)
 GRIP_MODES = ((0.0, 0.0), (0.3, 1.0))   # structured grip regimes in the candidate grid: firm full-close
 #   vs wide-hold + gentle carry (the regime a concave object needs) -- like the offset-0 wrist grid this
 #   only makes the regimes REPRESENTABLE; the model decides which one wins by predicted success.
@@ -132,8 +166,21 @@ def feats_from(sel, shape):
     return np.concatenate([pos, [np.cos(2 * yaw), np.sin(2 * yaw)], oh])
 
 
-def action_vec(dx, dy, w, grip=0.0, gentle=0.0):
-    return np.array([dx, dy, np.cos(2 * w), np.sin(2 * w), float(grip), float(gentle)], float)
+def action_vec(dx, dy, w, grip=0.0, gentle=0.0, tilt=0.0):
+    """Action vector; `tilt` = desired claw tilt off vertical (rad), carried as the phase
+    (cos tilt, sin tilt) when TILT_ACTION is on (see the block above)."""
+    a = [dx, dy, np.cos(2 * w), np.sin(2 * w), float(grip), float(gentle)]
+    if TILT_ACTION:
+        a += [np.cos(float(tilt)), np.sin(float(tilt))]
+    return np.array(a, float)
+
+
+def tilt_of(a):
+    """Decode the desired claw tilt (rad, >=0) from an action; 0 when the dimension is off."""
+    a = np.asarray(a, float).ravel()
+    if not TILT_ACTION or a.size < 8:
+        return 0.0
+    return float(np.arctan2(a[7], a[6]))
 
 
 def wrist_of(a):
@@ -200,6 +247,18 @@ class WorldModelModule(ArmModule):
         return len(self._X)
 
     @staticmethod
+    def natural_tilt(r):
+        """Die Neigung, die der Reach-Controller bei diesem Radius von sich aus einnimmt (rad).
+        Kalibrierung s. cross_augment; das ist eine EIGENSCHAFT DES ARMS, keine Bewertung."""
+        return float(np.clip((float(r) - TILT_R0) * np.radians(TILT_SLOPE), 0.0, np.pi / 2))
+
+    @staticmethod
+    def radius_of(feats):
+        """Abstand des Objekts von der Armbasis (Ursprung) aus den Situations-Features."""
+        f = np.asarray(feats, float).ravel()
+        return float(np.hypot(f[0], f[1])) if f.size >= 2 else None
+
+    @staticmethod
     def yaw_of(feats):
         """Recover the perceived object axis (rad, mod pi) from the situation features' (cos2yaw,
         sin2yaw) pair -- so callers that already hold `feats` need not carry the yaw separately."""
@@ -208,9 +267,19 @@ class WorldModelModule(ArmModule):
             return None
         return 0.5 * float(np.arctan2(f[3], f[2]))
 
+    def _migrate_tilt(self):
+        """Pad rows logged before the tilt dims with (cos0, sin0) = (1,0) = 0 deg = the old behaviour."""
+        if not TILT_ACTION or not self._X:
+            return
+        want = self.feat_dim + ACT_DIM
+        for i, r in enumerate(self._X):
+            if len(r) == want - 2:
+                self._X[i] = np.concatenate([np.asarray(r, float), [1.0, 0.0]])
+
     def train(self, epochs=500):
         if not self._X:
             return
+        self._migrate_tilt()
         X = np.array(self._X); Y = np.array(self._Y); m = len(X)
         if CROSS:
             X = cross_augment(X, self.feat_dim)
@@ -239,7 +308,7 @@ class WorldModelModule(ArmModule):
         P = np.array([[float(member.predict(x)[0]) for x in X] for member in self.members])  # (K, N)
         return P.mean(0), P.std(0)
 
-    def candidates(self, n, offsets=None, yaw=None):
+    def candidates(self, n, offsets=None, yaw=None, r=None):
         """Structured GRID (offset-0 wrists x grip regimes, so teacher-like actions are always
         representable) + n random (offset, wrist, grip, gentle) samples.  `offsets` = optional
         PERCEPTION-GROUNDED grasp-point candidates (dx,dy relative to the heuristic point, e.g.
@@ -262,18 +331,35 @@ class WorldModelModule(ArmModule):
         exactly as GRIP_MODES above.  ACT23_WRIST_REL=0 restores the absolute grid."""
         w0 = float(yaw) if (yaw is not None and WRIST_REL) else 0.0
         grid = w0 + np.linspace(0, np.pi, self.wrist_grid, endpoint=False)
-        A = [action_vec(0.0, 0.0, w, g, ge)
+        if not TILT_ACTION:
+            tilts = np.array([0.0])
+        elif r is None:
+            tilts = np.radians(np.linspace(0.0, TILT_MAX, TILT_GRID))
+        else:
+            # RELATIV zur natuerlichen Haltung (dieselbe Lehre wie beim objekt-relativen Wrist-Gitter,
+            # 45fa0a4): ein festes Winkelgitter verfehlt die kinematisch erzwungene Neigung um bis zu
+            # 9 Grad, weil diese stetig mit dem Radius waechst.  Relativ aufgespannt ist die
+            # natuerliche Haltung IMMER exakt waehlbar (Offset 0, kostet keine Position), dazu das
+            # Erzwingen der Senkrechten (0 absolut) und Abweichungen nach beiden Seiten.
+            tk = self.natural_tilt(r)
+            tilts = np.clip(np.concatenate([[0.0], tk + np.radians(TILT_OFFSETS)]),
+                            0.0, np.radians(TILT_MAX))
+            tilts = np.unique(np.round(tilts, 4))
+        A = [action_vec(0.0, 0.0, w, g, ge, t)
              for w in grid
-             for g, ge in GRIP_MODES]
+             for g, ge in GRIP_MODES
+             for t in tilts]
         if offsets is not None:
-            A += [action_vec(float(o[0]), float(o[1]), w, g, ge)
+            A += [action_vec(float(o[0]), float(o[1]), w, g, ge, t)
                   for o in offsets if float(np.linalg.norm(np.asarray(o, float))) > 1e-9
                   for w in grid
-                  for g, ge in GRIP_MODES]
+                  for g, ge in GRIP_MODES
+                  for t in tilts]
         for _ in range(int(n)):
             dx, dy = self.rng.uniform(-self.off_max, self.off_max, 2)
             A.append(action_vec(dx, dy, self.rng.uniform(0, np.pi),
-                                grip=self.rng.uniform(0.0, 0.4), gentle=float(self.rng.integers(2))))
+                                grip=self.rng.uniform(0.0, 0.4), gentle=float(self.rng.integers(2)),
+                                tilt=(self.rng.uniform(0.0, np.radians(TILT_MAX)) if TILT_ACTION else 0.0)))
         return np.array(A)
 
     def select_action(self, feats, n=40, lam=1.0, offsets=None):
@@ -281,7 +367,7 @@ class WorldModelModule(ArmModule):
         Returns (action, mu, sigma).  Untrained -> the offset-0 / wrist-0 default.
         The object axis is READ BACK from the situation features (cos2yaw, sin2yaw) and passed to
         candidates(), so the wrist grid is object-relative without changing this method's callers."""
-        A = self.candidates(n, offsets=offsets, yaw=self.yaw_of(feats))
+        A = self.candidates(n, offsets=offsets, yaw=self.yaw_of(feats), r=self.radius_of(feats))
         if self.n() == 0:
             return A[0], 0.0, 0.0
         mu, sd = self.predict(feats, A)

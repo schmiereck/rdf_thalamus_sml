@@ -60,7 +60,8 @@ from pc_cvnn.arm_modules.body_model import BodyModelModule
 from pc_cvnn.arm_modules.shape_classifier import ShapeClassifierModule
 from pc_cvnn.arm_modules.object_orientation import ObjectOrientationModule
 from pc_cvnn.arm_modules.world_model import (WorldModelModule, feats_from, action_vec, wrist_of,
-                                             quality as wm_quality)
+                                             quality as wm_quality, tilt_of as wm_tilt_of,
+                                             TILT_ACTION)
 from pc_cvnn.arm_modules.runtime_policy import RuntimePolicyModule
 from pc_cvnn.arm_modules import colour_openset
 from pc_cvnn.arm_modules.colour_openset import ColourOpenSetModule
@@ -2062,6 +2063,21 @@ def run_self_learning_steering(headless=False):
                 offs = [o for o in offs if float(np.linalg.norm(o)) <= 0.05]
             a, _, _ = world.select_action(fe, n=n_cand, lam=LAM, offsets=offs)
             a_exec = a; wf = (lambda s, _w=wrist_of(a): _w)
+            # ANFAHR-NEIGUNG AUS DER AKTION: bisher stand dir_ref FEST auf senkrecht (0,0,-1) und die
+            # Klaue kippte bei grossem Radius zwangslaeufig (gemessen: 45 Grad bei r=0.27, Korrelation
+            # +1.00) -- "ein Finger von unten, einer von oben" (User).  Jetzt WAEHLT das Modell die
+            # gewuenschte Neigung; sie wird in der RADIALEBENE nach aussen gekippt, weil genau dorthin
+            # die Kinematik den Arm zieht.  Waehlt es die ohnehin erreichbare Neigung, entfaellt der
+            # Konflikt zwischen Position und Haltung und es gibt keinen Positionsverlust.
+            _tilt = wm_tilt_of(a)
+            if TILT_ACTION and _tilt > 1e-6:
+                _p = np.asarray(fe[:2], float)
+                _n = float(np.linalg.norm(_p))
+                if _n > 1e-6:
+                    _ux, _uy = _p / _n                      # Radialrichtung Basis -> Objekt
+                    bm.body.dir_ref = np.array([np.sin(_tilt) * _ux, np.sin(_tilt) * _uy,
+                                                -np.cos(_tilt)], float)
+                    _dir_ref_set = True
             if float(np.linalg.norm(a[:2])) > 1e-9:
                 sel_off["dxy"] = np.asarray(a[:2], float)
             # A/B FORCE knobs (probe arms, PRIVILEGED, default off -- never a runtime rule): measure the
@@ -2158,6 +2174,10 @@ def run_self_learning_steering(headless=False):
         #   this episode -> becomes self-imitation demonstrations IF the agent self-judges a delivery
         runtime.begin_episode()                                # PEND the teacher rows; committed only if
         #   this episode is NOT a self-validated success (teacher corrects failures, see end_episode)
+        # dir_ref wurde ggf. oben aus der gewaehlten AKTION gekippt -- Originalwert sichern und nach
+        # der Episode zuruecksetzen, damit die Neigung NUR fuer diesen Griff gilt und nicht dauerhaft
+        # in Transport/Ablage und die naechste Episode durchschlaegt.
+        _dir_ref_orig = None if not TILT_ACTION else np.array(bm.body.dir_ref, float).copy()
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_fn,
                            policy_fn=(runtime.predict if use_net else None),
@@ -2173,6 +2193,8 @@ def run_self_learning_steering(headless=False):
                            servo=(method in ("color", "shape")), rescatter=False, episode_end_fn=ep_end,
                            lifelong=True, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
                            arm_reset=False)
+        if _dir_ref_orig is not None:
+            bm.body.dir_ref = _dir_ref_orig                    # Neigung galt nur fuer diese Episode
         _save(f"{body}_1after_runcombined")
         if os.environ.get("ACT23_YAW_AB", "0") == "1" and body in ("obj_L", "obj_U", "obj_blue"):
             # measurement companion to [YawAB]: how much the commanded shape ROTATED over the episode
