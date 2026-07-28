@@ -51,6 +51,7 @@ from .base import ArmModule
 # from _X on the next train() (handles state pickles from before this feature / knob toggles).
 CROSS = os.environ.get("ACT23_WORLD_CROSS", "1") == "1"
 SHARP = os.environ.get("ACT23_WORLD_SHARP", "1") != "0"   # add |cos2(w-yaw)| (see cross_augment)
+ARMREL = os.environ.get("ACT23_WORLD_ARMREL", "1") != "0"  # wrist vs ARM direction (see cross_augment)
 
 # GRADED OUTCOME (see observe()): a delivery is scored by its distance instead of a flat 1.0.
 # sigma = the confidence bar the credit routing uses (ACT23_WORLD_TOL, 25mm), so a placement AT the
@@ -91,6 +92,28 @@ def cross_augment(X2d, fd):
         # dependent and OPPOSITE between forms (U perpendicular 32% vs 13%, L parallel 56% vs 36%),
         # so the model still needs the shape features to pick the side.  ACT23_WORLD_SHARP=0 removes.
         cols.append(np.abs(c))
+    if ARMREL:
+        # GRIFFWINKEL RELATIV ZUR ARMRICHTUNG (User-Beobachtung 423-Ep-Lauf, Auto 351/370): "Objekt
+        # weit weg, dadurch waere Wrist-Ausrichtung PARALLEL zum Workspace optimal gewesen; der Wrist
+        # hat sich quer gedreht und dadurch rutscht der Griff weg."  Die Armbasis steht im Ursprung
+        # (pc_act16 BASE_CLEAR misst |pos|), alpha = atan2(py, px) ist also die Richtung Base->Objekt
+        # = die Armachse bei gestrecktem Arm.  cos(2a)/sin(2a) kommen ohne atan2 direkt aus den
+        # Koordinaten: cos2a = (px^2-py^2)/r^2, sin2a = 2 px py / r^2.
+        # Wie beim Objekt-Yaw ist die vollstaendige Beziehung das komplexe Produkt z_w * conj(z_alpha):
+        #   cos2(w-a)  GERICHTET  (+1 parallel zur Armachse, -1 quer)  <- traegt die Beobachtung
+        #   sin2(w-a)  orthogonale Komponente (vollstaendige Darstellung)
+        #  |cos2(w-a)| Schaerfe (1 bei parallel ODER quer, 0 diagonal dazu)
+        # DAZU der INTERAKTIONSTERM r*cos2(w-a): die Beobachtung ist DISTANZABHAENGIG ("weit weg"),
+        # und genau dieses Produkt aus Distanz und Ausrichtung ist der bilineare Term, den das MLP
+        # aus rohen Koordinaten nachweislich nicht bildet (siehe CROSS-Kommentar oben, n~150 statt
+        # ~3000).  KEINE REGEL: nichts hiervon sagt, WELCHE Ausrichtung gut ist -- das Modell lernt
+        # es aus seinen eigenen Outcomes.  ACT23_WORLD_ARMREL=0 entfernt die vier Spalten.
+        px, py = X2d[:, 0], X2d[:, 1]
+        r2 = np.maximum(px * px + py * py, 1e-12)
+        ca, sa = (px * px - py * py) / r2, 2.0 * px * py / r2      # cos(2a), sin(2a)
+        car = cw * ca + sw * sa                                    # cos2(w - alpha)
+        sar = sw * ca - cw * sa                                    # sin2(w - alpha)
+        cols += [car, sar, np.abs(car), np.sqrt(r2) * car]
     return np.column_stack(cols)
 
 FEAT_DIM = 7          # [pos(2), cos2yaw, sin2yaw, shape_onehot(3)]
