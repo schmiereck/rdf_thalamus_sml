@@ -127,6 +127,34 @@ def cross_augment(X2d, fd):
         tk = np.clip((np.sqrt(r2) - TILT_R0) * np.radians(TILT_SLOPE), 0.0, np.pi / 2)
         ck, sk = np.cos(tk), np.sin(tk)
         cols += [ct * ck + st_ * sk, st_ * ck - ct * sk]       # cos(tilt-tk), sin(tilt-tk)
+        if OPENING:
+            # GREIFBARKEIT = wie FLACH die FINGER-OEFFNUNGSACHSE gegen die Arbeitsflaeche liegt.
+            # User-Geometrie (2026-07-29): "So wie der Greifer aus seiner Ruheposition kommt, steht
+            # die Oeffnung zwischen den zwei Fingern parallel zur Arbeitsflaeche.  Eine 90-Grad-
+            # Drehung des Wrist stellt sie senkrecht -- aber nur, wenn der Arm sich weiter von der
+            # Base weg bewegt.  Bei nahen Objekten greift er von oben, dann ist die Oeffnung bei
+            # JEDEM Wrist-Drehwinkel fast parallel."
+            # Hergeleitet: die Trennachse steht senkrecht auf der Klauenrichtung, also ist ihre
+            # Neigung gegen die Horizontale  |arctan( tan(tilt) * cos(w - alpha) )|.  Das
+            # reproduziert beide Aussagen exakt -- bei tilt=0 ist sie NULL fuer jeden Wrist, bei
+            # gekippter Klaue maximal bei w=alpha und null bei 90 Grad dazu.
+            # ENTSCHEIDEND, weil hier "greifbar" oder nicht entschieden wird: liegt die Oeffnung
+            # schraeg, kommt "ein Finger von unten und einer von oben" (User) und ein flaches Objekt
+            # auf dem Tisch ist nicht fassbar.  Das Modell kannte tilt und w bisher nur GETRENNT --
+            # erst ihr Produkt bestimmt die Greifbarkeit, und claw_yaw() projiziert die Trennachse
+            # auf die Tischebene und wirft genau diese Z-Komponente weg.
+            # EINE Spalte genuegt: cos der Neigung = 1/sqrt(1 + (tan(tilt)*cos(w-a))^2), numerisch
+            # stabil ohne arctan.  1 = Oeffnung waagerecht (greifbar), -> 0 = senkrecht.  Eine
+            # Phasen-Darstellung waere hier REDUNDANT, denn die Neigung ist ein Betrag auf [0,90],
+            # dort bestimmt der Cosinus den Sinus eindeutig.
+            # ACHTUNG (Fehler im ersten Wurf, vom Sanity-Check gefangen): die Formel braucht
+            # cos(w-alpha), NICHT das gespeicherte cos(2(w-alpha)) = car.  Da der Ausdruck ohnehin
+            # quadriert wird, genuegt cos^2(w-a) = (1 + car)/2 -- das ist aus car exakt berechenbar
+            # und umgeht, dass der Wrist nur mod pi bekannt ist (das Vorzeichen von cos(w-a) waere
+            # unbestimmt, sein Quadrat nicht).
+            tt = np.tan(np.clip(np.arctan2(st_, ct), 0.0, 1.45))       # tan(tilt), gegen 90 Grad geschuetzt
+            cos2_rel = np.clip((1.0 + car) * 0.5, 0.0, 1.0)            # cos^2(w - alpha)
+            cols.append(1.0 / np.sqrt(1.0 + (tt ** 2) * cos2_rel))
     return np.column_stack(cols)
 
 FEAT_DIM = 7          # [pos(2), cos2yaw, sin2yaw, shape_onehot(3)]
@@ -150,6 +178,7 @@ TILT_GRID = int(os.environ.get("ACT23_TILT_GRID", "4"))      # Stufen (nur ohne 
 TILT_OFFSETS = [float(x) for x in os.environ.get("ACT23_TILT_OFFSETS", "-12,0,12,25").split(",")]
 TILT_CURIOSITY = float(os.environ.get("ACT23_TILT_CURIOSITY", "0.35"))   # Anteil Neugier-Zuege
 TILT_CUR_MARGIN = float(os.environ.get("ACT23_TILT_CUR_MARGIN", "1.2"))  # nur wenn deutlich unsicherer
+OPENING = os.environ.get("ACT23_WORLD_OPENING", "1") != "0"   # Greifbarkeit der Fingeroeffnung
 TILT_CUR_SLACK = float(os.environ.get("ACT23_TILT_CUR_SLACK", "0.10"))  # erlaubter Guete-Rueckstand
 #   eines Neugier-Kandidaten gegenueber der besten Neigung (Plausibilitaets-Schranke, s. select_action)
 #   Grad RELATIV zur natuerlichen Neigung; 0 = die kostenlose Haltung, negativ = gegen die Kinematik
