@@ -150,6 +150,8 @@ TILT_GRID = int(os.environ.get("ACT23_TILT_GRID", "4"))      # Stufen (nur ohne 
 TILT_OFFSETS = [float(x) for x in os.environ.get("ACT23_TILT_OFFSETS", "-12,0,12,25").split(",")]
 TILT_CURIOSITY = float(os.environ.get("ACT23_TILT_CURIOSITY", "0.35"))   # Anteil Neugier-Zuege
 TILT_CUR_MARGIN = float(os.environ.get("ACT23_TILT_CUR_MARGIN", "1.2"))  # nur wenn deutlich unsicherer
+TILT_CUR_SLACK = float(os.environ.get("ACT23_TILT_CUR_SLACK", "0.10"))  # erlaubter Guete-Rueckstand
+#   eines Neugier-Kandidaten gegenueber der besten Neigung (Plausibilitaets-Schranke, s. select_action)
 #   Grad RELATIV zur natuerlichen Neigung; 0 = die kostenlose Haltung, negativ = gegen die Kinematik
 TILT_R0 = float(os.environ.get("ACT23_TILT_R0", "0.117"))    # Radius, ab dem die Klaue zu kippen beginnt
 TILT_SLOPE = float(os.environ.get("ACT23_TILT_SLOPE", "293"))  # Grad pro Meter (gemessen, s. cross_augment)
@@ -393,9 +395,21 @@ class WorldModelModule(ArmModule):
                 same = np.array([j for j in range(len(A))
                                  if np.allclose(A[j][:6], base[:6], atol=1e-9)], dtype=int)
                 if same.size > 1:
-                    j = int(same[int(np.argmax(sd[same]))])
-                    if sd[j] > TILT_CUR_MARGIN * sd[i]:
-                        i = j
+                    # PLAUSIBILITAETS-SCHRANKE (gemessen 214-Ep-Lauf 2026-07-28): reine
+                    # Unsicherheits-Maximierung geht systematisch an den RAND des Bereichs, denn dort
+                    # war noch nie jemand -- alle 8 Griffe am Oberrand (>=54 Grad) waren fern und ALLE
+                    # gescheitert, der Block >45 Grad lieferte 0% (n=12).  Die Neugier verbrannte also
+                    # Griffe dort, wo das Modell bereits WEISS, dass es schlecht ist.  Jetzt wird nur
+                    # unter den PLAUSIBLEN Varianten erkundet: deren vorhergesagte Guete darf hoechstens
+                    # TILT_CUR_SLACK unter der besten liegen.  Das ist optimistische Exploration statt
+                    # blinder Neugier -- erkundet wird, wo das Modell UNSICHER ist, nicht wo es sicher
+                    # ablehnt.  Bleibt selbst-limitierend (TILT_CUR_MARGIN).
+                    mu_s = mu[same]
+                    ok = same[mu_s >= float(mu_s.max()) - TILT_CUR_SLACK]
+                    if ok.size:
+                        j = int(ok[int(np.argmax(sd[ok]))])
+                        if sd[j] > TILT_CUR_MARGIN * sd[i]:
+                            i = j
         return A[i], float(mu[i]), float(sd[i])
 
     def step(self) -> None:
