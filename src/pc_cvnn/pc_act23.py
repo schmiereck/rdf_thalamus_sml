@@ -2404,18 +2404,22 @@ def run_self_learning_steering(headless=False):
         # die unsichere Kausalzuordnung (Anfahrt vs Griffgeometrie) steckt im Gewicht.  ACT23_FAIL_W=0
         # schaltet es faktisch ab, ACT23_ATTEMPT_NETZ=1 gibt volles Gewicht (altes Experiment).
         obs_w = 1.0                                    # fit weight of THIS episode's world-model row
-        # MESSUNG 423-Ep-Lauf (2026-07-28): DEFAULT ZURUECK AUF 0 -- der Versuch ist GESCHEITERT.
-        # Gegen das Backup ohne Fehlgriff-Labels: die Ausrichtungs-Praeferenz KIPPTE von richtig
-        # (-0.010, bevorzugt ausgerichtet) auf falsch (+0.017, bevorzugt schraeg), Sigma stieg
-        # 0.297 -> 0.395, die Lieferrate fiel ueber den Lauf 47% -> 35% (NICHT durch die Curiosity-
-        # Zuteilung erklaert: bei D1-Objektraten waeren 46% zu erwarten) und die L-Form kollabierte
-        # 52% -> 13% (p=0.021).  URSACHE (User-Beobachtungen am Bild): ein Fehlgriff entsteht oft
-        # durch ein NACHBAROBJEKT im Weg, durch Distanz oder durch die Anfahrt -- das Label gibt
-        # aber der AKTION (Wrist/Grip) die Schuld.  Das Gewicht 0.3 daempft diese Fehlzuordnung
-        # nicht genug: sie ist nicht nur unsicher, sondern oft schlicht falsch.  Genau die
-        # Mehrdeutigkeit, vor der der Kommentar unten warnt.  ACT23_FAIL_W>0 reaktiviert das
-        # Experiment; die Gewichts-Infrastruktur (world_model _W) bleibt und ist unabhaengig nutzbar.
-        fail_w = float(os.environ.get("ACT23_FAIL_W", "0"))
+        # 423-Ep-Lauf ausgewertet (2026-07-28) -- und meine erste Bewertung KORRIGIERT.
+        # Ich hatte das Label fuer schaedlich erklaert (Ausrichtungs-Praeferenz -0.010 -> +0.017,
+        # Sigma 0.297 -> 0.395) und dabei gegen ein BACKUP verglichen, das sich nicht nur um die 86
+        # Fehlgriff-Zeilen unterscheidet, sondern um 264 neue Zeilen des Laufs -- die ~178
+        # zusaetzlichen ERFOLGS-Zeilen verschoben die Praeferenz, nicht das Label.  Der saubere Test
+        # (derselbe Zustand, gleicher Fit-Seed, NUR die 86 Zeilen variiert, beide frisch trainiert):
+        #   ohne die Zeilen  schraeg-Praeferenz +0.060, Sigma 0.155
+        #   mit  den Zeilen  schraeg-Praeferenz +0.001, Sigma 0.140
+        # Das Label VERBESSERT die Ausrichtungs-Bewertung also und senkt Sigma leicht -- der User
+        # hatte mit seinem Eindruck recht ("die Ausrichtung sieht nicht mehr so zufaellig aus").
+        # OFFEN und NICHT dem Label zuzuordnen: die Lieferrate fiel im Lauf 47% -> 35% (nicht durch
+        # die Curiosity-Zuteilung erklaert) und die L-Form von 52% auf 13% (n=15).  Ursache ungeklaert;
+        # ein Kandidat ist die graduelle Imitation (23% der 12000 Demos stammen aus Ablagen, die
+        # frueher verworfen worden waeren, mit 15% der Fit-Zugkraft).  LEHRE: einen Label-Effekt NUR
+        # gegen denselben Datensatz messen, nie gegen einen mitgewachsenen Backup-Stand.
+        fail_w = float(os.environ.get("ACT23_FAIL_W", "0.3"))
         att_full = (not use_net) or os.environ.get("ACT23_ATTEMPT_NETZ", "0") == "1"
         att_ok = att_full or fail_w > 0.0
         if os.environ.get("ACT23_CREDIT", "1") == "1":
