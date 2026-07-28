@@ -61,7 +61,7 @@ from pc_cvnn.arm_modules.shape_classifier import ShapeClassifierModule
 from pc_cvnn.arm_modules.object_orientation import ObjectOrientationModule
 from pc_cvnn.arm_modules.world_model import (WorldModelModule, feats_from, action_vec, wrist_of,
                                              quality as wm_quality, tilt_of as wm_tilt_of,
-                                             TILT_ACTION)
+                                             TILT_ACTION, TILT_CURIOSITY)
 from pc_cvnn.arm_modules.runtime_policy import RuntimePolicyModule
 from pc_cvnn.arm_modules import colour_openset
 from pc_cvnn.arm_modules.colour_openset import ColourOpenSetModule
@@ -2061,7 +2061,8 @@ def run_self_learning_steering(headless=False):
                 g0 = np.asarray(det["grasp_xy"], float)
                 offs = [np.asarray(p, float) - g0 for p in det["grasp_cands"]]
                 offs = [o for o in offs if float(np.linalg.norm(o)) <= 0.05]
-            a, _, _ = world.select_action(fe, n=n_cand, lam=LAM, offsets=offs)
+            a, _mu_a, _sd_a = world.select_action(fe, n=n_cand, lam=LAM, offsets=offs,
+                                                  curiosity=TILT_CURIOSITY)
             a_exec = a; wf = (lambda s, _w=wrist_of(a): _w)
             # ANFAHR-NEIGUNG AUS DER AKTION: bisher stand dir_ref FEST auf senkrecht (0,0,-1) und die
             # Klaue kippte bei grossem Radius zwangslaeufig (gemessen: 45 Grad bei r=0.27, Korrelation
@@ -2070,6 +2071,11 @@ def run_self_learning_steering(headless=False):
             # die Kinematik den Arm zieht.  Waehlt es die ohnehin erreichbare Neigung, entfaellt der
             # Konflikt zwischen Position und Haltung und es gibt keinen Positionsverlust.
             _tilt = wm_tilt_of(a)
+            if TILT_ACTION:
+                _nat = np.degrees(world.natural_tilt(world.radius_of(fe) or 0.0))
+                print(f"    [Neigung] {body}: gewaehlt {np.degrees(_tilt):.0f} Grad "
+                      f"(natuerlich {_nat:.0f}, r={100*(world.radius_of(fe) or 0):.0f}cm), "
+                      f"sigma {_sd_a:.3f}", flush=True)
             if TILT_ACTION and _tilt > 1e-6:
                 _p = np.asarray(fe[:2], float)
                 _n = float(np.linalg.norm(_p))

@@ -148,6 +148,8 @@ TILT_ACTION = os.environ.get("ACT23_TILT_ACTION", "1") != "0"
 TILT_MAX = float(os.environ.get("ACT23_TILT_MAX", "55"))     # Grad, Obergrenze des Kandidatengitters
 TILT_GRID = int(os.environ.get("ACT23_TILT_GRID", "4"))      # Stufen (nur ohne Radius-Info)
 TILT_OFFSETS = [float(x) for x in os.environ.get("ACT23_TILT_OFFSETS", "-12,0,12,25").split(",")]
+TILT_CURIOSITY = float(os.environ.get("ACT23_TILT_CURIOSITY", "0.35"))   # Anteil Neugier-Zuege
+TILT_CUR_MARGIN = float(os.environ.get("ACT23_TILT_CUR_MARGIN", "1.2"))  # nur wenn deutlich unsicherer
 #   Grad RELATIV zur natuerlichen Neigung; 0 = die kostenlose Haltung, negativ = gegen die Kinematik
 TILT_R0 = float(os.environ.get("ACT23_TILT_R0", "0.117"))    # Radius, ab dem die Klaue zu kippen beginnt
 TILT_SLOPE = float(os.environ.get("ACT23_TILT_SLOPE", "293"))  # Grad pro Meter (gemessen, s. cross_augment)
@@ -362,7 +364,7 @@ class WorldModelModule(ArmModule):
                                 tilt=(self.rng.uniform(0.0, np.radians(TILT_MAX)) if TILT_ACTION else 0.0)))
         return np.array(A)
 
-    def select_action(self, feats, n=40, lam=1.0, offsets=None):
+    def select_action(self, feats, n=40, lam=1.0, offsets=None, curiosity=0.0, rng=None):
         """Uncertainty-aware (LCB) action: argmax (mu - lam*sigma) over the candidate set.
         Returns (action, mu, sigma).  Untrained -> the offset-0 / wrist-0 default.
         The object axis is READ BACK from the situation features (cos2yaw, sin2yaw) and passed to
@@ -372,6 +374,28 @@ class WorldModelModule(ArmModule):
             return A[0], 0.0, 0.0
         mu, sd = self.predict(feats, A)
         i = int(np.argmax(mu - lam * sd))
+        if TILT_ACTION and curiosity > 0.0:
+            # NEUGIER AUF DER NEIGUNGS-ACHSE.  Das Problem (gemessen im Rauchtest): die LCB-Wahl
+            # mu - lam*sigma BESTRAFT Unsicherheit, und die neue Tilt-Dimension hat anfangs 3386
+            # Zeilen bei 0 Grad gegen ~0 bei allen anderen -- also gewinnt 0 Grad immer und die
+            # Dimension wird nie erprobt (Henne-Ei).  Hier greift dasselbe Neuheitsmass, das die
+            # Objektwahl schon benutzt (dort: sd.max() als Curiosity-Score): unter den Kandidaten,
+            # die sich NUR in der Neigung unterscheiden, wird die UNSICHERSTE gewaehlt.
+            # CHIRURGISCH: Wrist/Grip/Offset bleiben bei der LCB-besten Wahl, nur die Neigung wird
+            # erkundet -- ein schlechter Wrist wuerde die Episode ruinieren, eine ungewohnte Neigung
+            # kostet im schlimmsten Fall diesen einen Griff.
+            # SELBST-LIMITIEREND: nur wenn die unsicherste Variante DEUTLICH unsicherer ist
+            # (TILT_CUR_MARGIN).  Sind die Neigungen erprobt, gleicht sich sigma an und die
+            # Neugier verstummt von selbst -- kein Abkling-Zeitplan noetig.
+            _rng = rng if rng is not None else self.rng
+            if float(_rng.random()) < curiosity:
+                base = A[i]
+                same = np.array([j for j in range(len(A))
+                                 if np.allclose(A[j][:6], base[:6], atol=1e-9)], dtype=int)
+                if same.size > 1:
+                    j = int(same[int(np.argmax(sd[same]))])
+                    if sd[j] > TILT_CUR_MARGIN * sd[i]:
+                        i = j
         return A[i], float(mu[i]), float(sd[i])
 
     def step(self) -> None:
