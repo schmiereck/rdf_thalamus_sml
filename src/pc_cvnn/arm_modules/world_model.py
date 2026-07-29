@@ -179,8 +179,13 @@ TILT_OFFSETS = [float(x) for x in os.environ.get("ACT23_TILT_OFFSETS", "-12,0,12
 TILT_CURIOSITY = float(os.environ.get("ACT23_TILT_CURIOSITY", "0.35"))   # Anteil Neugier-Zuege
 TILT_CUR_MARGIN = float(os.environ.get("ACT23_TILT_CUR_MARGIN", "1.2"))  # nur wenn deutlich unsicherer
 OPENING = os.environ.get("ACT23_WORLD_OPENING", "1") != "0"   # Greifbarkeit der Fingeroeffnung
-TILT_CUR_SLACK = float(os.environ.get("ACT23_TILT_CUR_SLACK", "0.10"))  # erlaubter Guete-Rueckstand
-#   eines Neugier-Kandidaten gegenueber der besten Neigung (Plausibilitaets-Schranke, s. select_action)
+TILT_CUR_SLACK = float(os.environ.get("ACT23_TILT_CUR_SLACK", "0.25"))  # erlaubter Guete-Rueckstand
+#   eines Neugier-Kandidaten gegenueber der besten Neigung (Plausibilitaets-Schranke, s. select_action).
+#   0.10 war ZU ENG (gemessen 165-Ep-Lauf 2026-07-29): weil 0 Grad die mit Abstand meisten Daten hat,
+#   sieht es fast immer am besten aus, und bei 0.10 fielen die Alternativen durch die Schranke -- die
+#   erzwungene Senkrechte STIEG bei fernen Objekten von 50% auf 75%, der Abstand zur natuerlichen
+#   Haltung wuchs 25.5 -> 30.0 Grad.  Die Schranke sollte nur die SCHAEDLICHEN Raender abschneiden
+#   (>45 Grad, dort 0% Lieferung), nicht die mittlere Exploration, in der die natuerliche Haltung liegt.
 #   Grad RELATIV zur natuerlichen Neigung; 0 = die kostenlose Haltung, negativ = gegen die Kinematik
 TILT_R0 = float(os.environ.get("ACT23_TILT_R0", "0.117"))    # Radius, ab dem die Klaue zu kippen beginnt
 TILT_SLOPE = float(os.environ.get("ACT23_TILT_SLOPE", "293"))  # Grad pro Meter (gemessen, s. cross_augment)
