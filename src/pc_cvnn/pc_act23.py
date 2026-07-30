@@ -1605,6 +1605,17 @@ def run_self_learning_steering(headless=False):
                   f"trainiere Klassen einmalig nach", flush=True)
         train_fovea_classes()
 
+    # ACT23_MODVIZ=1: eigenes Fenster mit dem MODUL-GRAPHEN und den Zusammenspiel-Kurven
+    # (src/pc_cvnn/module_viz.py).  Rein passiv -- ein Redraw je Episode, kein Eingriff in den Lauf.
+    modviz = None
+    if os.environ.get("ACT23_MODVIZ", "0") == "1":
+        try:
+            from pc_cvnn.module_viz import ModuleViz
+            modviz = ModuleViz()
+            print("  [ModulViz] eigenes Fenster geoeffnet (ACT23_MODVIZ=1)", flush=True)
+        except Exception as _e:
+            print(f"  [ModulViz] nicht verfuegbar: {_e}", flush=True)
+
     sel_off = {"dxy": None}                                    # the self-selected grasp-point OFFSET (dx,dy)
     #   of the CURRENT command: perceive() and the form tracker's servo obs both add it, so the executed
     #   grasp target is (perceived point + learned offset) consistently through approach corrections
@@ -2564,6 +2575,21 @@ def run_self_learning_steering(headless=False):
         # policy drifted from the teacher ALONG ITS OWN TRAJECTORY (the oscillating-Bilanz diagnostic:
         # a Bilanz trough with a Schatten spike = the lifelong refit moved the policy, not bad luck).
         div = runtime.shadow_divergence_mm()
+        if modviz is not None:                                 # Zusammenspiel-Kurven (passiv)
+            try:
+                _fv = vc.surprise()
+                modviz.push(fovea=(None if _fv is None else _fv.get("sensor")),
+                            body_mm=getattr(bm.body, "last_surprise", None),
+                            wm_mu=locals().get("_mu_a"), wm_sd=locals().get("_sd_a"),
+                            pol_div_mm=div,
+                            place_mm=(None if s_d is None else s_d * 1000.0),
+                            tilt_deg=(np.degrees(locals().get("_tilt") or 0.0)
+                                      if TILT_ACTION else None),
+                            nat_deg=(np.degrees(world.natural_tilt(world.radius_of(fe)))
+                                     if (TILT_ACTION and fe is not None) else None))
+            except Exception as _e:
+                if os.environ.get("ACT23_DEBUG", "0") == "1":
+                    print(f"    [ModulViz] push uebersprungen: {_e}", flush=True)
         runtime.train(epochs=200)                              # act19's DAgger refits used 300; 80 underfit
         #   the shifting aggregate (user watched the net under-CLOSE the gripper -- the BC smoothing
         #   artefact that stronger refits + DAgger labels at the visited close-states sharpen)
