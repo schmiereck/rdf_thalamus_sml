@@ -1956,6 +1956,7 @@ def run_self_learning_steering(headless=False):
         just-placed object (user-observed).  So leg 1 HOLDS the episode's wrist angle while lifting; only
         leg 2, at carry height, ramps it home at a bounded rate."""
         sim.target("joint_5", act16.J5_OPEN)
+        HOME_Z_MIN = float(os.environ.get("ACT23_HOME_Z_MIN", "0.055"))   # Hoehen-Wache in Bein 2
         w = float(sim.d.qpos[sim.jqadr["joint_4"]])            # the wrist angle the episode ended with
         HOME_W = HOME["joint_4"]
         for k in range(60):                                    # leg 1: straight up, wrist HELD
@@ -1972,7 +1973,21 @@ def run_self_learning_steering(headless=False):
             q3 = sim.arm3_angles()
             if float(np.max(np.abs(q3 - HOME_Q3))) < 0.05 and abs(w - HOME_W) < 0.1:
                 break
-            sim.set_arm3_targets(q3 + np.clip(HOME_Q3 - q3, -0.03, 0.03))
+            step = np.clip(HOME_Q3 - q3, -0.03, 0.03)
+            # HOEHEN-WACHE (user-beobachtet: "die Finger schleifen beim Zurueckfahren manchmal am
+            # Boden, wenn der Arm beim Ablegen weit weg von der Base war").  Die Gelenkraum-
+            # Interpolation ist NICHT hoehenerhaltend: gemessen in der echten Sim faellt der tiefste
+            # Klauenpunkt waehrend Bein 2 von 69mm (Ablage nah) auf 23mm (Ablage bei r=0.27) -- das
+            # ist die Hoehe eines 24mm-Objekts.  Das gelernte FK-Modell zeigt diesen Durchhang NICHT
+            # (es sagte konstant 89mm voraus), deshalb wird hier die TATSAECHLICHE Hoehe aus der Sim
+            # gelesen und reaktiv gegengesteuert, statt sich auf die Vorhersage zu verlassen.
+            hz = float(sim.grasp_pos()[2])
+            if hz < HOME_Z_MIN:
+                h = sim.grasp_pos()
+                lift = bm.body.reach_velocity(q3, np.array([h[0], h[1], act16.CARRY_Z]),
+                                              gain=2.0, max_dq=0.03)
+                step = 0.5 * step + 0.5 * lift                 # heimwaerts UND wieder hoch
+            sim.set_arm3_targets(q3 + step)
             w += float(np.clip(HOME_W - w, -0.02, 0.02))
             sim.target("joint_4", w)
             sim.step(2)
