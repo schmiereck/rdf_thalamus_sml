@@ -176,7 +176,13 @@ TILT_ACTION = os.environ.get("ACT23_TILT_ACTION", "1") != "0"
 TILT_MAX = float(os.environ.get("ACT23_TILT_MAX", "55"))     # Grad, Obergrenze des Kandidatengitters
 TILT_GRID = int(os.environ.get("ACT23_TILT_GRID", "4"))      # Stufen (nur ohne Radius-Info)
 TILT_OFFSETS = [float(x) for x in os.environ.get("ACT23_TILT_OFFSETS", "-12,0,12,25").split(",")]
-TILT_CURIOSITY = float(os.environ.get("ACT23_TILT_CURIOSITY", "0.35"))   # Anteil Neugier-Zuege
+TILT_CURIOSITY = float(os.environ.get("ACT23_TILT_CURIOSITY", "0.6"))   # Anteil Neugier-Zuege.
+#   0.35 war der LIMITIERENDE Regler (gemessen 419-Ep-Lauf 2026-07-29): die uebrigen 65% sind reine
+#   LCB-Wahl und nehmen fast immer 0 Grad, daher blieb der 0-Grad-Anteil bei fernen Objekten trotz
+#   der SLACK-Korrektur bei 75%.  Meine Kennlinie hatte nur beschrieben, was die Neugier waehlt WENN
+#   sie greift -- nicht, wie oft sie greift.  Erwartung bei 0.6: 0.4*100% + 0.6*49% ~ 69% ... der
+#   Effekt ist also spuerbar, aber nicht dramatisch; der Datenuebergang (144 gekippte gegen ~3800
+#   senkrechte Zeilen) bleibt der eigentliche Bremsklotz.
 TILT_CUR_MARGIN = float(os.environ.get("ACT23_TILT_CUR_MARGIN", "1.2"))  # nur wenn deutlich unsicherer
 OPENING = os.environ.get("ACT23_WORLD_OPENING", "1") != "0"   # Greifbarkeit der Fingeroeffnung
 TILT_CUR_SLACK = float(os.environ.get("ACT23_TILT_CUR_SLACK", "0.25"))  # erlaubter Guete-Rueckstand
