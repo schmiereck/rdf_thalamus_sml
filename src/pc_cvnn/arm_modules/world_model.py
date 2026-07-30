@@ -181,13 +181,14 @@ TILT_VETO_N = int(os.environ.get("ACT23_TILT_VETO_N", "8"))       # ab so vielen
 TILT_VETO_Q = float(os.environ.get("ACT23_TILT_VETO_Q", "0.35"))  # als belegt; darunter = belegt schlecht
 T_EDGES = np.array([0, 8, 16, 24, 32, 40, 48, 90.1])       # Neigungs-Bins in Grad
 R_EDGES = np.array([0.0, 0.16, 0.21, 9.9])                 # Radius-Bins in Metern
-TILT_CURIOSITY = float(os.environ.get("ACT23_TILT_CURIOSITY", "0.6"))   # Anteil Neugier-Zuege.
-#   0.35 war der LIMITIERENDE Regler (gemessen 419-Ep-Lauf 2026-07-29): die uebrigen 65% sind reine
-#   LCB-Wahl und nehmen fast immer 0 Grad, daher blieb der 0-Grad-Anteil bei fernen Objekten trotz
-#   der SLACK-Korrektur bei 75%.  Meine Kennlinie hatte nur beschrieben, was die Neugier waehlt WENN
-#   sie greift -- nicht, wie oft sie greift.  Erwartung bei 0.6: 0.4*100% + 0.6*49% ~ 69% ... der
-#   Effekt ist also spuerbar, aber nicht dramatisch; der Datenuebergang (144 gekippte gegen ~3800
-#   senkrechte Zeilen) bleibt der eigentliche Bremsklotz.
+TILT_CURIOSITY = float(os.environ.get("ACT23_TILT_CURIOSITY", "0.35"))   # Anteil Neugier-Zuege.
+#   Kurze Geschichte dieses Reglers, damit er nicht wieder falsch gedreht wird: er stand auf 0.35,
+#   wurde auf 0.6 erhoeht, weil der 0-Grad-Anteil trotz der SLACK-Korrektur bei 75% klebte -- die
+#   Diagnose zeigte dann aber, dass nicht die RATE band, sondern erst die MARGIN-Bedingung (sigma
+#   differenzierte die Neigungen nicht) und danach die mu-Schranke (sie sperrte alles Unerprobte
+#   aus).  Beide sind mit dd99215 behoben (Dichte-Neuheit + datenbasiertes Veto).  Seither GREIFT
+#   die Neugier wirklich, und 0.6 hiesse: 60% aller Griffe explorieren.  Zurueck auf 0.35, weil die
+#   Erhoehung nur eine Kompensation fuer den defekten Mechanismus war.
 TILT_CUR_MARGIN = float(os.environ.get("ACT23_TILT_CUR_MARGIN", "1.2"))  # nur wenn deutlich unsicherer
 OPENING = os.environ.get("ACT23_WORLD_OPENING", "1") != "0"   # Greifbarkeit der Fingeroeffnung
 TILT_CUR_SLACK = float(os.environ.get("ACT23_TILT_CUR_SLACK", "0.25"))  # erlaubter Guete-Rueckstand
