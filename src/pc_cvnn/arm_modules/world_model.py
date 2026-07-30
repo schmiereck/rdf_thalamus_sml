@@ -176,6 +176,11 @@ TILT_ACTION = os.environ.get("ACT23_TILT_ACTION", "1") != "0"
 TILT_MAX = float(os.environ.get("ACT23_TILT_MAX", "55"))     # Grad, Obergrenze des Kandidatengitters
 TILT_GRID = int(os.environ.get("ACT23_TILT_GRID", "4"))      # Stufen (nur ohne Radius-Info)
 TILT_OFFSETS = [float(x) for x in os.environ.get("ACT23_TILT_OFFSETS", "-12,0,12,25").split(",")]
+TILT_NOV = os.environ.get("ACT23_TILT_NOVELTY", "dichte")   # "dichte" | "sigma" (s. tilt_novelty)
+TILT_VETO_N = int(os.environ.get("ACT23_TILT_VETO_N", "8"))       # ab so vielen Zeilen gilt eine Zelle
+TILT_VETO_Q = float(os.environ.get("ACT23_TILT_VETO_Q", "0.35"))  # als belegt; darunter = belegt schlecht
+T_EDGES = np.array([0, 8, 16, 24, 32, 40, 48, 90.1])       # Neigungs-Bins in Grad
+R_EDGES = np.array([0.0, 0.16, 0.21, 9.9])                 # Radius-Bins in Metern
 TILT_CURIOSITY = float(os.environ.get("ACT23_TILT_CURIOSITY", "0.6"))   # Anteil Neugier-Zuege.
 #   0.35 war der LIMITIERENDE Regler (gemessen 419-Ep-Lauf 2026-07-29): die uebrigen 65% sind reine
 #   LCB-Wahl und nehmen fast immer 0 Grad, daher blieb der 0-Grad-Anteil bei fernen Objekten trotz
@@ -289,6 +294,73 @@ class WorldModelModule(ArmModule):
 
     def n(self):
         return len(self._X)
+
+    def tilt_novelty(self, tilts_deg, r):
+        """NEUHEIT einer Neigung = wie wenig Erfahrung in dieser (Neigung, Radius)-Zelle steckt.
+
+        WARUM NICHT Ensemble-sigma (gemessen 2026-07-30): sigma misst, wie UNEINIG die Member sind.
+        Fuer eine NEUE Aktionsdimension funktioniert das nicht -- bei 144 gekippten gegen ~3800
+        senkrechte Zeilen sind sich die Member schlicht einig, egal welche Neigung, das
+        sigma-Verhaeltnis lag im Median bei 1.00 und die Neugier wurde in 137 von 200 Faellen
+        abgewiesen.  Ein Henne-Ei, das keine Reglerstellung aufloest: ohne Daten kein sigma-Kontrast,
+        ohne sigma-Kontrast keine Exploration, ohne Exploration keine Daten.
+        DATENDICHTE ist davon unabhaengig -- sie misst direkt, wo der Agent noch nicht war.  Das ist
+        dasselbe Prinzip wie DistanceNovelty (das im Projekt schon die OBJEKTwahl steuert), nur auf
+        einem Histogramm statt auf kNN, weil der Raum hier zweidimensional und klein ist.
+        (Neigung, Radius) genuegt als Raum: die Neigung wirkt ueber den Radius (die natuerliche
+        Haltung ist eine Funktion von r), Form und Objektwinkel bleiben bewusst draussen -- sonst
+        waeren die Zellen bei 3800 Zeilen durchweg leer und die Neuheit truege keine Information.
+        """
+        H = self._tilt_hist()
+        ri = int(np.clip(np.searchsorted(R_EDGES, float(r), side="right") - 1, 0, len(R_EDGES) - 2))
+        out = []
+        for td in np.atleast_1d(tilts_deg):
+            ti = int(np.clip(np.searchsorted(T_EDGES, float(td), side="right") - 1, 0, len(T_EDGES) - 2))
+            out.append(1.0 / (1.0 + float(H[ti, ri])))
+        return np.asarray(out, float)
+
+    def tilt_veto(self, tilts_deg, r):
+        """True fuer Neigungen, die MIT DATEN belegt schlecht sind (nicht bloss vom Modell vermutet).
+
+        WARUM NICHT die mu-Schranke (gemessen 2026-07-30): das Modell haelt JEDE unerprobte Neigung
+        fuer deutlich schlechter -- Gueterueckstand median 0.63 -- weil es aus den 0-Grad-Daten glatt
+        extrapoliert.  Eine Schranke auf mu vertraut dieser Extrapolation und sperrt damit genau das
+        aus, was die Neugier erkunden soll: in 123 von 200 fernen Situationen blieb nach der Schranke
+        NUR 0 Grad uebrig.  mu-Veto und Dichte-Neuheit arbeiten gegeneinander.
+        Datenbasiert loest sich der Konflikt: eine Zelle wird nur verworfen, wenn sie GENUG Zeilen
+        hat UND diese im Mittel schlecht ausgingen.  Unerprobtes bleibt erlaubt (das ist der Zweck),
+        belegt Schlechtes -- der Rand >45 Grad mit 0-25% Lieferung -- fliegt raus."""
+        H, L = self._tilt_hist(), self._tilt_labels()
+        ri = int(np.clip(np.searchsorted(R_EDGES, float(r), side="right") - 1, 0, len(R_EDGES) - 2))
+        out = []
+        for td in np.atleast_1d(tilts_deg):
+            ti = int(np.clip(np.searchsorted(T_EDGES, float(td), side="right") - 1, 0, len(T_EDGES) - 2))
+            n = float(H[ti, ri])
+            out.append(bool(n >= TILT_VETO_N and (L[ti, ri] / max(n, 1.0)) < TILT_VETO_Q))
+        return np.asarray(out, bool)
+
+    def _tilt_labels(self):
+        """Summe der Outcome-Labels je (Neigung x Radius)-Zelle -- Zaehler fuer die mittlere Guete."""
+        self._tilt_hist()                                  # fuellt/aktualisiert den Cache mit
+        return self._lsum
+
+    def _tilt_hist(self):
+        """(Neigung x Radius)-Histogramm der gespeicherten Zeilen; neu gerechnet, wenn Zeilen dazukamen."""
+        n = len(self._X)
+        if getattr(self, "_hist_n", -1) == n and getattr(self, "_hist", None) is not None:
+            return self._hist
+        H = np.zeros((len(T_EDGES) - 1, len(R_EDGES) - 1))
+        L = np.zeros_like(H)
+        if n:
+            X = np.array(self._X)
+            if X.shape[1] >= self.feat_dim + 8:
+                t = np.degrees(np.arctan2(X[:, self.feat_dim + 7], X[:, self.feat_dim + 6]))
+                r = np.hypot(X[:, 0], X[:, 1])
+                H, _, _ = np.histogram2d(t, r, bins=[T_EDGES, R_EDGES])
+                L, _, _ = np.histogram2d(t, r, bins=[T_EDGES, R_EDGES],
+                                         weights=np.array(self._Y, float).ravel())
+        self._hist, self._lsum, self._hist_n = H, L, n
+        return H
 
     @staticmethod
     def natural_tilt(r):
@@ -447,8 +519,20 @@ class WorldModelModule(ArmModule):
                     mu_s = mu[same]
                     ok = same[mu_s >= float(mu_s.max()) - TILT_CUR_SLACK]
                     if ok.size:
-                        j = int(ok[int(np.argmax(sd[ok]))])
-                        if sd[j] > TILT_CUR_MARGIN * sd[i]:
+                        if TILT_NOV == "dichte" and feats is not None:
+                            rr = self.radius_of(feats)
+                            # DATENBASIERTES VETO statt mu-Schranke (s. tilt_veto)
+                            td_all = np.degrees([tilt_of(A[k]) for k in same])
+                            keep = ~self.tilt_veto(td_all, rr if rr is not None else 0.0)
+                            ok = same[keep] if keep.any() else same
+                            td = np.degrees([tilt_of(A[k]) for k in ok])
+                            score = self.tilt_novelty(td, rr if rr is not None else 0.0)
+                            base = float(self.tilt_novelty(
+                                [np.degrees(tilt_of(A[i]))], rr if rr is not None else 0.0)[0])
+                        else:
+                            score, base = sd[ok], float(sd[i])
+                        j = int(ok[int(np.argmax(score))])
+                        if float(np.max(score)) > TILT_CUR_MARGIN * base:
                             i = j
         return A[i], float(mu[i]), float(sd[i])
 
