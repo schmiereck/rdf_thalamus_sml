@@ -2468,6 +2468,17 @@ def run_self_learning_steering(headless=False):
         # die unsichere Kausalzuordnung (Anfahrt vs Griffgeometrie) steckt im Gewicht.  ACT23_FAIL_W=0
         # schaltet es faktisch ab, ACT23_ATTEMPT_NETZ=1 gibt volles Gewicht (altes Experiment).
         obs_w = 1.0                                    # fit weight of THIS episode's world-model row
+        # SENSOR-BELEGTER GRIFF-FEHLSCHLAG (Fingerdruck-Streifen).  Gemessen (50 Ep): wenn der Druck
+        # waehrend des HEBENS durchgehend 0 bleibt UND beim Zufassen unter 1 N lag, hat die Klaue das
+        # Objekt nie gehalten -- in 92% der Faelle folgt daraus kein Erfolg.  Das ist ein KAUSAL
+        # EINDEUTIGES Negativ fuer die AKTION: es haengt nur am Griff, nicht an Transport, Ablage oder
+        # einem Nachbarobjekt.  Genau die Eindeutigkeit, die dem attempted-Label fehlt (dort musste die
+        # unsichere Zuordnung ueber ein Gewicht von 0.3 abgefedert werden) -- hier gibt es volles
+        # Gewicht.  `not delivered` als Schutz: eine Episode, die trotz Druckeinbruch liefert (kurzes
+        # Nachfassen), darf kein Negativ bekommen.  ACT23_GRIPLABEL=0 schaltet es ab.
+        _grip_lost = (os.environ.get("ACT23_GRIPLABEL", "1") != "0"
+                      and bool(_g)                       # Sensor hat ueberhaupt gemessen
+                      and _lift_m < 0.01 and _close_m < 1.0)   # oben aus run_combined._grip gelesen
         # 423-Ep-Lauf ausgewertet (2026-07-28) -- und meine erste Bewertung KORRIGIERT.
         # Ich hatte das Label fuer schaedlich erklaert (Ausrichtungs-Praeferenz -0.010 -> +0.017,
         # Sigma 0.297 -> 0.395) und dabei gegen ein BACKUP verglichen, das sich nicht nur um die 86
@@ -2487,7 +2498,11 @@ def run_self_learning_steering(headless=False):
         att_full = (not use_net) or os.environ.get("ACT23_ATTEMPT_NETZ", "0") == "1"
         att_ok = att_full or fail_w > 0.0
         if os.environ.get("ACT23_CREDIT", "1") == "1":
-            if not lifted and attempted and not delivered and att_ok:
+            if _grip_lost and not delivered:
+                # der Streifen BELEGT, dass die Klaue nie gehalten hat -> Aktion war schlecht
+                route, outcome = "Griff hielt nicht (Drucksensor)", False
+                obs_w = 1.0
+            elif not lifted and attempted and not delivered and att_ok:
                 # the claw CLOSED at the object and it never rose: the choreography ARRIVED, the
                 # ACTION's grasp geometry (wrist/grip) failed -> the action gets a FAILURE label.
                 # Without this route a grasp-PREVENTING wrist was unfalsifiable (always "nicht
