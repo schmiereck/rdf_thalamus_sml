@@ -2247,6 +2247,16 @@ def run_self_learning_steering(headless=False):
             _off = not (_rb[0] - 0.01 <= _e[0] <= _rb[1] + 0.01 and _rb[2] - 0.01 <= _e[1] <= _rb[3] + 0.01)
             _trav = 1000.0 * float(np.linalg.norm(_e - snap[body][0][:2]))
             print(f"    [PlaceAB] {body} Weg {_trav:.0f}mm{'  VON-FLAECHE-GEFLOGEN' if _off else ''}", flush=True)
+        _g = dict(getattr(act16.run_combined, "_grip", {}) or {})
+        def _ph(*names):                                       # Mittelwert ueber die genannten Phasen
+            v = [x for n in names for x in _g.get(n, [])]
+            return (float(np.mean(v)), float(np.min(v))) if v else (0.0, 0.0)
+        _close_m, _ = _ph("close", "lower")                    # zufassen
+        _lift_m, _lift_lo = _ph("lift")                        # Last uebernehmen
+        _carry_m, _carry_lo = _ph("carry")                     # halten
+        _rel_m, _ = _ph("place", "release")                    # loesen
+        print(f"    [Griffdruck] zufassen {_close_m:5.2f} | heben {_lift_m:5.2f} (min {_lift_lo:4.2f})"
+              f" | tragen {_carry_m:5.2f} (min {_carry_lo:4.2f}) | loesen {_rel_m:5.2f}  [N]", flush=True)
         _rel = getattr(act16.run_combined, "_release", None)
         if _rel is not None:
             # ABLAGE-MESSUNG (nur Diagnose): trennt "zu hoch losgelassen" von "seitlich verfehlt".

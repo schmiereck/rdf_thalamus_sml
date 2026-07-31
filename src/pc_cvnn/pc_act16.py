@@ -344,6 +344,14 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         run_combined._slipped = False                        #   self-measurable predictions per episode.
         run_combined._attempted = False
         run_combined._release = None       # release snapshot (see the step loop)
+        run_combined._grip = {}            # Fingerdruck-Streifen: Messreihe JE PHASE (N).
+        #   Ein realer Streifen liefert durchgehend -- also wird er auch durchgehend aufgezeichnet und
+        #   nach Phase getrennt ausgewertet.  Der reine Spitzenwert ueber die Episode trennte Erfolg
+        #   von Misserfolg NICHT (gemessen 45 Ep: 6.7 vs 8.1 N, p=0.43), weil er nur sagt DASS die
+        #   Klaue gedrueckt hat, nicht ob sie GEHALTEN hat -- gescheiterte Griffe drueckten sogar am
+        #   festesten (11.0 N: schief eingeklemmt und weggeschoben).  Die Frage "haelt der Griff" ist
+        #   eine Frage ueber ZEIT, also braucht es den Verlauf: fest zufassen (close), Last uebernehmen
+        #   (lift), sie halten (carry), sauber loesen (release).
         #   _maxcz = highest the object rose (GRASP checkpoint: did the grasp actually happen?).
         #   _slipped = while carried, did the object SEPARATE from the hand (CARRY checkpoint: did the
         #   grip hold?).  _attempted = the claw CLOSED low AT the believed object while it still sat on
@@ -531,6 +539,10 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                                          "cxy": np.asarray(c_true, float).copy(),
                                          "tgt": np.asarray(tgt_true, float).copy()}
             sim.target("joint_5", j5)
+            try:                                              # DRUCKMESSSTREIFEN (ein Finger, innen)
+                run_combined._grip.setdefault(phase, []).append(sim.grip_pressure("left"))
+            except Exception:
+                pass
             gentle = abs(j5 - J5_PUSH) < 0.2 and aim[2] < PUSH_Z + 0.02   # spread gripper + low = a PUSH
             # GENTLE CARRY: a concave object (e.g. a perceived U) is gripped OFF its centre-of-mass (its COM
             # sits in the concavity, on no material), so the lateral acceleration of a normal-speed carry tears

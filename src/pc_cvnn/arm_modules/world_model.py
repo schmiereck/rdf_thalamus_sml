@@ -181,7 +181,12 @@ TILT_VETO_N = int(os.environ.get("ACT23_TILT_VETO_N", "8"))       # ab so vielen
 TILT_VETO_Q = float(os.environ.get("ACT23_TILT_VETO_Q", "0.35"))  # als belegt; darunter = belegt schlecht
 T_EDGES = np.array([0, 8, 16, 24, 32, 40, 48, 90.1])       # Neigungs-Bins in Grad
 R_EDGES = np.array([0.0, 0.16, 0.21, 9.9])                 # Radius-Bins in Metern
-TILT_CURIOSITY = float(os.environ.get("ACT23_TILT_CURIOSITY", "0.35"))   # Anteil Neugier-Zuege.
+TILT_CURIOSITY = float(os.environ.get("ACT23_TILT_CURIOSITY", "0"))   # Anteil Neugier-Zuege.
+#   AUF 0 GESETZT (2026-07-31): die Frage ist beantwortet.  Mit 249 gekippten Zeilen sagen die Daten
+#   eindeutig, dass Neigen SCHLECHTER liefert (ferne Objekte: Guete 0.66 senkrecht vs 0.42 geneigt,
+#   p<0.0001), und das Modell hat das gelernt.  Die Exploration kostete nur noch: Lauf mit 22%
+#   Exploration lieferte 45%, mit 48% nur 36% (p=0.033).  Die Aktionsdimension bleibt -- das Modell
+#   waehlt jetzt von sich aus ueberwiegend die Senkrechte.  >0 nimmt die Erkundung wieder auf.
 #   Kurze Geschichte dieses Reglers, damit er nicht wieder falsch gedreht wird: er stand auf 0.35,
 #   wurde auf 0.6 erhoeht, weil der 0-Grad-Anteil trotz der SLACK-Korrektur bei 75% klebte -- die
 #   Diagnose zeigte dann aber, dass nicht die RATE band, sondern erst die MARGIN-Bedingung (sigma
