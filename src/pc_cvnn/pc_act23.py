@@ -1627,8 +1627,13 @@ def run_self_learning_steering(headless=False):
         """Add the model's self-selected grasp-point offset to a perceived grasp target (stage 1)."""
         return np.asarray(xy, float) + (sel_off["dxy"] if sel_off["dxy"] is not None else 0.0)
 
-    U_DENSEGRASP = os.environ.get("ACT23_U_DENSEGRASP", "1") != "0"   # DEFAULT ON (U-only A/B 2026-07-24:
-    #   +11pp Lieferung, 16->25/80; the win is real flat U carries; ACT23_U_DENSEGRASP=0 restores the rim grip)
+    U_DENSEGRASP = os.environ.get("ACT23_U_DENSEGRASP", "0") == "1"   # DEFAULT AUS seit 2026-08-01 (war ON,
+    #   U-only A/B 2026-07-24: +11pp, 16->25/80).  Es war eine FORM-SONDERREGEL (`if body == "obj_U"`) --
+    #   genau das gezuechtete Verhalten, das der Nutzer nicht will, und es half auch nicht genug (413-Ep-Lauf:
+    #   U 22% geliefert, 42% Griffverlust laut Drucksensor).  Der dichteste Punkt ist per Konstruktion
+    #   KANDIDAT 0 der Maskenabtastung (shape_classifier:614, argsort(-dv)) und damit fuer JEDE Form
+    #   waehlbar -- die U verliert ihn also nicht, sie muss ihn nur verdienen.  ACT23_U_DENSEGRASP=1
+    #   stellt die Sonderregel wieder her (A/B).
     FORM_SPLIT = os.environ.get("ACT23_FORM_SPLIT", "1") != "0"      # the same MERGED-BLOB recovery for the
     #   FORM path (L/U/open classes): a fused component's form descriptor is destroyed, so re-read the form
     #   on the colour-separated part (perceive_colour(with_form=True)).  Measured on obj_T over 80 poses:
@@ -1641,9 +1646,13 @@ def run_self_learning_steering(headless=False):
     #   grasps the neighbour.  ACT23_COLOUR_SPLIT=0 restores the old fallback.  Measured: 25mm -> 6mm.
 
     def _gp(det, body):
-        """Grasp point of a detection: the DENSEST (solid-base) point for the U under ACT23_U_DENSEGRASP
-        -- the default nearest-material grasp_xy lands on the U's thin inner rim (centroid in the
-        concavity) -> 'greift ins Leere' (746-log U mechanism-ID).  Every other object keeps grasp_xy."""
+        """Greifpunkt-BEZUG einer Detektion: immer grasp_xy (Material naechst dem Schwerpunkt).
+
+        Das ist zugleich der Bezugspunkt, auf den run_one die Kandidaten-Offsets bezieht (:2087) und
+        auf den _off() sie addiert -- fruehere U-Sonderregel gab hier grasp_dense zurueck, waehrend die
+        Offsets weiter gegen grasp_xy gerechnet wurden: die Verschiebung waere DOPPELT gezaehlt worden,
+        sobald die Kandidaten im Netz-Modus anspringen.  Ein Bezugspunkt fuer alle Formen schliesst das
+        aus.  ACT23_U_DENSEGRASP=1 holt die alte Sonderregel fuer ein A/B zurueck."""
         if U_DENSEGRASP and body == "obj_U" and det.get("grasp_dense") is not None:
             return det["grasp_dense"]
         return det["grasp_xy"]
@@ -2076,7 +2085,22 @@ def run_self_learning_steering(headless=False):
             # inflated sigma pushes LCB exactly into those unlabeled extrapolation offsets (model
             # exploitation, the act22 lesson).  Candidates are only OFFERED where the failure route
             # can label them: FSM episodes (or ACT23_ATTEMPT_NETZ=1).
-            cands_ok = (not use_net) or os.environ.get("ACT23_ATTEMPT_NETZ", "0") == "1"
+            #
+            # SEIT 2026-08-01 auch auf NETZ-Episoden -- weil der FALSIFIZIERER jetzt existiert.  Der
+            # Fingerdruck-Streifen labelt genau das, was ein schlechter Greifpunkt anrichtet: kein Druck
+            # beim Heben = die Klaue hat nie gehalten, kausal am GRIFF und an nichts sonst.  Gemessen im
+            # 413-Ep-Netz-Lauf: feuert in 34% der Episoden, 138 von 139 Treffern waren echte
+            # Nicht-Lieferungen, und die Enthaltungsquote fiel 33-43% -> 25%.  Damit ist die Begruendung
+            # oben ("die netz-Fehlerroute enthaelt sich") ueberholt.  Der Puffer zeigt, was der Riegel
+            # gekostet hat: die letzten ~1500 Zeilen haben Offset EXAKT 0 -- das Modell konnte nicht
+            # lernen, WO es greifen soll, weil nie etwas anderes probiert wurde.
+            # BLEIBT ENG: auf Netz-Episoden ist n_cand=0, es kommen also KEINE Zufalls-Offsets dazu --
+            # nur die <=6 maskenabgetasteten Punkte auf echtem Material (<=50mm).  Ehrliche Grenze: ~38%
+            # der Fehlschlaege fallen weiter als Enthaltung durch, die Falsifizierbarkeit ist also nicht
+            # vollstaendig, nur nicht mehr null.  ACT23_GRASP_CANDS_NETZ=0 riegelt wieder ab.
+            _griplabel = os.environ.get("ACT23_GRIPLABEL", "1") != "0"
+            cands_ok = ((not use_net) or os.environ.get("ACT23_ATTEMPT_NETZ", "0") == "1"
+                        or (_griplabel and os.environ.get("ACT23_GRASP_CANDS_NETZ", "1") != "0"))
             if (os.environ.get("ACT23_GRASP_CANDS", "1") == "1" and cands_ok
                     and det is not None and det.get("grasp_cands")):
                 # GRASP-POINT DISCOVERY (user's standing goal): the candidates are REAL places on the
@@ -2112,6 +2136,22 @@ def run_self_learning_steering(headless=False):
                     _dir_ref_set = True
             if float(np.linalg.norm(a[:2])) > 1e-9:
                 sel_off["dxy"] = np.asarray(a[:2], float)
+            if offs:
+                # IMMER geloggt (nicht DEBUG-gated), wie [Neigung]: seit die Kandidaten auch im
+                # Netz-Modus laufen, ist der Greifpunkt eine ECHTE Wahl des Modells und ein GUI-Lauf
+                # muss nachvollziehbar bleiben -- "Bezug" = wieviel der gewaehlte Punkt vom
+                # heuristischen abweicht, "dicht" = Abstand zum dichtesten (Kandidat 0).
+                # den dichtesten Punkt EXPLIZIT aus der Detektion nehmen, nicht offs[0] annehmen: die
+                # 50mm-Schranke oben kann ihn herausfiltern, dann waere offs[0] ein anderer Kandidat
+                # und die Zeile loege ueber genau die Groesse, die man mitliest.
+                _dn = det.get("grasp_dense")
+                _d0 = None if _dn is None else np.asarray(_dn, float) - g0
+                _sel = np.asarray(a[:2], float)
+                _txt = "Heuristik" if float(np.linalg.norm(_sel)) <= 1e-9 else \
+                       f"{1e3*_sel[0]:+.0f},{1e3*_sel[1]:+.0f}mm"
+                _nd = "" if _d0 is None else f", zum dichtesten {1e3*float(np.linalg.norm(_sel-_d0)):.0f}mm"
+                print(f"    [Greifpunkt] {body}: {_txt} aus {len(offs)} Masken-Kandidaten{_nd}",
+                      flush=True)
             # A/B FORCE knobs (probe arms, PRIVILEGED, default off -- never a runtime rule): measure the
             # CAUSAL value of a correct wrist / a material-centred grasp point for the prong shapes
             # before anything is allowed to learn it.  ACT23_FORCE_WRIST=priv aligns the wrist to the
