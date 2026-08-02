@@ -2081,6 +2081,13 @@ def run_self_learning_steering(headless=False):
             Image.fromarray(sim.render(CAM)).save(os.path.join(_dbgimg, f"stage_{tag}.png"))
 
     def run_one():
+        import time as _time
+        # ZEITKONTO je Episode (Nutzerwunsch 2026-08-02: sehen, wann die CPU nicht mehr reicht).
+        # Grob nach BLOECKEN, nicht nach Funktionen -- die Frage ist "welcher Teil wird teuer", und
+        # genau auf dieser Ebene kann man handeln (Fovea-Aufloesung, Trainings-Epochen, Episodenlaenge).
+        # Die Fovea zaehlt SICH SELBST (HexFovea.step), weil sie sonst in der Ausfuehrung verschwindet.
+        _T = {"gesamt": _time.perf_counter()}
+        _fov0 = getattr(vc.fovea, "t_step", 0.0), getattr(vc.fovea, "n_step", 0)
         _l, body, method = state.selected()
         # SNAPSHOT every object's pose before acting.  run_combined parks distractor cubes off-table and the
         # arm can knock objects -> afterwards restore all NON-commanded objects to exactly here, so the scene
@@ -2317,6 +2324,7 @@ def run_self_learning_steering(headless=False):
         # der Episode zuruecksetzen, damit die Neigung NUR fuer diesen Griff gilt und nicht dauerhaft
         # in Transport/Ablage und die naechste Episode durchschlaegt.
         _dir_ref_orig = None if not TILT_ACTION else np.array(bm.body.dir_ref, float).copy()
+        _T["vor_ausfuehrung"] = _time.perf_counter()           # alles davor = Wahrnehmung + Aktionswahl
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_fn,
                            policy_fn=(runtime.predict if use_net else None),
@@ -2332,6 +2340,7 @@ def run_self_learning_steering(headless=False):
                            servo=(method in ("color", "shape")), rescatter=False, episode_end_fn=ep_end,
                            lifelong=True, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
                            arm_reset=False)
+        _T["nach_ausfuehrung"] = _time.perf_counter()
         if _dir_ref_orig is not None:
             bm.body.dir_ref = _dir_ref_orig                    # Neigung galt nur fuer diese Episode
         _save(f"{body}_1after_runcombined")
@@ -2735,6 +2744,17 @@ def run_self_learning_steering(headless=False):
                   f"|Netz-Teacher| {div:.0f} mm ({runtime.n()} DAgger + {runtime.n_imit()} Selbst, "
                   f"nachtrainiert)", flush=True)
         save_state()                                           # lifelong progress survives a restart
+        if os.environ.get("ACT23_ZEIT", "1") != "0":
+            _now = _time.perf_counter()
+            _ges = _now - _T["gesamt"]
+            _wahr = _T.get("vor_ausfuehrung", _now) - _T["gesamt"]
+            _aus = _T.get("nach_ausfuehrung", _now) - _T.get("vor_ausfuehrung", _now)
+            _lern = _now - _T.get("nach_ausfuehrung", _now)    # Kredit + Welt-Fit + Selbst-Imitation
+            _ft = getattr(vc.fovea, "t_step", 0.0) - _fov0[0]  #   + Runtime-Refit + Speichern
+            _fn = getattr(vc.fovea, "n_step", 0) - _fov0[1]
+            print(f"    [Zeit] gesamt {_ges:5.1f}s | Wahrnehmung {_wahr:4.1f} | Ausfuehrung {_aus:5.1f} "
+                  f"(davon Fovea {_ft:4.1f} in {_fn} Schritten"
+                  f"{f', {1e3*_ft/_fn:.0f}ms/Schritt' if _fn else ''}) | Lernen {_lern:4.1f}", flush=True)
         return res.get("ok", False), res.get("err", float("nan")) * 1000.0
 
     # CURIOSITY-driven auto-run (the act21 researcher pattern, user request): instead of a random pick
