@@ -610,7 +610,14 @@ def run_self_learning_steering(headless=False):
     # PERSIST run_combined just does arm_home()+reposition_strays(): act23 owns ALL placement (setup_long,
     # place_all, the run_one snapshot-restore), so the scene truly persists and no geom is ever resized.
     act16.PERSIST = True
-    RES = int(os.environ.get("ACT23_RES", "240"))
+    RES = int(os.environ.get("ACT23_RES", "480"))   # 240 -> 480 am 2026-08-02 (Zweig fovea-res):
+    #   zusammen mit ACT_FOVEA_F 16->20 und UNVERAENDERTEM K=4 halbiert sich der Zellabstand im
+    #   Weltmass (2x Fovea-Aufloesung) bei gleichem Gesichtsfeld.  Gemessen kostet das im
+    #   Fovea-Netz fast nichts (Abtastung 2.9 -> 3.2ms); teuer sind allein die 400 statt 256
+    #   ZELLEN der PC-Relaxation.  Das Rendern selbst wird 4x teurer, lag aber bei ~10s je
+    #   Episode.  ACHTUNG bei Aenderungen: alle PIXEL-Schwellen des Formklassifikators sind auf
+    #   240px geeicht und skalieren ueber ShapeClassifierModule.px_scale mit; die gespeicherte
+    #   Homographie wird ueber needs_recal() neu gefittet.
     LAM = float(os.environ.get("ACT23_LAM", "1.0"))
     NPOS = int(os.environ.get("ACT23_NPOS", "10")); NTRIAL = int(os.environ.get("ACT23_NTRIAL", "5"))
     LONG = "obj_blue"; LONG_HALF = (0.034, 0.009, 0.012)   # clearly a LONG thin bar (not a cube)
@@ -791,6 +798,17 @@ def run_self_learning_steering(headless=False):
 
     if _loaded is not None:
         shape_clf = _loaded["shape_clf"]
+        # HOMOGRAPHIE VOR dem Welt-Check nachfitten, wenn sich die Bildaufloesung geaendert hat.
+        # Sonst laege JEDE wahrgenommene Position um den Aufloesungsfaktor daneben, _shapes_match_world
+        # schluege fehl und der Klassifikator wuerde komplett neu trainiert -- wobei die SELBST
+        # BENANNTEN offenen Klassen (neu-*) verloren gingen.  H ist reine Kamera-Kalibrierung, kein
+        # Gelerntes: neu fitten kostet nichts und rettet die Klassen.
+        if shape_clf.needs_recal(sim):
+            _sv = sim.d.mocap_pos.copy()
+            _n = shape_clf.calibrate(sim)
+            sim.d.mocap_pos[:] = _sv; mujoco.mj_forward(sim.m, sim.d)
+            print(f"  [Persistenz] Bildaufloesung geaendert -> Homographie neu gefittet ({_n} Punkte); "
+                  f"gelernte Formen und offene Klassen bleiben erhalten", flush=True)
         if _shapes_match_world(shape_clf):
             if panel is not None:
                 panel.update(sim.render(CAM), "Form-Wahrnehmung aus gespeichertem Zustand geladen")

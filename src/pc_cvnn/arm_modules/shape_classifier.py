@@ -162,7 +162,9 @@ class ShapeClassifierModule(ArmModule):
         import mujoco
         opt = mujoco.MjvOption(); opt.geomgroup[1] = 0       # hide the arm -> clean footprint
         sim._renderer.update_scene(sim.d, camera=self.cam, scene_option=opt)
-        return sim._renderer.render()                        # uint8
+        img = sim._renderer.render()                         # uint8
+        self._last_w = int(img.shape[1])                     # aktuelle Bildbreite fuer px_scale()
+        return img
 
     # ------------------------------------------------------------------
     # table-plane homography (overview px <-> world), fit by DLT
@@ -198,7 +200,32 @@ class ShapeClassifierModule(ArmModule):
             Mh.append([x, y, 1, 0, 0, 0, -u * x, -u * y, -u])
             Mh.append([0, 0, 0, x, y, 1, -v * x, -v * y, -v])
         self.H = np.linalg.svd(np.array(Mh))[2][-1].reshape(3, 3); self.Hinv = np.linalg.inv(self.H)
+        self._cal_w = int(self._render_u8(sim).shape[1])       # Bildbreite, FUER DIE H gilt (s. needs_recal)
         return len(W)
+
+    # Referenz-Bildbreite, auf die alle PIXEL-Schwellen dieser Klasse geeicht sind.
+    PX_REF = 240.0
+
+    def px_scale(self, img=None):
+        """Skalierung der Pixel-Schwellen fuer die AKTUELLE Bildbreite (1.0 bei 240px).
+
+        Laengen skalieren mit s, FLAECHEN mit s^2.  Ohne das laesst z.B. min_area=40 bei doppelter
+        Aufloesung Blobs durch, die in Weltmassen nur ein VIERTEL so gross sind -- Glanzlichter und
+        Splitter wuerden als Objekte gelten."""
+        w = float(getattr(self, "_last_w", 0) or (img.shape[1] if img is not None else self.PX_REF))
+        return w / self.PX_REF
+
+    def needs_recal(self, sim):
+        """Wurde H fuer eine ANDERE Bildbreite gefittet?  Dann ist sie unbrauchbar.
+
+        DIE STILLE FALLE (2026-08-02): H wird im Zustand MITGESPEICHERT, und die Kalibrierung lief
+        nur `if self.H is None` -- bei geaenderter Aufloesung waere die alte H weiterbenutzt worden
+        und JEDE wahrgenommene Position um den Aufloesungsfaktor daneben gelegen.  Kein Absturz,
+        keine Warnung, nur systematisch falsche Griffe."""
+        if self.H is None:
+            return True
+        cal = int(getattr(self, "_cal_w", 0) or 0)
+        return cal != int(self._render_u8(sim).shape[1])
 
     # ------------------------------------------------------------------
     # colour-agnostic occupancy + COMPLEX angular-harmonic descriptor
@@ -321,7 +348,7 @@ class ShapeClassifierModule(ArmModule):
         viz_fn(i, steps): optional callback every viz_every steps (e.g. to show the training live)."""
         import mujoco
         rng = rng or self.rng
-        if self.cam != "top" and self.H is None:
+        if self.cam != "top" and self.needs_recal(sim):     # auch bei GEAENDERTER Bildbreite
             self.calibrate(sim, rng=np.random.default_rng(3))
         sim.reset_home(); self._park_markers(sim)
         allb = ["obj_red", "obj_green", "obj_blue", "obj_L", "obj_U"]
@@ -571,6 +598,7 @@ class ShapeClassifierModule(ArmModule):
         from scipy import ndimage
         self._park_markers(sim)
         img = self._render_u8(sim)
+        min_area = min_area * self.px_scale() ** 2          # FLAECHE -> s^2 (s. px_scale)
         mask = self._mask(img)
         labels, n = ndimage.label(mask)
         out = []
@@ -613,7 +641,7 @@ class ShapeClassifierModule(ArmModule):
                     if cands:                                              # grasp-point candidate SAMPLING
                         order = np.argsort(-dv)
                         for i in order:
-                            if dv[i] < max(2.0, 0.45 * float(dv[order[0]])):
+                            if dv[i] < max(2.0 * self.px_scale(), 0.45 * float(dv[order[0]])):
                                 break                                       # thin rim: fingers find no hold
                             p = W[i]
                             if all(float(np.linalg.norm(p - q)) > 0.012 for q in gcands):
