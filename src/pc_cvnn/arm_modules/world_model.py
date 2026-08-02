@@ -114,10 +114,99 @@ def cross_augment(X2d, fd):
         car = cw * ca + sw * sa                                    # cos2(w - alpha)
         sar = sw * ca - cw * sa                                    # sin2(w - alpha)
         cols += [car, sar, np.abs(car), np.sqrt(r2) * car]
+    if TILT_ACTION and X2d.shape[1] >= fd + 8:
+        # ABWEICHUNG der GEWUENSCHTEN Neigung von der KINEMATISCH ERZWUNGENEN, als komplexes
+        # Produkt z_tilt * conj(z_kin) -> (cos d, sin d).  z_kin folgt aus dem Radius: gemessen
+        # (2026-07-28, Reach-Controller ueber ein Positionsgitter) ist die erzwungene Neigung nahezu
+        # exakt linear im Radius, Korrelation +1.00 -- 1 Grad bei 0.12m .. 45 Grad bei 0.27m, also
+        # ~293 Grad/m ab ~0.117m.  Das ist eine KALIBRIERUNG dieses Arms, keine Regel: sie sagt nur,
+        # welche Haltung der Arm hier von sich aus einnimmt, nicht welche gut ist.  Der Agent lernt
+        # aus den Outcomes, ob es sich lohnt, davon abzuweichen (d nahe 0 = er nimmt die natuerliche
+        # Haltung, |d| gross = er kaempft dagegen und zahlt mit Positionsfehler).
+        ct, st_ = X2d[:, fd + 6], X2d[:, fd + 7]
+        tk = np.clip((np.sqrt(r2) - TILT_R0) * np.radians(TILT_SLOPE), 0.0, np.pi / 2)
+        ck, sk = np.cos(tk), np.sin(tk)
+        cols += [ct * ck + st_ * sk, st_ * ck - ct * sk]       # cos(tilt-tk), sin(tilt-tk)
+        if OPENING:
+            # GREIFBARKEIT = wie FLACH die FINGER-OEFFNUNGSACHSE gegen die Arbeitsflaeche liegt.
+            # User-Geometrie (2026-07-29): "So wie der Greifer aus seiner Ruheposition kommt, steht
+            # die Oeffnung zwischen den zwei Fingern parallel zur Arbeitsflaeche.  Eine 90-Grad-
+            # Drehung des Wrist stellt sie senkrecht -- aber nur, wenn der Arm sich weiter von der
+            # Base weg bewegt.  Bei nahen Objekten greift er von oben, dann ist die Oeffnung bei
+            # JEDEM Wrist-Drehwinkel fast parallel."
+            # Hergeleitet: die Trennachse steht senkrecht auf der Klauenrichtung, also ist ihre
+            # Neigung gegen die Horizontale  |arctan( tan(tilt) * cos(w - alpha) )|.  Das
+            # reproduziert beide Aussagen exakt -- bei tilt=0 ist sie NULL fuer jeden Wrist, bei
+            # gekippter Klaue maximal bei w=alpha und null bei 90 Grad dazu.
+            # ENTSCHEIDEND, weil hier "greifbar" oder nicht entschieden wird: liegt die Oeffnung
+            # schraeg, kommt "ein Finger von unten und einer von oben" (User) und ein flaches Objekt
+            # auf dem Tisch ist nicht fassbar.  Das Modell kannte tilt und w bisher nur GETRENNT --
+            # erst ihr Produkt bestimmt die Greifbarkeit, und claw_yaw() projiziert die Trennachse
+            # auf die Tischebene und wirft genau diese Z-Komponente weg.
+            # EINE Spalte genuegt: cos der Neigung = 1/sqrt(1 + (tan(tilt)*cos(w-a))^2), numerisch
+            # stabil ohne arctan.  1 = Oeffnung waagerecht (greifbar), -> 0 = senkrecht.  Eine
+            # Phasen-Darstellung waere hier REDUNDANT, denn die Neigung ist ein Betrag auf [0,90],
+            # dort bestimmt der Cosinus den Sinus eindeutig.
+            # ACHTUNG (Fehler im ersten Wurf, vom Sanity-Check gefangen): die Formel braucht
+            # cos(w-alpha), NICHT das gespeicherte cos(2(w-alpha)) = car.  Da der Ausdruck ohnehin
+            # quadriert wird, genuegt cos^2(w-a) = (1 + car)/2 -- das ist aus car exakt berechenbar
+            # und umgeht, dass der Wrist nur mod pi bekannt ist (das Vorzeichen von cos(w-a) waere
+            # unbestimmt, sein Quadrat nicht).
+            tt = np.tan(np.clip(np.arctan2(st_, ct), 0.0, 1.45))       # tan(tilt), gegen 90 Grad geschuetzt
+            cos2_rel = np.clip((1.0 + car) * 0.5, 0.0, 1.0)            # cos^2(w - alpha)
+            cols.append(1.0 / np.sqrt(1.0 + (tt ** 2) * cos2_rel))
     return np.column_stack(cols)
 
 FEAT_DIM = 7          # [pos(2), cos2yaw, sin2yaw, shape_onehot(3)]
-ACT_DIM = 6           # [dx, dy, cos2w, sin2w, grip, gentle]
+# TILT = die ANFAHR-NEIGUNG der Klaue gegen die Senkrechte, als AKTION (ACT23_TILT_ACTION).
+# WARUM (User-Beobachtung 423-Ep-Lauf + Messung 2026-07-28): dir_ref stand FEST auf senkrecht
+# (0,0,-1), und bei grossem Radius ist das kinematisch unerreichbar -- die Klaue kippt zwangslaeufig
+# (gemessen, Korrelation +1.00: 1 Grad bei r=0.12m, 25 bei 0.21, 45 bei 0.27).  Dann kommt "ein
+# Finger von unten und einer von oben" (User) und der Griff scheitert.  Das Gewicht hochzudrehen
+# erzwingt zwar die Senkrechte, kostet aber die Position (WDIR 0.4 -> 53mm Reach-Fehler), ist also
+# kein Weg.  Stattdessen wird das ZIEL waehlbar: waehlt der Agent eine Neigung, die bei diesem
+# Radius ohnehin erreichbar ist, entfaellt der Konflikt und er bekommt die Haltung OHNE
+# Positionsverlust.  Er erleidet die Neigung nicht mehr, sondern waehlt sie.
+# ALS PHASE kodiert (User-Wunsch, konsistent zum Wrist und zur RoPE-Linie des Projekts):
+# z_tilt = e^{i*tilt} -> (cos tilt, sin tilt).  Anders als der Wrist ist die Neigung NICHT mod pi
+# (30 Grad nach aussen ist nicht dasselbe wie 30 nach innen), daher die volle Phase statt 2*Winkel.
+# ANGEHAENGT statt eingefuegt, damit bestehende Zeilen migrierbar bleiben: alte Zeilen bekommen
+# (1,0) = 0 Grad = exakt das bisherige Verhalten.  ACT23_TILT_ACTION=0 schaltet die Dimension ab.
+TILT_ACTION = os.environ.get("ACT23_TILT_ACTION", "1") != "0"
+TILT_MAX = float(os.environ.get("ACT23_TILT_MAX", "55"))     # Grad, Obergrenze des Kandidatengitters
+TILT_GRID = int(os.environ.get("ACT23_TILT_GRID", "4"))      # Stufen (nur ohne Radius-Info)
+TILT_OFFSETS = [float(x) for x in os.environ.get("ACT23_TILT_OFFSETS", "-12,0,12,25").split(",")]
+TILT_NOV = os.environ.get("ACT23_TILT_NOVELTY", "dichte")   # "dichte" | "sigma" (s. tilt_novelty)
+TILT_VETO_N = int(os.environ.get("ACT23_TILT_VETO_N", "8"))       # ab so vielen Zeilen gilt eine Zelle
+TILT_VETO_Q = float(os.environ.get("ACT23_TILT_VETO_Q", "0.35"))  # als belegt; darunter = belegt schlecht
+T_EDGES = np.array([0, 8, 16, 24, 32, 40, 48, 90.1])       # Neigungs-Bins in Grad
+R_EDGES = np.array([0.0, 0.16, 0.21, 9.9])                 # Radius-Bins in Metern
+TILT_CURIOSITY = float(os.environ.get("ACT23_TILT_CURIOSITY", "0"))   # Anteil Neugier-Zuege.
+#   AUF 0 GESETZT (2026-07-31): die Frage ist beantwortet.  Mit 249 gekippten Zeilen sagen die Daten
+#   eindeutig, dass Neigen SCHLECHTER liefert (ferne Objekte: Guete 0.66 senkrecht vs 0.42 geneigt,
+#   p<0.0001), und das Modell hat das gelernt.  Die Exploration kostete nur noch: Lauf mit 22%
+#   Exploration lieferte 45%, mit 48% nur 36% (p=0.033).  Die Aktionsdimension bleibt -- das Modell
+#   waehlt jetzt von sich aus ueberwiegend die Senkrechte.  >0 nimmt die Erkundung wieder auf.
+#   Kurze Geschichte dieses Reglers, damit er nicht wieder falsch gedreht wird: er stand auf 0.35,
+#   wurde auf 0.6 erhoeht, weil der 0-Grad-Anteil trotz der SLACK-Korrektur bei 75% klebte -- die
+#   Diagnose zeigte dann aber, dass nicht die RATE band, sondern erst die MARGIN-Bedingung (sigma
+#   differenzierte die Neigungen nicht) und danach die mu-Schranke (sie sperrte alles Unerprobte
+#   aus).  Beide sind mit dd99215 behoben (Dichte-Neuheit + datenbasiertes Veto).  Seither GREIFT
+#   die Neugier wirklich, und 0.6 hiesse: 60% aller Griffe explorieren.  Zurueck auf 0.35, weil die
+#   Erhoehung nur eine Kompensation fuer den defekten Mechanismus war.
+TILT_CUR_MARGIN = float(os.environ.get("ACT23_TILT_CUR_MARGIN", "1.2"))  # nur wenn deutlich unsicherer
+OPENING = os.environ.get("ACT23_WORLD_OPENING", "1") != "0"   # Greifbarkeit der Fingeroeffnung
+TILT_CUR_SLACK = float(os.environ.get("ACT23_TILT_CUR_SLACK", "0.25"))  # erlaubter Guete-Rueckstand
+#   eines Neugier-Kandidaten gegenueber der besten Neigung (Plausibilitaets-Schranke, s. select_action).
+#   0.10 war ZU ENG (gemessen 165-Ep-Lauf 2026-07-29): weil 0 Grad die mit Abstand meisten Daten hat,
+#   sieht es fast immer am besten aus, und bei 0.10 fielen die Alternativen durch die Schranke -- die
+#   erzwungene Senkrechte STIEG bei fernen Objekten von 50% auf 75%, der Abstand zur natuerlichen
+#   Haltung wuchs 25.5 -> 30.0 Grad.  Die Schranke sollte nur die SCHAEDLICHEN Raender abschneiden
+#   (>45 Grad, dort 0% Lieferung), nicht die mittlere Exploration, in der die natuerliche Haltung liegt.
+#   Grad RELATIV zur natuerlichen Neigung; 0 = die kostenlose Haltung, negativ = gegen die Kinematik
+TILT_R0 = float(os.environ.get("ACT23_TILT_R0", "0.117"))    # Radius, ab dem die Klaue zu kippen beginnt
+TILT_SLOPE = float(os.environ.get("ACT23_TILT_SLOPE", "293"))  # Grad pro Meter (gemessen, s. cross_augment)
+ACT_DIM = 8 if TILT_ACTION else 6     # [dx, dy, cos2w, sin2w, grip, gentle] (+ cos_tilt, sin_tilt)
 GRIP_MODES = ((0.0, 0.0), (0.3, 1.0))   # structured grip regimes in the candidate grid: firm full-close
 #   vs wide-hold + gentle carry (the regime a concave object needs) -- like the offset-0 wrist grid this
 #   only makes the regimes REPRESENTABLE; the model decides which one wins by predicted success.
@@ -132,8 +221,21 @@ def feats_from(sel, shape):
     return np.concatenate([pos, [np.cos(2 * yaw), np.sin(2 * yaw)], oh])
 
 
-def action_vec(dx, dy, w, grip=0.0, gentle=0.0):
-    return np.array([dx, dy, np.cos(2 * w), np.sin(2 * w), float(grip), float(gentle)], float)
+def action_vec(dx, dy, w, grip=0.0, gentle=0.0, tilt=0.0):
+    """Action vector; `tilt` = desired claw tilt off vertical (rad), carried as the phase
+    (cos tilt, sin tilt) when TILT_ACTION is on (see the block above)."""
+    a = [dx, dy, np.cos(2 * w), np.sin(2 * w), float(grip), float(gentle)]
+    if TILT_ACTION:
+        a += [np.cos(float(tilt)), np.sin(float(tilt))]
+    return np.array(a, float)
+
+
+def tilt_of(a):
+    """Decode the desired claw tilt (rad, >=0) from an action; 0 when the dimension is off."""
+    a = np.asarray(a, float).ravel()
+    if not TILT_ACTION or a.size < 8:
+        return 0.0
+    return float(np.arctan2(a[7], a[6]))
 
 
 def wrist_of(a):
@@ -188,6 +290,38 @@ class WorldModelModule(ArmModule):
         self._Y.append([y])
         self._weights(len(self._X) - 1).append(float(weight))
 
+    def ensure_feat_dim(self, new_fd, neutral):
+        """Das SITUATIONS-Schema erweitern und bestehende Zeilen mitnehmen.
+
+        Anders als beim Wrist/Tilt stehen neue SITUATIONS-Dimensionen nicht am Zeilenende, sondern
+        MITTEN in der Zeile (Layout: [feats | action]).  Alte Zeilen bekommen die neuen Werte daher
+        an Position feat_dim EINGESCHOBEN, der Aktionsblock rutscht nach rechts -- sonst laesse ein
+        blosses Anhaengen die Aktionsspalten der alten Zeilen gegen die der neuen verrutschen und
+        das Modell lernte Unsinn aus 4691 vorhandenen Versuchen.
+
+        `neutral` ist der Wert, den eine Zeile bekommt, die diese Information NIE hatte.  Der Aufrufer
+        muss dort ein GUELTIGKEITS-FLAG mitfuehren (s. pc_act23 NB_NEUTRAL): einen erfundenen
+        Sachwert einzusetzen waere eine Luege, aus der das Modell eine Scheinkorrelation lernt.
+
+        Idempotent (mehrfacher Aufruf aendert nichts) und ein No-op, wenn das Schema schon passt."""
+        new_fd = int(new_fd); neutral = np.asarray(neutral, float)
+        if new_fd == self.feat_dim:
+            return 0
+        if new_fd < self.feat_dim or len(neutral) != new_fd - self.feat_dim:
+            raise ValueError(f"ensure_feat_dim: {self.feat_dim} -> {new_fd} passt nicht zu "
+                             f"neutral[{len(neutral)}]")
+        old_fd, n = self.feat_dim, 0
+        for i, r in enumerate(self._X or []):
+            r = np.asarray(r, float)
+            # sowohl Zeilen MIT Tilt-Dimensionen als auch die zwei Spalten kuerzeren davor
+            if len(r) in (old_fd + ACT_DIM, old_fd + ACT_DIM - 2):
+                self._X[i] = np.concatenate([r[:old_fd], neutral, r[old_fd:]]); n += 1
+        self.feat_dim = new_fd
+        p = getattr(self, "in_ports", {}).get("situation")     # Port-Breite mitziehen (typisierte Ports)
+        if p is not None:
+            p.dim = new_fd
+        return n
+
     def _weights(self, upto):
         """Per-row fit weight, padded to `upto` entries with 1.0 -- migrates pre-weight pickles."""
         if getattr(self, "_W", None) is None:
@@ -199,6 +333,85 @@ class WorldModelModule(ArmModule):
     def n(self):
         return len(self._X)
 
+    def tilt_novelty(self, tilts_deg, r):
+        """NEUHEIT einer Neigung = wie wenig Erfahrung in dieser (Neigung, Radius)-Zelle steckt.
+
+        WARUM NICHT Ensemble-sigma (gemessen 2026-07-30): sigma misst, wie UNEINIG die Member sind.
+        Fuer eine NEUE Aktionsdimension funktioniert das nicht -- bei 144 gekippten gegen ~3800
+        senkrechte Zeilen sind sich die Member schlicht einig, egal welche Neigung, das
+        sigma-Verhaeltnis lag im Median bei 1.00 und die Neugier wurde in 137 von 200 Faellen
+        abgewiesen.  Ein Henne-Ei, das keine Reglerstellung aufloest: ohne Daten kein sigma-Kontrast,
+        ohne sigma-Kontrast keine Exploration, ohne Exploration keine Daten.
+        DATENDICHTE ist davon unabhaengig -- sie misst direkt, wo der Agent noch nicht war.  Das ist
+        dasselbe Prinzip wie DistanceNovelty (das im Projekt schon die OBJEKTwahl steuert), nur auf
+        einem Histogramm statt auf kNN, weil der Raum hier zweidimensional und klein ist.
+        (Neigung, Radius) genuegt als Raum: die Neigung wirkt ueber den Radius (die natuerliche
+        Haltung ist eine Funktion von r), Form und Objektwinkel bleiben bewusst draussen -- sonst
+        waeren die Zellen bei 3800 Zeilen durchweg leer und die Neuheit truege keine Information.
+        """
+        H = self._tilt_hist()
+        ri = int(np.clip(np.searchsorted(R_EDGES, float(r), side="right") - 1, 0, len(R_EDGES) - 2))
+        out = []
+        for td in np.atleast_1d(tilts_deg):
+            ti = int(np.clip(np.searchsorted(T_EDGES, float(td), side="right") - 1, 0, len(T_EDGES) - 2))
+            out.append(1.0 / (1.0 + float(H[ti, ri])))
+        return np.asarray(out, float)
+
+    def tilt_veto(self, tilts_deg, r):
+        """True fuer Neigungen, die MIT DATEN belegt schlecht sind (nicht bloss vom Modell vermutet).
+
+        WARUM NICHT die mu-Schranke (gemessen 2026-07-30): das Modell haelt JEDE unerprobte Neigung
+        fuer deutlich schlechter -- Gueterueckstand median 0.63 -- weil es aus den 0-Grad-Daten glatt
+        extrapoliert.  Eine Schranke auf mu vertraut dieser Extrapolation und sperrt damit genau das
+        aus, was die Neugier erkunden soll: in 123 von 200 fernen Situationen blieb nach der Schranke
+        NUR 0 Grad uebrig.  mu-Veto und Dichte-Neuheit arbeiten gegeneinander.
+        Datenbasiert loest sich der Konflikt: eine Zelle wird nur verworfen, wenn sie GENUG Zeilen
+        hat UND diese im Mittel schlecht ausgingen.  Unerprobtes bleibt erlaubt (das ist der Zweck),
+        belegt Schlechtes -- der Rand >45 Grad mit 0-25% Lieferung -- fliegt raus."""
+        H, L = self._tilt_hist(), self._tilt_labels()
+        ri = int(np.clip(np.searchsorted(R_EDGES, float(r), side="right") - 1, 0, len(R_EDGES) - 2))
+        out = []
+        for td in np.atleast_1d(tilts_deg):
+            ti = int(np.clip(np.searchsorted(T_EDGES, float(td), side="right") - 1, 0, len(T_EDGES) - 2))
+            n = float(H[ti, ri])
+            out.append(bool(n >= TILT_VETO_N and (L[ti, ri] / max(n, 1.0)) < TILT_VETO_Q))
+        return np.asarray(out, bool)
+
+    def _tilt_labels(self):
+        """Summe der Outcome-Labels je (Neigung x Radius)-Zelle -- Zaehler fuer die mittlere Guete."""
+        self._tilt_hist()                                  # fuellt/aktualisiert den Cache mit
+        return self._lsum
+
+    def _tilt_hist(self):
+        """(Neigung x Radius)-Histogramm der gespeicherten Zeilen; neu gerechnet, wenn Zeilen dazukamen."""
+        n = len(self._X)
+        if getattr(self, "_hist_n", -1) == n and getattr(self, "_hist", None) is not None:
+            return self._hist
+        H = np.zeros((len(T_EDGES) - 1, len(R_EDGES) - 1))
+        L = np.zeros_like(H)
+        if n:
+            X = np.array(self._X)
+            if X.shape[1] >= self.feat_dim + 8:
+                t = np.degrees(np.arctan2(X[:, self.feat_dim + 7], X[:, self.feat_dim + 6]))
+                r = np.hypot(X[:, 0], X[:, 1])
+                H, _, _ = np.histogram2d(t, r, bins=[T_EDGES, R_EDGES])
+                L, _, _ = np.histogram2d(t, r, bins=[T_EDGES, R_EDGES],
+                                         weights=np.array(self._Y, float).ravel())
+        self._hist, self._lsum, self._hist_n = H, L, n
+        return H
+
+    @staticmethod
+    def natural_tilt(r):
+        """Die Neigung, die der Reach-Controller bei diesem Radius von sich aus einnimmt (rad).
+        Kalibrierung s. cross_augment; das ist eine EIGENSCHAFT DES ARMS, keine Bewertung."""
+        return float(np.clip((float(r) - TILT_R0) * np.radians(TILT_SLOPE), 0.0, np.pi / 2))
+
+    @staticmethod
+    def radius_of(feats):
+        """Abstand des Objekts von der Armbasis (Ursprung) aus den Situations-Features."""
+        f = np.asarray(feats, float).ravel()
+        return float(np.hypot(f[0], f[1])) if f.size >= 2 else None
+
     @staticmethod
     def yaw_of(feats):
         """Recover the perceived object axis (rad, mod pi) from the situation features' (cos2yaw,
@@ -208,9 +421,19 @@ class WorldModelModule(ArmModule):
             return None
         return 0.5 * float(np.arctan2(f[3], f[2]))
 
+    def _migrate_tilt(self):
+        """Pad rows logged before the tilt dims with (cos0, sin0) = (1,0) = 0 deg = the old behaviour."""
+        if not TILT_ACTION or not self._X:
+            return
+        want = self.feat_dim + ACT_DIM
+        for i, r in enumerate(self._X):
+            if len(r) == want - 2:
+                self._X[i] = np.concatenate([np.asarray(r, float), [1.0, 0.0]])
+
     def train(self, epochs=500):
         if not self._X:
             return
+        self._migrate_tilt()
         X = np.array(self._X); Y = np.array(self._Y); m = len(X)
         if CROSS:
             X = cross_augment(X, self.feat_dim)
@@ -239,7 +462,7 @@ class WorldModelModule(ArmModule):
         P = np.array([[float(member.predict(x)[0]) for x in X] for member in self.members])  # (K, N)
         return P.mean(0), P.std(0)
 
-    def candidates(self, n, offsets=None, yaw=None):
+    def candidates(self, n, offsets=None, yaw=None, r=None):
         """Structured GRID (offset-0 wrists x grip regimes, so teacher-like actions are always
         representable) + n random (offset, wrist, grip, gentle) samples.  `offsets` = optional
         PERCEPTION-GROUNDED grasp-point candidates (dx,dy relative to the heuristic point, e.g.
@@ -262,30 +485,93 @@ class WorldModelModule(ArmModule):
         exactly as GRIP_MODES above.  ACT23_WRIST_REL=0 restores the absolute grid."""
         w0 = float(yaw) if (yaw is not None and WRIST_REL) else 0.0
         grid = w0 + np.linspace(0, np.pi, self.wrist_grid, endpoint=False)
-        A = [action_vec(0.0, 0.0, w, g, ge)
+        if not TILT_ACTION:
+            tilts = np.array([0.0])
+        elif r is None:
+            tilts = np.radians(np.linspace(0.0, TILT_MAX, TILT_GRID))
+        else:
+            # RELATIV zur natuerlichen Haltung (dieselbe Lehre wie beim objekt-relativen Wrist-Gitter,
+            # 45fa0a4): ein festes Winkelgitter verfehlt die kinematisch erzwungene Neigung um bis zu
+            # 9 Grad, weil diese stetig mit dem Radius waechst.  Relativ aufgespannt ist die
+            # natuerliche Haltung IMMER exakt waehlbar (Offset 0, kostet keine Position), dazu das
+            # Erzwingen der Senkrechten (0 absolut) und Abweichungen nach beiden Seiten.
+            tk = self.natural_tilt(r)
+            tilts = np.clip(np.concatenate([[0.0], tk + np.radians(TILT_OFFSETS)]),
+                            0.0, np.radians(TILT_MAX))
+            tilts = np.unique(np.round(tilts, 4))
+        A = [action_vec(0.0, 0.0, w, g, ge, t)
              for w in grid
-             for g, ge in GRIP_MODES]
+             for g, ge in GRIP_MODES
+             for t in tilts]
         if offsets is not None:
-            A += [action_vec(float(o[0]), float(o[1]), w, g, ge)
+            A += [action_vec(float(o[0]), float(o[1]), w, g, ge, t)
                   for o in offsets if float(np.linalg.norm(np.asarray(o, float))) > 1e-9
                   for w in grid
-                  for g, ge in GRIP_MODES]
+                  for g, ge in GRIP_MODES
+                  for t in tilts]
         for _ in range(int(n)):
             dx, dy = self.rng.uniform(-self.off_max, self.off_max, 2)
             A.append(action_vec(dx, dy, self.rng.uniform(0, np.pi),
-                                grip=self.rng.uniform(0.0, 0.4), gentle=float(self.rng.integers(2))))
+                                grip=self.rng.uniform(0.0, 0.4), gentle=float(self.rng.integers(2)),
+                                tilt=(self.rng.uniform(0.0, np.radians(TILT_MAX)) if TILT_ACTION else 0.0)))
         return np.array(A)
 
-    def select_action(self, feats, n=40, lam=1.0, offsets=None):
+    def select_action(self, feats, n=40, lam=1.0, offsets=None, curiosity=0.0, rng=None):
         """Uncertainty-aware (LCB) action: argmax (mu - lam*sigma) over the candidate set.
         Returns (action, mu, sigma).  Untrained -> the offset-0 / wrist-0 default.
         The object axis is READ BACK from the situation features (cos2yaw, sin2yaw) and passed to
         candidates(), so the wrist grid is object-relative without changing this method's callers."""
-        A = self.candidates(n, offsets=offsets, yaw=self.yaw_of(feats))
+        A = self.candidates(n, offsets=offsets, yaw=self.yaw_of(feats), r=self.radius_of(feats))
         if self.n() == 0:
             return A[0], 0.0, 0.0
         mu, sd = self.predict(feats, A)
         i = int(np.argmax(mu - lam * sd))
+        if TILT_ACTION and curiosity > 0.0:
+            # NEUGIER AUF DER NEIGUNGS-ACHSE.  Das Problem (gemessen im Rauchtest): die LCB-Wahl
+            # mu - lam*sigma BESTRAFT Unsicherheit, und die neue Tilt-Dimension hat anfangs 3386
+            # Zeilen bei 0 Grad gegen ~0 bei allen anderen -- also gewinnt 0 Grad immer und die
+            # Dimension wird nie erprobt (Henne-Ei).  Hier greift dasselbe Neuheitsmass, das die
+            # Objektwahl schon benutzt (dort: sd.max() als Curiosity-Score): unter den Kandidaten,
+            # die sich NUR in der Neigung unterscheiden, wird die UNSICHERSTE gewaehlt.
+            # CHIRURGISCH: Wrist/Grip/Offset bleiben bei der LCB-besten Wahl, nur die Neigung wird
+            # erkundet -- ein schlechter Wrist wuerde die Episode ruinieren, eine ungewohnte Neigung
+            # kostet im schlimmsten Fall diesen einen Griff.
+            # SELBST-LIMITIEREND: nur wenn die unsicherste Variante DEUTLICH unsicherer ist
+            # (TILT_CUR_MARGIN).  Sind die Neigungen erprobt, gleicht sich sigma an und die
+            # Neugier verstummt von selbst -- kein Abkling-Zeitplan noetig.
+            _rng = rng if rng is not None else self.rng
+            if float(_rng.random()) < curiosity:
+                base = A[i]
+                same = np.array([j for j in range(len(A))
+                                 if np.allclose(A[j][:6], base[:6], atol=1e-9)], dtype=int)
+                if same.size > 1:
+                    # PLAUSIBILITAETS-SCHRANKE (gemessen 214-Ep-Lauf 2026-07-28): reine
+                    # Unsicherheits-Maximierung geht systematisch an den RAND des Bereichs, denn dort
+                    # war noch nie jemand -- alle 8 Griffe am Oberrand (>=54 Grad) waren fern und ALLE
+                    # gescheitert, der Block >45 Grad lieferte 0% (n=12).  Die Neugier verbrannte also
+                    # Griffe dort, wo das Modell bereits WEISS, dass es schlecht ist.  Jetzt wird nur
+                    # unter den PLAUSIBLEN Varianten erkundet: deren vorhergesagte Guete darf hoechstens
+                    # TILT_CUR_SLACK unter der besten liegen.  Das ist optimistische Exploration statt
+                    # blinder Neugier -- erkundet wird, wo das Modell UNSICHER ist, nicht wo es sicher
+                    # ablehnt.  Bleibt selbst-limitierend (TILT_CUR_MARGIN).
+                    mu_s = mu[same]
+                    ok = same[mu_s >= float(mu_s.max()) - TILT_CUR_SLACK]
+                    if ok.size:
+                        if TILT_NOV == "dichte" and feats is not None:
+                            rr = self.radius_of(feats)
+                            # DATENBASIERTES VETO statt mu-Schranke (s. tilt_veto)
+                            td_all = np.degrees([tilt_of(A[k]) for k in same])
+                            keep = ~self.tilt_veto(td_all, rr if rr is not None else 0.0)
+                            ok = same[keep] if keep.any() else same
+                            td = np.degrees([tilt_of(A[k]) for k in ok])
+                            score = self.tilt_novelty(td, rr if rr is not None else 0.0)
+                            base = float(self.tilt_novelty(
+                                [np.degrees(tilt_of(A[i]))], rr if rr is not None else 0.0)[0])
+                        else:
+                            score, base = sd[ok], float(sd[i])
+                        j = int(ok[int(np.argmax(score))])
+                        if float(np.max(score)) > TILT_CUR_MARGIN * base:
+                            i = j
         return A[i], float(mu[i]), float(sd[i])
 
     def step(self) -> None:

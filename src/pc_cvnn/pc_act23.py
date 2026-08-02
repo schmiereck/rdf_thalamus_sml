@@ -60,7 +60,8 @@ from pc_cvnn.arm_modules.body_model import BodyModelModule
 from pc_cvnn.arm_modules.shape_classifier import ShapeClassifierModule
 from pc_cvnn.arm_modules.object_orientation import ObjectOrientationModule
 from pc_cvnn.arm_modules.world_model import (WorldModelModule, feats_from, action_vec, wrist_of,
-                                             quality as wm_quality)
+                                             quality as wm_quality, tilt_of as wm_tilt_of,
+                                             TILT_ACTION, TILT_CURIOSITY)
 from pc_cvnn.arm_modules.runtime_policy import RuntimePolicyModule
 from pc_cvnn.arm_modules import colour_openset
 from pc_cvnn.arm_modules.colour_openset import ColourOpenSetModule
@@ -94,6 +95,14 @@ FOVEA_MEM = FOVEA_NET and os.environ.get("ACT23_FOVEA_MEM", "1") == "1"
 BODY = {"cube": "obj_red", "L": "obj_L", "U": "obj_U"}
 ALL = ["obj_red", "obj_green", "obj_blue", "obj_L", "obj_U"]
 TARGET = np.array([0.0, 0.10])
+# NACHBAR-INFORMATION als Situations-Feature (s. _neighbour_feats).  ACT23_NEIGHBOURS=0 schaltet sie
+# ab -- die Dimensionen BLEIBEN dann im Schema (sonst passte der Puffer nicht mehr), sie tragen nur
+# konstant den neutralen Wert.  NB_DMAX = ab welchem Abstand ein Objekt nicht mehr als Nachbar zaehlt;
+# 0.12m deckt Schieben beim Schliessen, Rammen beim Tragen und das Blob-Verschmelzen (~40mm) ab.
+NEIGHBOURS = os.environ.get("ACT23_NEIGHBOURS", "1") != "0"
+NB_DMAX = float(os.environ.get("ACT23_NB_DMAX", "0.12"))
+NB_DIM = 5
+NB_NEUTRAL = np.array([0.0, NB_DMAX, 1.0, 0.0, 0.0])   # "nie gemessen" -- gueltig-Flag 0
 
 
 def _auc(y, s):
@@ -608,6 +617,7 @@ def run_self_learning_steering(headless=False):
     CUBE_BODIES = ["obj_red", "obj_green"]
 
     print("act23 [viz] — self-learning grasper command-steering" + (" (headless self-test)" if headless else ""))
+    _print_run_settings()
     sim = BracketArmSim(render_wh=(RES, RES)); sim.set_reach_site("contact")
     # ACT23_POLICY=teacher starts in teacher mode (headless isolation: execution/perception WITHOUT the
     # young world model's action lottery; the GUI toggle changes it live as before)
@@ -707,7 +717,9 @@ def run_self_learning_steering(headless=False):
         bm = BodyModelModule(rng=np.random.default_rng(5)); bm.babble(sim, 4000)
     state = CommandState23(sim)
     state.policy = os.environ.get("ACT23_POLICY", "self")
-    state.choreo = os.environ.get("ACT23_CHOREO", "fsm")
+    state.choreo = os.environ.get("ACT23_CHOREO", "netz")   # DEFAULT netz seit 2026-08-02 (war fsm):
+    #   der Nutzer schaltet beim GUI-Start ohnehin jedes Mal von Hand auf Netz um.  ACT23_CHOREO=fsm
+    #   holt die gescriptete Choreographie zurueck (Rauchtests/Vergleichslaeufe nutzen sie weiter).
     panel = None
     if not headless:
         panel = CommandPanel23(state, CAM, RES, rng=np.random.default_rng(7))
@@ -915,7 +927,12 @@ def run_self_learning_steering(headless=False):
     # embedding (no class one-hot) lets this ONE model absorb trials from any form.  (The former
     # ObjectOrientationModule features are subsumed by the k=2 phase -- one perception path, no oo.)
     world = (_loaded["world"] if _loaded is not None else
-             WorldModelModule(k=5, off_max=0.008, rng=np.random.default_rng(2), feat_dim=6 + shape_clf.NH))
+             WorldModelModule(k=5, off_max=0.008, rng=np.random.default_rng(2),
+                              feat_dim=6 + shape_clf.NH + NB_DIM))
+    _n_mig = world.ensure_feat_dim(6 + shape_clf.NH + NB_DIM, NB_NEUTRAL)   # geladene Puffer nachziehen
+    if _n_mig:
+        print(f"  [Schema] Nachbar-Information ergaenzt: {_n_mig} bestehende Zeilen migriert "
+              f"(gueltig-Flag 0 -- sie hatten die Information nie)", flush=True)
     #   off_max>0 (STAGE-1 de-scripting): the grasp-point OFFSET dims are live -- the model can learn to
     #   grasp a form off its perceived grasp point; grip+gentle action dims replace the obj_U runtime rules.
 
@@ -1254,7 +1271,45 @@ def run_self_learning_steering(headless=False):
                 y2 = float(_r[0])
         return np.concatenate([np.asarray(best["pos"], float),
                                [np.cos(2 * y2), np.sin(2 * y2), np.cos(4 * y4), np.sin(4 * y4)],
-                               shape_clf.desc_embed(best["desc"])])
+                               shape_clf.desc_embed(best["desc"]),
+                               _neighbour_feats(best, dets)])
+
+    def _neighbour_feats(best, dets):
+        """NACHBAR-INFORMATION fuers Welt-Modell (Nutzerwunsch, in ModulViz die gestrichelte Kante
+        ShapeClassifier -> SelfEval).  Der User hat wiederholt beobachtet, was hier fehlt: die Klaue
+        SCHIEBT beim Schliessen ein Objekt weg, sie RAMMT beim Tragen einen Nachbarn, und zwei nahe
+        Objekte VERSCHMELZEN zu einem Blob (Farb-/Form-Split).  All das haengt an der Nachbarschaft,
+        und das Welt-Modell sah bisher nur das Zielobjekt.
+
+        Kostet NICHTS: perceive_all liefert ohnehin ALLE Detektionen, situation_feats warf sie bisher
+        weg.  Kein zusaetzliches Rendern, keine privilegierte Information -- dieselbe eigene Kamera.
+        (Nicht aus der FOVEA: die ist der Aufmerksamkeitspfad auf das EINE Zielobjekt.)
+
+        5 Dimensionen: [gueltig, d_nah, cos phi, sin phi, n_nah]
+          gueltig  1.0 = diese Zeile hat echte Nachbar-Information (alte Zeilen: 0.0, s.
+                   ensure_feat_dim -- ein erfundener Sachwert waere eine Luege im Trainingssatz)
+          d_nah    Abstand zum naechsten Nachbarn, auf NB_DMAX gedeckelt
+          phi      RICHTUNG dorthin, im OBJEKTRAHMEN (gegen die eigene yaw-Achse gedreht) und als
+                   PHASE kodiert -- dieselbe Konvention wie Wrist und Neigung.  Objekt-relativ, weil
+                   "Nachbar auf der Zinkenseite" etwas anderes ist als "Nachbar hinter mir", und das
+                   nur im Objektrahmen ausdrueckbar ist.
+          n_nah    wieviele Nachbarn innerhalb NB_DMAX liegen (Gedraenge)"""
+        v = np.array([0.0, NB_DMAX, 1.0, 0.0, 0.0])
+        if not NEIGHBOURS:
+            return v
+        p = np.asarray(best["pos"], float)
+        d = [(float(np.linalg.norm(np.asarray(o["pos"], float) - p)), o)
+             for o in dets if o is not best and o.get("pos") is not None]
+        v[0] = 1.0                                    # gemessen -- auch "keine Nachbarn" ist Information
+        near = [x for x in d if x[0] <= NB_DMAX]
+        v[4] = float(len(near))
+        if d:
+            dist, o = min(d, key=lambda x: x[0])
+            v[1] = float(min(dist, NB_DMAX))
+            rel = np.asarray(o["pos"], float) - p
+            phi = float(np.arctan2(rel[1], rel[0])) - float(best.get("yaw", 0.0))   # Objektrahmen
+            v[2], v[3] = np.cos(phi), np.sin(phi)
+        return v
 
     bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, LONG)
     # ACT23_SEED (default 7 = historical behaviour): scene placement + auto target picks.  Parallel
@@ -1604,6 +1659,17 @@ def run_self_learning_steering(headless=False):
                   f"trainiere Klassen einmalig nach", flush=True)
         train_fovea_classes()
 
+    # ACT23_MODVIZ=1: eigenes Fenster mit dem MODUL-GRAPHEN und den Zusammenspiel-Kurven
+    # (src/pc_cvnn/module_viz.py).  Rein passiv -- ein Redraw je Episode, kein Eingriff in den Lauf.
+    modviz = None
+    if os.environ.get("ACT23_MODVIZ", "0") == "1":
+        try:
+            from pc_cvnn.module_viz import ModuleViz
+            modviz = ModuleViz()
+            print("  [ModulViz] eigenes Fenster geoeffnet (ACT23_MODVIZ=1)", flush=True)
+        except Exception as _e:
+            print(f"  [ModulViz] nicht verfuegbar: {_e}", flush=True)
+
     sel_off = {"dxy": None}                                    # the self-selected grasp-point OFFSET (dx,dy)
     #   of the CURRENT command: perceive() and the form tracker's servo obs both add it, so the executed
     #   grasp target is (perceived point + learned offset) consistently through approach corrections
@@ -1615,8 +1681,13 @@ def run_self_learning_steering(headless=False):
         """Add the model's self-selected grasp-point offset to a perceived grasp target (stage 1)."""
         return np.asarray(xy, float) + (sel_off["dxy"] if sel_off["dxy"] is not None else 0.0)
 
-    U_DENSEGRASP = os.environ.get("ACT23_U_DENSEGRASP", "1") != "0"   # DEFAULT ON (U-only A/B 2026-07-24:
-    #   +11pp Lieferung, 16->25/80; the win is real flat U carries; ACT23_U_DENSEGRASP=0 restores the rim grip)
+    U_DENSEGRASP = os.environ.get("ACT23_U_DENSEGRASP", "0") == "1"   # DEFAULT AUS seit 2026-08-01 (war ON,
+    #   U-only A/B 2026-07-24: +11pp, 16->25/80).  Es war eine FORM-SONDERREGEL (`if body == "obj_U"`) --
+    #   genau das gezuechtete Verhalten, das der Nutzer nicht will, und es half auch nicht genug (413-Ep-Lauf:
+    #   U 22% geliefert, 42% Griffverlust laut Drucksensor).  Der dichteste Punkt ist per Konstruktion
+    #   KANDIDAT 0 der Maskenabtastung (shape_classifier:614, argsort(-dv)) und damit fuer JEDE Form
+    #   waehlbar -- die U verliert ihn also nicht, sie muss ihn nur verdienen.  ACT23_U_DENSEGRASP=1
+    #   stellt die Sonderregel wieder her (A/B).
     FORM_SPLIT = os.environ.get("ACT23_FORM_SPLIT", "1") != "0"      # the same MERGED-BLOB recovery for the
     #   FORM path (L/U/open classes): a fused component's form descriptor is destroyed, so re-read the form
     #   on the colour-separated part (perceive_colour(with_form=True)).  Measured on obj_T over 80 poses:
@@ -1629,9 +1700,13 @@ def run_self_learning_steering(headless=False):
     #   grasps the neighbour.  ACT23_COLOUR_SPLIT=0 restores the old fallback.  Measured: 25mm -> 6mm.
 
     def _gp(det, body):
-        """Grasp point of a detection: the DENSEST (solid-base) point for the U under ACT23_U_DENSEGRASP
-        -- the default nearest-material grasp_xy lands on the U's thin inner rim (centroid in the
-        concavity) -> 'greift ins Leere' (746-log U mechanism-ID).  Every other object keeps grasp_xy."""
+        """Greifpunkt-BEZUG einer Detektion: immer grasp_xy (Material naechst dem Schwerpunkt).
+
+        Das ist zugleich der Bezugspunkt, auf den run_one die Kandidaten-Offsets bezieht (:2087) und
+        auf den _off() sie addiert -- fruehere U-Sonderregel gab hier grasp_dense zurueck, waehrend die
+        Offsets weiter gegen grasp_xy gerechnet wurden: die Verschiebung waere DOPPELT gezaehlt worden,
+        sobald die Kandidaten im Netz-Modus anspringen.  Ein Bezugspunkt fuer alle Formen schliesst das
+        aus.  ACT23_U_DENSEGRASP=1 holt die alte Sonderregel fuer ein A/B zurueck."""
         if U_DENSEGRASP and body == "obj_U" and det.get("grasp_dense") is not None:
             return det["grasp_dense"]
         return det["grasp_xy"]
@@ -1955,6 +2030,7 @@ def run_self_learning_steering(headless=False):
         just-placed object (user-observed).  So leg 1 HOLDS the episode's wrist angle while lifting; only
         leg 2, at carry height, ramps it home at a bounded rate."""
         sim.target("joint_5", act16.J5_OPEN)
+        HOME_Z_MIN = float(os.environ.get("ACT23_HOME_Z_MIN", "0.055"))   # Hoehen-Wache in Bein 2
         w = float(sim.d.qpos[sim.jqadr["joint_4"]])            # the wrist angle the episode ended with
         HOME_W = HOME["joint_4"]
         for k in range(60):                                    # leg 1: straight up, wrist HELD
@@ -1971,7 +2047,21 @@ def run_self_learning_steering(headless=False):
             q3 = sim.arm3_angles()
             if float(np.max(np.abs(q3 - HOME_Q3))) < 0.05 and abs(w - HOME_W) < 0.1:
                 break
-            sim.set_arm3_targets(q3 + np.clip(HOME_Q3 - q3, -0.03, 0.03))
+            step = np.clip(HOME_Q3 - q3, -0.03, 0.03)
+            # HOEHEN-WACHE (user-beobachtet: "die Finger schleifen beim Zurueckfahren manchmal am
+            # Boden, wenn der Arm beim Ablegen weit weg von der Base war").  Die Gelenkraum-
+            # Interpolation ist NICHT hoehenerhaltend: gemessen in der echten Sim faellt der tiefste
+            # Klauenpunkt waehrend Bein 2 von 69mm (Ablage nah) auf 23mm (Ablage bei r=0.27) -- das
+            # ist die Hoehe eines 24mm-Objekts.  Das gelernte FK-Modell zeigt diesen Durchhang NICHT
+            # (es sagte konstant 89mm voraus), deshalb wird hier die TATSAECHLICHE Hoehe aus der Sim
+            # gelesen und reaktiv gegengesteuert, statt sich auf die Vorhersage zu verlassen.
+            hz = float(sim.grasp_pos()[2])
+            if hz < HOME_Z_MIN:
+                h = sim.grasp_pos()
+                lift = bm.body.reach_velocity(q3, np.array([h[0], h[1], act16.CARRY_Z]),
+                                              gain=2.0, max_dq=0.03)
+                step = 0.5 * step + 0.5 * lift                 # heimwaerts UND wieder hoch
+            sim.set_arm3_targets(q3 + step)
             w += float(np.clip(HOME_W - w, -0.02, 0.02))
             sim.target("joint_4", w)
             sim.step(2)
@@ -1991,6 +2081,13 @@ def run_self_learning_steering(headless=False):
             Image.fromarray(sim.render(CAM)).save(os.path.join(_dbgimg, f"stage_{tag}.png"))
 
     def run_one():
+        import time as _time
+        # ZEITKONTO je Episode (Nutzerwunsch 2026-08-02: sehen, wann die CPU nicht mehr reicht).
+        # Grob nach BLOECKEN, nicht nach Funktionen -- die Frage ist "welcher Teil wird teuer", und
+        # genau auf dieser Ebene kann man handeln (Fovea-Aufloesung, Trainings-Epochen, Episodenlaenge).
+        # Die Fovea zaehlt SICH SELBST (HexFovea.step), weil sie sonst in der Ausfuehrung verschwindet.
+        _T = {"gesamt": _time.perf_counter()}
+        _fov0 = getattr(vc.fovea, "t_step", 0.0), getattr(vc.fovea, "n_step", 0)
         _l, body, method = state.selected()
         # SNAPSHOT every object's pose before acting.  run_combined parks distractor cubes off-table and the
         # arm can knock objects -> afterwards restore all NON-commanded objects to exactly here, so the scene
@@ -2049,7 +2146,22 @@ def run_self_learning_steering(headless=False):
             # inflated sigma pushes LCB exactly into those unlabeled extrapolation offsets (model
             # exploitation, the act22 lesson).  Candidates are only OFFERED where the failure route
             # can label them: FSM episodes (or ACT23_ATTEMPT_NETZ=1).
-            cands_ok = (not use_net) or os.environ.get("ACT23_ATTEMPT_NETZ", "0") == "1"
+            #
+            # SEIT 2026-08-01 auch auf NETZ-Episoden -- weil der FALSIFIZIERER jetzt existiert.  Der
+            # Fingerdruck-Streifen labelt genau das, was ein schlechter Greifpunkt anrichtet: kein Druck
+            # beim Heben = die Klaue hat nie gehalten, kausal am GRIFF und an nichts sonst.  Gemessen im
+            # 413-Ep-Netz-Lauf: feuert in 34% der Episoden, 138 von 139 Treffern waren echte
+            # Nicht-Lieferungen, und die Enthaltungsquote fiel 33-43% -> 25%.  Damit ist die Begruendung
+            # oben ("die netz-Fehlerroute enthaelt sich") ueberholt.  Der Puffer zeigt, was der Riegel
+            # gekostet hat: die letzten ~1500 Zeilen haben Offset EXAKT 0 -- das Modell konnte nicht
+            # lernen, WO es greifen soll, weil nie etwas anderes probiert wurde.
+            # BLEIBT ENG: auf Netz-Episoden ist n_cand=0, es kommen also KEINE Zufalls-Offsets dazu --
+            # nur die <=6 maskenabgetasteten Punkte auf echtem Material (<=50mm).  Ehrliche Grenze: ~38%
+            # der Fehlschlaege fallen weiter als Enthaltung durch, die Falsifizierbarkeit ist also nicht
+            # vollstaendig, nur nicht mehr null.  ACT23_GRASP_CANDS_NETZ=0 riegelt wieder ab.
+            _griplabel = os.environ.get("ACT23_GRIPLABEL", "1") != "0"
+            cands_ok = ((not use_net) or os.environ.get("ACT23_ATTEMPT_NETZ", "0") == "1"
+                        or (_griplabel and os.environ.get("ACT23_GRASP_CANDS_NETZ", "1") != "0"))
             if (os.environ.get("ACT23_GRASP_CANDS", "1") == "1" and cands_ok
                     and det is not None and det.get("grasp_cands")):
                 # GRASP-POINT DISCOVERY (user's standing goal): the candidates are REAL places on the
@@ -2059,11 +2171,61 @@ def run_self_learning_steering(headless=False):
                 # gets tried -- where to grip becomes the model's own, perception-grounded decision.
                 g0 = np.asarray(det["grasp_xy"], float)
                 offs = [np.asarray(p, float) - g0 for p in det["grasp_cands"]]
-                offs = [o for o in offs if float(np.linalg.norm(o)) <= 0.05]
-            a, _, _ = world.select_action(fe, n=n_cand, lam=LAM, offsets=offs)
+                # SCHRANKE 12mm (war 50mm -- zu weit gewaehlt, korrigiert nach dem 316-Ep-Lauf
+                # 2026-08-01).  Gemessen, dosisabhaengig und in 5 von 6 Objekten getrennt sichtbar:
+                #   Verschiebung  0-10mm -> 55% geliefert   (Heuristik-Referenz 52%)
+                #                10-20mm -> 31%
+                #                20-30mm -> 16%
+                #                 30mm+  ->  0%  (0 von 18)
+                # Griffverlust laut Drucksensor 17% (Heuristik) gegen 48% (verschoben).  Jenseits von
+                # ~12mm EXTRAPOLIERT das Modell nur noch -- genau die act22-Modellausbeutung, und LCB
+                # laeuft dort hinein, weil die Offset-Dimension kaum Zeilen hat.  Das ist KEINE neue
+                # Regel: die Schranke gab es schon, sie stand nur an der falschen Stelle.
+                # EHRLICH: auch 0-10mm zeigt keinen VORTEIL gegenueber dem heuristischen Punkt (55 vs
+                # 52%) -- die Schranke rettet die Selbstkorrektur, sie belegt keinen Nutzen.
+                _cap = float(os.environ.get("ACT23_GRASP_CAND_CAP", "0.012"))
+                offs = [o for o in offs if float(np.linalg.norm(o)) <= _cap]
+            a, _mu_a, _sd_a = world.select_action(fe, n=n_cand, lam=LAM, offsets=offs,
+                                                  curiosity=TILT_CURIOSITY)
             a_exec = a; wf = (lambda s, _w=wrist_of(a): _w)
+            # ANFAHR-NEIGUNG AUS DER AKTION: bisher stand dir_ref FEST auf senkrecht (0,0,-1) und die
+            # Klaue kippte bei grossem Radius zwangslaeufig (gemessen: 45 Grad bei r=0.27, Korrelation
+            # +1.00) -- "ein Finger von unten, einer von oben" (User).  Jetzt WAEHLT das Modell die
+            # gewuenschte Neigung; sie wird in der RADIALEBENE nach aussen gekippt, weil genau dorthin
+            # die Kinematik den Arm zieht.  Waehlt es die ohnehin erreichbare Neigung, entfaellt der
+            # Konflikt zwischen Position und Haltung und es gibt keinen Positionsverlust.
+            _tilt = wm_tilt_of(a)
+            if TILT_ACTION:
+                _nat = np.degrees(world.natural_tilt(world.radius_of(fe) or 0.0))
+                print(f"    [Neigung] {body}: gewaehlt {np.degrees(_tilt):.0f} Grad "
+                      f"(natuerlich {_nat:.0f}, r={100*(world.radius_of(fe) or 0):.0f}cm), "
+                      f"sigma {_sd_a:.3f}", flush=True)
+            if TILT_ACTION and _tilt > 1e-6:
+                _p = np.asarray(fe[:2], float)
+                _n = float(np.linalg.norm(_p))
+                if _n > 1e-6:
+                    _ux, _uy = _p / _n                      # Radialrichtung Basis -> Objekt
+                    bm.body.dir_ref = np.array([np.sin(_tilt) * _ux, np.sin(_tilt) * _uy,
+                                                -np.cos(_tilt)], float)
+                    _dir_ref_set = True
             if float(np.linalg.norm(a[:2])) > 1e-9:
                 sel_off["dxy"] = np.asarray(a[:2], float)
+            if offs:
+                # IMMER geloggt (nicht DEBUG-gated), wie [Neigung]: seit die Kandidaten auch im
+                # Netz-Modus laufen, ist der Greifpunkt eine ECHTE Wahl des Modells und ein GUI-Lauf
+                # muss nachvollziehbar bleiben -- "Bezug" = wieviel der gewaehlte Punkt vom
+                # heuristischen abweicht, "dicht" = Abstand zum dichtesten (Kandidat 0).
+                # den dichtesten Punkt EXPLIZIT aus der Detektion nehmen, nicht offs[0] annehmen: die
+                # 50mm-Schranke oben kann ihn herausfiltern, dann waere offs[0] ein anderer Kandidat
+                # und die Zeile loege ueber genau die Groesse, die man mitliest.
+                _dn = det.get("grasp_dense")
+                _d0 = None if _dn is None else np.asarray(_dn, float) - g0
+                _sel = np.asarray(a[:2], float)
+                _txt = "Heuristik" if float(np.linalg.norm(_sel)) <= 1e-9 else \
+                       f"{1e3*_sel[0]:+.0f},{1e3*_sel[1]:+.0f}mm"
+                _nd = "" if _d0 is None else f", zum dichtesten {1e3*float(np.linalg.norm(_sel-_d0)):.0f}mm"
+                print(f"    [Greifpunkt] {body}: {_txt} aus {len(offs)} Masken-Kandidaten{_nd}",
+                      flush=True)
             # A/B FORCE knobs (probe arms, PRIVILEGED, default off -- never a runtime rule): measure the
             # CAUSAL value of a correct wrist / a material-centred grasp point for the prong shapes
             # before anything is allowed to learn it.  ACT23_FORCE_WRIST=priv aligns the wrist to the
@@ -2158,6 +2320,11 @@ def run_self_learning_steering(headless=False):
         #   this episode -> becomes self-imitation demonstrations IF the agent self-judges a delivery
         runtime.begin_episode()                                # PEND the teacher rows; committed only if
         #   this episode is NOT a self-validated success (teacher corrects failures, see end_episode)
+        # dir_ref wurde ggf. oben aus der gewaehlten AKTION gekippt -- Originalwert sichern und nach
+        # der Episode zuruecksetzen, damit die Neigung NUR fuer diesen Griff gilt und nicht dauerhaft
+        # in Transport/Ablage und die naechste Episode durchschlaegt.
+        _dir_ref_orig = None if not TILT_ACTION else np.array(bm.body.dir_ref, float).copy()
+        _T["vor_ausfuehrung"] = _time.perf_counter()           # alles davor = Wahrnehmung + Aktionswahl
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_fn,
                            policy_fn=(runtime.predict if use_net else None),
@@ -2173,6 +2340,9 @@ def run_self_learning_steering(headless=False):
                            servo=(method in ("color", "shape")), rescatter=False, episode_end_fn=ep_end,
                            lifelong=True, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
                            arm_reset=False)
+        _T["nach_ausfuehrung"] = _time.perf_counter()
+        if _dir_ref_orig is not None:
+            bm.body.dir_ref = _dir_ref_orig                    # Neigung galt nur fuer diese Episode
         _save(f"{body}_1after_runcombined")
         if os.environ.get("ACT23_YAW_AB", "0") == "1" and body in ("obj_L", "obj_U", "obj_blue"):
             # measurement companion to [YawAB]: how much the commanded shape ROTATED over the episode
@@ -2193,6 +2363,16 @@ def run_self_learning_steering(headless=False):
             _off = not (_rb[0] - 0.01 <= _e[0] <= _rb[1] + 0.01 and _rb[2] - 0.01 <= _e[1] <= _rb[3] + 0.01)
             _trav = 1000.0 * float(np.linalg.norm(_e - snap[body][0][:2]))
             print(f"    [PlaceAB] {body} Weg {_trav:.0f}mm{'  VON-FLAECHE-GEFLOGEN' if _off else ''}", flush=True)
+        _g = dict(getattr(act16.run_combined, "_grip", {}) or {})
+        def _ph(*names):                                       # Mittelwert ueber die genannten Phasen
+            v = [x for n in names for x in _g.get(n, [])]
+            return (float(np.mean(v)), float(np.min(v))) if v else (0.0, 0.0)
+        _close_m, _ = _ph("close", "lower")                    # zufassen
+        _lift_m, _lift_lo = _ph("lift")                        # Last uebernehmen
+        _carry_m, _carry_lo = _ph("carry")                     # halten
+        _rel_m, _ = _ph("place", "release")                    # loesen
+        print(f"    [Griffdruck] zufassen {_close_m:5.2f} | heben {_lift_m:5.2f} (min {_lift_lo:4.2f})"
+              f" | tragen {_carry_m:5.2f} (min {_carry_lo:4.2f}) | loesen {_rel_m:5.2f}  [N]", flush=True)
         _rel = getattr(act16.run_combined, "_release", None)
         if _rel is not None:
             # ABLAGE-MESSUNG (nur Diagnose): trennt "zu hoch losgelassen" von "seitlich verfehlt".
@@ -2404,6 +2584,17 @@ def run_self_learning_steering(headless=False):
         # die unsichere Kausalzuordnung (Anfahrt vs Griffgeometrie) steckt im Gewicht.  ACT23_FAIL_W=0
         # schaltet es faktisch ab, ACT23_ATTEMPT_NETZ=1 gibt volles Gewicht (altes Experiment).
         obs_w = 1.0                                    # fit weight of THIS episode's world-model row
+        # SENSOR-BELEGTER GRIFF-FEHLSCHLAG (Fingerdruck-Streifen).  Gemessen (50 Ep): wenn der Druck
+        # waehrend des HEBENS durchgehend 0 bleibt UND beim Zufassen unter 1 N lag, hat die Klaue das
+        # Objekt nie gehalten -- in 92% der Faelle folgt daraus kein Erfolg.  Das ist ein KAUSAL
+        # EINDEUTIGES Negativ fuer die AKTION: es haengt nur am Griff, nicht an Transport, Ablage oder
+        # einem Nachbarobjekt.  Genau die Eindeutigkeit, die dem attempted-Label fehlt (dort musste die
+        # unsichere Zuordnung ueber ein Gewicht von 0.3 abgefedert werden) -- hier gibt es volles
+        # Gewicht.  `not delivered` als Schutz: eine Episode, die trotz Druckeinbruch liefert (kurzes
+        # Nachfassen), darf kein Negativ bekommen.  ACT23_GRIPLABEL=0 schaltet es ab.
+        _grip_lost = (os.environ.get("ACT23_GRIPLABEL", "1") != "0"
+                      and bool(_g)                       # Sensor hat ueberhaupt gemessen
+                      and _lift_m < 0.01 and _close_m < 1.0)   # oben aus run_combined._grip gelesen
         # 423-Ep-Lauf ausgewertet (2026-07-28) -- und meine erste Bewertung KORRIGIERT.
         # Ich hatte das Label fuer schaedlich erklaert (Ausrichtungs-Praeferenz -0.010 -> +0.017,
         # Sigma 0.297 -> 0.395) und dabei gegen ein BACKUP verglichen, das sich nicht nur um die 86
@@ -2423,7 +2614,11 @@ def run_self_learning_steering(headless=False):
         att_full = (not use_net) or os.environ.get("ACT23_ATTEMPT_NETZ", "0") == "1"
         att_ok = att_full or fail_w > 0.0
         if os.environ.get("ACT23_CREDIT", "1") == "1":
-            if not lifted and attempted and not delivered and att_ok:
+            if _grip_lost and not delivered:
+                # der Streifen BELEGT, dass die Klaue nie gehalten hat -> Aktion war schlecht
+                route, outcome = "Griff hielt nicht (Drucksensor)", False
+                obs_w = 1.0
+            elif not lifted and attempted and not delivered and att_ok:
                 # the claw CLOSED at the object and it never rose: the choreography ARRIVED, the
                 # ACTION's grasp geometry (wrist/grip) failed -> the action gets a FAILURE label.
                 # Without this route a grasp-PREVENTING wrist was unfalsifiable (always "nicht
@@ -2521,6 +2716,26 @@ def run_self_learning_steering(headless=False):
         # policy drifted from the teacher ALONG ITS OWN TRAJECTORY (the oscillating-Bilanz diagnostic:
         # a Bilanz trough with a Schatten spike = the lifelong refit moved the policy, not bad luck).
         div = runtime.shadow_divergence_mm()
+        if modviz is not None:                                 # Zusammenspiel-Kurven (passiv)
+            try:
+                _fv = vc.surprise()
+                # EINHEIT: body.last_surprise ist der FK-Fehler in METERN (pc_act14:307, Norm des
+                # Vorhersagefehlers), die Kurve heisst "Koerper (mm)".  Ohne die Umrechnung landen
+                # ~0.0008 auf einer Achse, die sich die Kurve mit dem Fovea-Fehler (~0.3-0.9) teilt
+                # -> sie liegt optisch KONSTANT auf 0 (vom Nutzer beobachtet, 2026-08-02).
+                _bs = getattr(bm.body, "last_surprise", None)
+                modviz.push(fovea=(None if _fv is None else _fv.get("sensor")),
+                            body_mm=(None if _bs is None else float(_bs) * 1000.0),
+                            wm_mu=locals().get("_mu_a"), wm_sd=locals().get("_sd_a"),
+                            pol_div_mm=div,
+                            place_mm=(None if s_d is None else s_d * 1000.0),
+                            tilt_deg=(np.degrees(locals().get("_tilt") or 0.0)
+                                      if TILT_ACTION else None),
+                            nat_deg=(np.degrees(world.natural_tilt(world.radius_of(fe)))
+                                     if (TILT_ACTION and fe is not None) else None))
+            except Exception as _e:
+                if os.environ.get("ACT23_DEBUG", "0") == "1":
+                    print(f"    [ModulViz] push uebersprungen: {_e}", flush=True)
         runtime.train(epochs=200)                              # act19's DAgger refits used 300; 80 underfit
         #   the shifting aggregate (user watched the net under-CLOSE the gripper -- the BC smoothing
         #   artefact that stronger refits + DAgger labels at the visited close-states sharpen)
@@ -2529,6 +2744,17 @@ def run_self_learning_steering(headless=False):
                   f"|Netz-Teacher| {div:.0f} mm ({runtime.n()} DAgger + {runtime.n_imit()} Selbst, "
                   f"nachtrainiert)", flush=True)
         save_state()                                           # lifelong progress survives a restart
+        if os.environ.get("ACT23_ZEIT", "1") != "0":
+            _now = _time.perf_counter()
+            _ges = _now - _T["gesamt"]
+            _wahr = _T.get("vor_ausfuehrung", _now) - _T["gesamt"]
+            _aus = _T.get("nach_ausfuehrung", _now) - _T.get("vor_ausfuehrung", _now)
+            _lern = _now - _T.get("nach_ausfuehrung", _now)    # Kredit + Welt-Fit + Selbst-Imitation
+            _ft = getattr(vc.fovea, "t_step", 0.0) - _fov0[0]  #   + Runtime-Refit + Speichern
+            _fn = getattr(vc.fovea, "n_step", 0) - _fov0[1]
+            print(f"    [Zeit] gesamt {_ges:5.1f}s | Wahrnehmung {_wahr:4.1f} | Ausfuehrung {_aus:5.1f} "
+                  f"(davon Fovea {_ft:4.1f} in {_fn} Schritten"
+                  f"{f', {1e3*_ft/_fn:.0f}ms/Schritt' if _fn else ''}) | Lernen {_lern:4.1f}", flush=True)
         return res.get("ok", False), res.get("err", float("nan")) * 1000.0
 
     # CURIOSITY-driven auto-run (the act21 researcher pattern, user request): instead of a random pick
@@ -2754,14 +2980,116 @@ def run_self_learning_steering(headless=False):
     print("  Steering beendet.")
 
 
+#  Kernschalter, die IMMER protokolliert werden -- die Stellschrauben der laufenden Untersuchungen.
+#  Alles andere erscheint nur, wenn es von der Vorgabe abweicht (s. _print_run_settings).
+_CORE_KNOBS = ("ACT23_SEED", "ACT23_CHOREO", "ACT23_POLICY", "ACT23_STATE_PATH",
+               "ACT23_GRASP_CANDS", "ACT23_GRASP_CANDS_NETZ", "ACT23_GRASP_CAND_CAP",
+               "ACT23_GRIPLABEL", "ACT23_U_DENSEGRASP", "ACT23_CREDIT",
+               "ACT23_TILT_ACTION", "ACT23_TILT_CURIOSITY", "ACT23_WRIST_REL",
+               "ACT23_LAM", "ACT23_HOME_Z_MIN", "ACT14_DOF")
+
+
+def _source_defaults():
+    """Vorgabewerte ALLER Schalter direkt aus dem Quelltext lesen (os.environ.get("ACT..", "..")).
+
+    Aus dem Quelltext statt aus einer gepflegten Liste, damit die Ausgabe nicht veraltet, sobald
+    ein neuer Schalter dazukommt -- in diesem Projekt passiert das staendig.  Faellt still auf
+    'nur gesetzte Variablen zeigen' zurueck, wenn die Dateien nicht lesbar sind."""
+    import glob
+    import re as _re
+    pat = _re.compile(r'os\.environ\.get\(\s*["\'](ACT\d*[A-Z0-9_]*)["\']\s*(?:,\s*["\']([^"\']*)["\'])?')
+    here = os.path.dirname(os.path.abspath(__file__))
+    out = {}
+    try:
+        files = ([os.path.join(here, n) for n in ("pc_act23.py", "pc_act16.py", "pc_act14.py")]
+                 + sorted(glob.glob(os.path.join(here, "arm_modules", "*.py"))))
+        for f in files:
+            if not os.path.exists(f):
+                continue
+            with open(f, encoding="utf-8", errors="replace") as fh:
+                for m in pat.finditer(fh.read()):
+                    out.setdefault(m.group(1), m.group(2))
+    except Exception:
+        pass
+    return out
+
+
+def _print_run_settings():
+    """Die EINSTELLUNGEN des Laufs ins Log schreiben (Nutzerwunsch 2026-08-02: im Log war nicht
+    nachvollziehbar, mit welchen Schaltern die GUI lief).
+
+    Zwei Bloecke, weil ein Vollabzug aller ~138 Schalter das Log zumuellen wuerde:
+      ABWEICHUNGEN  jeder Schalter, dessen Umgebungswert von der Quelltext-Vorgabe abweicht.  Das
+                    ist die eigentliche Antwort auf "womit lief der Lauf" und faengt AUCH Schalter,
+                    an die beim Schreiben dieser Funktion niemand gedacht hat.
+      KERN          die Stellschrauben der laufenden Untersuchungen, immer sichtbar, damit man den
+                    Stand auch dann sieht, wenn alles auf Vorgabe steht.
+    Dazu Commit + Arbeitsbaum-Zustand, damit ein Log-Fund spaeter reproduzierbar bleibt."""
+    try:
+        import subprocess
+        d = os.path.dirname(os.path.abspath(__file__))
+        h = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=d, capture_output=True,
+                           text=True, timeout=5)
+        st = subprocess.run(["git", "status", "--porcelain"], cwd=d, capture_output=True,
+                            text=True, timeout=5)
+        if h.returncode == 0:
+            dirty = " + ungespeicherte Aenderungen" if st.stdout.strip() else ""
+            print(f"  [Lauf] Commit {h.stdout.strip()}{dirty}", flush=True)
+    except Exception:
+        pass
+    defs = _source_defaults()
+    diff = []
+    for k, dv in sorted(defs.items()):
+        v = os.environ.get(k)
+        if v is not None and v != dv:
+            diff.append(f"{k}={v} (Vorgabe {dv!r})")
+    for k, v in sorted(os.environ.items()):          # gesetzt, aber im Quelltext nicht gefunden
+        if k.startswith("ACT") and k not in defs:
+            diff.append(f"{k}={v} (keine Vorgabe im Quelltext)")
+    if diff:
+        print("  [Lauf] Abweichungen von der Vorgabe:", flush=True)
+        for line in diff:
+            print(f"           {line}", flush=True)
+    else:
+        print("  [Lauf] alle Schalter auf Vorgabe", flush=True)
+    core = [f"{k.replace('ACT23_', '').replace('ACT14_', '')}={os.environ.get(k, defs.get(k))}"
+            for k in _CORE_KNOBS if (k in os.environ or k in defs)]
+    print("  [Lauf] Kern: " + "  ".join(core), flush=True)
+
+
 class _Tee:
     """Mirror a console stream into a log file (user request: every session leaves a log).
-    The FILE skips carriage-return progress spam (warmup/train tickers) and writes UTF-8
-    regardless of the console codepage; the CONSOLE stream is passed through untouched."""
+    The FILE skips carriage-return progress spam (warmup/train tickers), PREFIXES every line with
+    a wall-clock timestamp and writes UTF-8 regardless of the console codepage; the CONSOLE stream
+    is passed through untouched (unstamped -- the timestamps are for post-hoc log analysis).
+
+    WARUM DIE ZEITSTEMPEL (2026-08-02): der Nutzer sah die Kamera-Anzeige stehen und konnte nicht
+    entscheiden, ob der Lauf haengt oder nur das Fenster nicht neu zeichnet -- und das LOG konnte
+    es auch nicht, weil keine Uhrzeit drinstand.  Mit Stempel je Zeile sieht man sofort, ob die
+    Episoden zum fraglichen Zeitpunkt weiterliefen (Anzeige-Problem) oder nicht (echter Haenger),
+    und nebenbei, welche Phase wieviel Zeit kostet.  ACT23_LOG_TIME=0 schaltet es ab."""
+
+    STAMP = os.environ.get("ACT23_LOG_TIME", "1") != "0"
 
     def __init__(self, stream, fh):
         self._s = stream
         self._f = fh
+        self._bol = True                               # steht der Schreibkopf am Zeilenanfang?
+
+    def _stamped(self, data):
+        """Zeitstempel an jeden ZEILENANFANG.  write() bekommt beliebige Bruchstuecke (print gibt
+        Text und '\\n' getrennt aus), darum wird der Zeilenanfang ueber Aufrufe hinweg gemerkt --
+        sonst landete der Stempel mitten in der Zeile.  Leerzeilen bleiben leer."""
+        if not self.STAMP:
+            return data
+        import time
+        out = []
+        for part in data.splitlines(keepends=True):
+            if self._bol and part not in ("\n", "\r\n"):
+                out.append(time.strftime("%H:%M:%S "))
+            out.append(part)
+            self._bol = part.endswith("\n")
+        return "".join(out)
 
     def write(self, data):
         try:                                           # a dying console pipe (e.g. truncated by the
@@ -2770,7 +3098,7 @@ class _Tee:
             pass
         if "\r" not in data:
             try:
-                self._f.write(data)
+                self._f.write(self._stamped(data))
                 self._f.flush()
             except Exception:
                 pass

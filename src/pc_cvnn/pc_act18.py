@@ -519,6 +519,10 @@ class HexFovea:
     def step(self, img, gaze, cmd, learn=True, train_sel=False):
         """`cmd` is the object NAME (an abstract command); the sel channel is produced by the
         LEARNED head from onehot(cmd).  train_sel=True (warmup) also fits the head to _match_target."""
+        import time as _t
+        _t0 = _t.perf_counter()                              # ZEITKONTO (s. pc_act23 [Zeit]-Zeile):
+        #   die Fovea ist der Posten, der bei F/K/RES-Aenderungen als erstes teuer wird -- ohne
+        #   eigenen Zaehler waere sie in der Ausfuehrungszeit unsichtbar.
         arr = hex_sample(img, gaze, self._ek())              # sample at the current zoom
         if LEARN_SEL and train_sel:
             self.sel_head.train_step(arr, onehot_cmd(cmd), _match_target(arr, CMD_COLOR[cmd]))
@@ -530,6 +534,8 @@ class HexFovea:
             self.se.append(r["sensor_error"])
             self.hist["sensor"].append(r["sensor_error"]); self.hist["state"].append(r["state_error"])
             self.hist["total"].append(r["total_error"]); self.hist["relax"].append(r["relax_steps"])
+        self.t_step = getattr(self, "t_step", 0.0) + (_t.perf_counter() - _t0)   # getattr: alte Pickles
+        self.n_step = getattr(self, "n_step", 0) + 1                            #   haben die Felder nicht
         return arr
 
     def step_id(self, img, gaze, target_rgb, learn=True):
@@ -537,6 +543,9 @@ class HexFovea:
         colour-class centroid) via the cosine match, NOT the fixed command-code sel_head.  Lets
         fovea_gradient drive the gaze toward the agent's OWN self-labelled identity -- the fovea net
         can be pointed at any colour it has a class for, not just the three trained command codes."""
+        import time as _t
+        _t0 = _t.perf_counter()                              # ZEITKONTO -- step_id ist der Pfad, den
+        #   der Fovea-Servo je Frame fahrt (make_shape_track), also der eigentlich teure.
         arr = hex_sample(img, gaze, self._ek())
         arr[:, :, 0] = _match_chroma(arr, target_rgb)        # class-conditioned IDENTITY saliency
         #   (chroma distance, the colour-open-set metric -- the cosine gate let the grey table
@@ -548,6 +557,8 @@ class HexFovea:
             self.se.append(r["sensor_error"])
             self.hist["sensor"].append(r["sensor_error"]); self.hist["state"].append(r["state_error"])
             self.hist["total"].append(r["total_error"]); self.hist["relax"].append(r["relax_steps"])
+        self.t_step = getattr(self, "t_step", 0.0) + (_t.perf_counter() - _t0)
+        self.n_step = getattr(self, "n_step", 0) + 1
         return arr
 
     def warmup(self, render_fn, scenes, scatter_fn, rng, viz=None):

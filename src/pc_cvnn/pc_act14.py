@@ -130,6 +130,55 @@ class BracketArmSim:
         mujoco.mj_forward(self.m, self.d)
         return self.grasp_pos()
 
+    def grip_pressure(self, finger="left"):
+        """DRUCKMESSSTREIFEN an der INNENSEITE EINES Fingers -- ein Skalar (Newton), wie ihn der
+        geplante echte Aufbau liefert (ein Streifen, ein Finger, Innenflaeche).
+
+        Bewusst NICHT beidseitig und nicht als Vektor: der reale Sensor sitzt auf der Greifflaeche
+        eines Fingers und misst die Normalkraft, mit der dieser gegen etwas drueckt.  Genau diese
+        Einschraenkung macht das Signal aussagekraeftig -- ein Objekt ZWISCHEN den Fingern drueckt
+        auf die Innenflaeche, ein Finger der beim Zufahren seitlich gegen das Objekt stoesst (der
+        diagonale Griff, den der User beobachtet) erzeugt dort wenig oder nichts.
+
+        Gefiltert wird ueber die Kontakt-POSITION im Finger-Frame (robuster als die Normalen-
+        Richtung): nur Kontakte auf der zur Gegenklaue zeigenden Seite zaehlen.  Summe der
+        Normalkraefte aller solchen Kontakte."""
+        import mujoco
+        key = f"_press_{finger}"
+        if not hasattr(self, key):
+            pad = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_GEOM, f"claw_{finger}")
+            shaft = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_GEOM, f"finger_{finger}")
+            bid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_BODY, f"finger_{finger}")
+            #   claw_left sitzt bei +x im linken Finger-Frame, claw_right bei -x im rechten:
+            #   die Innenseite ist also die Richtung, in der die Klauenflaeche sitzt.
+            inner = +1.0 if finger == "left" else -1.0
+            # EIGENKONTAKTE ausschliessen: beim Schliessen ohne Objekt beruehren sich die Klauen und
+            # erzeugten 7.67 N (gemessen) -- das haette jedes Objektsignal ueberdeckt.  Ein realer
+            # Streifen auf der GREIFFLAECHE misst, was der Finger gegen die UMWELT drueckt, nicht was
+            # der eigene Greifer an seinen Kanten tut.
+            own = set()
+            for nm in ("claw_left", "claw_right", "finger_left", "finger_right", "gripper_base"):
+                gi = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_GEOM, nm)
+                if gi >= 0:
+                    own.add(gi)
+            setattr(self, key, ({pad, shaft}, bid, inner, own))
+        gids, bid, inner, own = getattr(self, key)
+        total, f = 0.0, np.zeros(6)
+        for c in range(int(self.d.ncon)):
+            con = self.d.contact[c]
+            if con.geom1 not in gids and con.geom2 not in gids:
+                continue
+            other = con.geom2 if con.geom1 in gids else con.geom1
+            if other in own:                          # Finger gegen Finger -> kein Umweltkontakt
+                continue
+            R = self.d.xmat[bid].reshape(3, 3)
+            loc = R.T @ (np.asarray(con.pos, float) - np.asarray(self.d.xpos[bid], float))
+            if loc[0] * inner <= 0.0:                 # Kontakt auf der AUSSENseite -> Streifen spuert nichts
+                continue
+            mujoco.mj_contactForce(self.m, self.d, c, f)
+            total += abs(float(f[0]))                 # Normalkraft im Kontaktframe
+        return float(total)
+
     def grasp_dir(self):
         """World direction the CLAW points along (the gripper body's +z at the grasp site) --
         the orientation the 4-DOF reach must PRESERVE (learned alongside the FK by babbling)."""
