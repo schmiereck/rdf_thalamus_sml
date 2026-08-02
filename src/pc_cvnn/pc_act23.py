@@ -709,7 +709,9 @@ def run_self_learning_steering(headless=False):
         bm = BodyModelModule(rng=np.random.default_rng(5)); bm.babble(sim, 4000)
     state = CommandState23(sim)
     state.policy = os.environ.get("ACT23_POLICY", "self")
-    state.choreo = os.environ.get("ACT23_CHOREO", "fsm")
+    state.choreo = os.environ.get("ACT23_CHOREO", "netz")   # DEFAULT netz seit 2026-08-02 (war fsm):
+    #   der Nutzer schaltet beim GUI-Start ohnehin jedes Mal von Hand auf Netz um.  ACT23_CHOREO=fsm
+    #   holt die gescriptete Choreographie zurueck (Rauchtests/Vergleichslaeufe nutzen sie weiter).
     panel = None
     if not headless:
         panel = CommandPanel23(state, CAM, RES, rng=np.random.default_rng(7))
@@ -2657,8 +2659,13 @@ def run_self_learning_steering(headless=False):
         if modviz is not None:                                 # Zusammenspiel-Kurven (passiv)
             try:
                 _fv = vc.surprise()
+                # EINHEIT: body.last_surprise ist der FK-Fehler in METERN (pc_act14:307, Norm des
+                # Vorhersagefehlers), die Kurve heisst "Koerper (mm)".  Ohne die Umrechnung landen
+                # ~0.0008 auf einer Achse, die sich die Kurve mit dem Fovea-Fehler (~0.3-0.9) teilt
+                # -> sie liegt optisch KONSTANT auf 0 (vom Nutzer beobachtet, 2026-08-02).
+                _bs = getattr(bm.body, "last_surprise", None)
                 modviz.push(fovea=(None if _fv is None else _fv.get("sensor")),
-                            body_mm=getattr(bm.body, "last_surprise", None),
+                            body_mm=(None if _bs is None else float(_bs) * 1000.0),
                             wm_mu=locals().get("_mu_a"), wm_sd=locals().get("_sd_a"),
                             pol_div_mm=div,
                             place_mm=(None if s_d is None else s_d * 1000.0),
