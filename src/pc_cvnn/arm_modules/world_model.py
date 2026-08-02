@@ -290,6 +290,38 @@ class WorldModelModule(ArmModule):
         self._Y.append([y])
         self._weights(len(self._X) - 1).append(float(weight))
 
+    def ensure_feat_dim(self, new_fd, neutral):
+        """Das SITUATIONS-Schema erweitern und bestehende Zeilen mitnehmen.
+
+        Anders als beim Wrist/Tilt stehen neue SITUATIONS-Dimensionen nicht am Zeilenende, sondern
+        MITTEN in der Zeile (Layout: [feats | action]).  Alte Zeilen bekommen die neuen Werte daher
+        an Position feat_dim EINGESCHOBEN, der Aktionsblock rutscht nach rechts -- sonst laesse ein
+        blosses Anhaengen die Aktionsspalten der alten Zeilen gegen die der neuen verrutschen und
+        das Modell lernte Unsinn aus 4691 vorhandenen Versuchen.
+
+        `neutral` ist der Wert, den eine Zeile bekommt, die diese Information NIE hatte.  Der Aufrufer
+        muss dort ein GUELTIGKEITS-FLAG mitfuehren (s. pc_act23 NB_NEUTRAL): einen erfundenen
+        Sachwert einzusetzen waere eine Luege, aus der das Modell eine Scheinkorrelation lernt.
+
+        Idempotent (mehrfacher Aufruf aendert nichts) und ein No-op, wenn das Schema schon passt."""
+        new_fd = int(new_fd); neutral = np.asarray(neutral, float)
+        if new_fd == self.feat_dim:
+            return 0
+        if new_fd < self.feat_dim or len(neutral) != new_fd - self.feat_dim:
+            raise ValueError(f"ensure_feat_dim: {self.feat_dim} -> {new_fd} passt nicht zu "
+                             f"neutral[{len(neutral)}]")
+        old_fd, n = self.feat_dim, 0
+        for i, r in enumerate(self._X or []):
+            r = np.asarray(r, float)
+            # sowohl Zeilen MIT Tilt-Dimensionen als auch die zwei Spalten kuerzeren davor
+            if len(r) in (old_fd + ACT_DIM, old_fd + ACT_DIM - 2):
+                self._X[i] = np.concatenate([r[:old_fd], neutral, r[old_fd:]]); n += 1
+        self.feat_dim = new_fd
+        p = getattr(self, "in_ports", {}).get("situation")     # Port-Breite mitziehen (typisierte Ports)
+        if p is not None:
+            p.dim = new_fd
+        return n
+
     def _weights(self, upto):
         """Per-row fit weight, padded to `upto` entries with 1.0 -- migrates pre-weight pickles."""
         if getattr(self, "_W", None) is None:

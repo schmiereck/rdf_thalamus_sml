@@ -95,6 +95,14 @@ FOVEA_MEM = FOVEA_NET and os.environ.get("ACT23_FOVEA_MEM", "1") == "1"
 BODY = {"cube": "obj_red", "L": "obj_L", "U": "obj_U"}
 ALL = ["obj_red", "obj_green", "obj_blue", "obj_L", "obj_U"]
 TARGET = np.array([0.0, 0.10])
+# NACHBAR-INFORMATION als Situations-Feature (s. _neighbour_feats).  ACT23_NEIGHBOURS=0 schaltet sie
+# ab -- die Dimensionen BLEIBEN dann im Schema (sonst passte der Puffer nicht mehr), sie tragen nur
+# konstant den neutralen Wert.  NB_DMAX = ab welchem Abstand ein Objekt nicht mehr als Nachbar zaehlt;
+# 0.12m deckt Schieben beim Schliessen, Rammen beim Tragen und das Blob-Verschmelzen (~40mm) ab.
+NEIGHBOURS = os.environ.get("ACT23_NEIGHBOURS", "1") != "0"
+NB_DMAX = float(os.environ.get("ACT23_NB_DMAX", "0.12"))
+NB_DIM = 5
+NB_NEUTRAL = np.array([0.0, NB_DMAX, 1.0, 0.0, 0.0])   # "nie gemessen" -- gueltig-Flag 0
 
 
 def _auc(y, s):
@@ -919,7 +927,12 @@ def run_self_learning_steering(headless=False):
     # embedding (no class one-hot) lets this ONE model absorb trials from any form.  (The former
     # ObjectOrientationModule features are subsumed by the k=2 phase -- one perception path, no oo.)
     world = (_loaded["world"] if _loaded is not None else
-             WorldModelModule(k=5, off_max=0.008, rng=np.random.default_rng(2), feat_dim=6 + shape_clf.NH))
+             WorldModelModule(k=5, off_max=0.008, rng=np.random.default_rng(2),
+                              feat_dim=6 + shape_clf.NH + NB_DIM))
+    _n_mig = world.ensure_feat_dim(6 + shape_clf.NH + NB_DIM, NB_NEUTRAL)   # geladene Puffer nachziehen
+    if _n_mig:
+        print(f"  [Schema] Nachbar-Information ergaenzt: {_n_mig} bestehende Zeilen migriert "
+              f"(gueltig-Flag 0 -- sie hatten die Information nie)", flush=True)
     #   off_max>0 (STAGE-1 de-scripting): the grasp-point OFFSET dims are live -- the model can learn to
     #   grasp a form off its perceived grasp point; grip+gentle action dims replace the obj_U runtime rules.
 
@@ -1258,7 +1271,45 @@ def run_self_learning_steering(headless=False):
                 y2 = float(_r[0])
         return np.concatenate([np.asarray(best["pos"], float),
                                [np.cos(2 * y2), np.sin(2 * y2), np.cos(4 * y4), np.sin(4 * y4)],
-                               shape_clf.desc_embed(best["desc"])])
+                               shape_clf.desc_embed(best["desc"]),
+                               _neighbour_feats(best, dets)])
+
+    def _neighbour_feats(best, dets):
+        """NACHBAR-INFORMATION fuers Welt-Modell (Nutzerwunsch, in ModulViz die gestrichelte Kante
+        ShapeClassifier -> SelfEval).  Der User hat wiederholt beobachtet, was hier fehlt: die Klaue
+        SCHIEBT beim Schliessen ein Objekt weg, sie RAMMT beim Tragen einen Nachbarn, und zwei nahe
+        Objekte VERSCHMELZEN zu einem Blob (Farb-/Form-Split).  All das haengt an der Nachbarschaft,
+        und das Welt-Modell sah bisher nur das Zielobjekt.
+
+        Kostet NICHTS: perceive_all liefert ohnehin ALLE Detektionen, situation_feats warf sie bisher
+        weg.  Kein zusaetzliches Rendern, keine privilegierte Information -- dieselbe eigene Kamera.
+        (Nicht aus der FOVEA: die ist der Aufmerksamkeitspfad auf das EINE Zielobjekt.)
+
+        5 Dimensionen: [gueltig, d_nah, cos phi, sin phi, n_nah]
+          gueltig  1.0 = diese Zeile hat echte Nachbar-Information (alte Zeilen: 0.0, s.
+                   ensure_feat_dim -- ein erfundener Sachwert waere eine Luege im Trainingssatz)
+          d_nah    Abstand zum naechsten Nachbarn, auf NB_DMAX gedeckelt
+          phi      RICHTUNG dorthin, im OBJEKTRAHMEN (gegen die eigene yaw-Achse gedreht) und als
+                   PHASE kodiert -- dieselbe Konvention wie Wrist und Neigung.  Objekt-relativ, weil
+                   "Nachbar auf der Zinkenseite" etwas anderes ist als "Nachbar hinter mir", und das
+                   nur im Objektrahmen ausdrueckbar ist.
+          n_nah    wieviele Nachbarn innerhalb NB_DMAX liegen (Gedraenge)"""
+        v = np.array([0.0, NB_DMAX, 1.0, 0.0, 0.0])
+        if not NEIGHBOURS:
+            return v
+        p = np.asarray(best["pos"], float)
+        d = [(float(np.linalg.norm(np.asarray(o["pos"], float) - p)), o)
+             for o in dets if o is not best and o.get("pos") is not None]
+        v[0] = 1.0                                    # gemessen -- auch "keine Nachbarn" ist Information
+        near = [x for x in d if x[0] <= NB_DMAX]
+        v[4] = float(len(near))
+        if d:
+            dist, o = min(d, key=lambda x: x[0])
+            v[1] = float(min(dist, NB_DMAX))
+            rel = np.asarray(o["pos"], float) - p
+            phi = float(np.arctan2(rel[1], rel[0])) - float(best.get("yaw", 0.0))   # Objektrahmen
+            v[2], v[3] = np.cos(phi), np.sin(phi)
+        return v
 
     bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, LONG)
     # ACT23_SEED (default 7 = historical behaviour): scene placement + auto target picks.  Parallel
