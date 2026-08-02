@@ -609,6 +609,7 @@ def run_self_learning_steering(headless=False):
     CUBE_BODIES = ["obj_red", "obj_green"]
 
     print("act23 [viz] — self-learning grasper command-steering" + (" (headless self-test)" if headless else ""))
+    _print_run_settings()
     sim = BracketArmSim(render_wh=(RES, RES)); sim.set_reach_site("contact")
     # ACT23_POLICY=teacher starts in teacher mode (headless isolation: execution/perception WITHOUT the
     # young world model's action lottery; the GUI toggle changes it live as before)
@@ -2110,7 +2111,20 @@ def run_self_learning_steering(headless=False):
                 # gets tried -- where to grip becomes the model's own, perception-grounded decision.
                 g0 = np.asarray(det["grasp_xy"], float)
                 offs = [np.asarray(p, float) - g0 for p in det["grasp_cands"]]
-                offs = [o for o in offs if float(np.linalg.norm(o)) <= 0.05]
+                # SCHRANKE 12mm (war 50mm -- zu weit gewaehlt, korrigiert nach dem 316-Ep-Lauf
+                # 2026-08-01).  Gemessen, dosisabhaengig und in 5 von 6 Objekten getrennt sichtbar:
+                #   Verschiebung  0-10mm -> 55% geliefert   (Heuristik-Referenz 52%)
+                #                10-20mm -> 31%
+                #                20-30mm -> 16%
+                #                 30mm+  ->  0%  (0 von 18)
+                # Griffverlust laut Drucksensor 17% (Heuristik) gegen 48% (verschoben).  Jenseits von
+                # ~12mm EXTRAPOLIERT das Modell nur noch -- genau die act22-Modellausbeutung, und LCB
+                # laeuft dort hinein, weil die Offset-Dimension kaum Zeilen hat.  Das ist KEINE neue
+                # Regel: die Schranke gab es schon, sie stand nur an der falschen Stelle.
+                # EHRLICH: auch 0-10mm zeigt keinen VORTEIL gegenueber dem heuristischen Punkt (55 vs
+                # 52%) -- die Schranke rettet die Selbstkorrektur, sie belegt keinen Nutzen.
+                _cap = float(os.environ.get("ACT23_GRASP_CAND_CAP", "0.012"))
+                offs = [o for o in offs if float(np.linalg.norm(o)) <= _cap]
             a, _mu_a, _sd_a = world.select_action(fe, n=n_cand, lam=LAM, offsets=offs,
                                                   curiosity=TILT_CURIOSITY)
             a_exec = a; wf = (lambda s, _w=wrist_of(a): _w)
@@ -2888,14 +2902,116 @@ def run_self_learning_steering(headless=False):
     print("  Steering beendet.")
 
 
+#  Kernschalter, die IMMER protokolliert werden -- die Stellschrauben der laufenden Untersuchungen.
+#  Alles andere erscheint nur, wenn es von der Vorgabe abweicht (s. _print_run_settings).
+_CORE_KNOBS = ("ACT23_SEED", "ACT23_CHOREO", "ACT23_POLICY", "ACT23_STATE_PATH",
+               "ACT23_GRASP_CANDS", "ACT23_GRASP_CANDS_NETZ", "ACT23_GRASP_CAND_CAP",
+               "ACT23_GRIPLABEL", "ACT23_U_DENSEGRASP", "ACT23_CREDIT",
+               "ACT23_TILT_ACTION", "ACT23_TILT_CURIOSITY", "ACT23_WRIST_REL",
+               "ACT23_LAM", "ACT23_HOME_Z_MIN", "ACT14_DOF")
+
+
+def _source_defaults():
+    """Vorgabewerte ALLER Schalter direkt aus dem Quelltext lesen (os.environ.get("ACT..", "..")).
+
+    Aus dem Quelltext statt aus einer gepflegten Liste, damit die Ausgabe nicht veraltet, sobald
+    ein neuer Schalter dazukommt -- in diesem Projekt passiert das staendig.  Faellt still auf
+    'nur gesetzte Variablen zeigen' zurueck, wenn die Dateien nicht lesbar sind."""
+    import glob
+    import re as _re
+    pat = _re.compile(r'os\.environ\.get\(\s*["\'](ACT\d*[A-Z0-9_]*)["\']\s*(?:,\s*["\']([^"\']*)["\'])?')
+    here = os.path.dirname(os.path.abspath(__file__))
+    out = {}
+    try:
+        files = ([os.path.join(here, n) for n in ("pc_act23.py", "pc_act16.py", "pc_act14.py")]
+                 + sorted(glob.glob(os.path.join(here, "arm_modules", "*.py"))))
+        for f in files:
+            if not os.path.exists(f):
+                continue
+            with open(f, encoding="utf-8", errors="replace") as fh:
+                for m in pat.finditer(fh.read()):
+                    out.setdefault(m.group(1), m.group(2))
+    except Exception:
+        pass
+    return out
+
+
+def _print_run_settings():
+    """Die EINSTELLUNGEN des Laufs ins Log schreiben (Nutzerwunsch 2026-08-02: im Log war nicht
+    nachvollziehbar, mit welchen Schaltern die GUI lief).
+
+    Zwei Bloecke, weil ein Vollabzug aller ~138 Schalter das Log zumuellen wuerde:
+      ABWEICHUNGEN  jeder Schalter, dessen Umgebungswert von der Quelltext-Vorgabe abweicht.  Das
+                    ist die eigentliche Antwort auf "womit lief der Lauf" und faengt AUCH Schalter,
+                    an die beim Schreiben dieser Funktion niemand gedacht hat.
+      KERN          die Stellschrauben der laufenden Untersuchungen, immer sichtbar, damit man den
+                    Stand auch dann sieht, wenn alles auf Vorgabe steht.
+    Dazu Commit + Arbeitsbaum-Zustand, damit ein Log-Fund spaeter reproduzierbar bleibt."""
+    try:
+        import subprocess
+        d = os.path.dirname(os.path.abspath(__file__))
+        h = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=d, capture_output=True,
+                           text=True, timeout=5)
+        st = subprocess.run(["git", "status", "--porcelain"], cwd=d, capture_output=True,
+                            text=True, timeout=5)
+        if h.returncode == 0:
+            dirty = " + ungespeicherte Aenderungen" if st.stdout.strip() else ""
+            print(f"  [Lauf] Commit {h.stdout.strip()}{dirty}", flush=True)
+    except Exception:
+        pass
+    defs = _source_defaults()
+    diff = []
+    for k, dv in sorted(defs.items()):
+        v = os.environ.get(k)
+        if v is not None and v != dv:
+            diff.append(f"{k}={v} (Vorgabe {dv!r})")
+    for k, v in sorted(os.environ.items()):          # gesetzt, aber im Quelltext nicht gefunden
+        if k.startswith("ACT") and k not in defs:
+            diff.append(f"{k}={v} (keine Vorgabe im Quelltext)")
+    if diff:
+        print("  [Lauf] Abweichungen von der Vorgabe:", flush=True)
+        for line in diff:
+            print(f"           {line}", flush=True)
+    else:
+        print("  [Lauf] alle Schalter auf Vorgabe", flush=True)
+    core = [f"{k.replace('ACT23_', '').replace('ACT14_', '')}={os.environ.get(k, defs.get(k))}"
+            for k in _CORE_KNOBS if (k in os.environ or k in defs)]
+    print("  [Lauf] Kern: " + "  ".join(core), flush=True)
+
+
 class _Tee:
     """Mirror a console stream into a log file (user request: every session leaves a log).
-    The FILE skips carriage-return progress spam (warmup/train tickers) and writes UTF-8
-    regardless of the console codepage; the CONSOLE stream is passed through untouched."""
+    The FILE skips carriage-return progress spam (warmup/train tickers), PREFIXES every line with
+    a wall-clock timestamp and writes UTF-8 regardless of the console codepage; the CONSOLE stream
+    is passed through untouched (unstamped -- the timestamps are for post-hoc log analysis).
+
+    WARUM DIE ZEITSTEMPEL (2026-08-02): der Nutzer sah die Kamera-Anzeige stehen und konnte nicht
+    entscheiden, ob der Lauf haengt oder nur das Fenster nicht neu zeichnet -- und das LOG konnte
+    es auch nicht, weil keine Uhrzeit drinstand.  Mit Stempel je Zeile sieht man sofort, ob die
+    Episoden zum fraglichen Zeitpunkt weiterliefen (Anzeige-Problem) oder nicht (echter Haenger),
+    und nebenbei, welche Phase wieviel Zeit kostet.  ACT23_LOG_TIME=0 schaltet es ab."""
+
+    STAMP = os.environ.get("ACT23_LOG_TIME", "1") != "0"
 
     def __init__(self, stream, fh):
         self._s = stream
         self._f = fh
+        self._bol = True                               # steht der Schreibkopf am Zeilenanfang?
+
+    def _stamped(self, data):
+        """Zeitstempel an jeden ZEILENANFANG.  write() bekommt beliebige Bruchstuecke (print gibt
+        Text und '\\n' getrennt aus), darum wird der Zeilenanfang ueber Aufrufe hinweg gemerkt --
+        sonst landete der Stempel mitten in der Zeile.  Leerzeilen bleiben leer."""
+        if not self.STAMP:
+            return data
+        import time
+        out = []
+        for part in data.splitlines(keepends=True):
+            if self._bol and part not in ("\n", "\r\n"):
+                out.append(time.strftime("%H:%M:%S "))
+            out.append(part)
+            self._bol = part.endswith("\n")
+        return "".join(out)
 
     def write(self, data):
         try:                                           # a dying console pipe (e.g. truncated by the
@@ -2904,7 +3020,7 @@ class _Tee:
             pass
         if "\r" not in data:
             try:
-                self._f.write(data)
+                self._f.write(self._stamped(data))
                 self._f.flush()
             except Exception:
                 pass
