@@ -3019,7 +3019,8 @@ def _source_defaults():
     here = os.path.dirname(os.path.abspath(__file__))
     out = {}
     try:
-        files = ([os.path.join(here, n) for n in ("pc_act23.py", "pc_act16.py", "pc_act14.py")]
+        files = ([os.path.join(here, n) for n in ("pc_act23.py", "pc_act18.py", "pc_act16.py",
+                                                 "pc_act15.py", "pc_act14.py")]
                  + sorted(glob.glob(os.path.join(here, "arm_modules", "*.py"))))
         for f in files:
             if not os.path.exists(f):
