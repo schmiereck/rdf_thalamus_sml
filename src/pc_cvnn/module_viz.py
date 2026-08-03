@@ -45,6 +45,11 @@ _NODES = [
     ("LatentGoal",     2, 1.3, "Platzier-Ziel"),
     ("Curiosity",      2, 0.0, "was wird geuebt"),
     ("LatentDynamics", 3, 1.3, "Uebergangsmodell"),
+    # AUSGABEN des Blickapparats als EIGENE Bloecke (Nutzerwunsch): sie sind keine Modul-Ports,
+    # sondern Groessen, die waehrend der Episode nach aussen wirken -- eigene Kaesten mit Live-Wert
+    # zeigen das ehrlicher als eine Kante, die quer durch BodyModel laeuft.
+    ("Fovea-Zoom",     0, 3.6, "Abtastweite z"),
+    ("Fovea-Servo",    1, 3.6, "Greifziel-Korrektur"),
 ]
 # (von, nach, art)   art: "wired" | "missing" | "idle"
 _EDGES = [
@@ -63,7 +68,10 @@ _EDGES = [
     #   ein Situations-Feature.  Vorher fehlte diese Kante -- vom Nutzer hier in der Grafik entdeckt.
     ("BodyModel", "WorldModel", "wired"),          # seit 2026-08-03: Klauen-Startwinkel, Hand->Ziel
     #   und die FK-Surprise sind Situations-Features -- die letzte gemessene Luecke ist zu.
-    ("VisualCortex", "RuntimePolicy", "servo"),    # FOVEA-SERVO: wirkt auf die AUSFUEHRUNG, nicht
+    ("VisualCortex", "Fovea-Zoom", "wired"),       # z wird je verfolgtem Frame aus der Lock-Konfidenz
+    #   nachgefuehrt (_zoom_step) und beim Klassen-Training ueber die Spanne gewuerfelt
+    ("VisualCortex", "Fovea-Servo", "wired"),      # (obs, conf) je 4. Frame
+    ("Fovea-Servo", "RuntimePolicy", "servo"),     # FOVEA-SERVO: wirkt auf die AUSFUEHRUNG, nicht
     #   ueber einen Port.  make_shape_track liefert (obs, conf); bei sicherem Lock stammt obs aus der
     #   BLICKUEBERZEUGUNG DES NETZES, sonst vom Detektor (|Netz-Detektor| misst die Differenz).
     #   run_combined korrigiert damit obj_belief -- den angefahrenen Greifzielpunkt -- und NUR in den
@@ -82,7 +90,8 @@ _STYLE = {"servo":   dict(ls="-.", color="#7fe08a", lw=1.4, alpha=0.9),
 class ModuleViz:
     """Passives Anzeigefenster; `push(**werte)` einmal pro Episode aufrufen."""
 
-    KEYS = ("fovea", "body_mm", "wm_mu", "wm_sd", "pol_div_mm", "place_mm", "tilt_deg", "nat_deg")
+    KEYS = ("fovea", "body_mm", "wm_mu", "wm_sd", "pol_div_mm", "place_mm", "tilt_deg", "nat_deg",
+            "zoom", "servo_mm")
 
     def __init__(self, title="act23 — PCModule und ihr Zusammenspiel"):
         import matplotlib.pyplot as plt
@@ -110,7 +119,7 @@ class ModuleViz:
     def _draw_graph(self, vals):
         ax = self.axG
         ax.clear(); ax.set_facecolor("#15151c"); ax.axis("off")
-        ax.set_xlim(-0.62, 4.55); ax.set_ylim(-0.55, 3.35)
+        ax.set_xlim(-0.62, 4.55); ax.set_ylim(-0.55, 4.15)
         BW, BH = 0.86, 0.46                                    # Kaestchenbreite/-hoehe
         for a, b, kind in _EDGES:
             (x1, y1), (x2, y2) = self._pos[a], self._pos[b]
@@ -132,7 +141,7 @@ class ModuleViz:
         leg = [("verdrahtet (Port)", "wired"), ("Servo: wirkt auf die Ausfuehrung", "servo"),
                ("Info da, NICHT angeschlossen", "missing"), ("Modul inaktiv", "idle")]
         for i, (lab, kind) in enumerate(leg):
-            y = 3.15 - i * 0.26
+            y = 3.95 - i * 0.26
             ax.plot([3.62, 3.86], [y, y], **_STYLE[kind])
             ax.text(3.92, y, lab, color="#9a9aa8", fontsize=6.5, va="center")
 
@@ -174,10 +183,13 @@ class ModuleViz:
                    "BodyModel": last("body_mm", "{:.1f} mm"),
                    "WorldModel": f"mu {last('wm_mu','{:.2f}')} / s {last('wm_sd','{:.2f}')}",
                    "RuntimePolicy": last("pol_div_mm", "{:.0f} mm"),
-                   "SelfEval": last("place_mm", "{:.0f} mm")}
+                   "SelfEval": last("place_mm", "{:.0f} mm"),
+                   "Fovea-Zoom": last("zoom", "z {:.2f}"),
+                   "Fovea-Servo": last("servo_mm", "{:.1f} mm")}
         self._draw_graph(cur)
         self._plot(self.ax[0], "Wahrnehmung: Fovea-Surprise + Koerpermodell",
-                   [("fovea", "Fovea sensor_error", "#5fd7ff"), ("body_mm", "Koerper (mm)", "#ffd166")])
+                   [("fovea", "Fovea sensor_error", "#5fd7ff"), ("body_mm", "Koerper (mm)", "#ffd166"),
+                    ("zoom", "Fovea-Zoom z", "#c792ea"), ("servo_mm", "|Netz-Detektor| mm", "#7fe08a")])
         self._plot(self.ax[1], "Griffwahl: Welt-Modell mu und sigma",
                    [("wm_mu", "mu (erwartete Guete)", "#7fe08a"), ("wm_sd", "sigma (Unsicherheit)", "#ff7b6b")])
         self._plot(self.ax[2], "Ausfuehrung: Policy-vs-Teacher und Ablage",

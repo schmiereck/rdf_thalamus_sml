@@ -456,6 +456,11 @@ class CommandPanel23:
     """Same look as pc_act21's CommandPanel (arm camera + fovea + surprise + buttons) but with ONE unified
     object row (no colour/form mode) and a grasp-policy toggle."""
 
+    # EINE Quelle fuer Beschriftung und Farbe des Choreo-Knopfes -- Konstruktor UND Umschalter lesen
+    # sie, damit der Knopf nicht wieder etwas anderes anzeigt als der Zustand sagt.
+    CH_LBL = {"fsm": "Choreo: FSM", "netz": "Choreo: Netz", "attractor": "Choreo: Attraktor"}
+    CH_COL = {"fsm": "#5a3a3a", "netz": "#2a5a7a", "attractor": "#5a2a7a"}
+
     def __init__(self, state, cam, res, rng=None, randomize_fn=None):
         import matplotlib.pyplot as plt
         from matplotlib.widgets import Button
@@ -497,7 +502,12 @@ class CommandPanel23:
         self.bAuto.on_clicked(self._toggle_auto)
         # STAGE 2: scripted FSM choreography <-> the LEARNED runtime policy drives the sub-goals
         axCh = self.fig.add_axes([0.33, 0.220, 0.125, 0.05])
-        self.bCh = Button(axCh, "Choreo: FSM", color="#5a3a3a", hovercolor="#7a5050")
+        # BESCHRIFTUNG AUS DEM ZUSTAND, nicht fest verdrahtet.  BUG bis 2026-08-03: hier stand
+        # "Choreo: FSM" fix -- seit der Vorgabe-Umstellung auf netz zeigte der Knopf also FSM an,
+        # WAEHREND das System auf Netz lief (vom Nutzer gemeldet).  Ein Druck haette dann auf
+        # Attraktor weitergeschaltet statt wie erwartet auf Netz.
+        self.bCh = Button(axCh, self.CH_LBL.get(state.choreo, "Choreo: FSM"),
+                          color=self.CH_COL.get(state.choreo, "#5a3a3a"), hovercolor="#7a5050")
         self.bCh.on_clicked(self._toggle_choreo)
         # STAGE 4a: place target as GOAL LATENT (latent-difference servo) <-> classic coordinate
         axLG = self.fig.add_axes([0.462, 0.220, 0.082, 0.05])
@@ -569,10 +579,8 @@ class CommandPanel23:
         # latent servo; still net-family, the runtime policy drives the grasp) -> FSM
         nxt = {"fsm": "netz", "netz": "attractor", "attractor": "fsm"}
         self.state.choreo = nxt.get(self.state.choreo, "fsm")
-        lbl = {"fsm": "Choreo: FSM", "netz": "Choreo: Netz", "attractor": "Choreo: Attraktor"}
-        col = {"fsm": "#5a3a3a", "netz": "#2a5a7a", "attractor": "#5a2a7a"}
-        self.bCh.label.set_text(lbl[self.state.choreo])
-        self.bCh.color = col[self.state.choreo]
+        self.bCh.label.set_text(self.CH_LBL[self.state.choreo])
+        self.bCh.color = self.CH_COL[self.state.choreo]
         self.bCh.ax.set_facecolor(self.bCh.color); self._refresh()
 
     def _toggle_goalmode(self, _e):
@@ -2880,7 +2888,10 @@ def run_self_learning_steering(headless=False):
                             tilt_deg=(np.degrees(locals().get("_tilt") or 0.0)
                                       if TILT_ACTION else None),
                             nat_deg=(np.degrees(world.natural_tilt(world.radius_of(fe)))
-                                     if (TILT_ACTION and fe is not None) else None))
+                                     if (TILT_ACTION and fe is not None) else None),
+                            zoom=float(getattr(vc.fovea, "z", 1.0)),
+                            servo_mm=(float(np.mean(_fs["d"]))
+                                      if (_fs := getattr(vc, "_fsv", None) or {"d": []})["d"] else None))
             except Exception as _e:
                 if os.environ.get("ACT23_DEBUG", "0") == "1":
                     print(f"    [ModulViz] push uebersprungen: {_e}", flush=True)

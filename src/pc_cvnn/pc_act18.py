@@ -115,9 +115,20 @@ FOVEA_B = float(os.environ.get("ACT_FOVEA_B", "1.0"))         # peripheral expan
 # NET-STEERABLE ZOOM: the fovea can widen its sampling (up to 2x the AREA = sqrt(2)x linear) to get an
 # OVERVIEW when the net is uncertain where the commanded object is, then zoom back in for detail.  The
 # zoom is driven by the net's own localization CONFIDENCE (like the gaze is driven by fovea_gradient).
-ZOOM = os.environ.get("ACT_FOVEA_ZOOM", "0") == "1"            # DEFAULT OFF (A/B: hurt acquisition here --
-#   the overview rarely triggers in this small workspace, and the scale-invariant training it needs
-#   dilutes the z=1 precision; enable for a LARGER workspace where objects fall outside the FOV)
+ZOOM = os.environ.get("ACT_FOVEA_ZOOM", "1") == "1"            # DEFAULT AN seit 2026-08-03.
+#   Das alte A/B (Vorgabe AUS) sagte: schadet der Akquise "in diesem KLEINEN Arbeitsbereich ...
+#   enable for a LARGER workspace where objects fall outside the FOV".  Genau die Bedingung ist
+#   erfuellt -- der Nutzer faehrt dauerhaft ACT_REACH_X0/X1/Y1 = -0.12/0.12/0.24 statt der Vorgabe
+#   -0.11/0.11/0.21, und er hatte den Zoom entsprechend seit Monaten gesetzt.
+#   KORREKTUR EINER FALSCHAUSSAGE VON MIR (2026-08-03): ich hatte behauptet, der Zoom sei wirkungslos
+#   und zum Abschalten geraten.  Falsch, an zwei Stellen uebersehen:
+#     * make_shape_track ruft _zoom_step JE VERFOLGTEM FRAME (pc_act23:2135) -- ich hatte nur in
+#       dieser Datei nach _zoom_step gesucht, nicht nach dem Aufrufer.
+#     * das Umtrainieren der Farbklassen wuerfelt z ueber die ganze Spanne (pc_act23:1781); das IST
+#       die vom Nutzer angeforderte Skalen-Invarianz und er hat sie beobachtet.
+#   ACT_FOVEA_ZOOM=0 schaltet beides ab (Runtime-Anpassung UND Trainings-Spanne).
+#   ACHTUNG: der Wert geht in _zoom_span ein -- ein Wechsel loest beim naechsten Laden ein einmaliges
+#   Umtrainieren der Fovea auf Farbklassen aus (~80 Runden).
 ZOOM_MAX = float(os.environ.get("ACT_FOVEA_ZOOM_MAX", "2.0"))   # widest sampling: 2x spacing = 50% "size"
 ZOOM_MIN = float(os.environ.get("ACT_FOVEA_ZOOM_MIN", "0.5"))   # finest sampling: 0.5x = 200% detail
 #   (user request: zoom BOTH ways around the default z=1 -- confident lock narrows below 1 for
