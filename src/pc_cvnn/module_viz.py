@@ -8,9 +8,9 @@ Zwei Hälften:
           durchgezogen  = verdrahtet, Daten fliessen
           gestrichelt   = Information EXISTIERT im System, ist aber nicht angeschlossen
           gepunktet     = Modul vorhanden, im act23-Lauf aber nicht aktiv
-        Die gestrichelten Kanten sind die in dieser Arbeit gemessenen Befunde: das Koerpermodell
-        kennt die Armstellung, das Welt-Modell erfaehrt sie nie; perceive_all sieht ALLE Objekte,
-        situation_feats gibt nur das Zielobjekt weiter.
+        Die gestrichelte Kante ist der verbliebene gemessene Befund: das Koerpermodell kennt die
+        Armstellung, das Welt-Modell erfaehrt sie nie.  (Zwei fruehere Luecken sind geschlossen --
+        Nachbarobjekte und der Fovea-Zustand sind seit 2026-08-02/03 Situations-Features.)
 
   UNTEN vier Kurvenpaare, je Episode ein Punkt.  Bewusst gepaart, damit man ZUSAMMENSPIEL liest
         statt Einzelwerte:
@@ -57,9 +57,13 @@ _EDGES = [
     ("LatentGoal", "RuntimePolicy", "wired"),
     ("Curiosity", "LatentGoal", "wired"),
     ("LatentDynamics", "LatentGoal", "idle"),
+    ("VisualCortex", "WorldModel", "wired"),       # seit 2026-08-03: Fovea-Zustand (Surprise + |top|) IST
+    #   ein Situations-Feature.  Vorher fehlte diese Kante -- vom Nutzer hier in der Grafik entdeckt.
     ("BodyModel", "WorldModel", "missing"),        # Armstellung/Klauen-Neigung erreicht das Modell nie
-    ("ShapeClassifier", "SelfEval", "missing"),    # Nachbarobjekte: perceive_all sieht sie, nur das Ziel geht weiter
 ]
+#   Die frueher gestrichelte Kante ShapeClassifier -> SelfEval (Nachbarobjekte gesehen, aber nicht
+#   weitergegeben) ist geschlossen: die Nachbar-Information laeuft jetzt ueber ShapeClassifier ->
+#   WorldModel mit (5 Dim, mit Gueltigkeits-Flag).
 _STYLE = {"wired":   dict(ls="-",  color="#5fd7ff", lw=1.6, alpha=0.95),
           "missing": dict(ls="--", color="#ff7b6b", lw=1.4, alpha=0.9),
           "idle":    dict(ls=":",  color="#7a7a8a", lw=1.2, alpha=0.7)}

@@ -99,6 +99,19 @@ TARGET = np.array([0.0, 0.10])
 # ab -- die Dimensionen BLEIBEN dann im Schema (sonst passte der Puffer nicht mehr), sie tragen nur
 # konstant den neutralen Wert.  NB_DMAX = ab welchem Abstand ein Objekt nicht mehr als Nachbar zaehlt;
 # 0.12m deckt Schieben beim Schliessen, Rammen beim Tragen und das Blob-Verschmelzen (~40mm) ab.
+# FOVEA-ZUSTAND als Situations-Feature (s. _fovea_feats).  Der Nutzer hat in der ModulViz-Grafik
+# bemerkt, dass es KEINE Kante VisualCortex -> WorldModel gibt -- zu Recht: die Situation kam bisher
+# vollstaendig aus dem UEBERSICHTS-Pfad (perceive_all), das gelernte Fovea-Netz beeinflusste nur, wohin
+# der Arm waehrend des Anfahrens zielt.  Folge: eine bessere Fovea konnte die GRIFFWAHL gar nicht
+# erreichen (siehe den zurueckgenommenen Aufloesungsversuch), und schwankende Servo-Qualitaet erschien
+# dem Welt-Modell als unerklaerliches Rauschen bei identischen Merkmalen.
+# FOV_SETTLE: so viele Fovea-Schritte auf dem AKTUELLEN Bild, bevor der Zustand gelesen wird.  Gesucht
+# werden muss dabei NICHT -- perceive_all hat das Objekt schon lokalisiert, die Fovea wird nur
+# dorthin gerichtet und schwingt ein.  learn=False: das ist ein LESEN, keine Erfahrung.
+FOVEA_FEATS = os.environ.get("ACT23_FOVEA_FEATS", "1") != "0"
+FOV_SETTLE = int(os.environ.get("ACT23_FOV_SETTLE", "4"))
+FOV_DIM = 12                                           # [gueltig, Surprise, |top|(10)]
+FOV_NEUTRAL = np.zeros(FOV_DIM)                        # "nie gemessen" -- gueltig-Flag 0
 NEIGHBOURS = os.environ.get("ACT23_NEIGHBOURS", "1") != "0"
 NB_DMAX = float(os.environ.get("ACT23_NB_DMAX", "0.12"))
 NB_DIM = 5
@@ -610,7 +623,7 @@ def run_self_learning_steering(headless=False):
     # PERSIST run_combined just does arm_home()+reposition_strays(): act23 owns ALL placement (setup_long,
     # place_all, the run_one snapshot-restore), so the scene truly persists and no geom is ever resized.
     act16.PERSIST = True
-    RES = int(os.environ.get("ACT23_RES", "480"))   # 240 -> 480 am 2026-08-02 (Zweig fovea-res):
+    RES = int(os.environ.get("ACT23_RES", "240"))   # 240 -> 480 am 2026-08-02 (Zweig fovea-res):
     #   zusammen mit ACT_FOVEA_F 16->20 und UNVERAENDERTEM K=4 halbiert sich der Zellabstand im
     #   Weltmass (2x Fovea-Aufloesung) bei gleichem Gesichtsfeld.  Gemessen kostet das im
     #   Fovea-Netz fast nichts (Abtastung 2.9 -> 3.2ms); teuer sind allein die 400 statt 256
@@ -946,11 +959,17 @@ def run_self_learning_steering(headless=False):
     # ObjectOrientationModule features are subsumed by the k=2 phase -- one perception path, no oo.)
     world = (_loaded["world"] if _loaded is not None else
              WorldModelModule(k=5, off_max=0.008, rng=np.random.default_rng(2),
-                              feat_dim=6 + shape_clf.NH + NB_DIM))
-    _n_mig = world.ensure_feat_dim(6 + shape_clf.NH + NB_DIM, NB_NEUTRAL)   # geladene Puffer nachziehen
+                              feat_dim=6 + shape_clf.NH + NB_DIM + FOV_DIM))
+    # Schema-Erweiterungen der Reihe nach; jede ist idempotent, also greift beim Laden genau die,
+    # die dem Puffer noch fehlt (14 -> 19 -> 31).
+    _n_mig = world.ensure_feat_dim(6 + shape_clf.NH + NB_DIM, NB_NEUTRAL)
     if _n_mig:
         print(f"  [Schema] Nachbar-Information ergaenzt: {_n_mig} bestehende Zeilen migriert "
               f"(gueltig-Flag 0 -- sie hatten die Information nie)", flush=True)
+    _n_mig = world.ensure_feat_dim(6 + shape_clf.NH + NB_DIM + FOV_DIM, FOV_NEUTRAL)
+    if _n_mig:
+        print(f"  [Schema] Fovea-Zustand ergaenzt: {_n_mig} bestehende Zeilen migriert "
+              f"(gueltig-Flag 0)", flush=True)
     #   off_max>0 (STAGE-1 de-scripting): the grasp-point OFFSET dims are live -- the model can learn to
     #   grasp a form off its perceived grasp point; grip+gentle action dims replace the obj_U runtime rules.
 
@@ -1290,7 +1309,51 @@ def run_self_learning_steering(headless=False):
         return np.concatenate([np.asarray(best["pos"], float),
                                [np.cos(2 * y2), np.sin(2 * y2), np.cos(4 * y4), np.sin(4 * y4)],
                                shape_clf.desc_embed(best["desc"]),
-                               _neighbour_feats(best, dets)])
+                               _neighbour_feats(best, dets),
+                               _fovea_feats(best)])
+
+    def _fovea_feats(best):
+        """ZUSTAND DES FOVEA-NETZES als Situations-Feature -- schliesst die fehlende Kante
+        VisualCortex -> WorldModel (vom Nutzer in der ModulViz-Grafik entdeckt).
+
+        12 Dimensionen: [gueltig, Surprise, |top| (10)]
+          gueltig   1.0 = echt gemessen (alte Zeilen 0.0, s. ensure_feat_dim)
+          Surprise  sensor_error des PC-Netzes = wie gut die Fovea erklaert, was sie sieht.  Ein
+                    hoher Wert heisst, der Griff wird auf einem wackligen Perzept geplant -- genau
+                    die Information, die dem Welt-Modell bisher fehlte, um schwankende
+                    Servo-Qualitaet von echtem Aktions-Fehler zu unterscheiden.
+          |top|     BETRAG des obersten Latents (10 komplexe Dim).  Der Betrag, nicht die Phase:
+                    dieselbe Konvention wie beim Formdeskriptor (|F| ist die Bedeutung, die Phase
+                    die Lage).  x10 skaliert, damit die Groessenordnung zu den uebrigen Merkmalen
+                    passt (roh 0.01-0.09).
+
+        KEINE SUCHE: perceive_all hat das Objekt schon lokalisiert, also wird die Fovea nur dorthin
+        gerichtet (step_id auf best["chroma"], die eigene Chromatizitaet des Objekts) und schwingt
+        FOV_SETTLE Schritte ein.  Ein volles locate() waere eine Saccaden-Suche ueber bis zu 60
+        Iterationen -- unnoetig, wenn die Position bereits bekannt ist.
+        learn=False, damit dieses LESEN die Fovea-Gewichte nicht veraendert."""
+        v = np.zeros(FOV_DIM)
+        if not FOVEA_FEATS or vc is None or getattr(vc, "fovea", None) is None:
+            return v
+        try:
+            px = np.asarray(shape_clf._world_to_px(np.asarray(best["pos"], float))[0], float)
+            img = shape_clf._render_u8(sim)                 # Arm ausgeblendet, wie beim Klassifikator
+            for _ in range(max(1, FOV_SETTLE)):
+                vc.fovea.step_id(img, px, np.asarray(best["chroma"], float), learn=False)
+            d = vc.fovea.last_diag or {}
+            se = float(d.get("sensor_error", 0.0))
+            top = np.abs(np.asarray(vc.fovea.net.node("top").mu))
+            v[0] = 1.0
+            # LOGARITHMISCH, nicht linear gedeckelt: der Wert spannt Groessenordnungen -- reife Fovea
+            # ~0.26, frisch aufgewaermt >=5, im Warmup bis ~180.  Ein linearer Deckel saettigt genau
+            # dort, wo die Information steckt (im Rauchtest standen beide Zeilen auf dem Deckel 5.00).
+            v[1] = float(np.clip(np.log1p(max(0.0, se)), 0.0, 10.0))
+            v[2:2 + len(top)] = 10.0 * top[:FOV_DIM - 2]
+        except Exception as _e:
+            if os.environ.get("ACT23_DEBUG", "0") == "1":
+                print(f"    [Fovea-Feat] uebersprungen: {_e}", flush=True)
+            v[:] = 0.0
+        return v
 
     def _neighbour_feats(best, dets):
         """NACHBAR-INFORMATION fuers Welt-Modell (Nutzerwunsch, in ModulViz die gestrichelte Kante

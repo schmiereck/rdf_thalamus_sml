@@ -38,12 +38,17 @@ CMD_COLOR = {"obj_red": np.array([0.9, 0.1, 0.1]), "obj_green": np.array([0.1, 0
 MAGENTA = np.array([1., 0, 1.])
 MATCH_TH = 0.86
 HEX_DY = 0.8660254              # row spacing of a hex lattice (sqrt(3)/2)
-F = int(os.environ.get("ACT_FOVEA_F", "20"))   # 16 -> 20 am 2026-08-02 (Zweig fovea-res).
-#   Zusammen mit ACT23_RES 240->480 bei UNVERAENDERTEM K=4: der Zellabstand halbiert sich im
-#   WELTMASS (2x Aufloesung), und F=20 haelt dabei das Gesichtsfeld (warp(9.5)*4/480 = 24.8%
-#   der Bildbreite gegen vorher 55/240 = 22.9%).  KOSTEN: die PC-Relaxation haengt an der
-#   ZELLENZAHL F^2 -- gemessen 331ms bei 256 Zellen, davon nur 2.9ms Abtastung, und RES/K
-#   aendern daran NICHTS.  400 statt 256 Zellen -> Fovea ~117s statt 74.7s je Episode.
+F = int(os.environ.get("ACT_FOVEA_F", "16"))   # ZURUECK auf 16 am 2026-08-03.
+#   Der Versuch F=20 + ACT23_RES 480 (2x Aufloesung bei gleichem Gesichtsfeld) ist GEMESSEN
+#   ohne Nutzen: 91-Ep-GUI-Lauf, |Netz-Detektor| 5.41mm gegen 4.6-5.8mm vorher (unveraendert),
+#   Lieferung 29.7% gegen ~40%, Griffverlust 64% gegen 44%, Episode 230s statt 122s.
+#   EHRLICH: der Einbruch ist mit der frisch aufgewaermten Fovea konfundiert (91 Episoden
+#   Erfahrung gegen tausende) -- aber die LOKALISIERUNG, also genau das, was Aufloesung
+#   verbessern sollte, bewegte sich nicht, bei 1.9x Rechenzeit.
+#   Der eigentliche Grund fuer die Ruecknahme ist strukturell: die Fovea speiste das
+#   WELT-MODELL gar nicht (vom Nutzer in der ModulViz-Grafik entdeckt), also konnte eine
+#   bessere Fovea die Griffwahl ueberhaupt nicht erreichen -- nur die Ausfuehrung.
+#   ACT_FOVEA_F=20 zusammen mit ACT23_RES=480 holt das Experiment zurueck.
 #   ACHTUNG: eine mit anderem F aufgewaermte Fovea ist UNBRAUCHBAR (set_sheet4 indiziert
 #   cells[(r,c)] ueber range(F) -> KeyError); pc_act23 verwirft sie beim Laden.   # fovea sheet is F×F cells; env-tunable to put MORE cells
 #   on the object (finer localization) when the camera shows objects small.  Paired with K (the px
