@@ -5,7 +5,9 @@ Zwei Hälften:
   OBEN  der MODUL-GRAPH.  Jedes Kästchen ist ein ArmModule, darunter steht sein aktueller Wert.
         Pfeile sind die tatsächliche Verdrahtung — und zwar in drei Sorten, damit die LÜCKEN
         genauso sichtbar sind wie die Verbindungen:
-          durchgezogen  = verdrahtet, Daten fliessen
+          durchgezogen  = verdrahtet ueber typisierte Ports, Daten fliessen
+          strichpunkt   = wirkt auf die AUSFUEHRUNG statt ueber einen Port (Fovea-Servo: korrigiert
+                          waehrend des Anfahrens den Greifzielpunkt, nicht die Merkmale eines Moduls)
           gestrichelt   = Information EXISTIERT im System, ist aber nicht angeschlossen
           gepunktet     = Modul vorhanden, im act23-Lauf aber nicht aktiv
         Stand 2026-08-03 sind ALLE drei gemessenen Luecken geschlossen: Nachbarobjekte,
@@ -61,11 +63,18 @@ _EDGES = [
     #   ein Situations-Feature.  Vorher fehlte diese Kante -- vom Nutzer hier in der Grafik entdeckt.
     ("BodyModel", "WorldModel", "wired"),          # seit 2026-08-03: Klauen-Startwinkel, Hand->Ziel
     #   und die FK-Surprise sind Situations-Features -- die letzte gemessene Luecke ist zu.
+    ("VisualCortex", "RuntimePolicy", "servo"),    # FOVEA-SERVO: wirkt auf die AUSFUEHRUNG, nicht
+    #   ueber einen Port.  make_shape_track liefert (obs, conf); bei sicherem Lock stammt obs aus der
+    #   BLICKUEBERZEUGUNG DES NETZES, sonst vom Detektor (|Netz-Detektor| misst die Differenz).
+    #   run_combined korrigiert damit obj_belief -- den angefahrenen Greifzielpunkt -- und NUR in den
+    #   Phasen "over"/"lower".  Der Nutzer hat zu Recht gefragt, woran das haengt: in einer reinen
+    #   Port-Grafik war dieser Pfad unsichtbar.
 ]
 #   Die frueher gestrichelte Kante ShapeClassifier -> SelfEval (Nachbarobjekte gesehen, aber nicht
 #   weitergegeben) ist geschlossen: die Nachbar-Information laeuft jetzt ueber ShapeClassifier ->
 #   WorldModel mit (5 Dim, mit Gueltigkeits-Flag).
-_STYLE = {"wired":   dict(ls="-",  color="#5fd7ff", lw=1.6, alpha=0.95),
+_STYLE = {"servo":   dict(ls="-.", color="#7fe08a", lw=1.4, alpha=0.9),
+          "wired":   dict(ls="-",  color="#5fd7ff", lw=1.6, alpha=0.95),
           "missing": dict(ls="--", color="#ff7b6b", lw=1.4, alpha=0.9),
           "idle":    dict(ls=":",  color="#7a7a8a", lw=1.2, alpha=0.7)}
 
@@ -120,8 +129,8 @@ class ModuleViz:
                     zorder=4, fontweight="bold")
             ax.text(c, r - 0.105, v if v else desc, ha="center", va="center",
                     color="#7fe08a" if v else "#8a8a9a", fontsize=7.0 if v else 6.3, zorder=4)
-        leg = [("verdrahtet", "wired"), ("Info da, NICHT angeschlossen", "missing"),
-               ("Modul inaktiv", "idle")]
+        leg = [("verdrahtet (Port)", "wired"), ("Servo: wirkt auf die Ausfuehrung", "servo"),
+               ("Info da, NICHT angeschlossen", "missing"), ("Modul inaktiv", "idle")]
         for i, (lab, kind) in enumerate(leg):
             y = 3.15 - i * 0.26
             ax.plot([3.62, 3.86], [y, y], **_STYLE[kind])

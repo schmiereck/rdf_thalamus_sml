@@ -1394,7 +1394,17 @@ def run_self_learning_steering(headless=False):
             return v
         try:
             px = np.asarray(shape_clf._world_to_px(np.asarray(best["pos"], float))[0], float)
-            img = shape_clf._render_u8(sim)                 # Arm ausgeblendet, wie beim Klassifikator
+            # MARKER PARKEN wie bei jedem anderen Wahrnehmungs-Einstieg (shape_classifier:576/599/692).
+            # BUG 2026-08-03: hier fehlte das.  situation_feats stellt die Marker unmittelbar vor
+            # diesem Aufruf wieder her, die Fovea sah also die magentafarbenen Zielscheiben mit --
+            # und ROT ist eine TEILMENGE von Magenta (1,0,1), der dokumentierte Fehlermodus, bei dem
+            # das rote Kommando die Zielscheibe lockt.  Gemessen im 141-Ep-Lauf: der FARBPFAD
+            # (Wuerfel) brach auf 10% ein, der Formpfad nur auf 27%.
+            _sv = sim.d.mocap_pos.copy(); shape_clf._park_markers(sim)
+            try:
+                img = shape_clf._render_u8(sim)             # Arm ausgeblendet, wie beim Klassifikator
+            finally:
+                sim.d.mocap_pos[:] = _sv; mujoco.mj_forward(sim.m, sim.d)
             for _ in range(max(1, FOV_SETTLE)):
                 vc.fovea.step_id(img, px, np.asarray(best["chroma"], float), learn=False)
             d = vc.fovea.last_diag or {}
