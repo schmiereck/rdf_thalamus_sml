@@ -108,6 +108,17 @@ TARGET = np.array([0.0, 0.10])
 # FOV_SETTLE: so viele Fovea-Schritte auf dem AKTUELLEN Bild, bevor der Zustand gelesen wird.  Gesucht
 # werden muss dabei NICHT -- perceive_all hat das Objekt schon lokalisiert, die Fovea wird nur
 # dorthin gerichtet und schwingt ein.  learn=False: das ist ein LESEN, keine Erfahrung.
+# ARMSTELLUNG als Situations-Feature (s. _body_feats).  Die letzte gestrichelte Kante der
+# ModulViz-Grafik: das Koerpermodell kennt die Armstellung, das Welt-Modell erfuhr sie nie.
+# WARUM DAS ZAEHLT: run_combined laeuft mit arm_reset=False, der Arm startet also NICHT bit-identisch,
+# sondern dort, wo drive_home ihn gelassen hat (~0.05 rad je Gelenk daneben).  Der Nutzer hat genau
+# daraus ein Problem beobachtet: "Der Greifer richtet sich manchmal beim Start einer Episode schon in
+# Ruheposition aus, oft in eine extreme 90-Grad-Position ... dann kollidiert er beim Anfahren mit
+# einem Finger mit der Base."  Fuer das Welt-Modell sahen solche Episoden bisher aus wie jede andere.
+BODY_FEATS = os.environ.get("ACT23_BODY_FEATS", "1") != "0"
+BD_DMAX = float(os.environ.get("ACT23_BD_DMAX", "0.4"))   # Deckel fuer den Hand-Ziel-Abstand (m)
+BD_DIM = 7                                             # [gueltig, FK-Surprise, cos2w0, sin2w0, d, cos, sin]
+BD_NEUTRAL = np.zeros(BD_DIM)
 FOVEA_FEATS = os.environ.get("ACT23_FOVEA_FEATS", "1") != "0"
 FOV_SETTLE = int(os.environ.get("ACT23_FOV_SETTLE", "4"))
 FOV_DIM = 12                                           # [gueltig, Surprise, |top|(10)]
@@ -959,7 +970,7 @@ def run_self_learning_steering(headless=False):
     # ObjectOrientationModule features are subsumed by the k=2 phase -- one perception path, no oo.)
     world = (_loaded["world"] if _loaded is not None else
              WorldModelModule(k=5, off_max=0.008, rng=np.random.default_rng(2),
-                              feat_dim=6 + shape_clf.NH + NB_DIM + FOV_DIM))
+                              feat_dim=6 + shape_clf.NH + NB_DIM + FOV_DIM + BD_DIM))
     # Schema-Erweiterungen der Reihe nach; jede ist idempotent, also greift beim Laden genau die,
     # die dem Puffer noch fehlt (14 -> 19 -> 31).
     _n_mig = world.ensure_feat_dim(6 + shape_clf.NH + NB_DIM, NB_NEUTRAL)
@@ -969,6 +980,10 @@ def run_self_learning_steering(headless=False):
     _n_mig = world.ensure_feat_dim(6 + shape_clf.NH + NB_DIM + FOV_DIM, FOV_NEUTRAL)
     if _n_mig:
         print(f"  [Schema] Fovea-Zustand ergaenzt: {_n_mig} bestehende Zeilen migriert "
+              f"(gueltig-Flag 0)", flush=True)
+    _n_mig = world.ensure_feat_dim(6 + shape_clf.NH + NB_DIM + FOV_DIM + BD_DIM, BD_NEUTRAL)
+    if _n_mig:
+        print(f"  [Schema] Armstellung ergaenzt: {_n_mig} bestehende Zeilen migriert "
               f"(gueltig-Flag 0)", flush=True)
     #   off_max>0 (STAGE-1 de-scripting): the grasp-point OFFSET dims are live -- the model can learn to
     #   grasp a form off its perceived grasp point; grip+gentle action dims replace the obj_U runtime rules.
@@ -1310,7 +1325,49 @@ def run_self_learning_steering(headless=False):
                                [np.cos(2 * y2), np.sin(2 * y2), np.cos(4 * y4), np.sin(4 * y4)],
                                shape_clf.desc_embed(best["desc"]),
                                _neighbour_feats(best, dets),
-                               _fovea_feats(best)])
+                               _fovea_feats(best),
+                               _body_feats(best)])
+
+    def _body_feats(best):
+        """ARMSTELLUNG als Situations-Feature -- schliesst die letzte gestrichelte Kante
+        BodyModel -> WorldModel.
+
+        7 Dimensionen: [gueltig, FK-Surprise, cos2w0, sin2w0, d_hand, cos phi, sin phi]
+          FK-Surprise  log1p des Koerpermodell-Vorhersagefehlers in MILLIMETERN.  Die Kinematik lernt
+                       lebenslang weiter; ist ihr Fehler gerade gross, geht die Hand nicht dorthin,
+                       wo der Griff geplant wurde.  Genau wie bei der Fovea-Surprise konnte das
+                       Welt-Modell diesen Stoerterm bisher nicht von einem Aktions-Fehler trennen.
+          w0           START-Orientierung der Klaue (claw_yaw = Finger-Trennachse in der Welt), als
+                       PHASE ueber 2*Winkel, weil eine Klaue pi-symmetrisch ist -- dieselbe
+                       Konvention wie die Wrist-AKTION.  Das ist die vom Nutzer beobachtete
+                       "extreme 90-Grad-Stellung" beim Episodenstart.
+          d_hand/phi   Wo der Arm HERKOMMT: Abstand und Richtung von der aktuellen Hand zum Ziel,
+                       im BASIS-Rahmen (dort lebt die Kinematik).  Mit arm_reset=False ist der
+                       Startpunkt jede Episode ein anderer."""
+        v = np.zeros(BD_DIM)
+        if not BODY_FEATS:
+            return v
+        try:
+            w0 = float(sim.claw_yaw())
+            hand = np.asarray(sim.grasp_pos(), float)[:2]
+            tgt = np.asarray(best["pos"], float)
+            rel = tgt - hand
+            d = float(np.linalg.norm(rel))
+            fk = getattr(bm.body, "last_surprise", None)
+            v[0] = 1.0
+            v[1] = 0.0 if fk is None else float(np.clip(np.log1p(1e3 * float(fk)), 0.0, 10.0))
+            v[2], v[3] = np.cos(2 * w0), np.sin(2 * w0)
+            v[4] = min(d, BD_DMAX)
+            if d > 1e-6:
+                ph = float(np.arctan2(rel[1], rel[0]))
+                v[5], v[6] = np.cos(ph), np.sin(ph)
+            else:
+                v[5] = 1.0
+        except Exception as _e:
+            if os.environ.get("ACT23_DEBUG", "0") == "1":
+                print(f"    [Koerper-Feat] uebersprungen: {_e}", flush=True)
+            v[:] = 0.0
+        return v
 
     def _fovea_feats(best):
         """ZUSTAND DES FOVEA-NETZES als Situations-Feature -- schliesst die fehlende Kante

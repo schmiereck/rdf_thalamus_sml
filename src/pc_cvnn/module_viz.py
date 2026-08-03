@@ -8,9 +8,9 @@ Zwei Hälften:
           durchgezogen  = verdrahtet, Daten fliessen
           gestrichelt   = Information EXISTIERT im System, ist aber nicht angeschlossen
           gepunktet     = Modul vorhanden, im act23-Lauf aber nicht aktiv
-        Die gestrichelte Kante ist der verbliebene gemessene Befund: das Koerpermodell kennt die
-        Armstellung, das Welt-Modell erfaehrt sie nie.  (Zwei fruehere Luecken sind geschlossen --
-        Nachbarobjekte und der Fovea-Zustand sind seit 2026-08-02/03 Situations-Features.)
+        Stand 2026-08-03 sind ALLE drei gemessenen Luecken geschlossen: Nachbarobjekte,
+        Fovea-Zustand und Armstellung sind Situations-Features des Welt-Modells.  Bleibt eine
+        gestrichelte Kante uebrig, ist sie ein NEUER Befund -- nicht Dekoration.
 
   UNTEN vier Kurvenpaare, je Episode ein Punkt.  Bewusst gepaart, damit man ZUSAMMENSPIEL liest
         statt Einzelwerte:
@@ -59,7 +59,8 @@ _EDGES = [
     ("LatentDynamics", "LatentGoal", "idle"),
     ("VisualCortex", "WorldModel", "wired"),       # seit 2026-08-03: Fovea-Zustand (Surprise + |top|) IST
     #   ein Situations-Feature.  Vorher fehlte diese Kante -- vom Nutzer hier in der Grafik entdeckt.
-    ("BodyModel", "WorldModel", "missing"),        # Armstellung/Klauen-Neigung erreicht das Modell nie
+    ("BodyModel", "WorldModel", "wired"),          # seit 2026-08-03: Klauen-Startwinkel, Hand->Ziel
+    #   und die FK-Surprise sind Situations-Features -- die letzte gemessene Luecke ist zu.
 ]
 #   Die frueher gestrichelte Kante ShapeClassifier -> SelfEval (Nachbarobjekte gesehen, aber nicht
 #   weitergegeben) ist geschlossen: die Nachbar-Information laeuft jetzt ueber ShapeClassifier ->
