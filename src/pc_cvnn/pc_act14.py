@@ -38,7 +38,21 @@ HOME = {"joint_0": 1.5708, "joint_1": 0.0, "joint_2": 0.0,
 # claw orientation drifts and grasping breaks.  j4/gripper stay separately controlled.
 DOF = int(os.environ.get("ACT14_DOF", "3"))
 ARM3 = ["joint_0", "joint_1", "joint_2"] + (["joint_3"] if DOF >= 4 else [])
-WDIR = float(os.environ.get("ACT14_WDIR", "0.05"))   # claw-direction weight in the 4-DOF reach LS
+WDIR = float(os.environ.get("ACT14_WDIR", "0.02"))   # claw-direction weight in the 4-DOF reach LS.
+# 0.05 -> 0.02 am 2026-08-06, GEMESSEN (2 Seeds x 40 Ziele auf z=20mm, gepaart):
+#   |z|-Fehler   14.6/9.4 mm  ->  8.9/5.3 mm   (p<0.0001 auf beiden Seeds)
+#   Ausreisser >30mm  15%/8%  ->  8%/5%
+#   seitlich      7.8/6.7 mm  ->  6.7/6.6 mm   (p=0.002 / p=0.72)
+#   PREIS: Klauenabweichung 35.3/34.0 Grad -> 36.2/35.1, also +1.1 Grad (p<0.001, aber gegen eine
+#   Grundabweichung von 34-36 Grad vernachlaessigbar).
+# DER EIGENTLICHE BEFUND: das Gewicht steuert die Klauenhaltung im Bereich 0..0.05 KAUM (35.8 Grad
+# bei 0.00 gegen 34.2 bei 0.05) -- die Neigung ist bei diesem Arm kinematisch erzwungen und waechst
+# mit dem Radius (s. natural_tilt in world_model).  0.05 kostete also Position, ohne Orientierung zu
+# kaufen.  Oberhalb 0.05 kippt es schnell: 0.10 -> 38mm Mittelfehler, 0.20 -> 105mm, 100% Ausreisser.
+# ANLASS: der Arm griff systematisch ZU HOCH (+6.5mm Median, 100% der Ziele nach oben) und damit bei
+# 12mm Wuerfel-Halbbreite an der Kante -- Drucksignatur der Fehlgriffe: zufassen 3.2 N, heben 0.04 N.
+# OFFEN: das ist eine REICHGENAUIGKEITS-Messung, kein Liefernachweis.  Ob die Lieferquote steigt,
+# muss ein GUI-Lauf zeigen.
 
 
 class BracketArmSim:
