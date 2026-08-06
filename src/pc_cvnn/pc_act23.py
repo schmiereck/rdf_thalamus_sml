@@ -95,6 +95,16 @@ FOVEA_MEM = FOVEA_NET and os.environ.get("ACT23_FOVEA_MEM", "1") == "1"
 BODY = {"cube": "obj_red", "L": "obj_L", "U": "obj_U"}
 ALL = ["obj_red", "obj_green", "obj_blue", "obj_L", "obj_U"]
 TARGET = np.array([0.0, 0.10])
+# ALLE DREI ZUSATZBLOECKE STEHEN SEIT 2026-08-06 AUF AUS.  Gemessen am 686-Ep-Lauf (623 Zeilen mit
+# gueltigen Bloecken, 5-fach kreuzvalidiert): die Bloecke WEGZULASSEN sagt besser vorher als sie zu
+# fuehren -- MSE 0.1110 ohne gegen 0.1147 mit (p=0.034).  Nicht wegen Redundanz (nur d_hand war aus
+# den alten Merkmalen ableitbar, R^2=0.74; die uebrigen tragen echte neue Information, R^2 0.09-0.26)
+# und nicht wegen der Dimensionszahl (die Kompression der 10 |top|-Dim auf ihre Mittelamplitude aendert
+# NICHTS: 0.1149 gegen 0.1147, p=0.89).  Es ist eine STICHPROBENFRAGE: die Effekte sind echt, aber mit
+# rho~0.15 (R^2~2%) zu klein, als dass sich das Schaetzen ihrer Gewichte bei 623 Zeilen und 56
+# augmentierten Spalten lohnt.  Schema und Code BLEIBEN, damit die 623 gesammelten Zeilen nicht
+# verloren sind und das Experiment bei deutlich groesserem Puffer fortsetzbar ist -- die Abschaltung
+# schreibt nur konstant neutrale Werte, sie entfernt keine Spalten.
 # NACHBAR-INFORMATION als Situations-Feature (s. _neighbour_feats).  ACT23_NEIGHBOURS=0 schaltet sie
 # ab -- die Dimensionen BLEIBEN dann im Schema (sonst passte der Puffer nicht mehr), sie tragen nur
 # konstant den neutralen Wert.  NB_DMAX = ab welchem Abstand ein Objekt nicht mehr als Nachbar zaehlt;
@@ -115,15 +125,15 @@ TARGET = np.array([0.0, 0.10])
 # daraus ein Problem beobachtet: "Der Greifer richtet sich manchmal beim Start einer Episode schon in
 # Ruheposition aus, oft in eine extreme 90-Grad-Position ... dann kollidiert er beim Anfahren mit
 # einem Finger mit der Base."  Fuer das Welt-Modell sahen solche Episoden bisher aus wie jede andere.
-BODY_FEATS = os.environ.get("ACT23_BODY_FEATS", "1") != "0"
+BODY_FEATS = os.environ.get("ACT23_BODY_FEATS", "0") == "1"
 BD_DMAX = float(os.environ.get("ACT23_BD_DMAX", "0.4"))   # Deckel fuer den Hand-Ziel-Abstand (m)
 BD_DIM = 7                                             # [gueltig, FK-Surprise, cos2w0, sin2w0, d, cos, sin]
 BD_NEUTRAL = np.zeros(BD_DIM)
-FOVEA_FEATS = os.environ.get("ACT23_FOVEA_FEATS", "1") != "0"
+FOVEA_FEATS = os.environ.get("ACT23_FOVEA_FEATS", "0") == "1"
 FOV_SETTLE = int(os.environ.get("ACT23_FOV_SETTLE", "4"))
 FOV_DIM = 12                                           # [gueltig, Surprise, |top|(10)]
 FOV_NEUTRAL = np.zeros(FOV_DIM)                        # "nie gemessen" -- gueltig-Flag 0
-NEIGHBOURS = os.environ.get("ACT23_NEIGHBOURS", "1") != "0"
+NEIGHBOURS = os.environ.get("ACT23_NEIGHBOURS", "0") == "1"
 NB_DMAX = float(os.environ.get("ACT23_NB_DMAX", "0.12"))
 NB_DIM = 5
 NB_NEUTRAL = np.array([0.0, NB_DMAX, 1.0, 0.0, 0.0])   # "nie gemessen" -- gueltig-Flag 0
