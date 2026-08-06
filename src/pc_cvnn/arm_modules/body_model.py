@@ -44,13 +44,17 @@ class BodyModelModule(ArmModule):
         """Train the LEARNED inverse kinematics from babbling through the learned fk; once set,
         `reach_velocity` uses it instead of the analytic Jacobian.  Returns the babble error (mm)."""
         rng3 = sim.arm3_range()
-        self.ik = LearnedInverseKinematics(rng=rng)
-        return self.ik.train(self.body.fk, rng3[:, 0], rng3[:, 1], steps=steps, rng=rng)
+        self.ik = LearnedInverseKinematics(rng=rng, nq=int(rng3.shape[0]))   # Gelenkzahl aus dem Bereich
+        # RICHTUNGSTERM ab 4 DOF: dort ist der Arm fuer eine 3-D Position redundant, und ohne die
+        # Klauenrichtung driftet die Orientierung (gemessen: Reichfehler 78mm statt 15mm analytisch).
+        _dir = self.body.claw_dir if int(rng3.shape[0]) >= 4 else None
+        return self.ik.train(self.body.fk, rng3[:, 0], rng3[:, 1], steps=steps, rng=rng, dir_fk=_dir)
 
     # -- drop-in `body` interface for run_combined: a LEARNED reach when self.ik is set --
     def reach_velocity(self, q3, target, gain: float = 2.0, max_dq: float = 0.03, damp: float = 0.04):
         if self.ik is not None and self.ik.trained:
-            return self.ik.reach_velocity(self.body.fk, q3, target, gain=gain, max_dq=max_dq)
+            return self.ik.reach_velocity(self.body.fk, q3, target, gain=gain, max_dq=max_dq,
+                                          dir_fk=self.body.claw_dir, dir_ref=self.body.dir_ref)
         return self.body.reach_velocity(q3, target, gain=gain, max_dq=max_dq, damp=damp)
 
     def fk(self, q3):
