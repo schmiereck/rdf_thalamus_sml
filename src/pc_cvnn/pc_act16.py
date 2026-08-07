@@ -132,7 +132,11 @@ def reactive_subgoal(state):
     else GRASP.  (c) SIZE-ADAPTIVE: the grasp/place/carry heights are derived from the object's half-height
     (cube -> the old 0.014, flat/tall -> grasp at their own centre).
     Returns a flat [aim_x, aim_y, aim_z, gripper] (the same shape the policy emits)."""
-    hx, hy, hz, cx, cy, cz, tx, ty, j5, obj_h, obj_fp = state
+    hx, hy, hz, cx, cy, cz, tx, ty, j5, obj_h, obj_fp = np.asarray(state, float)[:11]
+    # state[11:13] = [druck_gueltig, fingerdruck_N] (Tastsinn, 2026-08-07).  Der TEACHER liest ihn
+    # bewusst NICHT: seine Wiederhol-Logik haengt am privilegierten cz (run_combined lift-Phase) und
+    # bleibt als Trainingssignal -- die POLICY bekommt den Druck als beobachtbaren Ersatz und lernt
+    # per DAgger, das Teacher-Verhalten am Tastsinn statt am Privileg festzumachen.
     hxy = np.array([hx, hy]); c = np.array([cx, cy]); t = np.array([tx, ty])
     if obj_fp > GRASP_MAX_HALF:                           # AFFORDANCE: too wide to grasp -> push
         return _push_subgoal(hxy, hz, c, t)
@@ -484,8 +488,18 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 if cz > 0.028 and sim.d.qpos[sim.jqadr["joint_5"]] < J5_CLOSED_TH:   # object carried, drive
                     tgt = np.asarray(place_servo_fn(hxy), float)  # the place target by the latent servo
             # state for a LEARNED action policy: hand, object, object-z, target, gripper, OBJ SIZE (c)
+            # + TASTSINN [gueltig, druck_N] (2026-08-07): der Fingerdruck-Streifen als LAUFZEIT-Eingang.
+            # Gemessen: Druck beim Zufassen sagt das Halten fast deterministisch vorher (<0.5N -> 4%,
+            # >2N -> 86%), und die Verluste passieren beim Heben/Tragen -- wo die Kamera das Objekt
+            # unter dem Greifer verliert und bisher nur das PRIVILEGIERTE cz den Verlust verriet.
+            # Auf dem realen Roboter existiert cz nicht; der Streifen ist die geplante Hardware.
+            try:
+                press = float(sim.grip_pressure("left"))
+            except Exception:
+                press = -1.0                                   # Sensor nicht lesbar -> gueltig=0
             state = np.array([h[0], h[1], h[2], c[0], c[1], cz, tgt_eff[0], tgt_eff[1],
-                              sim.d.qpos[sim.jqadr["joint_5"]], obj_h, obj_fp], float)
+                              sim.d.qpos[sim.jqadr["joint_5"]], obj_h, obj_fp,
+                              1.0 if press >= 0 else 0.0, max(press, 0.0)], float)
             if teacher_log_fn is not None:                    # DAgger: the FSM's sub-goal at the
                 teacher_log_fn(state, np.asarray(aim, float).copy(), float(j5))   # (policy-)VISITED state
             route_carry = carry_target_fn is not None and phase == "carry"   # the routed carry follows the
@@ -542,10 +556,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                                          "cxy": np.asarray(c_true, float).copy(),
                                          "tgt": np.asarray(tgt_true, float).copy()}
             sim.target("joint_5", j5)
-            try:                                              # DRUCKMESSSTREIFEN (ein Finger, innen)
-                run_combined._grip.setdefault(phase, []).append(sim.grip_pressure("left"))
-            except Exception:
-                pass
+            if press >= 0:                                    # DRUCKMESSSTREIFEN (ein Finger, innen);
+                run_combined._grip.setdefault(phase, []).append(press)   # im Zustand bereits gelesen
             gentle = abs(j5 - J5_PUSH) < 0.2 and aim[2] < PUSH_Z + 0.02   # spread gripper + low = a PUSH
             # GENTLE CARRY: a concave object (e.g. a perceived U) is gripped OFF its centre-of-mass (its COM
             # sits in the concavity, on no material), so the lateral acceleration of a normal-speed carry tears

@@ -1019,6 +1019,13 @@ def run_self_learning_steering(headless=False):
     # ACT23_CHOREO=netz) lets the POLICY drive the sub-goals incl. the gripper; guards stay on by default
     # (train-with-guard) -- verify guard-free with ACT16_CLOSE_GUARD=0 ACT16_REFLEX=0.
     runtime = _loaded["runtime"] if _loaded is not None else RuntimePolicyModule(rng=np.random.default_rng(4))
+    _n_rt = runtime.ensure_state_dim(13) if hasattr(runtime, "ensure_state_dim") else 0
+    if _n_rt:
+        # TASTSINN-Migration (11 -> 13): das Netz wird in ensure_state_dim mit NULL-Spalten
+        # VERBREITERT (Ausgabe bitgleich, kein Retrain noetig); die Lifelong-Refits lernen die
+        # Druckspalten allmaehlich aus den neuen Demos.
+        print(f"  [Schema] Tastsinn in der Runtime-Policy ergaenzt: {_n_rt} Zeilen migriert "
+              f"(gueltig-Flag 0), Netz verhaltensneutral auf 13 Eingaenge verbreitert", flush=True)
 
     # STAGE 3 (user request): OPEN-SET COLOURS -- fully self-labelled, no teacher colour set anywhere.
     # Scene glances feed component CHROMATICITIES; classes are self-named ("farbe-N") and bound to the
