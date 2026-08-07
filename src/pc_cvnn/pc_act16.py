@@ -59,6 +59,9 @@ GRASP_OFFSET = float(os.environ.get("ACT16_GRASP_OFFSET", "0.006"))   # (#2) gra
 #   (cube -> 0.018, was 0.014): the claw tips sit ~14mm below the contact site, so grasp_z=0.014 put them
 #   AT the floor and any overshoot was blocked/deflected; +4mm lifts them clear while still gripping the cube
 GRASP_MAX_HALF = 0.016                          # footprint half above which an object is too wide to grasp
+CLAW_OFF = float(os.environ.get("ACT16_CLAW_OFF", "0.008"))   # Versatz Reichpunkt -> Backenmitte (m).
+#   s. die Begruendung an der Anwendungsstelle in run_combined.  ACT16_CLAW_OFF=0 stellt das alte
+#   Verhalten wieder her (fuer ein sauberes A/B).
 SERVO_K, SERVO_CONF, SERVO_LOST = 0.5, 0.5, 6   # closed-loop grasp-target belief: correction gain,
 #   min track-confidence to update, frames of low confidence before a saccadic re-acquire
 MAX_REACQ = 2                                   # cap re-acquires per episode: a persistent track failure
@@ -552,7 +555,20 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             if gentle:    g, mdq = 1.3, 0.016
             elif carrying: g, mdq = CARRY_GAIN, CARRY_MDQ
             else:         g, mdq = 2.0, 0.026                            # (derived from the sub-goal, so it
-            q3 = sim.arm3_angles(); sim.set_arm3_targets(q3 + body.reach_velocity(q3, aim, gain=g, max_dq=mdq))
+            # BACKENMITTE STATT REICHPUNKT (2026-08-07).  Der Reichpunkt (site "contact") liegt NICHT
+            # zwischen den Backen: die Backenmitte sitzt 4.1mm davor bei offener und 8.6mm bei
+            # geschlossener Klaue (gemessen, ueber alle Wrist-Winkel konstant).  Bei +-6mm Backentiefe
+            # schliessen die Backen damit VOR dem Objekt.  Das Ziel wird deshalb um CLAW_OFF ENTGEGEN
+            # der Klauenachse verschoben, sodass die BACKEN dort landen, wo bisher der Reichpunkt kam.
+            # Verschoben wird das REICHZIEL, nicht die Vorgaben: alle Koordinaten (Teacher, Policy,
+            # 24000 DAgger-Beispiele) bleiben damit gueltig.
+            # Kausal gemessen (16 Posen, anfahren-schliessen-heben): Versatz 0 -> 0% gehoben bei 4.5N
+            # Zufassdruck und 0.0N beim Heben; +4mm -> 56%, +6mm -> 62%, +8mm -> 69%, +10mm -> 44%.
+            # Das Optimum +8mm trifft den geometrischen Wert 8.6mm von der anderen Seite.
+            _aim = np.asarray(aim, float)
+            if CLAW_OFF > 0.0:
+                _aim = _aim - CLAW_OFF * sim.claw_fwd()
+            q3 = sim.arm3_angles(); sim.set_arm3_targets(q3 + body.reach_velocity(q3, _aim, gain=g, max_dq=mdq))
             if WRIST_ALIGN or policy_wrist is not None:        # (B) align the claw to the object's grip axis --
                 # a 5-dim policy (act23) supplies its OWN desired claw_yaw (LEARNED wrist); else the teacher's
                 # heuristic wrist_tgt.  The parallel claw is symmetric mod pi, so the learned wrist aligns mod pi.

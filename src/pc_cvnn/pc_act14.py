@@ -201,6 +201,22 @@ class BracketArmSim:
     def set_reach_site(self, name):
         self.reach_sid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_SITE, name)
 
+    def claw_fwd(self):
+        """Einheitsvektor (Welt), in dessen Richtung die BACKENMITTE vor dem Reichpunkt liegt.
+
+        GEMESSEN 2026-08-07: der Reichpunkt (site "contact") ist NICHT die Backenmitte.  Die liegt
+        bei geoeffneter Klaue 4.4mm davor und wandert beim SCHLIESSEN auf 8.6mm -- bei einer
+        Backentiefe von nur +-6mm schliessen die Backen also VOR dem Objekt und erwischen
+        bestenfalls dessen Hinterkante.  Genau das erzeugt die Fehlgriff-Signatur aus den Logs:
+        viel Druck beim Zufassen (die Backen druecken an der Kante), null beim Heben.
+        Der Versatz liegt im SITE-Rahmen konstant auf der lokalen z-Achse, dreht also mit dem
+        Wrist mit -- ein weltfester xy-Offset (wie die Greifpunkt-Kandidaten) kann ihn NICHT
+        ausgleichen, was rueckblickend erklaert, warum jene Linie nichts brachte."""
+        R = self.d.site_xmat[self.reach_sid].reshape(3, 3)
+        v = R[:, 2].copy(); v[2] = 0.0                       # in der Tischebene, die Hoehe regelt aim_z
+        n = float(np.linalg.norm(v))
+        return v / n if n > 1e-9 else np.array([0.0, 1.0, 0.0])
+
     def set_target_marker(self, xy, z=0.001):
         bid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_BODY, "target_marker")
         self.d.mocap_pos[self.m.body_mocapid[bid]] = [xy[0], xy[1], z]
