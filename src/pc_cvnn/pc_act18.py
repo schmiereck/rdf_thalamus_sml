@@ -38,7 +38,19 @@ CMD_COLOR = {"obj_red": np.array([0.9, 0.1, 0.1]), "obj_green": np.array([0.1, 0
 MAGENTA = np.array([1., 0, 1.])
 MATCH_TH = 0.86
 HEX_DY = 0.8660254              # row spacing of a hex lattice (sqrt(3)/2)
-F = int(os.environ.get("ACT_FOVEA_F", "16"))   # fovea sheet is F×F cells; env-tunable to put MORE cells
+F = int(os.environ.get("ACT_FOVEA_F", "16"))   # ZURUECK auf 16 am 2026-08-03.
+#   Der Versuch F=20 + ACT23_RES 480 (2x Aufloesung bei gleichem Gesichtsfeld) ist GEMESSEN
+#   ohne Nutzen: 91-Ep-GUI-Lauf, |Netz-Detektor| 5.41mm gegen 4.6-5.8mm vorher (unveraendert),
+#   Lieferung 29.7% gegen ~40%, Griffverlust 64% gegen 44%, Episode 230s statt 122s.
+#   EHRLICH: der Einbruch ist mit der frisch aufgewaermten Fovea konfundiert (91 Episoden
+#   Erfahrung gegen tausende) -- aber die LOKALISIERUNG, also genau das, was Aufloesung
+#   verbessern sollte, bewegte sich nicht, bei 1.9x Rechenzeit.
+#   Der eigentliche Grund fuer die Ruecknahme ist strukturell: die Fovea speiste das
+#   WELT-MODELL gar nicht (vom Nutzer in der ModulViz-Grafik entdeckt), also konnte eine
+#   bessere Fovea die Griffwahl ueberhaupt nicht erreichen -- nur die Ausfuehrung.
+#   ACT_FOVEA_F=20 zusammen mit ACT23_RES=480 holt das Experiment zurueck.
+#   ACHTUNG: eine mit anderem F aufgewaermte Fovea ist UNBRAUCHBAR (set_sheet4 indiziert
+#   cells[(r,c)] ueber range(F) -> KeyError); pc_act23 verwirft sie beim Laden.   # fovea sheet is F×F cells; env-tunable to put MORE cells
 #   on the object (finer localization) when the camera shows objects small.  Paired with K (the px
 #   spacing, ACT_FOVEA_K, default 4): window = F*K px; smaller K = tighter window = more cells/object.
 
@@ -103,9 +115,20 @@ FOVEA_B = float(os.environ.get("ACT_FOVEA_B", "1.0"))         # peripheral expan
 # NET-STEERABLE ZOOM: the fovea can widen its sampling (up to 2x the AREA = sqrt(2)x linear) to get an
 # OVERVIEW when the net is uncertain where the commanded object is, then zoom back in for detail.  The
 # zoom is driven by the net's own localization CONFIDENCE (like the gaze is driven by fovea_gradient).
-ZOOM = os.environ.get("ACT_FOVEA_ZOOM", "0") == "1"            # DEFAULT OFF (A/B: hurt acquisition here --
-#   the overview rarely triggers in this small workspace, and the scale-invariant training it needs
-#   dilutes the z=1 precision; enable for a LARGER workspace where objects fall outside the FOV)
+ZOOM = os.environ.get("ACT_FOVEA_ZOOM", "1") == "1"            # DEFAULT AN seit 2026-08-03.
+#   Das alte A/B (Vorgabe AUS) sagte: schadet der Akquise "in diesem KLEINEN Arbeitsbereich ...
+#   enable for a LARGER workspace where objects fall outside the FOV".  Genau die Bedingung ist
+#   erfuellt -- der Nutzer faehrt dauerhaft ACT_REACH_X0/X1/Y1 = -0.12/0.12/0.24 statt der Vorgabe
+#   -0.11/0.11/0.21, und er hatte den Zoom entsprechend seit Monaten gesetzt.
+#   KORREKTUR EINER FALSCHAUSSAGE VON MIR (2026-08-03): ich hatte behauptet, der Zoom sei wirkungslos
+#   und zum Abschalten geraten.  Falsch, an zwei Stellen uebersehen:
+#     * make_shape_track ruft _zoom_step JE VERFOLGTEM FRAME (pc_act23:2135) -- ich hatte nur in
+#       dieser Datei nach _zoom_step gesucht, nicht nach dem Aufrufer.
+#     * das Umtrainieren der Farbklassen wuerfelt z ueber die ganze Spanne (pc_act23:1781); das IST
+#       die vom Nutzer angeforderte Skalen-Invarianz und er hat sie beobachtet.
+#   ACT_FOVEA_ZOOM=0 schaltet beides ab (Runtime-Anpassung UND Trainings-Spanne).
+#   ACHTUNG: der Wert geht in _zoom_span ein -- ein Wechsel loest beim naechsten Laden ein einmaliges
+#   Umtrainieren der Fovea auf Farbklassen aus (~80 Runden).
 ZOOM_MAX = float(os.environ.get("ACT_FOVEA_ZOOM_MAX", "2.0"))   # widest sampling: 2x spacing = 50% "size"
 ZOOM_MIN = float(os.environ.get("ACT_FOVEA_ZOOM_MIN", "0.5"))   # finest sampling: 0.5x = 200% detail
 #   (user request: zoom BOTH ways around the default z=1 -- confident lock narrows below 1 for

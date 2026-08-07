@@ -61,8 +61,37 @@ class RuntimePolicyModule(ArmModule):
         self._k = 0                                   # subsample counter
         self.trained = False
         self._div: list[float] = []                   # shadow |aim_pred - aim_teacher| (m), per observe
-        (self.add_in("policy_state", 11, "[hand xyz, obj xy, obj z, target xy, gripper, obj_h, obj_fp]")
+        (self.add_in("policy_state", 13, "[hand xyz, obj xy, obj z, target xy, gripper, obj_h, obj_fp, "
+                                         "druck_gueltig, druck_N]")
              .add_out("subgoal", 4, "[aim_xyz, gripper]"))
+
+    def ensure_state_dim(self, want: int = 13, neutral=(0.0, 0.0)) -> int:
+        """DAgger- und Selbst-Puffer auf die TASTSINN-Dimensionen erweitern (11 -> 13).
+
+        Alte Zeilen bekommen [gueltig=0, druck=0]: der Druck WAR bei ihren Episoden physisch da,
+        wurde aber nicht aufgezeichnet -- ihn mit 0 zu behaupten, waere die Luege "Klaue leer",
+        und das Netz lernte daraus, dass Tragen ohne Druck normal ist.  Mit dem Flag kann es die
+        alten Zeilen konditioniert ignorieren; der rollende Puffer (CAP) waescht sie ohnehin aus.
+        Idempotent, "mindestens"-Semantik wie world_model.ensure_feat_dim."""
+        pad = np.asarray(neutral, float); n = 0
+        for buf in (self._X, self._Xi):
+            for i, r in enumerate(buf):
+                r = np.asarray(r, float)
+                if len(r) < want:
+                    buf[i] = np.concatenate([r, pad[:want - len(r)]]); n += 1
+        # NETZ VERBREITERN statt neu bauen: NULL-Spalten fuer die neuen Eingaenge lassen die Ausgabe
+        # BITGLEICH (Migration ist verhaltensneutral); die Lifelong-Refits lernen die Druckspalten
+        # dann allmaehlich.  Der erste Versuch (frisches Netz + 200 Epochen) vernichtete das ueber
+        # tausende Episoden warm trainierte Netz -- Schatten-Divergenz 362mm statt 7-11mm.
+        d0 = self.net.W1.shape[1]
+        if d0 < want:
+            self.net.W1 = np.concatenate([self.net.W1, np.zeros((self.net.W1.shape[0], want - d0))], axis=1)
+            self.net.imu = np.concatenate([self.net.imu, np.zeros(want - d0)])
+            self.net.isd = np.concatenate([self.net.isd, np.ones(want - d0)])
+        p = self.in_ports.get("policy_state")
+        if p is not None:
+            p.dim = want
+        return n
 
     # -- lifelong DAgger data --
     def observe(self, state, subgoal) -> None:
@@ -195,6 +224,12 @@ class RuntimePolicyModule(ArmModule):
         return len(getattr(self, "_Xi", []))
 
     def train(self, epochs=120, quiet=True) -> None:
+        if self._X:
+            _w = len(np.asarray(self._X[-1], float))
+            if self.net.W1.shape[1] != _w:                 # Zustandsbreite gewachsen (Tastsinn 11->13):
+                from pc_cvnn.pc_act19 import Policy as _P  #   Netz mit neuer Breite neu aufbauen; das
+                self.net = _P(din=_w, rng=np.random.default_rng(4))   # folgende fit lernt aus dem
+                self.trained = False                       #   MIGRIERTEN Puffer neu (Welt-Modell-Muster)
         if len(self._X) < 500:
             return                                    # too little to fit anything meaningful
         Xi, Yi = getattr(self, "_Xi", []), getattr(self, "_Yi", [])

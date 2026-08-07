@@ -59,6 +59,19 @@ GRASP_OFFSET = float(os.environ.get("ACT16_GRASP_OFFSET", "0.006"))   # (#2) gra
 #   (cube -> 0.018, was 0.014): the claw tips sit ~14mm below the contact site, so grasp_z=0.014 put them
 #   AT the floor and any overshoot was blocked/deflected; +4mm lifts them clear while still gripping the cube
 GRASP_MAX_HALF = 0.016                          # footprint half above which an object is too wide to grasp
+CLAW_OFF = float(os.environ.get("ACT16_CLAW_OFF", "0.008"))
+OBS_STATE = os.environ.get("ACT16_OBS_STATE", "1") == "1"   # STUFE C (Tastsinn-Vorschlag): der POLICY-
+#   VORGABE AN seit 2026-08-07, nach A/B (14 Ep je Arm, gleiche Saat): privilegiert 5/14 geliefert /
+#   haelt 50%, beobachtbar 4/14 / 57% -- KEIN Einbruch (Fisher p=1.0).  Die Krücke ist ersetzbar;
+#   damit trainieren alle künftigen Demos auf real-tauglichen Zustaenden und der TASTSINN wird zur
+#   tragenden Information.  Ehrlich: n=14 belegt Gleichheit nicht, nur die Abwesenheit eines
+#   Zusammenbruchs -- der Verteilungsversatz ist konstruktiv klein (haelt: Objekt=Hand; verloren:
+#   Objekt=Fallort auf Ruhehoehe), und genau der Druck entscheidet, welcher Fall gilt.
+#   Zustand nutzt eine BEOBACHTBARE Objektschaetzung (Belief + Tastsinn) statt des privilegierten
+#   sim.obj_pos -- s. die Konstruktion von c_obs/cz_obs in run_combined.  Nur der ZUSTAND wechselt;
+#   die FSM (Teacher) behaelt ihr Privileg als Trainingssignal.  =0 (Vorgabe): altes Verhalten.   # Versatz Reichpunkt -> Backenmitte (m).
+#   s. die Begruendung an der Anwendungsstelle in run_combined.  ACT16_CLAW_OFF=0 stellt das alte
+#   Verhalten wieder her (fuer ein sauberes A/B).
 SERVO_K, SERVO_CONF, SERVO_LOST = 0.5, 0.5, 6   # closed-loop grasp-target belief: correction gain,
 #   min track-confidence to update, frames of low confidence before a saccadic re-acquire
 MAX_REACQ = 2                                   # cap re-acquires per episode: a persistent track failure
@@ -129,7 +142,11 @@ def reactive_subgoal(state):
     else GRASP.  (c) SIZE-ADAPTIVE: the grasp/place/carry heights are derived from the object's half-height
     (cube -> the old 0.014, flat/tall -> grasp at their own centre).
     Returns a flat [aim_x, aim_y, aim_z, gripper] (the same shape the policy emits)."""
-    hx, hy, hz, cx, cy, cz, tx, ty, j5, obj_h, obj_fp = state
+    hx, hy, hz, cx, cy, cz, tx, ty, j5, obj_h, obj_fp = np.asarray(state, float)[:11]
+    # state[11:13] = [druck_gueltig, fingerdruck_N] (Tastsinn, 2026-08-07).  Der TEACHER liest ihn
+    # bewusst NICHT: seine Wiederhol-Logik haengt am privilegierten cz (run_combined lift-Phase) und
+    # bleibt als Trainingssignal -- die POLICY bekommt den Druck als beobachtbaren Ersatz und lernt
+    # per DAgger, das Teacher-Verhalten am Tastsinn statt am Privileg festzumachen.
     hxy = np.array([hx, hy]); c = np.array([cx, cy]); t = np.array([tx, ty])
     if obj_fp > GRASP_MAX_HALF:                           # AFFORDANCE: too wide to grasp -> push
         return _push_subgoal(hxy, hz, c, t)
@@ -340,6 +357,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         wrist_hold = None                                    # last aligned joint_4 (held through the grip)
         guard_minz = 1.0; guard_stall = 0                    # close-guard: deepest descent + stall counter
         last_phase = phase; phase_age = 0                    # STALL-ESCAPE: don't hang in one phase forever
+        run_combined._cobs = None; run_combined._held_prev = False   # beobachtbare Objektschaetzung (Stufe C)
+        run_combined._lift_xy = None                         # Handposition beim ABHEBEN (Trage-Etikett)
         run_combined._maxcz = float(obj_h)                   # CHECKPOINTS (act23 credit routing): three
         run_combined._slipped = False                        #   self-measurable predictions per episode.
         run_combined._attempted = False
@@ -481,8 +500,41 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 if cz > 0.028 and sim.d.qpos[sim.jqadr["joint_5"]] < J5_CLOSED_TH:   # object carried, drive
                     tgt = np.asarray(place_servo_fn(hxy), float)  # the place target by the latent servo
             # state for a LEARNED action policy: hand, object, object-z, target, gripper, OBJ SIZE (c)
-            state = np.array([h[0], h[1], h[2], c[0], c[1], cz, tgt_eff[0], tgt_eff[1],
-                              sim.d.qpos[sim.jqadr["joint_5"]], obj_h, obj_fp], float)
+            # + TASTSINN [gueltig, druck_N] (2026-08-07): der Fingerdruck-Streifen als LAUFZEIT-Eingang.
+            # Gemessen: Druck beim Zufassen sagt das Halten fast deterministisch vorher (<0.5N -> 4%,
+            # >2N -> 86%), und die Verluste passieren beim Heben/Tragen -- wo die Kamera das Objekt
+            # unter dem Greifer verliert und bisher nur das PRIVILEGIERTE cz den Verlust verriet.
+            # Auf dem realen Roboter existiert cz nicht; der Streifen ist die geplante Hardware.
+            try:
+                press = float(sim.grip_pressure("left"))
+            except Exception:
+                press = -1.0                                   # Sensor nicht lesbar -> gueltig=0
+            _j5q = float(sim.d.qpos[sim.jqadr["joint_5"]])
+            # STUFE C (ACT16_OBS_STATE=1): BEOBACHTBARE Objektschaetzung fuer den Policy-Zustand.
+            # Das privilegierte c_true/cz stand bisher auch WAEHREND DES TRAGENS im Zustand -- auf dem
+            # realen Roboter existiert es nicht, und die Kamera sieht das Objekt unter dem Greifer
+            # nicht.  Beobachtbarer Ersatz, rein aus Belief + TASTSINN:
+            #   haelt (Druck>0.3N, Klaue zu)  -> Objekt IST an der Hand: c_obs=hand_xy, cz_obs=hand_z
+            #   Anfahrphasen                  -> c ist dort ohnehin der Fovea-Belief (beobachtbar)
+            #   Verlust (haelt -> haelt nicht)-> Objekt fiel WO DIE HAND WAR: c_obs friert dort ein,
+            #                                    cz_obs = Ruhehoehe obj_h (es liegt wieder auf dem Tisch)
+            # Die FSM selbst faehrt weiter mit dem Privileg (Teacher = Trainingssignal); nur was die
+            # POLICY sieht -- und was als Demo-Zustand GELOGGT wird -- wechselt auf beobachtbar.
+            _holding = press > 0.3 and _j5q < J5_CLOSED_TH
+            if run_combined._cobs is None or phase in ("over", "lower", "close"):
+                run_combined._cobs = (np.asarray(c, float).copy(), float(obj_h))
+            if _holding:
+                run_combined._cobs = (np.asarray(hxy, float).copy(), float(hz))
+            elif run_combined._held_prev:                       # eben verloren -> am Fallort einfrieren
+                run_combined._cobs = (np.asarray(hxy, float).copy(), float(obj_h))
+            run_combined._held_prev = _holding
+            if OBS_STATE:
+                c_st, cz_st = run_combined._cobs
+            else:
+                c_st, cz_st = c, cz                            # altes Verhalten (privilegiert im Carry)
+            state = np.array([h[0], h[1], h[2], c_st[0], c_st[1], cz_st, tgt_eff[0], tgt_eff[1],
+                              _j5q, obj_h, obj_fp,
+                              1.0 if press >= 0 else 0.0, max(press, 0.0)], float)
             if teacher_log_fn is not None:                    # DAgger: the FSM's sub-goal at the
                 teacher_log_fn(state, np.asarray(aim, float).copy(), float(j5))   # (policy-)VISITED state
             route_carry = carry_target_fn is not None and phase == "carry"   # the routed carry follows the
@@ -539,10 +591,26 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                                          "cxy": np.asarray(c_true, float).copy(),
                                          "tgt": np.asarray(tgt_true, float).copy()}
             sim.target("joint_5", j5)
-            try:                                              # DRUCKMESSSTREIFEN (ein Finger, innen)
-                run_combined._grip.setdefault(phase, []).append(sim.grip_pressure("left"))
-            except Exception:
-                pass
+            if press >= 0:                                    # DRUCKMESSSTREIFEN (ein Finger, innen);
+                # PHASE FUER DIE MESSUNG aus der BEOBACHTBAREN Lage ableiten, nicht aus dem
+                # FSM-Zustand.  GRUND (gemessen 2026-08-07): die FSM schaltet erst auf "carry", wenn
+                # die HAND ihre eigene Hubvorgabe erreicht (hz > CARRY_Z-0.015).  Im NETZ-Modus
+                # ueberschreibt die Policy den Zielpunkt, der Arm folgt ihr, die Bedingung tritt nie
+                # ein -- die Phase bleibt bei "lift" haengen.  Folge: "carry" erscheint in 45% der
+                # FSM-Episoden, aber nur in 12% der Netz-Episoden, und der TRANSPORT wurde unter
+                # "lift" verbucht.  "tragen 0.00" hiess also nicht "verloren" und nicht "nicht
+                # gemessen", sondern "falsch einsortiert".
+                # Beobachtbar: gehoben + Klaue zu + die Hand hat sich seit dem Abheben seitlich
+                # bewegt -> das ist Transport, unabhaengig davon, wer den Arm fuehrt.
+                _lifted = cz > obj_h + 0.02 and j5 < J5_CLOSED_TH
+                if _lifted and run_combined._lift_xy is None:
+                    run_combined._lift_xy = np.asarray(hxy, float).copy()
+                _phl = phase
+                if _lifted and run_combined._lift_xy is not None                         and float(np.linalg.norm(hxy - run_combined._lift_xy)) > 0.03:
+                    _phl = "carry"
+                elif _lifted and phase in ("lift", "over", "lower", "close"):
+                    _phl = "lift"
+                run_combined._grip.setdefault(_phl, []).append(press)   # im Zustand bereits gelesen
             gentle = abs(j5 - J5_PUSH) < 0.2 and aim[2] < PUSH_Z + 0.02   # spread gripper + low = a PUSH
             # GENTLE CARRY: a concave object (e.g. a perceived U) is gripped OFF its centre-of-mass (its COM
             # sits in the concavity, on no material), so the lateral acceleration of a normal-speed carry tears
@@ -552,7 +620,20 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             if gentle:    g, mdq = 1.3, 0.016
             elif carrying: g, mdq = CARRY_GAIN, CARRY_MDQ
             else:         g, mdq = 2.0, 0.026                            # (derived from the sub-goal, so it
-            q3 = sim.arm3_angles(); sim.set_arm3_targets(q3 + body.reach_velocity(q3, aim, gain=g, max_dq=mdq))
+            # BACKENMITTE STATT REICHPUNKT (2026-08-07).  Der Reichpunkt (site "contact") liegt NICHT
+            # zwischen den Backen: die Backenmitte sitzt 4.1mm davor bei offener und 8.6mm bei
+            # geschlossener Klaue (gemessen, ueber alle Wrist-Winkel konstant).  Bei +-6mm Backentiefe
+            # schliessen die Backen damit VOR dem Objekt.  Das Ziel wird deshalb um CLAW_OFF ENTGEGEN
+            # der Klauenachse verschoben, sodass die BACKEN dort landen, wo bisher der Reichpunkt kam.
+            # Verschoben wird das REICHZIEL, nicht die Vorgaben: alle Koordinaten (Teacher, Policy,
+            # 24000 DAgger-Beispiele) bleiben damit gueltig.
+            # Kausal gemessen (16 Posen, anfahren-schliessen-heben): Versatz 0 -> 0% gehoben bei 4.5N
+            # Zufassdruck und 0.0N beim Heben; +4mm -> 56%, +6mm -> 62%, +8mm -> 69%, +10mm -> 44%.
+            # Das Optimum +8mm trifft den geometrischen Wert 8.6mm von der anderen Seite.
+            _aim = np.asarray(aim, float)
+            if CLAW_OFF > 0.0:
+                _aim = _aim - CLAW_OFF * sim.claw_fwd()
+            q3 = sim.arm3_angles(); sim.set_arm3_targets(q3 + body.reach_velocity(q3, _aim, gain=g, max_dq=mdq))
             if WRIST_ALIGN or policy_wrist is not None:        # (B) align the claw to the object's grip axis --
                 # a 5-dim policy (act23) supplies its OWN desired claw_yaw (LEARNED wrist); else the teacher's
                 # heuristic wrist_tgt.  The parallel claw is symmetric mod pi, so the learned wrist aligns mod pi.

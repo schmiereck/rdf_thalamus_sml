@@ -303,11 +303,17 @@ class WorldModelModule(ArmModule):
         muss dort ein GUELTIGKEITS-FLAG mitfuehren (s. pc_act23 NB_NEUTRAL): einen erfundenen
         Sachwert einzusetzen waere eine Luege, aus der das Modell eine Scheinkorrelation lernt.
 
-        Idempotent (mehrfacher Aufruf aendert nichts) und ein No-op, wenn das Schema schon passt."""
+        "ENSURE" heisst MINDESTENS: ein Ziel, das das Schema schon erreicht oder ueberschritten hat,
+        ist ein No-op.  Das ist noetig, weil die Erweiterungen als KETTE aufgerufen werden (14 -> 19
+        -> 31 -> 38) und ein bereits weiter fortgeschrittener Puffer sonst an der ERSTEN Stufe
+        scheitert -- genau das ist am 2026-08-03 beim GUI-Start passiert (feat_dim 38, Stufe 19).
+        Sicher, weil die Kette streng aufsteigend ist und feat_dim nie schrumpft: die Abschalt-Knoepfe
+        (ACT23_NEIGHBOURS/_FOVEA_FEATS/_BODY_FEATS) lassen die Dimensionen im Schema und setzen sie
+        nur konstant neutral."""
         new_fd = int(new_fd); neutral = np.asarray(neutral, float)
-        if new_fd == self.feat_dim:
+        if new_fd <= self.feat_dim:
             return 0
-        if new_fd < self.feat_dim or len(neutral) != new_fd - self.feat_dim:
+        if len(neutral) != new_fd - self.feat_dim:
             raise ValueError(f"ensure_feat_dim: {self.feat_dim} -> {new_fd} passt nicht zu "
                              f"neutral[{len(neutral)}]")
         old_fd, n = self.feat_dim, 0

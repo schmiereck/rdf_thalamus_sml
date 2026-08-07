@@ -36,6 +36,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 import mujoco
 
+# WER hat welchen Schalter gesetzt?  VOR den setdefault-Aufrufen festhalten, welche ACT*-Variablen
+# aus der UMGEBUNG kamen -- sonst meldet _print_run_settings die von act23 selbst gesetzten Werte als
+# "Abweichung" und der Nutzer sucht in seinem Startbefehl nach etwas, das dort nie stand (genau das
+# ist am 2026-08-03 passiert: ACT_GOAL_ROPE und ACT_REACH_* wurden faelschlich ihm zugeschrieben).
+_ENV_AT_IMPORT = {k for k in os.environ if k.startswith("ACT")}
+
 os.environ.setdefault("ACT14_DOF", "4")   # act23 runs the 4-DOF arm: joint_3 freed (user request) --
 #   it was LOCKED at HOME=3.14 everywhere and is THE reason for the small workspace; the learned
 #   kinematics babbles all 4 positioning joints and the reach keeps the CLAW DIRECTION (redundancy).
@@ -95,11 +101,45 @@ FOVEA_MEM = FOVEA_NET and os.environ.get("ACT23_FOVEA_MEM", "1") == "1"
 BODY = {"cube": "obj_red", "L": "obj_L", "U": "obj_U"}
 ALL = ["obj_red", "obj_green", "obj_blue", "obj_L", "obj_U"]
 TARGET = np.array([0.0, 0.10])
+# ALLE DREI ZUSATZBLOECKE STEHEN SEIT 2026-08-06 AUF AUS.  Gemessen am 686-Ep-Lauf (623 Zeilen mit
+# gueltigen Bloecken, 5-fach kreuzvalidiert): die Bloecke WEGZULASSEN sagt besser vorher als sie zu
+# fuehren -- MSE 0.1110 ohne gegen 0.1147 mit (p=0.034).  Nicht wegen Redundanz (nur d_hand war aus
+# den alten Merkmalen ableitbar, R^2=0.74; die uebrigen tragen echte neue Information, R^2 0.09-0.26)
+# und nicht wegen der Dimensionszahl (die Kompression der 10 |top|-Dim auf ihre Mittelamplitude aendert
+# NICHTS: 0.1149 gegen 0.1147, p=0.89).  Es ist eine STICHPROBENFRAGE: die Effekte sind echt, aber mit
+# rho~0.15 (R^2~2%) zu klein, als dass sich das Schaetzen ihrer Gewichte bei 623 Zeilen und 56
+# augmentierten Spalten lohnt.  Schema und Code BLEIBEN, damit die 623 gesammelten Zeilen nicht
+# verloren sind und das Experiment bei deutlich groesserem Puffer fortsetzbar ist -- die Abschaltung
+# schreibt nur konstant neutrale Werte, sie entfernt keine Spalten.
 # NACHBAR-INFORMATION als Situations-Feature (s. _neighbour_feats).  ACT23_NEIGHBOURS=0 schaltet sie
 # ab -- die Dimensionen BLEIBEN dann im Schema (sonst passte der Puffer nicht mehr), sie tragen nur
 # konstant den neutralen Wert.  NB_DMAX = ab welchem Abstand ein Objekt nicht mehr als Nachbar zaehlt;
 # 0.12m deckt Schieben beim Schliessen, Rammen beim Tragen und das Blob-Verschmelzen (~40mm) ab.
-NEIGHBOURS = os.environ.get("ACT23_NEIGHBOURS", "1") != "0"
+# FOVEA-ZUSTAND als Situations-Feature (s. _fovea_feats).  Der Nutzer hat in der ModulViz-Grafik
+# bemerkt, dass es KEINE Kante VisualCortex -> WorldModel gibt -- zu Recht: die Situation kam bisher
+# vollstaendig aus dem UEBERSICHTS-Pfad (perceive_all), das gelernte Fovea-Netz beeinflusste nur, wohin
+# der Arm waehrend des Anfahrens zielt.  Folge: eine bessere Fovea konnte die GRIFFWAHL gar nicht
+# erreichen (siehe den zurueckgenommenen Aufloesungsversuch), und schwankende Servo-Qualitaet erschien
+# dem Welt-Modell als unerklaerliches Rauschen bei identischen Merkmalen.
+# FOV_SETTLE: so viele Fovea-Schritte auf dem AKTUELLEN Bild, bevor der Zustand gelesen wird.  Gesucht
+# werden muss dabei NICHT -- perceive_all hat das Objekt schon lokalisiert, die Fovea wird nur
+# dorthin gerichtet und schwingt ein.  learn=False: das ist ein LESEN, keine Erfahrung.
+# ARMSTELLUNG als Situations-Feature (s. _body_feats).  Die letzte gestrichelte Kante der
+# ModulViz-Grafik: das Koerpermodell kennt die Armstellung, das Welt-Modell erfuhr sie nie.
+# WARUM DAS ZAEHLT: run_combined laeuft mit arm_reset=False, der Arm startet also NICHT bit-identisch,
+# sondern dort, wo drive_home ihn gelassen hat (~0.05 rad je Gelenk daneben).  Der Nutzer hat genau
+# daraus ein Problem beobachtet: "Der Greifer richtet sich manchmal beim Start einer Episode schon in
+# Ruheposition aus, oft in eine extreme 90-Grad-Position ... dann kollidiert er beim Anfahren mit
+# einem Finger mit der Base."  Fuer das Welt-Modell sahen solche Episoden bisher aus wie jede andere.
+BODY_FEATS = os.environ.get("ACT23_BODY_FEATS", "0") == "1"
+BD_DMAX = float(os.environ.get("ACT23_BD_DMAX", "0.4"))   # Deckel fuer den Hand-Ziel-Abstand (m)
+BD_DIM = 7                                             # [gueltig, FK-Surprise, cos2w0, sin2w0, d, cos, sin]
+BD_NEUTRAL = np.zeros(BD_DIM)
+FOVEA_FEATS = os.environ.get("ACT23_FOVEA_FEATS", "0") == "1"
+FOV_SETTLE = int(os.environ.get("ACT23_FOV_SETTLE", "4"))
+FOV_DIM = 12                                           # [gueltig, Surprise, |top|(10)]
+FOV_NEUTRAL = np.zeros(FOV_DIM)                        # "nie gemessen" -- gueltig-Flag 0
+NEIGHBOURS = os.environ.get("ACT23_NEIGHBOURS", "0") == "1"
 NB_DMAX = float(os.environ.get("ACT23_NB_DMAX", "0.12"))
 NB_DIM = 5
 NB_NEUTRAL = np.array([0.0, NB_DMAX, 1.0, 0.0, 0.0])   # "nie gemessen" -- gueltig-Flag 0
@@ -432,6 +472,11 @@ class CommandPanel23:
     """Same look as pc_act21's CommandPanel (arm camera + fovea + surprise + buttons) but with ONE unified
     object row (no colour/form mode) and a grasp-policy toggle."""
 
+    # EINE Quelle fuer Beschriftung und Farbe des Choreo-Knopfes -- Konstruktor UND Umschalter lesen
+    # sie, damit der Knopf nicht wieder etwas anderes anzeigt als der Zustand sagt.
+    CH_LBL = {"fsm": "Choreo: FSM", "netz": "Choreo: Netz", "attractor": "Choreo: Attraktor"}
+    CH_COL = {"fsm": "#5a3a3a", "netz": "#2a5a7a", "attractor": "#5a2a7a"}
+
     def __init__(self, state, cam, res, rng=None, randomize_fn=None):
         import matplotlib.pyplot as plt
         from matplotlib.widgets import Button
@@ -473,7 +518,12 @@ class CommandPanel23:
         self.bAuto.on_clicked(self._toggle_auto)
         # STAGE 2: scripted FSM choreography <-> the LEARNED runtime policy drives the sub-goals
         axCh = self.fig.add_axes([0.33, 0.220, 0.125, 0.05])
-        self.bCh = Button(axCh, "Choreo: FSM", color="#5a3a3a", hovercolor="#7a5050")
+        # BESCHRIFTUNG AUS DEM ZUSTAND, nicht fest verdrahtet.  BUG bis 2026-08-03: hier stand
+        # "Choreo: FSM" fix -- seit der Vorgabe-Umstellung auf netz zeigte der Knopf also FSM an,
+        # WAEHREND das System auf Netz lief (vom Nutzer gemeldet).  Ein Druck haette dann auf
+        # Attraktor weitergeschaltet statt wie erwartet auf Netz.
+        self.bCh = Button(axCh, self.CH_LBL.get(state.choreo, "Choreo: FSM"),
+                          color=self.CH_COL.get(state.choreo, "#5a3a3a"), hovercolor="#7a5050")
         self.bCh.on_clicked(self._toggle_choreo)
         # STAGE 4a: place target as GOAL LATENT (latent-difference servo) <-> classic coordinate
         axLG = self.fig.add_axes([0.462, 0.220, 0.082, 0.05])
@@ -545,10 +595,8 @@ class CommandPanel23:
         # latent servo; still net-family, the runtime policy drives the grasp) -> FSM
         nxt = {"fsm": "netz", "netz": "attractor", "attractor": "fsm"}
         self.state.choreo = nxt.get(self.state.choreo, "fsm")
-        lbl = {"fsm": "Choreo: FSM", "netz": "Choreo: Netz", "attractor": "Choreo: Attraktor"}
-        col = {"fsm": "#5a3a3a", "netz": "#2a5a7a", "attractor": "#5a2a7a"}
-        self.bCh.label.set_text(lbl[self.state.choreo])
-        self.bCh.color = col[self.state.choreo]
+        self.bCh.label.set_text(self.CH_LBL[self.state.choreo])
+        self.bCh.color = self.CH_COL[self.state.choreo]
         self.bCh.ax.set_facecolor(self.bCh.color); self._refresh()
 
     def _toggle_goalmode(self, _e):
@@ -610,7 +658,14 @@ def run_self_learning_steering(headless=False):
     # PERSIST run_combined just does arm_home()+reposition_strays(): act23 owns ALL placement (setup_long,
     # place_all, the run_one snapshot-restore), so the scene truly persists and no geom is ever resized.
     act16.PERSIST = True
-    RES = int(os.environ.get("ACT23_RES", "240"))
+    RES = int(os.environ.get("ACT23_RES", "240"))   # 240 -> 480 am 2026-08-02 (Zweig fovea-res):
+    #   zusammen mit ACT_FOVEA_F 16->20 und UNVERAENDERTEM K=4 halbiert sich der Zellabstand im
+    #   Weltmass (2x Fovea-Aufloesung) bei gleichem Gesichtsfeld.  Gemessen kostet das im
+    #   Fovea-Netz fast nichts (Abtastung 2.9 -> 3.2ms); teuer sind allein die 400 statt 256
+    #   ZELLEN der PC-Relaxation.  Das Rendern selbst wird 4x teurer, lag aber bei ~10s je
+    #   Episode.  ACHTUNG bei Aenderungen: alle PIXEL-Schwellen des Formklassifikators sind auf
+    #   240px geeicht und skalieren ueber ShapeClassifierModule.px_scale mit; die gespeicherte
+    #   Homographie wird ueber needs_recal() neu gefittet.
     LAM = float(os.environ.get("ACT23_LAM", "1.0"))
     NPOS = int(os.environ.get("ACT23_NPOS", "10")); NTRIAL = int(os.environ.get("ACT23_NTRIAL", "5"))
     LONG = "obj_blue"; LONG_HALF = (0.034, 0.009, 0.012)   # clearly a LONG thin bar (not a cube)
@@ -671,7 +726,12 @@ def run_self_learning_steering(headless=False):
             sc.classify(np.zeros(sc.fmu.shape[0]))             # shape head forward
             sc.resolve(np.zeros(sc.fmu.shape[0]))              # open-set gate (exemplars + thresholds)
             if rt.trained:
-                rt.predict(np.zeros(11))                       # runtime policy forward
+                # Breite AUS DEM NETZ nehmen, nicht fest verdrahten: mit dem Tastsinn (d912b74)
+                # wuchs der Zustand auf 13, und die fest kodierte 11 liess den Funktionstest
+                # scheitern -- woraufhin der GESAMTE Zustand (Welt-Modell, Policy, Formklassen,
+                # offene Klassen) als "alte Datei" verworfen wurde.  Beim Sondierungslauf am
+                # 2026-08-07 genau so passiert.
+                rt.predict(np.zeros(rt.net.W1.shape[1]))       # runtime policy forward
             if b.get("colours") is not None:                   # optional stage-3 colour classes
                 b["colours"].classify(np.ones(3) / 3)
             lg = b.get("latent_goal")                          # optional stage-4a goal-latent servo
@@ -791,6 +851,17 @@ def run_self_learning_steering(headless=False):
 
     if _loaded is not None:
         shape_clf = _loaded["shape_clf"]
+        # HOMOGRAPHIE VOR dem Welt-Check nachfitten, wenn sich die Bildaufloesung geaendert hat.
+        # Sonst laege JEDE wahrgenommene Position um den Aufloesungsfaktor daneben, _shapes_match_world
+        # schluege fehl und der Klassifikator wuerde komplett neu trainiert -- wobei die SELBST
+        # BENANNTEN offenen Klassen (neu-*) verloren gingen.  H ist reine Kamera-Kalibrierung, kein
+        # Gelerntes: neu fitten kostet nichts und rettet die Klassen.
+        if shape_clf.needs_recal(sim):
+            _sv = sim.d.mocap_pos.copy()
+            _n = shape_clf.calibrate(sim)
+            sim.d.mocap_pos[:] = _sv; mujoco.mj_forward(sim.m, sim.d)
+            print(f"  [Persistenz] Bildaufloesung geaendert -> Homographie neu gefittet ({_n} Punkte); "
+                  f"gelernte Formen und offene Klassen bleiben erhalten", flush=True)
         if _shapes_match_world(shape_clf):
             if panel is not None:
                 panel.update(sim.render(CAM), "Form-Wahrnehmung aus gespeichertem Zustand geladen")
@@ -928,11 +999,21 @@ def run_self_learning_steering(headless=False):
     # ObjectOrientationModule features are subsumed by the k=2 phase -- one perception path, no oo.)
     world = (_loaded["world"] if _loaded is not None else
              WorldModelModule(k=5, off_max=0.008, rng=np.random.default_rng(2),
-                              feat_dim=6 + shape_clf.NH + NB_DIM))
-    _n_mig = world.ensure_feat_dim(6 + shape_clf.NH + NB_DIM, NB_NEUTRAL)   # geladene Puffer nachziehen
+                              feat_dim=6 + shape_clf.NH + NB_DIM + FOV_DIM + BD_DIM))
+    # Schema-Erweiterungen der Reihe nach; jede ist idempotent, also greift beim Laden genau die,
+    # die dem Puffer noch fehlt (14 -> 19 -> 31).
+    _n_mig = world.ensure_feat_dim(6 + shape_clf.NH + NB_DIM, NB_NEUTRAL)
     if _n_mig:
         print(f"  [Schema] Nachbar-Information ergaenzt: {_n_mig} bestehende Zeilen migriert "
               f"(gueltig-Flag 0 -- sie hatten die Information nie)", flush=True)
+    _n_mig = world.ensure_feat_dim(6 + shape_clf.NH + NB_DIM + FOV_DIM, FOV_NEUTRAL)
+    if _n_mig:
+        print(f"  [Schema] Fovea-Zustand ergaenzt: {_n_mig} bestehende Zeilen migriert "
+              f"(gueltig-Flag 0)", flush=True)
+    _n_mig = world.ensure_feat_dim(6 + shape_clf.NH + NB_DIM + FOV_DIM + BD_DIM, BD_NEUTRAL)
+    if _n_mig:
+        print(f"  [Schema] Armstellung ergaenzt: {_n_mig} bestehende Zeilen migriert "
+              f"(gueltig-Flag 0)", flush=True)
     #   off_max>0 (STAGE-1 de-scripting): the grasp-point OFFSET dims are live -- the model can learn to
     #   grasp a form off its perceived grasp point; grip+gentle action dims replace the obj_U runtime rules.
 
@@ -943,6 +1024,13 @@ def run_self_learning_steering(headless=False):
     # ACT23_CHOREO=netz) lets the POLICY drive the sub-goals incl. the gripper; guards stay on by default
     # (train-with-guard) -- verify guard-free with ACT16_CLOSE_GUARD=0 ACT16_REFLEX=0.
     runtime = _loaded["runtime"] if _loaded is not None else RuntimePolicyModule(rng=np.random.default_rng(4))
+    _n_rt = runtime.ensure_state_dim(13) if hasattr(runtime, "ensure_state_dim") else 0
+    if _n_rt:
+        # TASTSINN-Migration (11 -> 13): das Netz wird in ensure_state_dim mit NULL-Spalten
+        # VERBREITERT (Ausgabe bitgleich, kein Retrain noetig); die Lifelong-Refits lernen die
+        # Druckspalten allmaehlich aus den neuen Demos.
+        print(f"  [Schema] Tastsinn in der Runtime-Policy ergaenzt: {_n_rt} Zeilen migriert "
+              f"(gueltig-Flag 0), Netz verhaltensneutral auf 13 Eingaenge verbreitert", flush=True)
 
     # STAGE 3 (user request): OPEN-SET COLOURS -- fully self-labelled, no teacher colour set anywhere.
     # Scene glances feed component CHROMATICITIES; classes are self-named ("farbe-N") and bound to the
@@ -1272,7 +1360,103 @@ def run_self_learning_steering(headless=False):
         return np.concatenate([np.asarray(best["pos"], float),
                                [np.cos(2 * y2), np.sin(2 * y2), np.cos(4 * y4), np.sin(4 * y4)],
                                shape_clf.desc_embed(best["desc"]),
-                               _neighbour_feats(best, dets)])
+                               _neighbour_feats(best, dets),
+                               _fovea_feats(best),
+                               _body_feats(best)])
+
+    def _body_feats(best):
+        """ARMSTELLUNG als Situations-Feature -- schliesst die letzte gestrichelte Kante
+        BodyModel -> WorldModel.
+
+        7 Dimensionen: [gueltig, FK-Surprise, cos2w0, sin2w0, d_hand, cos phi, sin phi]
+          FK-Surprise  log1p des Koerpermodell-Vorhersagefehlers in MILLIMETERN.  Die Kinematik lernt
+                       lebenslang weiter; ist ihr Fehler gerade gross, geht die Hand nicht dorthin,
+                       wo der Griff geplant wurde.  Genau wie bei der Fovea-Surprise konnte das
+                       Welt-Modell diesen Stoerterm bisher nicht von einem Aktions-Fehler trennen.
+          w0           START-Orientierung der Klaue (claw_yaw = Finger-Trennachse in der Welt), als
+                       PHASE ueber 2*Winkel, weil eine Klaue pi-symmetrisch ist -- dieselbe
+                       Konvention wie die Wrist-AKTION.  Das ist die vom Nutzer beobachtete
+                       "extreme 90-Grad-Stellung" beim Episodenstart.
+          d_hand/phi   Wo der Arm HERKOMMT: Abstand und Richtung von der aktuellen Hand zum Ziel,
+                       im BASIS-Rahmen (dort lebt die Kinematik).  Mit arm_reset=False ist der
+                       Startpunkt jede Episode ein anderer."""
+        v = np.zeros(BD_DIM)
+        if not BODY_FEATS:
+            return v
+        try:
+            w0 = float(sim.claw_yaw())
+            hand = np.asarray(sim.grasp_pos(), float)[:2]
+            tgt = np.asarray(best["pos"], float)
+            rel = tgt - hand
+            d = float(np.linalg.norm(rel))
+            fk = getattr(bm.body, "last_surprise", None)
+            v[0] = 1.0
+            v[1] = 0.0 if fk is None else float(np.clip(np.log1p(1e3 * float(fk)), 0.0, 10.0))
+            v[2], v[3] = np.cos(2 * w0), np.sin(2 * w0)
+            v[4] = min(d, BD_DMAX)
+            if d > 1e-6:
+                ph = float(np.arctan2(rel[1], rel[0]))
+                v[5], v[6] = np.cos(ph), np.sin(ph)
+            else:
+                v[5] = 1.0
+        except Exception as _e:
+            if os.environ.get("ACT23_DEBUG", "0") == "1":
+                print(f"    [Koerper-Feat] uebersprungen: {_e}", flush=True)
+            v[:] = 0.0
+        return v
+
+    def _fovea_feats(best):
+        """ZUSTAND DES FOVEA-NETZES als Situations-Feature -- schliesst die fehlende Kante
+        VisualCortex -> WorldModel (vom Nutzer in der ModulViz-Grafik entdeckt).
+
+        12 Dimensionen: [gueltig, Surprise, |top| (10)]
+          gueltig   1.0 = echt gemessen (alte Zeilen 0.0, s. ensure_feat_dim)
+          Surprise  sensor_error des PC-Netzes = wie gut die Fovea erklaert, was sie sieht.  Ein
+                    hoher Wert heisst, der Griff wird auf einem wackligen Perzept geplant -- genau
+                    die Information, die dem Welt-Modell bisher fehlte, um schwankende
+                    Servo-Qualitaet von echtem Aktions-Fehler zu unterscheiden.
+          |top|     BETRAG des obersten Latents (10 komplexe Dim).  Der Betrag, nicht die Phase:
+                    dieselbe Konvention wie beim Formdeskriptor (|F| ist die Bedeutung, die Phase
+                    die Lage).  x10 skaliert, damit die Groessenordnung zu den uebrigen Merkmalen
+                    passt (roh 0.01-0.09).
+
+        KEINE SUCHE: perceive_all hat das Objekt schon lokalisiert, also wird die Fovea nur dorthin
+        gerichtet (step_id auf best["chroma"], die eigene Chromatizitaet des Objekts) und schwingt
+        FOV_SETTLE Schritte ein.  Ein volles locate() waere eine Saccaden-Suche ueber bis zu 60
+        Iterationen -- unnoetig, wenn die Position bereits bekannt ist.
+        learn=False, damit dieses LESEN die Fovea-Gewichte nicht veraendert."""
+        v = np.zeros(FOV_DIM)
+        if not FOVEA_FEATS or vc is None or getattr(vc, "fovea", None) is None:
+            return v
+        try:
+            px = np.asarray(shape_clf._world_to_px(np.asarray(best["pos"], float))[0], float)
+            # MARKER PARKEN wie bei jedem anderen Wahrnehmungs-Einstieg (shape_classifier:576/599/692).
+            # BUG 2026-08-03: hier fehlte das.  situation_feats stellt die Marker unmittelbar vor
+            # diesem Aufruf wieder her, die Fovea sah also die magentafarbenen Zielscheiben mit --
+            # und ROT ist eine TEILMENGE von Magenta (1,0,1), der dokumentierte Fehlermodus, bei dem
+            # das rote Kommando die Zielscheibe lockt.  Gemessen im 141-Ep-Lauf: der FARBPFAD
+            # (Wuerfel) brach auf 10% ein, der Formpfad nur auf 27%.
+            _sv = sim.d.mocap_pos.copy(); shape_clf._park_markers(sim)
+            try:
+                img = shape_clf._render_u8(sim)             # Arm ausgeblendet, wie beim Klassifikator
+            finally:
+                sim.d.mocap_pos[:] = _sv; mujoco.mj_forward(sim.m, sim.d)
+            for _ in range(max(1, FOV_SETTLE)):
+                vc.fovea.step_id(img, px, np.asarray(best["chroma"], float), learn=False)
+            d = vc.fovea.last_diag or {}
+            se = float(d.get("sensor_error", 0.0))
+            top = np.abs(np.asarray(vc.fovea.net.node("top").mu))
+            v[0] = 1.0
+            # LOGARITHMISCH, nicht linear gedeckelt: der Wert spannt Groessenordnungen -- reife Fovea
+            # ~0.26, frisch aufgewaermt >=5, im Warmup bis ~180.  Ein linearer Deckel saettigt genau
+            # dort, wo die Information steckt (im Rauchtest standen beide Zeilen auf dem Deckel 5.00).
+            v[1] = float(np.clip(np.log1p(max(0.0, se)), 0.0, 10.0))
+            v[2:2 + len(top)] = 10.0 * top[:FOV_DIM - 2]
+        except Exception as _e:
+            if os.environ.get("ACT23_DEBUG", "0") == "1":
+                print(f"    [Fovea-Feat] uebersprungen: {_e}", flush=True)
+            v[:] = 0.0
+        return v
 
     def _neighbour_feats(best, dets):
         """NACHBAR-INFORMATION fuers Welt-Modell (Nutzerwunsch, in ModulViz die gestrichelte Kante
@@ -2183,7 +2367,25 @@ def run_self_learning_steering(headless=False):
                 # Regel: die Schranke gab es schon, sie stand nur an der falschen Stelle.
                 # EHRLICH: auch 0-10mm zeigt keinen VORTEIL gegenueber dem heuristischen Punkt (55 vs
                 # 52%) -- die Schranke rettet die Selbstkorrektur, sie belegt keinen Nutzen.
-                _cap = float(os.environ.get("ACT23_GRASP_CAND_CAP", "0.012"))
+                # SCHRANKE AN DIE OBJEKTGROESSE GEKOPPELT (2026-08-07), vorher fest 12mm.
+                # Gemessen an 1414 Episoden aus 20 Logs, Haltequote gegen die Verschiebung RELATIV zur
+                # Material-Halbspanne des Objekts:
+                #     0            62% (n=728)   <- heuristischer Punkt
+                #     0.01-0.30    64% (n=276)   <- kein Schaden
+                #     0.30-0.60    53% (n=234)
+                #     0.60-1.00    35% (n=121)
+                #     >1.00        24% (n= 55)
+                # Absolut gemessen ist der Zusammenhang schwaecher (rho -0.145) als relativ (-0.161),
+                # und die feste Schranke wirkt gegensaetzlich: bei den 24mm-Wuerfeln sind 6-12mm bereits
+                # die halbe Objektbreite (Haltequote 28-38%), bei der 68mm langen Form dagegen harmlos
+                # (65%).  Eine Zahl kann beides nicht treffen.
+                # KEINE neue Regel: die Groesse kommt aus der eigenen Wahrnehmung (Material-Halbspanne
+                # der Detektion), nicht aus einer Tabelle je Objekt.  ACT23_GRASP_CAND_FRAC=0 faellt auf
+                # die alte feste Schranke zurueck.
+                _abs = float(os.environ.get("ACT23_GRASP_CAND_CAP", "0.012"))
+                _frac = float(os.environ.get("ACT23_GRASP_CAND_FRAC", "0.30"))
+                _span = float(det.get("span") or 0.0)
+                _cap = min(_abs, _frac * _span) if (_frac > 0 and _span > 0) else _abs
                 offs = [o for o in offs if float(np.linalg.norm(o)) <= _cap]
             a, _mu_a, _sd_a = world.select_action(fe, n=n_cand, lam=LAM, offsets=offs,
                                                   curiosity=TILT_CURIOSITY)
@@ -2371,8 +2573,14 @@ def run_self_learning_steering(headless=False):
         _lift_m, _lift_lo = _ph("lift")                        # Last uebernehmen
         _carry_m, _carry_lo = _ph("carry")                     # halten
         _rel_m, _ = _ph("place", "release")                    # loesen
+        # ABTASTZAHL JE PHASE mitloggen: "tragen 0.00" war bisher nicht von "nicht gemessen" zu
+        # unterscheiden -- 87% der Episoden hatten KEINEN Trage-Messpunkt, und ich habe das einmal
+        # faelschlich als Trageverlust gelesen.  Mit n je Phase ist der Unterschied im Log sichtbar.
+        _cnt = "/".join(f"{n}:{len(_g.get(n, []))}" for n in ("over", "lower", "close", "lift", "carry",
+                                                             "place", "release") if _g.get(n))
         print(f"    [Griffdruck] zufassen {_close_m:5.2f} | heben {_lift_m:5.2f} (min {_lift_lo:4.2f})"
-              f" | tragen {_carry_m:5.2f} (min {_carry_lo:4.2f}) | loesen {_rel_m:5.2f}  [N]", flush=True)
+              f" | tragen {_carry_m:5.2f} (min {_carry_lo:4.2f}) | loesen {_rel_m:5.2f}  [N]"
+              f"  | Messpunkte {_cnt or 'KEINE'}", flush=True)
         _rel = getattr(act16.run_combined, "_release", None)
         if _rel is not None:
             # ABLAGE-MESSUNG (nur Diagnose): trennt "zu hoch losgelassen" von "seitlich verfehlt".
@@ -2732,7 +2940,10 @@ def run_self_learning_steering(headless=False):
                             tilt_deg=(np.degrees(locals().get("_tilt") or 0.0)
                                       if TILT_ACTION else None),
                             nat_deg=(np.degrees(world.natural_tilt(world.radius_of(fe)))
-                                     if (TILT_ACTION and fe is not None) else None))
+                                     if (TILT_ACTION and fe is not None) else None),
+                            zoom=float(getattr(vc.fovea, "z", 1.0)),
+                            servo_mm=(float(np.mean(_fs["d"]))
+                                      if (_fs := getattr(vc, "_fsv", None) or {"d": []})["d"] else None))
             except Exception as _e:
                 if os.environ.get("ACT23_DEBUG", "0") == "1":
                     print(f"    [ModulViz] push uebersprungen: {_e}", flush=True)
@@ -3001,7 +3212,8 @@ def _source_defaults():
     here = os.path.dirname(os.path.abspath(__file__))
     out = {}
     try:
-        files = ([os.path.join(here, n) for n in ("pc_act23.py", "pc_act16.py", "pc_act14.py")]
+        files = ([os.path.join(here, n) for n in ("pc_act23.py", "pc_act18.py", "pc_act16.py",
+                                                 "pc_act15.py", "pc_act14.py")]
                  + sorted(glob.glob(os.path.join(here, "arm_modules", "*.py"))))
         for f in files:
             if not os.path.exists(f):
@@ -3050,6 +3262,10 @@ def _print_run_settings():
         print("  [Lauf] Abweichungen von der Vorgabe:", flush=True)
         for line in diff:
             print(f"           {line}", flush=True)
+        _own = [d for d in diff if d.split("=")[0] not in _ENV_AT_IMPORT]
+        if _own:
+            print(f"           (davon von act23 selbst gesetzt, NICHT aus dem Startbefehl: "
+                  f"{', '.join(sorted(d.split('=')[0] for d in _own))})", flush=True)
     else:
         print("  [Lauf] alle Schalter auf Vorgabe", flush=True)
     core = [f"{k.replace('ACT23_', '').replace('ACT14_', '')}={os.environ.get(k, defs.get(k))}"
