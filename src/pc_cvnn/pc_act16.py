@@ -358,6 +358,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         guard_minz = 1.0; guard_stall = 0                    # close-guard: deepest descent + stall counter
         last_phase = phase; phase_age = 0                    # STALL-ESCAPE: don't hang in one phase forever
         run_combined._cobs = None; run_combined._held_prev = False   # beobachtbare Objektschaetzung (Stufe C)
+        run_combined._lift_xy = None                         # Handposition beim ABHEBEN (Trage-Etikett)
         run_combined._maxcz = float(obj_h)                   # CHECKPOINTS (act23 credit routing): three
         run_combined._slipped = False                        #   self-measurable predictions per episode.
         run_combined._attempted = False
@@ -591,7 +592,25 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                                          "tgt": np.asarray(tgt_true, float).copy()}
             sim.target("joint_5", j5)
             if press >= 0:                                    # DRUCKMESSSTREIFEN (ein Finger, innen);
-                run_combined._grip.setdefault(phase, []).append(press)   # im Zustand bereits gelesen
+                # PHASE FUER DIE MESSUNG aus der BEOBACHTBAREN Lage ableiten, nicht aus dem
+                # FSM-Zustand.  GRUND (gemessen 2026-08-07): die FSM schaltet erst auf "carry", wenn
+                # die HAND ihre eigene Hubvorgabe erreicht (hz > CARRY_Z-0.015).  Im NETZ-Modus
+                # ueberschreibt die Policy den Zielpunkt, der Arm folgt ihr, die Bedingung tritt nie
+                # ein -- die Phase bleibt bei "lift" haengen.  Folge: "carry" erscheint in 45% der
+                # FSM-Episoden, aber nur in 12% der Netz-Episoden, und der TRANSPORT wurde unter
+                # "lift" verbucht.  "tragen 0.00" hiess also nicht "verloren" und nicht "nicht
+                # gemessen", sondern "falsch einsortiert".
+                # Beobachtbar: gehoben + Klaue zu + die Hand hat sich seit dem Abheben seitlich
+                # bewegt -> das ist Transport, unabhaengig davon, wer den Arm fuehrt.
+                _lifted = cz > obj_h + 0.02 and j5 < J5_CLOSED_TH
+                if _lifted and run_combined._lift_xy is None:
+                    run_combined._lift_xy = np.asarray(hxy, float).copy()
+                _phl = phase
+                if _lifted and run_combined._lift_xy is not None                         and float(np.linalg.norm(hxy - run_combined._lift_xy)) > 0.03:
+                    _phl = "carry"
+                elif _lifted and phase in ("lift", "over", "lower", "close"):
+                    _phl = "lift"
+                run_combined._grip.setdefault(_phl, []).append(press)   # im Zustand bereits gelesen
             gentle = abs(j5 - J5_PUSH) < 0.2 and aim[2] < PUSH_Z + 0.02   # spread gripper + low = a PUSH
             # GENTLE CARRY: a concave object (e.g. a perceived U) is gripped OFF its centre-of-mass (its COM
             # sits in the concavity, on no material), so the lateral acceleration of a normal-speed carry tears
