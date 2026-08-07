@@ -2355,7 +2355,25 @@ def run_self_learning_steering(headless=False):
                 # Regel: die Schranke gab es schon, sie stand nur an der falschen Stelle.
                 # EHRLICH: auch 0-10mm zeigt keinen VORTEIL gegenueber dem heuristischen Punkt (55 vs
                 # 52%) -- die Schranke rettet die Selbstkorrektur, sie belegt keinen Nutzen.
-                _cap = float(os.environ.get("ACT23_GRASP_CAND_CAP", "0.012"))
+                # SCHRANKE AN DIE OBJEKTGROESSE GEKOPPELT (2026-08-07), vorher fest 12mm.
+                # Gemessen an 1414 Episoden aus 20 Logs, Haltequote gegen die Verschiebung RELATIV zur
+                # Material-Halbspanne des Objekts:
+                #     0            62% (n=728)   <- heuristischer Punkt
+                #     0.01-0.30    64% (n=276)   <- kein Schaden
+                #     0.30-0.60    53% (n=234)
+                #     0.60-1.00    35% (n=121)
+                #     >1.00        24% (n= 55)
+                # Absolut gemessen ist der Zusammenhang schwaecher (rho -0.145) als relativ (-0.161),
+                # und die feste Schranke wirkt gegensaetzlich: bei den 24mm-Wuerfeln sind 6-12mm bereits
+                # die halbe Objektbreite (Haltequote 28-38%), bei der 68mm langen Form dagegen harmlos
+                # (65%).  Eine Zahl kann beides nicht treffen.
+                # KEINE neue Regel: die Groesse kommt aus der eigenen Wahrnehmung (Material-Halbspanne
+                # der Detektion), nicht aus einer Tabelle je Objekt.  ACT23_GRASP_CAND_FRAC=0 faellt auf
+                # die alte feste Schranke zurueck.
+                _abs = float(os.environ.get("ACT23_GRASP_CAND_CAP", "0.012"))
+                _frac = float(os.environ.get("ACT23_GRASP_CAND_FRAC", "0.30"))
+                _span = float(det.get("span") or 0.0)
+                _cap = min(_abs, _frac * _span) if (_frac > 0 and _span > 0) else _abs
                 offs = [o for o in offs if float(np.linalg.norm(o)) <= _cap]
             a, _mu_a, _sd_a = world.select_action(fe, n=n_cand, lam=LAM, offsets=offs,
                                                   curiosity=TILT_CURIOSITY)

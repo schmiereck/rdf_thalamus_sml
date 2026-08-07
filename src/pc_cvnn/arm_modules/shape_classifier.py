@@ -648,6 +648,11 @@ class ShapeClassifierModule(ArmModule):
                                 gcands.append(p)
                             if len(gcands) >= 6:
                                 break
+            span = 0.0                                          # MATERIAL-HALBSPANNE in Metern: 95%-Perzentil
+            if self.H is not None:                              #   des Abstands vom Schwerpunkt.  Damit kann ein
+                _W = self._px_to_world(np.column_stack([xs, ys]))   # Aufrufer die zulaessige Greifpunkt-
+                span = float(np.percentile(np.linalg.norm(_W - ctr, axis=1), 95))   # Verschiebung an die
+            #   OBJEKTGROESSE koppeln statt an eine feste Zahl (s. ACT23_GRASP_CAND_FRAC in pc_act23).
             rgb = img[ys, xs].astype(float).mean(0) / 255.0     # component CHROMATICITY (stage-3 colour
             csum = float(rgb.sum())                             #   open-set: brightness-normalised, so
             chroma = rgb / csum if csum > 1e-6 else rgb         #   shading/position largely cancel)
@@ -656,6 +661,7 @@ class ShapeClassifierModule(ArmModule):
                         "yaw": self._yaw_from(F), "yaw4": self._yaw4_from(F), "area": float(comp.sum()),
                         "chroma": chroma,
                         "px": np.array([xs.mean(), ys.mean()]),
+                        "span": span,                          # Material-Halbspanne (m), s. oben
                         "grasp_cands": gcands,                 # perception-grounded grasp-point candidates
                         "grasp_dense": grasp_dense,            # densest (base) point; ACT23_U_DENSEGRASP griff
                         "wpx": (W[::3] if (wpx and self.H is not None) else None),   # component material in
