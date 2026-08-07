@@ -59,7 +59,17 @@ GRASP_OFFSET = float(os.environ.get("ACT16_GRASP_OFFSET", "0.006"))   # (#2) gra
 #   (cube -> 0.018, was 0.014): the claw tips sit ~14mm below the contact site, so grasp_z=0.014 put them
 #   AT the floor and any overshoot was blocked/deflected; +4mm lifts them clear while still gripping the cube
 GRASP_MAX_HALF = 0.016                          # footprint half above which an object is too wide to grasp
-CLAW_OFF = float(os.environ.get("ACT16_CLAW_OFF", "0.008"))   # Versatz Reichpunkt -> Backenmitte (m).
+CLAW_OFF = float(os.environ.get("ACT16_CLAW_OFF", "0.008"))
+OBS_STATE = os.environ.get("ACT16_OBS_STATE", "1") == "1"   # STUFE C (Tastsinn-Vorschlag): der POLICY-
+#   VORGABE AN seit 2026-08-07, nach A/B (14 Ep je Arm, gleiche Saat): privilegiert 5/14 geliefert /
+#   haelt 50%, beobachtbar 4/14 / 57% -- KEIN Einbruch (Fisher p=1.0).  Die Krücke ist ersetzbar;
+#   damit trainieren alle künftigen Demos auf real-tauglichen Zustaenden und der TASTSINN wird zur
+#   tragenden Information.  Ehrlich: n=14 belegt Gleichheit nicht, nur die Abwesenheit eines
+#   Zusammenbruchs -- der Verteilungsversatz ist konstruktiv klein (haelt: Objekt=Hand; verloren:
+#   Objekt=Fallort auf Ruhehoehe), und genau der Druck entscheidet, welcher Fall gilt.
+#   Zustand nutzt eine BEOBACHTBARE Objektschaetzung (Belief + Tastsinn) statt des privilegierten
+#   sim.obj_pos -- s. die Konstruktion von c_obs/cz_obs in run_combined.  Nur der ZUSTAND wechselt;
+#   die FSM (Teacher) behaelt ihr Privileg als Trainingssignal.  =0 (Vorgabe): altes Verhalten.   # Versatz Reichpunkt -> Backenmitte (m).
 #   s. die Begruendung an der Anwendungsstelle in run_combined.  ACT16_CLAW_OFF=0 stellt das alte
 #   Verhalten wieder her (fuer ein sauberes A/B).
 SERVO_K, SERVO_CONF, SERVO_LOST = 0.5, 0.5, 6   # closed-loop grasp-target belief: correction gain,
@@ -347,6 +357,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         wrist_hold = None                                    # last aligned joint_4 (held through the grip)
         guard_minz = 1.0; guard_stall = 0                    # close-guard: deepest descent + stall counter
         last_phase = phase; phase_age = 0                    # STALL-ESCAPE: don't hang in one phase forever
+        run_combined._cobs = None; run_combined._held_prev = False   # beobachtbare Objektschaetzung (Stufe C)
         run_combined._maxcz = float(obj_h)                   # CHECKPOINTS (act23 credit routing): three
         run_combined._slipped = False                        #   self-measurable predictions per episode.
         run_combined._attempted = False
@@ -497,8 +508,31 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 press = float(sim.grip_pressure("left"))
             except Exception:
                 press = -1.0                                   # Sensor nicht lesbar -> gueltig=0
-            state = np.array([h[0], h[1], h[2], c[0], c[1], cz, tgt_eff[0], tgt_eff[1],
-                              sim.d.qpos[sim.jqadr["joint_5"]], obj_h, obj_fp,
+            _j5q = float(sim.d.qpos[sim.jqadr["joint_5"]])
+            # STUFE C (ACT16_OBS_STATE=1): BEOBACHTBARE Objektschaetzung fuer den Policy-Zustand.
+            # Das privilegierte c_true/cz stand bisher auch WAEHREND DES TRAGENS im Zustand -- auf dem
+            # realen Roboter existiert es nicht, und die Kamera sieht das Objekt unter dem Greifer
+            # nicht.  Beobachtbarer Ersatz, rein aus Belief + TASTSINN:
+            #   haelt (Druck>0.3N, Klaue zu)  -> Objekt IST an der Hand: c_obs=hand_xy, cz_obs=hand_z
+            #   Anfahrphasen                  -> c ist dort ohnehin der Fovea-Belief (beobachtbar)
+            #   Verlust (haelt -> haelt nicht)-> Objekt fiel WO DIE HAND WAR: c_obs friert dort ein,
+            #                                    cz_obs = Ruhehoehe obj_h (es liegt wieder auf dem Tisch)
+            # Die FSM selbst faehrt weiter mit dem Privileg (Teacher = Trainingssignal); nur was die
+            # POLICY sieht -- und was als Demo-Zustand GELOGGT wird -- wechselt auf beobachtbar.
+            _holding = press > 0.3 and _j5q < J5_CLOSED_TH
+            if run_combined._cobs is None or phase in ("over", "lower", "close"):
+                run_combined._cobs = (np.asarray(c, float).copy(), float(obj_h))
+            if _holding:
+                run_combined._cobs = (np.asarray(hxy, float).copy(), float(hz))
+            elif run_combined._held_prev:                       # eben verloren -> am Fallort einfrieren
+                run_combined._cobs = (np.asarray(hxy, float).copy(), float(obj_h))
+            run_combined._held_prev = _holding
+            if OBS_STATE:
+                c_st, cz_st = run_combined._cobs
+            else:
+                c_st, cz_st = c, cz                            # altes Verhalten (privilegiert im Carry)
+            state = np.array([h[0], h[1], h[2], c_st[0], c_st[1], cz_st, tgt_eff[0], tgt_eff[1],
+                              _j5q, obj_h, obj_fp,
                               1.0 if press >= 0 else 0.0, max(press, 0.0)], float)
             if teacher_log_fn is not None:                    # DAgger: the FSM's sub-goal at the
                 teacher_log_fn(state, np.asarray(aim, float).copy(), float(j5))   # (policy-)VISITED state
