@@ -726,7 +726,12 @@ def run_self_learning_steering(headless=False):
             sc.classify(np.zeros(sc.fmu.shape[0]))             # shape head forward
             sc.resolve(np.zeros(sc.fmu.shape[0]))              # open-set gate (exemplars + thresholds)
             if rt.trained:
-                rt.predict(np.zeros(11))                       # runtime policy forward
+                # Breite AUS DEM NETZ nehmen, nicht fest verdrahten: mit dem Tastsinn (d912b74)
+                # wuchs der Zustand auf 13, und die fest kodierte 11 liess den Funktionstest
+                # scheitern -- woraufhin der GESAMTE Zustand (Welt-Modell, Policy, Formklassen,
+                # offene Klassen) als "alte Datei" verworfen wurde.  Beim Sondierungslauf am
+                # 2026-08-07 genau so passiert.
+                rt.predict(np.zeros(rt.net.W1.shape[1]))       # runtime policy forward
             if b.get("colours") is not None:                   # optional stage-3 colour classes
                 b["colours"].classify(np.ones(3) / 3)
             lg = b.get("latent_goal")                          # optional stage-4a goal-latent servo
@@ -2568,8 +2573,14 @@ def run_self_learning_steering(headless=False):
         _lift_m, _lift_lo = _ph("lift")                        # Last uebernehmen
         _carry_m, _carry_lo = _ph("carry")                     # halten
         _rel_m, _ = _ph("place", "release")                    # loesen
+        # ABTASTZAHL JE PHASE mitloggen: "tragen 0.00" war bisher nicht von "nicht gemessen" zu
+        # unterscheiden -- 87% der Episoden hatten KEINEN Trage-Messpunkt, und ich habe das einmal
+        # faelschlich als Trageverlust gelesen.  Mit n je Phase ist der Unterschied im Log sichtbar.
+        _cnt = "/".join(f"{n}:{len(_g.get(n, []))}" for n in ("over", "lower", "close", "lift", "carry",
+                                                             "place", "release") if _g.get(n))
         print(f"    [Griffdruck] zufassen {_close_m:5.2f} | heben {_lift_m:5.2f} (min {_lift_lo:4.2f})"
-              f" | tragen {_carry_m:5.2f} (min {_carry_lo:4.2f}) | loesen {_rel_m:5.2f}  [N]", flush=True)
+              f" | tragen {_carry_m:5.2f} (min {_carry_lo:4.2f}) | loesen {_rel_m:5.2f}  [N]"
+              f"  | Messpunkte {_cnt or 'KEINE'}", flush=True)
         _rel = getattr(act16.run_combined, "_release", None)
         if _rel is not None:
             # ABLAGE-MESSUNG (nur Diagnose): trennt "zu hoch losgelassen" von "seitlich verfehlt".
