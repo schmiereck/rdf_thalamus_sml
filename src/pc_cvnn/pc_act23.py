@@ -36,6 +36,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 import mujoco
 
+# WER hat welchen Schalter gesetzt?  VOR den setdefault-Aufrufen festhalten, welche ACT*-Variablen
+# aus der UMGEBUNG kamen -- sonst meldet _print_run_settings die von act23 selbst gesetzten Werte als
+# "Abweichung" und der Nutzer sucht in seinem Startbefehl nach etwas, das dort nie stand (genau das
+# ist am 2026-08-03 passiert: ACT_GOAL_ROPE und ACT_REACH_* wurden faelschlich ihm zugeschrieben).
+_ENV_AT_IMPORT = {k for k in os.environ if k.startswith("ACT")}
+
 os.environ.setdefault("ACT14_DOF", "4")   # act23 runs the 4-DOF arm: joint_3 freed (user request) --
 #   it was LOCKED at HOME=3.14 everywhere and is THE reason for the small workspace; the learned
 #   kinematics babbles all 4 positioning joints and the reach keeps the CLAW DIRECTION (redundancy).
@@ -3220,6 +3226,10 @@ def _print_run_settings():
         print("  [Lauf] Abweichungen von der Vorgabe:", flush=True)
         for line in diff:
             print(f"           {line}", flush=True)
+        _own = [d for d in diff if d.split("=")[0] not in _ENV_AT_IMPORT]
+        if _own:
+            print(f"           (davon von act23 selbst gesetzt, NICHT aus dem Startbefehl: "
+                  f"{', '.join(sorted(d.split('=')[0] for d in _own))})", flush=True)
     else:
         print("  [Lauf] alle Schalter auf Vorgabe", flush=True)
     core = [f"{k.replace('ACT23_', '').replace('ACT14_', '')}={os.environ.get(k, defs.get(k))}"
