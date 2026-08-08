@@ -181,6 +181,23 @@ TILT_VETO_N = int(os.environ.get("ACT23_TILT_VETO_N", "8"))       # ab so vielen
 TILT_VETO_Q = float(os.environ.get("ACT23_TILT_VETO_Q", "0.35"))  # als belegt; darunter = belegt schlecht
 T_EDGES = np.array([0, 8, 16, 24, 32, 40, 48, 90.1])       # Neigungs-Bins in Grad
 R_EDGES = np.array([0.0, 0.16, 0.21, 9.9])                 # Radius-Bins in Metern
+GRIP_CURIOSITY = float(os.environ.get("ACT23_GRIP_CURIOSITY", "0.4"))   # Neugier auf der GRIFFWEITE.
+#   NOETIG AUS DEMSELBEN GRUND wie damals bei der Neigung (s. TILT_CURIOSITY unten): die geoeffnete
+#   Achse hat 5664 Zeilen bei 0.0/0.3 und NULL bei allen neuen Werten, also bestraft LCB (mu-lam*sigma)
+#   genau die Werte, die gemessen funktionieren -- 0.00 gewinnt immer und die Achse wird nie erprobt.
+#   Verifiziert: direkt nach dem Oeffnen des Gitters waehlte das Modell weiterhin 0.00.
+#   Gleiche Bauart wie die Neigungs-Neugier: CHIRURGISCH (nur die Griffweite wird erkundet, Offset/
+#   Wrist/Neigung bleiben bei der LCB-Wahl), PLAUSIBILITAETSBESCHRAENKT (nur unter Kandidaten, deren
+#   vorhergesagte Guete hoechstens GRIP_CUR_SLACK unter der besten liegt) und SELBSTLIMITIEREND
+#   (nur wenn die unsicherste Variante deutlich unsicherer ist -- sind die Weiten erprobt, verstummt
+#   die Neugier von selbst).  ACT23_GRIP_CURIOSITY=0 schaltet sie ab.
+GRIP_CUR_SLACK = float(os.environ.get("ACT23_GRIP_CUR_SLACK", "0.20"))
+#   0.35 -> 0.20: mit 0.35 landete die Neugier am RAND des Gitters (im Rauchtest j5=0.34, Backenabstand
+#   ~43mm, kein Kontakt) -- derselbe Fehler, den die Neigungs-Neugier historisch hatte.  Der Puffer ist
+#   an den neuen Werten NICHT leer (12-22 Zeilen aus der alten Zufallserkundung), die Vorhersage also
+#   informativ: mit 0.20 bleibt die Erkundung im Bereich mu>=0.78, das sind gemessen j5 0.08-0.18 --
+#   genau das Fenster, das im Griff-Experiment 55% hob.
+GRIP_CUR_MARGIN = float(os.environ.get("ACT23_GRIP_CUR_MARGIN", "1.15"))
 TILT_CURIOSITY = float(os.environ.get("ACT23_TILT_CURIOSITY", "0"))   # Anteil Neugier-Zuege.
 #   AUF 0 GESETZT (2026-07-31): die Frage ist beantwortet.  Mit 249 gekippten Zeilen sagen die Daten
 #   eindeutig, dass Neigen SCHLECHTER liefert (ferne Objekte: Guete 0.66 senkrecht vs 0.42 geneigt,
@@ -207,9 +224,30 @@ TILT_CUR_SLACK = float(os.environ.get("ACT23_TILT_CUR_SLACK", "0.25"))  # erlaub
 TILT_R0 = float(os.environ.get("ACT23_TILT_R0", "0.117"))    # Radius, ab dem die Klaue zu kippen beginnt
 TILT_SLOPE = float(os.environ.get("ACT23_TILT_SLOPE", "293"))  # Grad pro Meter (gemessen, s. cross_augment)
 ACT_DIM = 8 if TILT_ACTION else 6     # [dx, dy, cos2w, sin2w, grip, gentle] (+ cos_tilt, sin_tilt)
-GRIP_MODES = ((0.0, 0.0), (0.3, 1.0))   # structured grip regimes in the candidate grid: firm full-close
-#   vs wide-hold + gentle carry (the regime a concave object needs) -- like the offset-0 wrist grid this
-#   only makes the regimes REPRESENTABLE; the model decides which one wins by predicted success.
+# GRIFFWEITE ALS KONTINUIERLICHE ACHSE (2026-08-08).  Vorher: GRIP_MODES = ((0.0,0.0),(0.3,1.0)) --
+# genau ZWEI Werte, und fuer einen 24mm-Wuerfel sind BEIDE falsch.  Gemessen (20 Posen je Wert,
+# anfahren-schliessen-heben):
+#     j5 0.00  Backenabstand 13.7mm -> 10.3mm EINDRINGUNG, Zufassdruck 6.12N, beim Heben 0.00N,
+#              gehoben  5%   (die gespeicherte Energie schiesst das Objekt heraus -- der Nutzer sah
+#              den Wuerfel "gegen die Schwerkraft aus dem Greifer huepfen")
+#     j5 0.15  20.0mm ->  55%      j5 0.17  22.0mm -> 55%      j5 0.19  24.8mm -> 55%
+#     j5 0.30  38.0mm -> beruehrt den Wuerfel gar nicht, Zufassdruck 0.21N, gehoben 0%
+# Die beiden verfuegbaren Modi waren also die beiden SCHLECHTESTEN; der Weithalte-Wert stammt von
+# der U-Form (Zinkenabstand ~42mm).  Das erklaert, warum die Griffweite nie mit dem Halten
+# korrelierte (rho=0.04): die Wahl stand zwischen zwei Fehlern.
+#
+# KEIN berechneter Wert und keine Tabelle je Objekt -- dieselbe Loesung wie beim Wrist- und
+# Neigungsgitter: der Wahlraum wird GEOEFFNET, das Welt-Modell entscheidet weiter per LCB.
+# Dass es das KANN, ist gemessen: die Greifbreite (Ausdehnung entlang der Finger-Trennachse, also
+# form- UND ausrichtungsabhaengig) ist aus dem vorhersagbar, was das Modell ohnehin sieht --
+# Formdeskriptor allein R^2=0.76, mit yaw/Wrist/Relativwinkel R^2=0.80 bei 4.7mm mittlerem Fehler
+# (Breiten von 24mm Wuerfel-quer bis 91mm U-laengs; Mittelwert-Raten waere 12.6mm).
+# Die Stufung ist eine DISKRETISIERUNG wie TILT_OFFSETS und wrist_grid, kein fester Sollwert.
+GRIP_GRID = tuple(float(x) for x in os.environ.get(
+    "ACT23_GRIP_GRID", "0.0,0.08,0.14,0.18,0.22,0.28,0.34").split(","))
+GENTLE_MODES = (0.0, 1.0)               # sanfter Transport als eigene, frei kombinierbare Wahl
+GRIP_MODES = tuple((g, ge) for g in GRIP_GRID for ge in GENTLE_MODES)     if os.environ.get("ACT23_GRIP_CONT", "1") != "0" else ((0.0, 0.0), (0.3, 1.0))
+#   ACT23_GRIP_CONT=0 stellt das alte Zwei-Werte-Menue fuer ein A/B wieder her.
 SHAPE_ID = {"cube": 0, "L": 1, "U": 2}
 
 
@@ -532,6 +570,21 @@ class WorldModelModule(ArmModule):
             return A[0], 0.0, 0.0
         mu, sd = self.predict(feats, A)
         i = int(np.argmax(mu - lam * sd))
+        if GRIP_CURIOSITY > 0.0 and len(GRIP_MODES) > 2:
+            # NEUGIER AUF DER GRIFFWEITE -- gleiche Bauart wie die Neigungs-Neugier unten.
+            _rng0 = rng if rng is not None else self.rng
+            if float(_rng0.random()) < GRIP_CURIOSITY:
+                base = A[i]
+                # gleiche Aktion BIS AUF Griffweite/sanft: Spalten 0-3 (Offset, Wrist) und 6+ (Neigung)
+                keep = [0, 1, 2, 3] + list(range(6, A.shape[1]))
+                same = np.array([j for j in range(len(A))
+                                 if np.allclose(A[j][keep], base[keep], atol=1e-9)], dtype=int)
+                if same.size > 1:
+                    ok = same[mu[same] >= float(mu[same].max()) - GRIP_CUR_SLACK]
+                    if ok.size:
+                        j = int(ok[int(np.argmax(sd[ok]))])
+                        if float(sd[j]) > GRIP_CUR_MARGIN * float(sd[i]):
+                            i = j
         if TILT_ACTION and curiosity > 0.0:
             # NEUGIER AUF DER NEIGUNGS-ACHSE.  Das Problem (gemessen im Rauchtest): die LCB-Wahl
             # mu - lam*sigma BESTRAFT Unsicherheit, und die neue Tilt-Dimension hat anfangs 3386
