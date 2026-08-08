@@ -633,7 +633,12 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             _aim = np.asarray(aim, float)
             if CLAW_OFF > 0.0:
                 _aim = _aim - CLAW_OFF * sim.claw_fwd()
-            q3 = sim.arm3_angles(); sim.set_arm3_targets(q3 + body.reach_velocity(q3, _aim, gain=g, max_dq=mdq))
+            # VOLLE Winkel ins Koerpermodell (ARM3 + Wrist + Greifer): der Wrist verschiebt den
+            # Reichpunkt um bis zu 21mm und war fuer die gelernte Kinematik bisher unsichtbar
+            # (Vorhersagefehler 7.1 -> 5.3mm, seit er mitgelernt wird).  set_arm3_targets bekommt
+            # weiterhin nur die STELLGELENKE.
+            q3 = sim.arm3_angles(); qf = sim.arm_angles_full()
+            sim.set_arm3_targets(q3 + body.reach_velocity(qf, _aim, gain=g, max_dq=mdq))
             if WRIST_ALIGN or policy_wrist is not None:        # (B) align the claw to the object's grip axis --
                 # a 5-dim policy (act23) supplies its OWN desired claw_yaw (LEARNED wrist); else the teacher's
                 # heuristic wrist_tgt.  The parallel claw is symmetric mod pi, so the learned wrist aligns mod pi.
@@ -651,7 +656,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                     sim.target("joint_4", wrist_hold)          #   sudden roll at contact; re-assert vs the home reset)
             sim.step(2)
             if lifelong and k % 3 == 0:                       # LIFELONG: refine the learned kinematics
-                body.observe(sim.arm3_angles(), sim.grasp_pos(), lr=0.02)   # from the real (joints,hand)
+                body.observe(sim.arm_angles_full(), sim.grasp_pos(), lr=0.02)   # from the real (joints,hand)
             if viz is not None and k % 5 == 0:
                 viz.update(sim.render(CAM), f"ep {ep} {via} {cmd} [{phase}]"
                                             f"  obj->tgt {np.linalg.norm(c-tgt)*1000:.0f}mm")

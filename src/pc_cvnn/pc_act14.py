@@ -106,6 +106,11 @@ class BracketArmSim:
             mujoco.mj_step(self.m, self.d)
 
     # ---- 3-motor subset (base+shoulder+elbow); wrist j3=pi (down), j4/gripper at home ----
+    def arm_angles_full(self):
+        """ARM3-Winkel + die Zusatzgelenke (Wrist, Greifer), wie das Koerpermodell sie erwartet."""
+        return np.array([self.d.qpos[self.jqadr[j]] for j in ARM3]
+                        + [self.d.qpos[self.jqadr["joint_4"]], self.d.qpos[self.jqadr["joint_5"]]])
+
     def arm3_angles(self):
         return np.array([self.d.qpos[self.jqadr[j]] for j in ARM3])
 
@@ -133,14 +138,24 @@ class BracketArmSim:
         bid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_BODY, name)
         self.m.geom_size[self.m.body_geomadr[bid]] = np.asarray(half, float)
 
+    def joint_range(self, name):
+        jid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_JOINT, name)
+        return np.asarray(self.m.jnt_range[jid], float)
+
     def fk_truth(self, q3):
-        """Eye-hand 'observation': set the 3 joints (others fixed), forward kinematics ->
-        grasp position.  In sim this is instant via mj_forward (no dynamics)."""
+        """Eye-hand 'observation': set the joints, forward kinematics -> grasp position.
+        q3 = ARM3-Winkel, optional gefolgt von joint_4/joint_5 (die das Koerpermodell seit
+        2026-08-08 als EINGANG kennt -- vorher standen sie hier fest auf HOME, weshalb der Wrist
+        fuer die gelernte Kinematik unsichtbar war, obwohl er den Reichpunkt um 21mm verschiebt)."""
+        q3 = np.asarray(q3, float)
         for j, v in zip(ARM3, q3):
             self.d.qpos[self.jqadr[j]] = float(v)
         if "joint_3" not in ARM3:
             self.d.qpos[self.jqadr["joint_3"]] = HOME["joint_3"]
-        self.d.qpos[self.jqadr["joint_4"]] = HOME["joint_4"]
+        _extra = q3[len(ARM3):]
+        self.d.qpos[self.jqadr["joint_4"]] = float(_extra[0]) if len(_extra) > 0 else HOME["joint_4"]
+        if len(_extra) > 1:
+            self.d.qpos[self.jqadr["joint_5"]] = float(_extra[1])
         mujoco.mj_forward(self.m, self.d)
         return self.grasp_pos()
 
@@ -274,15 +289,36 @@ class ArmBodyModel3D:
     solves a weighted stacked least-squares [position; soft claw-direction], else the claw
     orientation would drift with the null space and grasping breaks."""
 
-    def __init__(self, rng=None, dof=None):
+    def __init__(self, rng=None, dof=None, aux=None):
         self.rng = rng or np.random.default_rng(0)
         self.dof = int(dof) if dof is not None else len(ARM3)
-        self.NF = 3 * (7 if self.dof == 3 else 15) + 1
+        # ZUSATZGELENKE als EINGANG: joint_4 (Wrist) und joint_5 (Greifer) werden nicht vom
+        # Reichregler gestellt, verschieben den Reichpunkt aber -- GEMESSEN: joint_4 um 21.2mm
+        # ueber seinen Bereich, joint_5 um 0.0mm.  Weil das Babbeln sie auf HOME liess, war der
+        # Wrist fuer das Modell unsichtbares Rauschen: Vorhersagefehler 7.7mm bei HOME-Wrist gegen
+        # 10.0mm bei zufaelligem (p=6.6e-07).  Als cos/sin-Paar (zirkulaer, wie ueberall im Projekt)
+        # in die Merkmalsbasis; reach_velocity liefert weiterhin NUR dq fuer ARM3.
+        # joint_5 traegt fuer den KONTAKTPUNKT nachweislich nichts -- es ist mit drin, weil es die
+        # BACKENMITTE verschiebt (4.1mm offen -> 8.6mm geschlossen, s. CLAW_OFF) und das Koerpermodell
+        # damit spaeter lernen kann, wo die Backen stehen, statt es aus einer Konstante zu nehmen.
+        self.aux = tuple(aux) if aux is not None else ("joint_4", "joint_5")
+        self.NF = 3 * (7 if self.dof == 3 else 15) + 1 + 2 * len(self.aux)
         self.W = np.zeros((self.NF, 3)); self.Wd = np.zeros((self.NF, 3))
         self.dir_ref = None                              # claw direction to PRESERVE (from babble poses)
         self.last_surprise = None
 
     def _feat(self, q):
+        """q = ARM3-Winkel, optional gefolgt von den aux-Gelenken (Wrist, Greifer).
+
+        ALTLAST-FEST: ein VOR 2026-08-08 gespeichertes Modell hat kein `aux`-Attribut.  getattr
+        liefert dann () und das Modell verhaelt sich exakt wie frueher -- wichtig, weil sonst schon
+        der Persistenz-Funktionstest scheitert und der GESAMTE Zustand verworfen wird (genau das ist
+        beim Bauen passiert, und es ist derselbe Fehlertyp wie die fest verdrahtete Zustandsbreite
+        im Funktionstest).  Die eigentliche Umstellung uebernimmt danach die NF-Pruefung in
+        pc_act23, die das Modell mit der neuen Merkmalsbasis neu babbelt."""
+        aux_names = getattr(self, "aux", ())
+        q = np.asarray(q, float)
+        aux = q[self.dof:self.dof + len(aux_names)] if len(q) > self.dof else np.zeros(len(aux_names))
         t0, t1, t2 = float(q[0]), float(q[1]), float(q[2])
         # the elbow axis is reversed + 90deg offsets, so include BOTH (θ1+θ2) and (θ1-θ2) —
         # least-squares picks the right combo; at 4 DOF likewise all (θ1±θ2±θ3) combos.
@@ -293,7 +329,8 @@ class ArmBodyModel3D:
             for s in (t1 + t2 + t3, t1 + t2 - t3, t1 - t2 + t3, t1 - t2 - t3):
                 g += [np.cos(s), np.sin(s)]
         g = np.array(g)
-        return np.concatenate([np.cos(t0) * g, np.sin(t0) * g, g])
+        return np.concatenate([np.cos(t0) * g, np.sin(t0) * g, g,
+                               np.cos(aux), np.sin(aux)])
 
     def _aug(self, q):
         return np.append(self._feat(q), 1.0)                          # +bias
@@ -309,9 +346,15 @@ class ArmBodyModel3D:
 
     def babble(self, sim, steps):
         rng3 = sim.arm3_range()
+        # AUCH die Zusatzgelenke bebabbeln: sie standen bisher auf HOME, weshalb das Modell den
+        # Wrist nie zu sehen bekam.  Ohne Streuung hier bleibt die neue Merkmalsspalte konstant und
+        # traegt nichts.
+        arng = np.array([sim.joint_range(j) for j in self.aux], float) if self.aux else np.zeros((0, 2))
         X = np.empty((steps, self.NF)); Y = np.empty((steps, 3)); D = np.empty((steps, 3))
         for i in range(steps):
-            q = self.rng.uniform(rng3[:, 0], rng3[:, 1])
+            q3 = self.rng.uniform(rng3[:, 0], rng3[:, 1])
+            qa = self.rng.uniform(arng[:, 0], arng[:, 1]) if len(arng) else np.zeros(0)
+            q = np.concatenate([q3, qa])
             X[i] = self._aug(q); Y[i] = sim.fk_truth(q); D[i] = sim.grasp_dir()
         G = np.linalg.inv(X.T @ X + 1e-6 * np.eye(self.NF))           # ridge least squares
         self.W = G @ (X.T @ Y); self.Wd = G @ (X.T @ D)
@@ -339,9 +382,11 @@ class ArmBodyModel3D:
 
     def jacobian(self, q, eps=1e-4, W=None):
         W = self.W if W is None else W
+        q = np.asarray(q, float)
         J = np.zeros((3, self.dof))
         for i in range(self.dof):
-            dq = np.zeros(self.dof); dq[i] = eps
+            dq = np.zeros(len(q)); dq[i] = eps      # nur die STELLGELENKE variieren; die
+            #   Zusatzgelenke (Wrist/Greifer) sind Eingang, keine Stellgroesse
             J[:, i] = (self._aug(q + dq) @ W - self._aug(q - dq) @ W) / (2 * eps)
         return J
 

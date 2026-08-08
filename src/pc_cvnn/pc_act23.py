@@ -58,7 +58,7 @@ for _k, _v in (("ACT_REACH_X0", "-0.12"), ("ACT_REACH_X1", "0.12"),
     os.environ.setdefault(_k, _v)
 os.environ.setdefault("ACT_GOAL_ROPE", "1")   # STAGE 4a: RoPE goal-latent (near-linear in position ->
 #   the learned latent-inverse is near-exact; measured in act21: servo isolated ~0mm vs 4.4mm blob)
-from pc_cvnn.pc_act14 import BracketArmSim, HOME, ARM3
+from pc_cvnn.pc_act14 import BracketArmSim, HOME, ARM3, ArmBodyModel3D
 from pc_cvnn.pc_act18 import (F as HEX_F, warp_gaze_delta, fovea_gradient,
                               ZOOM as FOVEA_ZOOM, ZOOM_MIN, ZOOM_MAX)
 from pc_cvnn.test_pc_act10 import com2d
@@ -1023,6 +1023,18 @@ def run_self_learning_steering(headless=False):
     # lesson: the stateful phase machine's labels degrade DAgger).  "Choreo: Netz" (GUI toggle /
     # ACT23_CHOREO=netz) lets the POLICY drive the sub-goals incl. the gripper; guards stay on by default
     # (train-with-guard) -- verify guard-free with ACT16_CLOSE_GUARD=0 ACT16_REFLEX=0.
+    # KOERPERMODELL: Merkmalsbreite pruefen.  Seit die Zusatzgelenke (Wrist/Greifer) Eingang sind,
+    # ist NF gewachsen; ein aelteres gespeichertes Modell passt nicht mehr und wird neu gebabbelt.
+    # Das kostet Sekunden und verliert nichts -- die Kinematik ist die einzige rein
+    # selbstueberwachte Groesse im Zustand.
+    try:
+        _want = ArmBodyModel3D(rng=np.random.default_rng(0)).NF
+        if bm.body.NF != _want:
+            print(f"  [Persistenz] Koerpermodell hat {bm.body.NF} Merkmale, erwartet {_want} "
+                  f"(Wrist/Greifer neu als Eingang) -- wird neu gebabbelt ...", flush=True)
+            bm.body = ArmBodyModel3D(rng=np.random.default_rng(5)); bm.babble(sim, 4000)
+    except Exception as _e:
+        print(f"  [Persistenz] Koerpermodell-Pruefung uebersprungen: {_e}", flush=True)
     runtime = _loaded["runtime"] if _loaded is not None else RuntimePolicyModule(rng=np.random.default_rng(4))
     _n_rt = runtime.ensure_state_dim(13) if hasattr(runtime, "ensure_state_dim") else 0
     if _n_rt:
@@ -2221,7 +2233,7 @@ def run_self_learning_steering(headless=False):
             q3 = sim.arm3_angles(); h = sim.grasp_pos()
             if h[2] > act16.CARRY_Z - 0.01:
                 break
-            sim.set_arm3_targets(q3 + bm.body.reach_velocity(q3, np.array([h[0], h[1], act16.CARRY_Z]),
+            sim.set_arm3_targets(q3 + bm.body.reach_velocity(sim.arm_angles_full(), np.array([h[0], h[1], act16.CARRY_Z]),
                                                              gain=2.0, max_dq=0.026))
             sim.target("joint_4", w)                           # re-assert vs the set_arm3_targets clobber
             sim.step(2)
@@ -2242,7 +2254,7 @@ def run_self_learning_steering(headless=False):
             hz = float(sim.grasp_pos()[2])
             if hz < HOME_Z_MIN:
                 h = sim.grasp_pos()
-                lift = bm.body.reach_velocity(q3, np.array([h[0], h[1], act16.CARRY_Z]),
+                lift = bm.body.reach_velocity(sim.arm_angles_full(), np.array([h[0], h[1], act16.CARRY_Z]),
                                               gain=2.0, max_dq=0.03)
                 step = 0.5 * step + 0.5 * lift                 # heimwaerts UND wieder hoch
             sim.set_arm3_targets(q3 + step)
