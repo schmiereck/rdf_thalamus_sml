@@ -181,7 +181,21 @@ TILT_VETO_N = int(os.environ.get("ACT23_TILT_VETO_N", "8"))       # ab so vielen
 TILT_VETO_Q = float(os.environ.get("ACT23_TILT_VETO_Q", "0.35"))  # als belegt; darunter = belegt schlecht
 T_EDGES = np.array([0, 8, 16, 24, 32, 40, 48, 90.1])       # Neigungs-Bins in Grad
 R_EDGES = np.array([0.0, 0.16, 0.21, 9.9])                 # Radius-Bins in Metern
-GRIP_CURIOSITY = float(os.environ.get("ACT23_GRIP_CURIOSITY", "0.4"))   # Neugier auf der GRIFFWEITE.
+GRIP_CURIOSITY = float(os.environ.get("ACT23_GRIP_CURIOSITY", "0"))   # Neugier auf der GRIFFWEITE.
+#   AUF 0 GESETZT (2026-08-10): die Frage ist beantwortet.  582-Ep-Lauf, 2034 Episoden mit Objekt +
+#   Griffwert + Druck -- der VOLLSCHLUSS ist im echten System der beste Wert, auch bei den Wuerfeln:
+#     Wuerfel  0.00 -> haelt 49% (n=465)   gegen 0.13-0.20 -> 32% (n=19)
+#     letzte 700 Pufferzeilen: 0.00 -> 42% Erfolg, alle anderen Werte 25-37%, rho=-0.075 p=0.047
+#   Das Netz ist ueber den Lauf korrekt auf 0.00 konvergiert (Griff-Median 0.08 -> 0.00) und hat die
+#   schlechteren Werte selbst verworfen.  Weitere Erkundung verbrennt nur Episoden -- dieselbe Lage,
+#   in der seinerzeit TILT_CURIOSITY auf 0 ging.
+#   MEIN FEHLER, DER DAS AUSGELOEST HAT: der Pruefstand (approach-close-lift, nur roter Wuerfel)
+#   sagte 0.00 -> 20% und 0.14-0.18 -> 80%, also das UMGEKEHRTE Vorzeichen.  Er liefert bekanntlich
+#   0% Lieferung, wo das echte System 35% schafft; ich habe die Einschraenkung notiert und dann
+#   trotzdem darauf gebaut.  Geprueft und ausgeschlossen als Erklaerung: die Schliess-Rampe (Stufe
+#   gegen Rampe 20/20, 65/80, 70/80) und die Objektmischung (Vergleich oben ist objektgetrennt).
+#   Das GITTER bleibt: es ist die richtige Struktur, kostet 64ms je Episode und hat die Frage sauber
+#   beantwortet.  ACT23_GRIP_CURIOSITY=0.4 holt die Erkundung fuer ein A/B zurueck.
 #   NOETIG AUS DEMSELBEN GRUND wie damals bei der Neigung (s. TILT_CURIOSITY unten): die geoeffnete
 #   Achse hat 5664 Zeilen bei 0.0/0.3 und NULL bei allen neuen Werten, also bestraft LCB (mu-lam*sigma)
 #   genau die Werte, die gemessen funktionieren -- 0.00 gewinnt immer und die Achse wird nie erprobt.
