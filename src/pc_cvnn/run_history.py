@@ -31,6 +31,7 @@ import hashlib
 import json
 import os
 import re
+import time
 
 import numpy as np
 
@@ -120,7 +121,10 @@ def load_runs(n_runs=6, min_episodes=MIN_EPISODES):
             recs = json.load(open(cf, encoding="utf-8"))
         else:
             recs = parse_log(f)
-            if len(recs) >= min_episodes:   # Rauchtests nicht cachen, sie aendern sich nicht mehr
+            growing = (time.time() - os.path.getmtime(f)) < 300     # noch beschrieben -> NICHT cachen:
+            #   der Schluessel enthaelt Groesse und mtime, ein laufendes Log wuerde bei jedem
+            #   Einlesen eine neue Cache-Datei anlegen (Muell, der nie wieder gelesen wird)
+            if len(recs) >= min_episodes and not growing:
                 json.dump(recs, open(cf, "w", encoding="utf-8"))
         if len(recs) < min_episodes:
             continue
@@ -262,12 +266,14 @@ def main():
         return
     import matplotlib.pyplot as plt
     if a.watch > 0:
-        plt.ion(); plt.show()
-        import time
-        while plt.fignum_exists(v.fig.number):
-            time.sleep(a.watch); v.draw()
-    else:
-        plt.show()
+        # TIMER statt time.sleep: eine Schlafschleife BLOCKIERT die GUI-Ereignisschleife, das
+        # Fenster reagiert dann waehrend der ganzen Wartezeit nicht und laesst sich nicht einmal
+        # in den Vordergrund holen (vom Nutzer beobachtet -- derselbe Mechanismus wie bei der
+        # eingefrorenen Kamera-Anzeige).  Der Timer wird von der Ereignisschleife selbst getaktet.
+        v.timer = v.fig.canvas.new_timer(interval=int(a.watch * 1000))
+        v.timer.add_callback(v.draw)
+        v.timer.start()
+    plt.show()
 
 
 if __name__ == "__main__":
