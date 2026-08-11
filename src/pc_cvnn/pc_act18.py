@@ -115,7 +115,22 @@ FOVEA_B = float(os.environ.get("ACT_FOVEA_B", "1.0"))         # peripheral expan
 # NET-STEERABLE ZOOM: the fovea can widen its sampling (up to 2x the AREA = sqrt(2)x linear) to get an
 # OVERVIEW when the net is uncertain where the commanded object is, then zoom back in for detail.  The
 # zoom is driven by the net's own localization CONFIDENCE (like the gaze is driven by fovea_gradient).
-ZOOM = os.environ.get("ACT_FOVEA_ZOOM", "1") == "1"            # DEFAULT AN seit 2026-08-03.
+ZOOM = os.environ.get("ACT_FOVEA_ZOOM", "0") == "1"            # WIEDER AUS seit 2026-08-11.
+#   Ich hatte die Vorgabe am 2026-08-03 auf 1 gestellt -- mit dem Argument, das alte A/B habe
+#   "enable for a LARGER workspace" vermerkt und der Nutzer fahre einen groesseren Bereich.  Das
+#   war eine Ableitung aus einem Kommentar, keine Messung.  Jetzt GEMESSEN, sauberes A/B (beide
+#   Laeufe Commit d00d308, gleiche Konfiguration, einziger Unterschied der Zoom):
+#       Zoom AUS (173 Ep)   Zoom AN (260 Ep)
+#       |Netz-Detektor|  3.96 mm        4.85 mm      p=0.0002   <- SCHLECHTER
+#       Lieferquote        32%            37%        p=0.354
+#       haelt beim Heben   66%            60%        p=0.223
+#   Ausgerechnet die Groesse, die der Zoom verbessern soll -- die Lokalisierung der Fovea --
+#   wird signifikant SCHLECHTER; alles andere bleibt im Rauschen.  Das bestaetigt die
+#   urspruengliche Begruendung woertlich: "the scale-invariant training it needs dilutes the z=1
+#   precision".  Der Arbeitsbereich war nicht der entscheidende Punkt.
+#   ACHTUNG: der Wert geht in _zoom_span ein -- der Wechsel loest beim naechsten Laden ein
+#   einmaliges Umtrainieren der Fovea auf die Farbklassen aus (~80 Runden, wenige Minuten).
+#   ACT_FOVEA_ZOOM=1 holt ihn zurueck; die Skalen-Invarianz beim Klassen-Training haengt daran.
 #   Das alte A/B (Vorgabe AUS) sagte: schadet der Akquise "in diesem KLEINEN Arbeitsbereich ...
 #   enable for a LARGER workspace where objects fall outside the FOV".  Genau die Bedingung ist
 #   erfuellt -- der Nutzer faehrt dauerhaft ACT_REACH_X0/X1/Y1 = -0.12/0.12/0.24 statt der Vorgabe

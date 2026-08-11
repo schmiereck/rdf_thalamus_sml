@@ -48,7 +48,11 @@ _RE = {
     "fovea":  re.compile(r"\|Netz-Detektor\| mittel ([\d.]+) mm"),
     "shadow": re.compile(r"\|Netz-Teacher\| (\d+) mm"),
     "sigma":  re.compile(r"\[Neigung\] \w+: gewaehlt \d+ Grad \(natuerlich \d+, r=(\d+)cm\), sigma ([\d.]+)"),
-    "credit": re.compile(r"\[Kredit\] (.+?) (?:->|--)"),
+    # Die Enthaltungs-Zeile beginnt ebenfalls mit [Kredit] ("... -- Welt-Modell enthaelt sich"),
+    # darf aber NICHT als Kredit zaehlen -- sonst ist die Enthaltungsquote konstant 0 (beim
+    # Zoom-A/B aufgefallen, wo beide Laeufe 0% zeigten statt der bekannten ~25%).
+    "credit": re.compile(r"\[Kredit\] (.+?) ->"),
+    "abstain": re.compile(r"\[Kredit\].*enth\w*lt sich"),
     "gripv":  re.compile(r"Label Selbst: Wrist \d+ Grad, Grip ([\d.]+)"),
     "time":   re.compile(r"\[Zeit\] gesamt ([\d.]+)s"),
 }
@@ -88,6 +92,8 @@ def parse_log(path):
         m = _RE["credit"].search(line)
         if m:
             d["credit"] = m.group(1).strip()
+        if _RE["abstain"].search(line):
+            d["abstain_line"] = 1.0
         m = _RE["gripv"].search(line)
         if m:
             d["grip_cmd"] = float(m.group(1))
@@ -100,7 +106,7 @@ def parse_log(path):
         if "delivered" not in r:           # abgebrochene letzte Episode
             continue
         r["episode"] = e
-        r["abstained"] = float("credit" not in r)
+        r["abstained"] = float("credit" not in r or "abstain_line" in r)
         out.append(r)
     return out
 
