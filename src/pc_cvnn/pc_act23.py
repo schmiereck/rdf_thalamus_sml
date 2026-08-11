@@ -2334,6 +2334,7 @@ def run_self_learning_steering(headless=False):
         fe = situation_feats(body)                               # perceived situation for the LIFELONG loop
         a_exec = None                                            # FULL action this episode runs (self mode):
         sel_off["dxy"] = None                                    #   [offset, wrist, grip, gentle]
+        _mu_a = _sd_a = None                                     # Modell-Bewertung DER WAHL (s. [Welt-Vorhersage])
         # STAGE-1 de-scripting: in self mode the world model picks the WHOLE action for EVERY object --
         # wrist (the fixed teacher angle slips off diagonal cubes), grasp-point OFFSET (off_max>0),
         # and grip close-angle + gentle-carry, which used to be the hand-coded body=='obj_U' runtime
@@ -2485,6 +2486,27 @@ def run_self_learning_steering(headless=False):
                                                         sy * loc[0] + cy * loc[1]])
                 sel_off["dxy"] = tgt - np.asarray(det["grasp_xy"], float)
                 a_exec = a_exec.copy(); a_exec[0], a_exec[1] = sel_off["dxy"]
+            if a_exec is not None and world.n() > 0:
+                # VORHERSAGE DES WELT-MODELLS fuer die AUSGEFUEHRTE Aktion, direkt vor der Ausfuehrung.
+                # WOZU: erst damit laesst sich messen, wieviel des vorhandenen Signals das Modell
+                # tatsaechlich einsammelt.  Die Wiederholungsmessung (ACT23_EXV, 40 Szenen x 4) hat
+                # ergeben, dass ein Vorhersager, der nur die Situation sieht, 82% erreichen KOENNTE
+                # (Grundrate 54%) -- ob das Modell bei 60 oder bei 80 steht, war aus dem Log nicht
+                # ablesbar, weil mu nirgends stand.
+                # ABSICHTLICH die ausgefuehrte Aktion und nicht das mu aus select_action: der
+                # Greifpunkt und die FORCE-Knoepfe koennen a_exec danach noch verschieben, dann
+                # bewertete select_action eine Aktion, die so nie gefahren wurde.  Weicht beides ab,
+                # steht die urspruengliche Zahl daneben.
+                try:
+                    _mx, _sx = world.predict(fe, np.asarray(a_exec, float)[None])
+                    _mx, _sx = float(np.ravel(_mx)[0]), float(np.ravel(_sx)[0])
+                    _dr = ("" if _mu_a is None or abs(_mx - float(_mu_a)) < 5e-3
+                           else f"  (bei der Wahl {float(_mu_a):.3f}, danach verschoben)")
+                    print(f"    [Welt-Vorhersage] {body}: mu {_mx:.3f}  sigma {_sx:.3f}"
+                          f"  (LCB {_mx - LAM * _sx:+.3f}){_dr}", flush=True)
+                except Exception as _e:
+                    if os.environ.get("ACT23_DEBUG", "0") == "1":
+                        print(f"    [Welt-Vorhersage] uebersprungen: {_e}", flush=True)
             if EXV_FREEZE and a_exec is not None:
                 # KONTROLLE der Wiederholungsmessung: die [Kredit]-Zeile zeigt nur Wrist und Grip,
                 # der Aktionsvektor enthaelt aber auch Offset und Neigung.  Zwei Wiederholungen

@@ -35,6 +35,7 @@ RE_HEAD = re.compile(r"\[Auto (\d+)\](?: W(\d+))? (.+?) \.\.\.\s*$")
 RE_RES = re.compile(r"\[Auto (\d+)\] (GELIEFERT|NICHT geliefert)\s+\|\s+Abstand (-?\d+) mm")
 RE_ACT = re.compile(r"\[Kredit\].*Wrist (\d+) Grad, Grip ([\d.]+)")
 RE_AVEC = re.compile(r"\[EXV-Aktion\] ([-+0-9. ]+)")     # VOLLER Aktionsvektor -- die scharfe Kontrolle
+RE_MU = re.compile(r"\[Welt-Vorhersage\].*?mu ([-\d.]+)\s+sigma ([-\d.]+)")
 RE_GRIP = re.compile(r"\[Greifpunkt\]")
 
 
@@ -53,6 +54,8 @@ def parse(path):
                 pending = {"label": m.group(3), "rep": m.group(2)}
             elif (m := RE_AVEC.search(line)):
                 pending["avec"] = tuple(round(float(v), 4) for v in m.group(1).split())
+            elif (m := RE_MU.search(line)):
+                pending["mu"] = float(m.group(1)); pending["sd"] = float(m.group(2))
             elif (m := RE_ACT.search(line)):
                 pending["wrist"] = float(m.group(1)); pending["grip"] = float(m.group(2))
             elif (m := RE_RES.search(line)):
@@ -149,6 +152,9 @@ def main(path):
         print(f"    Streuung ZWISCHEN den Szenen (Situation)   : {sb:.3f}{unit}")
         print(f"    ICC (Anteil, den die Szene erklaert)       : {icc:.2f}")
 
+    # --- OBERGRENZE und was das Modell davon einsammelt ---------------------------------------
+    _ceiling_and_model(scenes)
+
     # --- wie oft kippt eine Szene ueberhaupt? -------------------------------------------------
     mixed = [s for s in scenes if len({e["ok"] for e in s}) > 1]
     full = [s for s in scenes if all(e["ok"] for e in s)]
@@ -159,6 +165,88 @@ def main(path):
     if sp:
         print(f"  Abstands-Spanne INNERHALB einer Szene (alle {len(sp)} Szenen): "
               f"Median {np.median(sp):.0f} mm, max {np.max(sp):.0f} mm")
+
+
+def _ceiling_and_model(scenes, rng=None):
+    """Wieviel des vorhandenen Signals sammelt das Welt-Modell ein?
+
+    OBERGRENZE: wer die Szene perfekt kennt, sagt die Mehrheit ihrer Wiederholungen voraus.  Sie
+    wird LEAVE-ONE-OUT geschaetzt (Mehrheit aus den uebrigen Wiederholungen, getestet auf der
+    ausgelassenen).  Die naive Formel max(k,n-k)/n ist bei wenigen Wiederholungen VERZERRT -- eine
+    Welt aus reinen Muenzwuerfen ergibt damit bei n=4 schon 68.8%, nicht 50%.
+
+    DAGEGEN das Modell: [Welt-Vorhersage] mu ist die vorhergesagte Lieferwahrscheinlichkeit der
+    tatsaechlich gefahrenen Aktion.  Verglichen werden AUC (rangbasiert, schwellenfrei) und die
+    beste erreichbare Genauigkeit ueber alle Schwellen -- letztere ist optimistisch, weil die
+    Schwelle auf denselben Daten gesucht wird, und steht deshalb als OBERE Schaetzung da."""
+    rng = rng or np.random.default_rng(0)
+    ok = [[bool(e["ok"]) for e in s] for s in scenes]
+    n_tot = sum(len(s) for s in ok)
+    k = np.array([sum(s) for s in ok]); n = np.array([len(s) for s in ok])
+    base = max(k.sum(), n.sum() - k.sum()) / n.sum()
+
+    hits = tot = 0
+    for s in ok:
+        for i in range(len(s)):
+            rest = [s[j] for j in range(len(s)) if j != i]
+            if not rest:
+                continue
+            maj = (sum(rest) * 2 > len(rest)) if sum(rest) * 2 != len(rest) else bool(rng.integers(2))
+            hits += (maj == s[i]); tot += 1
+    ceil = hits / tot if tot else float("nan")
+
+    print("")
+    print(f"  Vorhersagbarkeit (Grundlage: {len(scenes)} Szenen, {n_tot} Episoden):")
+    print(f"    Grundrate (immer die Mehrheitsklasse)      : {100 * base:5.1f} %")
+    print(f"    OBERGRENZE bei perfekter Szenenkenntnis    : {100 * ceil:5.1f} %   "
+          f"(naiv max(k,n-k)/n: {100 * np.sum(np.maximum(k, n - k)) / n.sum():.1f} %, verzerrt)")
+
+    mu = np.array([e["mu"] for s in scenes for e in s if e.get("mu") is not None], float)
+    y = np.array([e["ok"] for s in scenes for e in s if e.get("mu") is not None], bool)
+    if len(mu) == 0:
+        grund = "[Welt-Vorhersage] fehlt im Log -- Lauf vor dieser Zeile"
+    elif len(mu) < 10:
+        grund = f"nur {len(mu)} Episoden mit mu -- zu wenig"
+    elif y.all() or not y.any():
+        grund = "alle Episoden gleich ausgegangen -- AUC nicht definiert"
+    else:
+        grund = None
+    if grund:
+        print(f"    Welt-Modell                               :   --    ({grund})")
+        return
+    pos, neg = mu[y], mu[~y]
+    auc = float((pos[:, None] > neg[None, :]).mean() + 0.5 * (pos[:, None] == neg[None, :]).mean())
+
+    # GENAUIGKEIT AUF GETRENNTEN SZENEN.  Zwei Fallen stecken hier:
+    #  (1) Die Schwelle auf denselben Daten zu suchen ist optimistisch -- ein mu aus reinem Rauschen
+    #      kam so auf 58.8% gegen eine Grundrate von 51.7% und haette "39% des Signals" reklamiert.
+    #  (2) Schlimmer: ein Auslassen EINZELNER EPISODEN hilft nichts, weil die uebrigen drei
+    #      Wiederholungen DERSELBEN Szene im Trainingssatz bleiben -- die verraten den Ausgang
+    #      direkt.  Auch ausgelassen-getestet blieb das nutzlose Modell deshalb bei 34%.
+    # Deshalb wird nach SZENEN geteilt: Schwelle auf der einen Haelfte, Test auf der anderen, beide
+    # Richtungen, ueber mehrere Zufallsteilungen gemittelt.  Ein nutzloses Modell landet damit auf
+    # der Grundrate, wie es soll.
+    # Polaritaet fest (mu >= t heisst "liefert"): ein Modell mit umgekehrtem Vorzeichen ist kaputt
+    # und soll nicht durchs Umdrehen gerettet werden.  Die AUC daneben zeigt es (< 0.5).
+    sid = np.array([i for i, sc_ in enumerate(scenes) for e in sc_ if e.get("mu") is not None])
+    ts = np.unique(mu)
+    accs = []
+    for _ in range(200):
+        perm = rng.permutation(len(scenes))
+        half = set(perm[: len(scenes) // 2].tolist())
+        A = np.array([i in half for i in sid])
+        if A.all() or not A.any() or y[A].all() or not y[A].any()                 or y[~A].all() or not y[~A].any():
+            continue
+        for tr, te in ((A, ~A), (~A, A)):
+            t = float(ts[int(np.argmax([((mu[tr] >= t_) == y[tr]).mean() for t_ in ts]))])
+            accs.append(((mu[te] >= t) == y[te]).mean())
+    acc = float(np.mean(accs)) if accs else float("nan")
+    print(f"    Welt-Modell (mu, n={len(mu)})                 : AUC {auc:.3f}, Genauigkeit "
+          f"{100 * acc:5.1f} % (Schwelle auf getrennten Szenen)")
+    span, got = ceil - base, acc - base
+    if span > 1e-9:
+        print(f"    -> von {100 * span:.1f} Prozentpunkten nutzbarem Signal sammelt das Modell "
+              f"{100 * got:.1f} ein ({100 * got / span:.0f} %)")
 
 
 RE_JIT = re.compile(r"Startpose-Jitter ([\d.]+) rad")
