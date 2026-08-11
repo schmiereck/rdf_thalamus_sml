@@ -3107,7 +3107,8 @@ def run_self_learning_steering(headless=False):
                   f"({N * EXV_N} Episoden), Startpose-Jitter "
                   f"{f'{EXV_JITTER:.3f} rad' if EXV_JITTER > 0 else 'aus (nur natuerliche Streuung)'}, "
                   f"Lernen {'EINGEFROREN' if EXV_FREEZE else 'AN (!)'}, "
-                  f"Zustand wird {'NICHT' if EXV_FREEZE else ''} gespeichert", flush=True)
+                  f"Zustand {'unveraendert (nur einmal vor der Messung gesichert)' if EXV_FREEZE else 'WIRD FORTGESCHRIEBEN'}",
+                  flush=True)
             if EXV_FREEZE:
                 # EINMAL sichern, BEVOR die Messung laeuft: das Einfrieren blockiert save_state()
                 # je Episode, damit die Messung den Zustand nicht veraendert.  Das Startup-Training

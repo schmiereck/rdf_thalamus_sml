@@ -2,8 +2,9 @@
 
 Der Lauf (pc_act23.py mit ACT23_EXV=M) faehrt jede Szene M-mal.  Objektpose, Ziel und die
 Situationsmerkmale sind dabei bitgleich und das Lernen ist eingefroren -- die getroffene WAHL ist
-also fix.  Was innerhalb einer Szene noch streut, kann nur die Ausfuehrung sein: der Arm startet
-dort, wo drive_home ihn gelassen hat, und die Fovea traegt ihren Zustand mit.
+damit praktisch fix (NICHT bitgleich: das Wrist-Gitter ist armrelativ, s. Kontrolle unten).  Was
+innerhalb einer Szene streut, ist die Ausfuehrung: der Arm startet dort, wo drive_home ihn
+gelassen hat, und die Fovea traegt ihren Zustand mit.
 
 Ausgegeben wird die Varianzzerlegung des Erfolgs (0/1) und des Abstands (mm):
 
@@ -15,9 +16,10 @@ ICC nahe 1: dieselbe Szene liefert dasselbe Ergebnis, die Ausfuehrung ist unschu
 Hebel liegt bei Wahrnehmung/Wahl.  ICC nahe 0: die Szene sagt nichts vorher, weil die Bahn
 entscheidet -- dann ist jedes weitere Merkmal im Welt-Modell vergebliche Muehe.
 
-KONTROLLE (wird mitgeprueft): ist der VOLLE Aktionsvektor ueber die Wiederholungen identisch
-([EXV-Aktion])?  Wenn nicht, war die Wahl doch nicht fix und die Zerlegung misst Wahl PLUS
-Ausfuehrung statt der Ausfuehrung allein.
+KONTROLLE (wird mitgeprueft): wie stark weicht der VOLLE Aktionsvektor ([EXV-Aktion]) zwischen
+den Wiederholungen ab -- in Grad, Millimetern, Grip?  Ein Rest bleibt bauartbedingt (armrelatives
+Wrist-Gitter, gemessen ~0.1 Grad).  Wird die Abweichung gross, misst die Zerlegung Wahl PLUS
+Ausfuehrung statt der Ausfuehrung allein, und der Report sagt das.
 
     python src/pc_cvnn/act23_exv_report.py log/pc_act23_....txt        # ein Lauf, volle Zerlegung
     python src/pc_cvnn/act23_exv_report.py log/a.txt log/b.txt ...     # Dosis-Wirkung ueber Jitter
@@ -92,27 +94,50 @@ def main(path):
           f"{sum(len(s) for s in scenes)} Episoden\n")
 
     # --- Kontrolle: war die Wahl ueber die Wiederholungen wirklich fix? -----------------------
-    # Der VOLLE Vektor ([EXV-Aktion]) ist die scharfe Pruefung; Wrist/Grip aus [Kredit] nur der
-    # Rueckfall fuer Logs, die vor dieser Zeile entstanden sind (dort bleiben Offset und Neigung
-    # ungeprueft -- das steht dann auch so da).
-    def _ctl(key, label):
+    # Die Wahl ist NICHT exakt fix, und das ist kein Fehler, sondern Bauart: mit ACT23_WRIST_REL=1
+    # wird das Wrist-Gitter ARMRELATIV aufgespannt (grid = w0 + linspace).  Der Arm steht zwischen
+    # zwei Wiederholungen nie bitgleich (arm_reset=False, erst recht unter Jitter), also verschiebt
+    # sich w0 und mit ihm der gewaehlte Wrist -- im Rauchtest um 0.1 Grad.
+    # Ein binaeres "identisch ja/nein" wuerde 0.1 Grad wie einen echten Aktionswechsel behandeln.
+    # Berichtet wird deshalb die GROESSE der Abweichung in den interpretierbaren Einheiten; erst
+    # wenn die gross wird, misst die Zerlegung Wahl PLUS Ausfuehrung statt der Ausfuehrung allein.
+    def _spread(sc):
+        """max. Abweichung innerhalb einer Szene -> (Wrist-Grad, Offset-mm, Grip, Neigungs-Grad)."""
+        av = [e["avec"] for e in sc if e.get("avec") and len(e["avec"]) >= 6]
+        if len(av) < 2:
+            return None
+        A = np.asarray(av, float)
+        w = np.degrees(np.arctan2(A[:, 3], A[:, 2]) / 2.0) % 180.0
+        dw = max(min(abs(a - b), 180.0 - abs(a - b)) for a in w for b in w)   # zyklisch mod 180
+        off = np.hypot(A[:, 0], A[:, 1]) * 1000.0
+        doff = float(np.max([np.linalg.norm(A[i, :2] - A[j, :2]) for i in range(len(A))
+                             for j in range(len(A))]) * 1000.0)
+        dgrip = float(A[:, 4].max() - A[:, 4].min())
+        dtilt = (float(np.ptp(np.degrees(np.arctan2(A[:, 7], A[:, 6])))) if A.shape[1] >= 8 else 0.0)
+        return dw, doff, dgrip, dtilt, float(off.mean())
+
+    sp = [x for x in (_spread(sc) for sc in scenes) if x is not None]
+    if sp:
+        S = np.asarray(sp, float)
+        print(f"  [Kontrolle] Aktions-Abweichung innerhalb einer Szene ({len(sp)} Szenen, Median | max):")
+        print(f"      Wrist  {np.median(S[:, 0]):5.2f} | {S[:, 0].max():5.2f} Grad     "
+              f"Offset {np.median(S[:, 1]):5.2f} | {S[:, 1].max():5.2f} mm")
+        print(f"      Grip   {np.median(S[:, 2]):5.3f} | {S[:, 2].max():5.3f}          "
+              f"Neigung {np.median(S[:, 3]):5.2f} | {S[:, 3].max():5.2f} Grad")
+        if S[:, 0].max() > 5.0 or S[:, 1].max() > 2.0:
+            print("      ACHTUNG: das ist keine Rundung mehr -- die Zerlegung misst dann Wahl PLUS "
+                  "Ausfuehrung.")
+        else:
+            print("      -> vernachlaessigbar (armrelatives Wrist-Gitter); die Wahl gilt als fix.")
+    else:
         n_var = n_chk = 0
         for sc in scenes:
-            acts = {e[key] for e in sc if e.get(key) is not None}
+            acts = {(e.get("wrist"), e.get("grip")) for e in sc if e.get("wrist") is not None}
             if acts:
                 n_chk += 1; n_var += len(acts) > 1
         if n_chk:
-            print(f"  [Kontrolle] {label}: identisch in {n_chk - n_var}/{n_chk} Szenen"
-                  f"{'   -- ACHTUNG, die Wahl war NICHT fix, die Zerlegung misst dann Wahl+Ausfuehrung!'
-                     if n_var else ''}")
-        return n_chk
-
-    if not _ctl("avec", "voller Aktionsvektor"):
-        for sc in scenes:
-            for e in sc:
-                if e.get("wrist") is not None:
-                    e["wg"] = (e["wrist"], e["grip"])
-        _ctl("wg", "Wrist/Grip (Offset+Neigung UNGEPRUEFT -- altes Log)")
+            print(f"  [Kontrolle] altes Log ohne [EXV-Aktion]: Wrist/Grip identisch in "
+                  f"{n_chk - n_var}/{n_chk} Szenen (Offset und Neigung UNGEPRUEFT)")
 
     ok_g = [[1.0 if e["ok"] else 0.0 for e in s] for s in scenes]
     mm_g = [[e["mm"] for e in s] for s in scenes]
