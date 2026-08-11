@@ -128,6 +128,23 @@ class BracketArmSim:
         self.d.qpos[qadr + 3:qadr + 7] = [np.cos(yaw / 2), 0.0, 0.0, np.sin(yaw / 2)]   # z-rotation
         self.d.qvel[vadr:vadr + 6] = 0.0
 
+    def obj_pose7(self, name):
+        """Die VOLLE Freikoerper-Pose [x,y,z,qw,qx,qy,qz] als Kopie.
+
+        set_object() schreibt eine reine z-Drehung und richtet damit ein umgekipptes Objekt
+        stillschweigend wieder auf.  Fuer eine Wiederholungsmessung (ACT23_EXV) muss die Szene
+        exakt so zurueckkommen, wie sie war -- auch schraeg."""
+        bid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_BODY, name)
+        qadr = self.m.jnt_qposadr[self.m.body_jntadr[bid]]
+        return self.d.qpos[qadr:qadr + 7].copy()
+
+    def set_obj_pose7(self, name, q7):
+        """Gegenstueck zu obj_pose7: Pose exakt zuruecksetzen, Geschwindigkeit auf null."""
+        bid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_BODY, name)
+        jadr = self.m.body_jntadr[bid]; qadr = self.m.jnt_qposadr[jadr]; vadr = self.m.jnt_dofadr[jadr]
+        self.d.qpos[qadr:qadr + 7] = np.asarray(q7, float)
+        self.d.qvel[vadr:vadr + 6] = 0.0
+
     def obj_yaw(self, name):
         """The object's z-rotation (radians) from its body quaternion (long-axis orientation in the table)."""
         q = self.d.xquat[mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_BODY, name)]

@@ -144,6 +144,22 @@ NB_DMAX = float(os.environ.get("ACT23_NB_DMAX", "0.12"))
 NB_DIM = 5
 NB_NEUTRAL = np.array([0.0, NB_DMAX, 1.0, 0.0, 0.0])   # "nie gemessen" -- gueltig-Flag 0
 
+# AUSFUEHRUNGS-VARIANZ (ACT23_EXV=M): dieselbe Szene M-mal fahren, um zu trennen, wieviel des
+# Ausgangs an der WAHL haengt und wieviel an der AUSFUEHRUNG.  Damit die M Wiederholungen wirklich
+# dieselbe Entscheidung treffen, friert die Messung das Lernen ein -- sonst haette Wiederholung 2
+# ein Welt-Modell gesehen, das aus Wiederholung 1 gelernt hat, und die Aktion koennte kippen.
+# Nebeneffekt (erwuenscht): eine Messung verschmutzt den ueber Wochen gewachsenen Zustand nicht.
+EXV_N = max(1, int(os.environ.get("ACT23_EXV", "1")))
+EXV_FREEZE = EXV_N > 1 and os.environ.get("ACT23_EXV_FREEZE", "1") == "1"
+# MuJoCo selbst ist deterministisch: bleibt das Objekt liegen und der Arm kehrt in dieselbe
+# Ruhelage zurueck, wiederholt sich eine Episode BIS AUF DEN MILLIMETER (im Rauchtest gemessen:
+# 63+-0 mm ueber drei Laeufe).  Der einzige natuerliche Streukanal ist die ARMSTELLUNG beim Start
+# -- run_combined faehrt mit arm_reset=False, der Arm beginnt dort, wo drive_home ihn liess.
+# ACT23_EXV_JITTER=<rad> stoert die Gelenke vor jeder Wiederholung gezielt um diesen Betrag und
+# macht aus "wiederholt es sich?" eine DOSIS-WIRKUNGS-Kurve: wie empfindlich ist der Ausgang
+# gegen die Startpose?  0 (Vorgabe) misst nur die natuerlich auftretende Streuung.
+EXV_JITTER = float(os.environ.get("ACT23_EXV_JITTER", "0.0"))
+
 
 def _auc(y, s):
     y = np.asarray(y).ravel(); s = np.asarray(s).ravel()
@@ -2469,6 +2485,13 @@ def run_self_learning_steering(headless=False):
                                                         sy * loc[0] + cy * loc[1]])
                 sel_off["dxy"] = tgt - np.asarray(det["grasp_xy"], float)
                 a_exec = a_exec.copy(); a_exec[0], a_exec[1] = sel_off["dxy"]
+            if EXV_FREEZE and a_exec is not None:
+                # KONTROLLE der Wiederholungsmessung: die [Kredit]-Zeile zeigt nur Wrist und Grip,
+                # der Aktionsvektor enthaelt aber auch Offset und Neigung.  Zwei Wiederholungen
+                # koennten in Wrist/Grip uebereinstimmen und sich trotzdem unterscheiden -- dann
+                # waere nicht die Ausfuehrung isoliert.  Voller Vektor, damit das PRUEFBAR ist.
+                print("    [EXV-Aktion] " + " ".join(f"{v:+.4f}" for v in np.asarray(a_exec).ravel()),
+                      flush=True)
             if os.environ.get("ACT23_YAW_AB", "0") == "1":
                 # A/B measurement ONLY (never fed to a learner): the PRIVILEGED true long axis next
                 # to the EXECUTED wrist/offset (after any force knob), so an offline script can test
@@ -2881,13 +2904,15 @@ def run_self_learning_steering(headless=False):
                 # (world_model.quality) instead of a flat 1.0.  Only when the agent judged it itself --
                 # under ACT23_WORLD_LABEL=welt there is no self-distance and the label stays binary.
                 _qd = s_d if (lbl_src == "Selbst" and s_d is not None) else None
-                world.observe(fe, a_obs, outcome, dist=_qd, weight=obs_w)
-                world.train(epochs=600)
+                if not EXV_FREEZE:
+                    world.observe(fe, a_obs, outcome, dist=_qd, weight=obs_w)
+                    world.train(epochs=600)
                 _qs = ("" if (_qd is None or not outcome)
                        else f", Guete {wm_quality(_qd):.2f} bei {_qd*1000:.0f}mm")
                 if obs_w != 1.0:
                     _qs += f", Gewicht {obs_w:.2f}"
-                print(f"    [Kredit] {route} -> Welt-Modell +1 ({src}, Label {lbl_src}: Wrist "
+                print(f"    [Kredit] {route} -> Welt-Modell "
+                      f"{'EINGEFROREN (EXV)' if EXV_FREEZE else '+1'} ({src}, Label {lbl_src}: Wrist "
                       f"{np.degrees(wrist_of(a_obs)) % 180.0:.0f} Grad, Grip {a_obs[4]:.2f}"
                       f"{', sanft' if a_obs[5] > 0.5 else ''}, "
                       f"{'geliefert' if outcome else 'nicht geliefert'}{_qs}) -> {world.n()} Versuche",
@@ -2910,6 +2935,7 @@ def run_self_learning_steering(headless=False):
         imit_ok = delivered and s_d is not None and s_d < imit_bar
         imitated = False
         if (use_net and pol_trace and lifted and imit_ok and not slipped
+                and not EXV_FREEZE
                 and os.environ.get("ACT23_SELFIMIT", "1") == "1"):
             _q = wm_quality(s_d) if _gimit else 1.0
             added = runtime.imitate([s for s, _a in pol_trace], [a for _s, a in pol_trace],
@@ -2928,7 +2954,7 @@ def run_self_learning_steering(headless=False):
         # the teacher's correction rows stays tied to the STRICT confident bar (imit_tol) -- a merely-ok
         # episode now contributes its own demos AND keeps the teacher's correction, which is exactly the
         # regime where both signals are useful.  keep-behaviour is therefore unchanged from before.
-        runtime.end_episode(keep=not (imitated and confident))   # failure/uncertain -> the teacher's
+        runtime.end_episode(keep=not (imitated and confident) and not EXV_FREEZE)  # failure/uncertain -> the teacher's
         #   correction rows enter DAgger; a self-validated success keeps ONLY its own actions
         # STAGE 2 lifelong: refit the choreography on the aggregated teacher labels; report the SHADOW
         # divergence |policy - teacher| over this episode's VISITED states in BOTH modes -- on FSM
@@ -2959,14 +2985,16 @@ def run_self_learning_steering(headless=False):
             except Exception as _e:
                 if os.environ.get("ACT23_DEBUG", "0") == "1":
                     print(f"    [ModulViz] push uebersprungen: {_e}", flush=True)
-        runtime.train(epochs=200)                              # act19's DAgger refits used 300; 80 underfit
+        if not EXV_FREEZE:
+            runtime.train(epochs=200)                          # act19's DAgger refits used 300; 80 underfit
         #   the shifting aggregate (user watched the net under-CLOSE the gripper -- the BC smoothing
         #   artefact that stronger refits + DAgger labels at the visited close-states sharpen)
         if np.isfinite(div):
             print(f"    [Stufe 2] Choreo-Schatten ({'Netz' if use_net else 'FSM'}-Lauf): "
                   f"|Netz-Teacher| {div:.0f} mm ({runtime.n()} DAgger + {runtime.n_imit()} Selbst, "
                   f"nachtrainiert)", flush=True)
-        save_state()                                           # lifelong progress survives a restart
+        if not EXV_FREEZE:
+            save_state()                                       # lifelong progress survives a restart
         if os.environ.get("ACT23_ZEIT", "1") != "0":
             _now = _time.perf_counter()
             _ges = _now - _T["gesamt"]
@@ -3074,6 +3102,22 @@ def run_self_learning_steering(headless=False):
         state.auto = True
         print(f"  headless AUTO-Lauf: {N} Episoden, Choreo {state.choreo}, "
               f"Selbst-Imitation {'aus' if os.environ.get('ACT23_SELFIMIT','1')=='0' else 'an'}", flush=True)
+        if EXV_N > 1:
+            print(f"  [EXV] Ausfuehrungs-Varianz: jede der {N} Szenen {EXV_N}x wiederholt "
+                  f"({N * EXV_N} Episoden), Startpose-Jitter "
+                  f"{f'{EXV_JITTER:.3f} rad' if EXV_JITTER > 0 else 'aus (nur natuerliche Streuung)'}, "
+                  f"Lernen {'EINGEFROREN' if EXV_FREEZE else 'AN (!)'}, "
+                  f"Zustand wird {'NICHT' if EXV_FREEZE else ''} gespeichert", flush=True)
+            if EXV_FREEZE:
+                # EINMAL sichern, BEVOR die Messung laeuft: das Einfrieren blockiert save_state()
+                # je Episode, damit die Messung den Zustand nicht veraendert.  Das Startup-Training
+                # (z.B. das Nachtrainieren fehlender Fovea-Klassen, ~20 min) faellt damit aber bei
+                # JEDEM Lauf der Reihe erneut an.  Hier ist noch nichts gemessen worden -- der
+                # Zustand ist der geladene plus Startup -- also ist dieser eine Schreibvorgang
+                # unbedenklich und spart der Dosis-Wirkungs-Reihe Stunden.
+                save_state()
+                print("  [EXV] Startup-Zustand einmalig gesichert (Messung selbst schreibt nicht)",
+                      flush=True)
         bilanz = {"fsm": [], "netz": []}
         obj_hist = []
         force_list = [s.strip() for s in os.environ.get("ACT23_AUTO_OBJ", "").split(",") if s.strip()]
@@ -3117,12 +3161,58 @@ def run_self_learning_steering(headless=False):
                 state.place_selected_random(crng)
             elif pick is not None:
                 print(f"    {pick}", flush=True)
-            print(f"  [Auto {ep}] {state.label()} ...", flush=True)
-            ok, err = run_one()
-            print(f"  [Auto {ep}] {'GELIEFERT' if ok else 'NICHT geliefert'}  |  Abstand {err:.0f} mm",
-                  flush=True)
-            bilanz["netz" if state.choreo in ("netz", "attractor") else "fsm"].append(bool(ok))
-            obj_hist.append((state.OBJECTS[state.sel][0], bool(ok)))
+            # AUSFUEHRUNGS-VARIANZ (ACT23_EXV=M > 1): DIESELBE Szene M-mal fahren.  Objektpose, Ziel
+            # und damit die Situationsmerkmale sind bitgleich, die Aktionswahl ist deterministisch
+            # (LCB; Neigungs- und Griff-Neugier stehen auf 0) -- was variiert, ist allein die
+            # AUSFUEHRUNG: der Arm startet dort, wo drive_home ihn gelassen hat (arm_reset=False),
+            # und die Fovea traegt ihren Zustand aus der Vorepisode mit.
+            # WOZU: die Aktion erklaert gemessen nur +0.055 R^2, aber aehnliche Zeilen stimmen im
+            # Ausgang zu 83-88% ueberein -- die Struktur sitzt also irgendwo.  Streuen die
+            # Ergebnisse INNERHALB einer Szene, entscheidet die gefahrene Bahn und nicht die
+            # getroffene Wahl; bleiben sie konstant, ist die Ausfuehrung unschuldig.
+            _reps = EXV_N
+            _pb = state.OBJECTS[state.sel][1]
+            _pose = sim.obj_pose7(_pb)                         # VOLLE Pose, auch schraeg (s. obj_pose7)
+            _scene = []
+            # world.candidates() zieht n ZUFAELLIGE Aktionskandidaten aus world.rng -- ohne
+            # Ruecksetzen saehe Wiederholung 2 andere Kandidaten und koennte eine andere Aktion
+            # waehlen.  Dann waere nicht mehr die Ausfuehrung isoliert, sondern Wahl+Ausfuehrung
+            # vermischt.  Der Bit-Generator-Zustand wird deshalb je Wiederholung zurueckgespult.
+            _rng0 = world.rng.bit_generator.state if _reps > 1 else None
+            _jrng = np.random.default_rng(1000 + ep)           # eigener Strom: world.rng wird zurueckgespult
+            for _rep in range(_reps):
+                if _rep > 0:                                   # Szene exakt wiederherstellen
+                    sim.set_obj_pose7(_pb, _pose)
+                    if EXV_JITTER > 0.0:                       # Startpose gezielt stoeren
+                        # Gelenknamen AUS DER SIM: bei ACT14_DOF=4 hat ARM3 vier Eintraege, die
+                        # Liste ist also sechs lang (joint_0..joint_5) -- eine feste Namensliste
+                        # traf die falschen Gelenke.
+                        _jn = list(ARM3) + ["joint_4", "joint_5"]
+                        _q = sim.arm_angles_full() + _jrng.normal(0.0, EXV_JITTER, len(_jn))
+                        for _j, _v in zip(_jn, _q):
+                            _lo, _hi = sim.joint_range(_j)
+                            _v = float(np.clip(_v, _lo, _hi))
+                            sim.d.qpos[sim.jqadr[_j]] = _v
+                            sim.d.ctrl[sim.act[_j]] = _v
+                            # Geschwindigkeit mit auf null: sonst waere neben der gewollten
+                            # Positionsstoerung noch eine ungewollte Geschwindigkeitsstoerung im
+                            # Spiel und die Dosis waere nicht mehr die, die draufsteht.
+                            sim.d.qvel[sim.m.jnt_dofadr[sim._jid(_j)]] = 0.0
+                    mujoco.mj_forward(sim.m, sim.d); sim.step(40)
+                    world.rng.bit_generator.state = _rng0
+                print(f"  [Auto {ep}]{f' W{_rep}' if _reps > 1 else ''} {state.label()} ...", flush=True)
+                ok, err = run_one()
+                print(f"  [Auto {ep}] {'GELIEFERT' if ok else 'NICHT geliefert'}  |  Abstand {err:.0f} mm",
+                      flush=True)
+                _scene.append((bool(ok), float(err)))
+                bilanz["netz" if state.choreo in ("netz", "attractor") else "fsm"].append(bool(ok))
+                obj_hist.append((state.OBJECTS[state.sel][0], bool(ok)))
+            if _reps > 1:
+                _o = [x[0] for x in _scene]; _d = [x[1] for x in _scene]
+                print(f"    [EXV] Szene {ep} ({state.OBJECTS[state.sel][0]}): "
+                      f"{''.join('1' if x else '0' for x in _o)}  "
+                      f"{sum(_o)}/{len(_o)} geliefert  Abstand {np.mean(_d):.0f}+-{np.std(_d):.0f} mm",
+                      flush=True)
             if (ep + 1) % 10 == 0:
                 print(bilanz_line(bilanz, obj_hist), flush=True)
         return
