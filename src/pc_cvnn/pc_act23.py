@@ -160,6 +160,8 @@ EXV_FREEZE = EXV_N > 1 and os.environ.get("ACT23_EXV_FREEZE", "1") == "1"
 # macht aus "wiederholt es sich?" eine DOSIS-WIRKUNGS-Kurve: wie empfindlich ist der Ausgang
 # gegen die Startpose?  0 (Vorgabe) misst nur die natuerlich auftretende Streuung.
 EXV_JITTER = float(os.environ.get("ACT23_EXV_JITTER", "0.0"))
+# Neugier auf DIREKT GEMESSENER Abdeckung statt auf der Ensemble-Uneinigkeit (s. curious_pick).
+NOVELTY_DIRECT = os.environ.get("ACT23_NOVELTY_DIRECT", "1") == "1"
 
 
 def _auc(y, s):
@@ -3087,10 +3089,24 @@ def run_self_learning_steering(headless=False):
             fe = situation_feats(nm)
             if fe is None:
                 continue                                       # camera can't find it -> not a candidate
-            _mu, sd = world.predict(fe, world.candidates(0, yaw=world.yaw_of(fe)))   # sigma over the
-            #   action grid HERE -- same OBJECT-RELATIVE grid the choice uses, so the curiosity score
-            #   measures uncertainty over the actions actually available (not a different world-frame set)
-            s = float(sd.max())
+            # NEUHEIT DIREKT GEMESSEN statt aus der Ensemble-Uneinigkeit geraten.  Gemessen
+            # 2026-08-11: sigma besteht zu 93% aus der INITIALISIERUNG der Mitglieder (ohne jedes
+            # Resampling 0.1400 gegen 0.1502 mit), haengt entsprechend schwach an echter Neuheit
+            # (+0.21) und gar nicht am Fehler (+0.030).  Es sollte zwei Jobs machen -- Risiko in
+            # mu-lam*sigma und Neuheit hier -- und machte keinen.  world.novelty misst den Abstand
+            # zur k-naechsten EIGENSTAENDIGEN Erfahrung; viermal dieselbe stehende Szene zaehlt
+            # damit wie EINMAL (verifiziert: 12.82 -> 12.68 bei vier Wiederholungen, gegen 0.00 bei
+            # vier eigenstaendigen Erfahrungen).
+            # Nebenwirkung, die erwuenscht ist: das Rauschende-Fernseher-Problem entfaellt hier von
+            # selbst -- ein stochastischer Ausgang haelt sigma ewig hoch, die ABDECKUNG aber nicht.
+            # Die Lernfortschritts-Logik darunter bleibt, sie misst jetzt "gewinne ich hier noch
+            # neues Terrain" statt "faellt meine Unsicherheit".  ACT23_NOVELTY_DIRECT=0 -> altes sigma.
+            if NOVELTY_DIRECT:
+                s = float(world.novelty(fe))
+            else:
+                _mu, sd = world.predict(fe, world.candidates(0, yaw=world.yaw_of(fe)))
+                #   sigma over the action grid HERE -- same OBJECT-RELATIVE grid the choice uses
+                s = float(sd.max())
             h = sig_hist.setdefault(_l, []); h.append(s); del h[:-8]
             lp = float(np.mean(h[:len(h) // 2]) - np.mean(h[len(h) // 2:])) if len(h) >= 6 else 0.0
             scores.append((max(lp, 0.0) + 0.25 * s, lp, s, k, _l))
@@ -3125,7 +3141,8 @@ def run_self_learning_steering(headless=False):
                 tgt_visited.append(np.asarray(best_p, float)); del tgt_visited[:-40]
         verb = "träumt Ziel" if DREAM else "neues Ziel"
         lang_info = f" | {lgoal_lang.format_latent_message(best_z, tag='z_g')}" if DREAM and best_z is not None else ""
-        return (f"[curiosity] übt '{lbl}' (Fortschritt {lp_best:+.2f}, σ={sd_best:.2f})"
+        _sig = f"Neuheit={sd_best:.2f}" if NOVELTY_DIRECT else f"σ={sd_best:.2f}"
+        return (f"[curiosity] übt '{lbl}' (Fortschritt {lp_best:+.2f}, {_sig})"
                 + (f", {verb} [{best_p[0]:.2f},{best_p[1]:.2f}]"
                    + (f" (Latent-Neuheit {best_nov:.2f}){lang_info}" if DREAM else "")
                    if best_p is not None else ""))

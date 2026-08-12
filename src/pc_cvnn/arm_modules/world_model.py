@@ -524,6 +524,68 @@ class WorldModelModule(ArmModule):
             member.fit(X[idx], Y[idx], epochs=epochs, quiet=True,
                        w=(W[idx] if not np.allclose(W, 1.0) else None))
 
+    def novelty(self, feats, actions=None, k=3):
+        """DIREKT GEMESSENE Neuheit: Abstand zur k-nächsten EIGENSTAENDIGEN Erfahrung.
+
+        WARUM NICHT sigma (gemessen 2026-08-11): die Uneinigkeit des Ensembles besteht zu 93% aus
+        der INITIALISIERUNG, nicht aus der Datenabdeckung -- ohne jedes Resampling betraegt sigma
+        0.1400 gegen 0.1502 mit.  Entsprechend schwach haengt sie an echter Neuheit (+0.21) und gar
+        nicht am Fehler (+0.030).  sigma sollte zwei Jobs machen -- Risiko in mu-lam*sigma und
+        Neuheit in der Neugier -- und macht keinen.  Hier wird der Neuheits-Job direkt gemessen
+        statt aus zufaelligen Anfangsgewichten geraten: exakt, ohne Beiwert zum Abstimmen, und ohne
+        die Vorhersage mu anzufassen.
+
+        WIEDERHOLUNG ZAEHLT NICHT ALS ABDECKUNG.  Der Abstand wird je ERFAHRUNGS-GRUPPE minimiert
+        (dieselbe Gruppierung wie beim Block-Bootstrap: eine stehende Szene in einem Lauf), und erst
+        dann ueber die Gruppen der k-kleinste genommen.  Viermal dieselbe Szene zu fahren senkt die
+        Neuheit also so viel wie EINMAL -- das ist der ganze Punkt: ein Kind, das denselben Becher
+        viermal umwirft, hat etwas ueber DIESEN Becher gelernt, nicht ueber Becher.
+        Altzeilen ohne Gruppe zaehlen als je eigene Erfahrung (nichts wird rueckwirkend geraten).
+
+        Abstaende in EINHEITEN DER STREUUNG je Spalte, sonst dominierte die Spalte mit der groessten
+        Skala.  `actions=None` fragt nur nach der SITUATION (Objektwahl); mit actions (N, ACT_DIM)
+        kommt je Aktion ein Wert zurueck (Erkundung innerhalb einer Situation).
+        NICHT das Risiko: Neuheit sagt gemessen nichts darueber, wo das Modell falsch liegt
+        (+0.042, p=0.35) -- sie sagt, wo es noch nicht war.
+        """
+        m = len(self._X)
+        if m == 0:
+            return float("inf") if actions is None else np.full(len(np.atleast_2d(actions)), np.inf)
+        X = np.asarray(self._X, float)
+        fd = self.feat_dim
+        f = np.asarray(feats, float).ravel()[:fd]
+        if actions is None:
+            B = X[:, :fd]
+            Q = f[None, :]
+        else:
+            A = np.atleast_2d(np.asarray(actions, float))
+            B = X[:, :fd + A.shape[1]]
+            Q = np.column_stack([np.tile(f, (len(A), 1)), A])
+        sc = B.std(0); sc[sc < 1e-9] = 1.0
+        Bn = B / sc
+        gi, ng = self._group_index(m)
+        out = np.empty(len(Q))
+        for j, q in enumerate(Q):
+            d = np.linalg.norm(Bn - (q[:B.shape[1]] / sc), axis=1)
+            per = np.full(ng, np.inf)
+            np.minimum.at(per, gi, d)                    # kleinster Abstand JE ERFAHRUNG
+            kk = min(int(k), ng)
+            out[j] = float(np.partition(per, kk - 1)[kk - 1])
+        return out if actions is not None else float(out[0])
+
+    def _group_index(self, m):
+        """(Index je Zeile -> Gruppennummer, Anzahl Gruppen), gecacht solange der Puffer gleich bleibt."""
+        cache = getattr(self, "_gi_cache", None)
+        if cache is not None and cache[0] == m:
+            return cache[1], cache[2]
+        G = self._groups(m)[:m]
+        seen, gi = {}, np.empty(m, dtype=int)
+        for i, g in enumerate(G):
+            key = ("_zeile", i) if g is None else g
+            gi[i] = seen.setdefault(key, len(seen))
+        self._gi_cache = (m, gi, len(seen))
+        return gi, len(seen)
+
     def _bootstrap_blocks(self, m):
         """Zeilen nach zusammenhaengender Erfahrung gruppieren -- oder None fuer den Zeilen-Bootstrap.
 
