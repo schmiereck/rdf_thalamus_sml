@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time as _time_mod
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -1652,7 +1653,20 @@ def run_self_learning_steering(headless=False):
     SLOTS = [(-0.06, 0.24), (0.06, 0.24), (0.0, 0.19), (-0.09, 0.115), (0.09, 0.115), (0.0, 0.115)]
     scene_slots = {}                                           # body -> slot index (finds the FREE slot)
 
+    # ERFAHRUNGS-GRUPPE fuer den Block-Bootstrap des Welt-Modells (s. world_model._bootstrap_blocks).
+    # Eine Gruppe = eine STEHENDE SZENE innerhalb EINES Laufs.  Genau das ist die Einheit, ueber die
+    # die Zeilen korreliert sind: die Szene wird beim Start (und auf Knopfdruck) gewuerfelt und
+    # bleibt danach stehen -- run_one stellt alle NICHT kommandierten Objekte nach jeder Episode
+    # wieder her, es bewegt sich also nur das kommandierte.
+    # Das ist EIGENWAHRNEHMUNG, kein privilegiertes Weltwissen: der Agent weiss, wann er die Szene
+    # neu aufgebaut hat, so wie ein Kind weiss, dass das eine durchgehende Sitzung war.
+    exp_group = {"lauf": f"{os.getpid()}-{int(_time_mod.time())}", "szene": 0}
+
+    def group_id():
+        return f"{exp_group['lauf']}:{exp_group['szene']}"
+
     def randomize_objects():
+        exp_group["szene"] += 1                                # neue stehende Szene -> neue Gruppe
         sim.reset_home()
         bodies = [(nm, m) for _l, nm, m in state.OBJECTS]
         if NOVEL_BODY in scene and all(nm != NOVEL_BODY for nm, _ in bodies):
@@ -2944,7 +2958,7 @@ def run_self_learning_steering(headless=False):
                 # under ACT23_WORLD_LABEL=welt there is no self-distance and the label stays binary.
                 _qd = s_d if (lbl_src == "Selbst" and s_d is not None) else None
                 if not EXV_FREEZE:
-                    world.observe(fe, a_obs, outcome, dist=_qd, weight=obs_w)
+                    world.observe(fe, a_obs, outcome, dist=_qd, weight=obs_w, group=group_id())
                     world.train(epochs=600)
                 _qs = ("" if (_qd is None or not outcome)
                        else f", Guete {wm_quality(_qd):.2f} bei {_qd*1000:.0f}mm")

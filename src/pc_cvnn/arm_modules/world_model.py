@@ -315,7 +315,7 @@ class WorldModelModule(ArmModule):
              .add_out("uncertainty", 1, "ensemble-std (epistemic)"))
 
     # -- self-supervised data --
-    def observe(self, feats, action, delivered, dist=None, weight=1.0):
+    def observe(self, feats, action, delivered, dist=None, weight=1.0, group=None):
         """One outcome for (situation, action).  `dist` = the SELF-JUDGED placement distance (m).
 
         GRADED LABEL (the user's idea, 2026-07-25): with `dist` a SUCCESS is scored by HOW WELL it
@@ -341,6 +341,8 @@ class WorldModelModule(ArmModule):
         self._X.append(np.concatenate([np.asarray(feats, float), np.asarray(action, float)]))
         self._Y.append([y])
         self._weights(len(self._X) - 1).append(float(weight))
+        # `group` = welche Zeilen aus EINER zusammenhaengenden Erfahrung stammen (s. _groups/train).
+        self._groups(len(self._X) - 1).append(group)
 
     def ensure_feat_dim(self, new_fd, neutral):
         """Das SITUATIONS-Schema erweitern und bestehende Zeilen mitnehmen.
@@ -387,6 +389,19 @@ class WorldModelModule(ArmModule):
         while len(self._W) < upto:
             self._W.append(1.0)
         return self._W
+
+    def _groups(self, upto):
+        """Gruppen-Id je Zeile, auf `upto` Eintraege mit None aufgefuellt (migriert alte Pickles).
+
+        None heisst "unbekannt" und wird im Bootstrap wie eine EIGENE Gruppe behandelt -- also
+        genau wie heute.  Nichts wird rueckwirkend erfunden: fuer die 6732 Altzeilen wissen wir
+        nicht, welche aus derselben stehenden Szene stammen, und sie als zusammengehoerig zu raten
+        waere eine Behauptung ohne Grundlage."""
+        if getattr(self, "_G", None) is None:
+            self._G = []
+        while len(self._G) < upto:
+            self._G.append(None)
+        return self._G
 
     def n(self):
         return len(self._X)
@@ -500,10 +515,53 @@ class WorldModelModule(ArmModule):
                                    rng=np.random.default_rng(int(self.rng.integers(1 << 30))))
                             for _ in self.members]
         W = np.asarray(self._weights(m), float)
+        blocks = self._bootstrap_blocks(m)
         for member in self.members:
-            idx = self.rng.integers(0, m, m)          # bootstrap resample -> ensemble diversity
+            if blocks is None:
+                idx = self.rng.integers(0, m, m)      # bootstrap resample -> ensemble diversity
+            else:
+                idx = self._block_resample(blocks, m)
             member.fit(X[idx], Y[idx], epochs=epochs, quiet=True,
                        w=(W[idx] if not np.allclose(W, 1.0) else None))
+
+    def _bootstrap_blocks(self, m):
+        """Zeilen nach zusammenhaengender Erfahrung gruppieren -- oder None fuer den Zeilen-Bootstrap.
+
+        WARUM (gemessen 2026-08-11): der Bootstrap zog EINZELNE ZEILEN.  In einem GUI-Lauf bleibt
+        die Szene aber STEHEN -- nur das kommandierte Objekt bewegt sich -- also sind
+        aufeinanderfolgende Zeilen Beinah-Duplikate.  Fuenf davon landen mit hoher
+        Wahrscheinlichkeit in JEDEM Ensemble-Mitglied, die Mitglieder sind sich einig, und sigma
+        wird zu klein: der Agent haelt fuer bekannt, was er effektiv EINMAL gesehen hat.  Da sigma
+        die Aktionswahl (mu - lam*sigma), die Neugier-Objektwahl (sd.max()) und die
+        Neigungs-/Griff-Neugier steuert, ist das kein Messfehler, sondern Verhalten.
+        Bild dazu: ein Kind, das denselben Becher viermal umwirft, hat etwas ueber DIESEN Becher
+        gelernt, nicht ueber Becher -- sein Zutrauen sollte das abbilden.
+
+        EHRLICHE ERWARTUNG: das hebt die Lieferrate NICHT.  Gemessen sagt sigma nichts darueber,
+        wo das Modell falsch liegt (Spearman +0.030, p=0.5), und Neuheit auch nicht (+0.042,
+        p=0.35).  Der Block-Bootstrap macht sigma zu einem ehrlichen ABDECKUNGS-Mass, also zu einer
+        besseren Erkundung -- gemessen am Kriterium "Selbst-Aneignung statt Lieferrate".
+
+        Sind alle Gruppen unbekannt (None) -- z.B. der gesamte Altbestand -- gibt es NICHTS zu
+        blocken, und wir kehren zum alten Pfad zurueck: bitgleiches Verhalten, kein stiller Bruch.
+        """
+        if os.environ.get("ACT23_WM_BLOCK", "1") != "1":
+            return None
+        G = self._groups(m)[:m]
+        by = {}
+        for i, g in enumerate(G):
+            by.setdefault(("_zeile", i) if g is None else g, []).append(i)
+        if all(len(v) == 1 for v in by.values()):
+            return None                               # nur Einzelzeilen -> exakt der alte Pfad
+        return [np.asarray(v, dtype=int) for v in by.values()]
+
+    def _block_resample(self, blocks, m):
+        """Ganze Erfahrungs-Bloecke mit Zuruecklegen ziehen, bis m Zeilen beisammen sind."""
+        pick, tot = [], 0
+        while tot < m:
+            b = blocks[int(self.rng.integers(0, len(blocks)))]
+            pick.append(b); tot += len(b)
+        return np.concatenate(pick)[:m]
 
     def generalisation_auc(self, gap=1500, test=500, epochs=150):
         """Wie gut verallgemeinert das Modell auf WIRKLICH neue Situationen?
