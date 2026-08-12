@@ -1620,6 +1620,23 @@ def run_self_learning_steering(headless=False):
               f"({'bereit' if runtime.trained else 'zu wenig Daten'}).")
         save_state()                                           # capture the fresh startup training
 
+    # WELT-MODELL: die EHRLICHE Guete beim Start.  Bis 2026-08-11 gab es in der Steuerung gar keine
+    # Halteteil-Bewertung -- nur im Diagnose-Pfad, und die lief ueber einen BENACHBARTEN Halteteil.
+    # Der ist zu leicht: aufeinanderfolgende Zeilen stammen aus demselben Lauf, und dort bleibt die
+    # SZENE STEHEN (nur das kommandierte Objekt bewegt sich), die Testzeilen haben also
+    # Beinah-Duplikate im Training.  Beide Zahlen werden ausgegeben, weil die DIFFERENZ der Befund
+    # ist -- gemessen 0.877 gegen 0.740, und ein frischer Lauf zeigte 0.489/0.569.
+    # Wonach zu steuern ist: die Zahl MIT LUECKE.  Kostet ~25s auf einer Kopie, ACT23_WM_EVAL=0 aus.
+    if os.environ.get("ACT23_WM_EVAL", "1") == "1" and world.n() >= 2400:
+        try:
+            _na, _lu = world.generalisation_auc()
+            if np.isfinite(_lu):
+                print(f"  [Welt-Guete] P(Lieferung) AUC: benachbarter Halteteil {_na:.3f} "
+                      f"-- MIT LUECKE {_lu:.3f} (das ist die Verallgemeinerung; danach steuern)",
+                      flush=True)
+        except Exception as _e:
+            print(f"  [Welt-Guete] uebersprungen: {type(_e).__name__}: {_e}", flush=True)
+
     scene = {}                                                 # intended (body -> (xy, z, yaw)); the scene is FIXED
     #   after placement and restored per command, so only the commanded object moves.
     # DETERMINISTIC well-spread SLOTS: the workspace (x +-0.11, y 0.07..0.21, minus the base-clear disk) is too

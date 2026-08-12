@@ -505,6 +505,49 @@ class WorldModelModule(ArmModule):
             member.fit(X[idx], Y[idx], epochs=epochs, quiet=True,
                        w=(W[idx] if not np.allclose(W, 1.0) else None))
 
+    def generalisation_auc(self, gap=1500, test=500, epochs=150):
+        """Wie gut verallgemeinert das Modell auf WIRKLICH neue Situationen?
+
+        Ein benachbarter Halteteil beantwortet das NICHT.  Aufeinanderfolgende Zeilen stammen aus
+        demselben Lauf, und dort bleibt die SZENE STEHEN -- nur das kommandierte Objekt bewegt
+        sich.  Die Testzeilen haben deshalb Beinah-Duplikate im Training.  GEMESSEN (2026-08-11,
+        6732 Zeilen) faellt die AUC mit wachsender Luecke zwischen Training und Test:
+            Luecke    0 -> 0.860      Luecke 1500 -> 0.746
+            Luecke  500 -> 0.858      Luecke 3000 -> 0.656
+        Die 0.86 waren also nie die Verallgemeinerung, sondern die Naehe.  Der echte Wert ~0.66-0.75
+        deckt sich mit dem, was ein frischer Lauf zeigt (0.489 gegen das Welt-Urteil, 0.569 gegen
+        das Selbst-Urteil, 95% bis 0.65 bzw. 0.73).
+
+        Rueckgabe (naiv, mit_luecke): beide, damit die Differenz sichtbar bleibt -- sie IST der
+        Befund.  Beruehrt das laufende Modell nicht (arbeitet auf einer Kopie).
+        """
+        import copy
+        m_all = len(self._X)
+        if m_all < test + gap + 400:
+            return float("nan"), float("nan")
+        X = np.array(self._X); Y = np.array(self._Y)
+        te = slice(m_all - test, m_all)
+        Yte = np.asarray(Y[te], float).ravel() > 0.5   # _Y-Zeilen koennen (1,)-Form haben
+        if Yte.all() or not Yte.any():
+            return float("nan"), float("nan")
+
+        def _fit_score(end):
+            c = copy.deepcopy(self)
+            c._X = [x for x in X[:end]]; c._Y = [y for y in Y[:end]]
+            c._W = [v for v in np.asarray(self._weights(m_all), float)[:end]]
+            c.train(epochs=epochs)
+            return np.array([float(c.predict(x[:self.feat_dim], x[self.feat_dim:][None])[0][0])
+                             for x in X[te]])
+
+        def _auc(sc):
+            pos, neg = sc[Yte], sc[~Yte]
+            if len(pos) < 3 or len(neg) < 3:
+                return float("nan")
+            return float((pos[:, None] > neg[None, :]).mean()
+                         + 0.5 * (pos[:, None] == neg[None, :]).mean())
+
+        return _auc(_fit_score(m_all - test)), _auc(_fit_score(m_all - test - gap))
+
     # -- prediction with uncertainty --
     def predict(self, feats, actions):
         """actions: (N, ACT_DIM) -> (mu (N,), sigma (N,)) over the ensemble."""
