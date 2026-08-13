@@ -48,6 +48,9 @@ SANE_M = 1.0           # POSITION SANITY BOUND (m): the hand/object/target all l
 #                        DAgger logged those and a quarter of the buffer went absurd, wrecking the policy.
 #                        Guard the buffer at the source + a load-time sanitize heal the damage.
 _POS_COLS = (0, 1, 2, 3, 4, 6, 7)   # hand xyz, obj xy, target xy (cz/j5/obj_h/obj_fp are not positions)
+PHASE_W = float(__import__("os").environ.get("ACT23_PHASE_W", "5"))   # Gewicht der KURZEN Phasen
+#   (tragen/ablegen) im Fit; 1 = aus.  Begruendung + Messung an der Anwendungsstelle in train().
+PHASE_WEIGHTS = {"tragen": PHASE_W, "ablegen": PHASE_W}
 
 
 class RuntimePolicyModule(ArmModule):
@@ -261,7 +264,6 @@ class RuntimePolicyModule(ArmModule):
                 bal = np.array([bk[k] for k in K], float)              #   IMIT_WEIGHT (applied once below)
             X = np.array(self._X + Xi); Y = np.array(self._Y + Yi)
             w = np.concatenate([np.ones(len(self._X)), IMIT_WEIGHT * q * bal])
-            self.net.fit(X, Y, epochs=epochs, quiet=quiet, w=w)
         elif Xi and _IMIT_BAL:                        # DAgger labels + PER-KEY BALANCED self-imitation.
             # MEASURED (U/cube alternation): balanced EVICTION alone does not save a rare skill -- its
             # few demos (~1-2% of the buffer) have no PULL against 24000 teacher rows whose labels
@@ -278,14 +280,35 @@ class RuntimePolicyModule(ArmModule):
             wk = {k: min(IMIT_WEIGHT * mean / c, 4.0 * IMIT_WEIGHT) for k, c in cnt.items()}
             X = np.array(self._X + Xi); Y = np.array(self._Y + Yi)
             w = np.concatenate([np.ones(len(self._X)), np.array([wk[k] for k in K], float)])
-            self.net.fit(X, Y, epochs=epochs, quiet=quiet, w=w)
         elif Xi:                                      # ACT23_IMIT_BAL=0: the old flat replication
             X = np.array(self._X + Xi * IMIT_WEIGHT)
             Y = np.array(self._Y + Yi * IMIT_WEIGHT)
-            self.net.fit(X, Y, epochs=epochs, quiet=quiet)
+            w = None
         else:
             X, Y = np.array(self._X), np.array(self._Y)
-            self.net.fit(X, Y, epochs=epochs, quiet=quiet)
+            w = None
+        # PHASEN-GEWICHTUNG (2026-08-13).  Gemessen am Puffer: die ABLAGE stellt nur 3.2% der
+        # DAgger-Zeilen (759 von 24000) -- nicht weil DAgger verzerrt waere, sondern weil die Phase
+        # kurz ist (3.7% der besuchten Schritte).  Entsprechend ist die Policy dort unterangepasst:
+        # Vorhersagefehler auf den EIGENEN Trainingsdaten 11.2mm Median gegen 3.5mm beim Anfahren.
+        # Zur Laufzeit laeuft sie dort ~6x so weit vom Teacher weg wie beim Anfahren (29mm gegen 5mm),
+        # und die Ablage verfehlt das Ziel um 18mm (Erfolg) / 44mm (Fehlschlag).
+        # Offline gegengetestet auf 4000 ZURUECKGEHALTENEN Zeilen (Median-Fehler in mm):
+        #   Gewicht  anfahren greifen tragen ablegen gesamt
+        #     1        5.0     12.7    17.2   19.1    9.5
+        #     5        5.4     13.5     8.6   11.5    9.2   <- gewaehlt
+        #    15        6.6     15.2     7.4    9.5   10.3
+        # x5 halbiert den Ablagefehler fast, kostet Anfahren/Greifen kaum und senkt den Gesamtwert
+        # sogar leicht; x15 kippt (Ablage weiter besser, aber Anfahren/Greifen und gesamt schlechter).
+        # Es ist eine TRAININGSDATEN-Gewichtung, keine Laufzeitregel -- sie multipliziert sich mit den
+        # bestehenden AWR-Gewichten (graduelle Imitation, Schluessel-Balance), statt sie zu ersetzen.
+        # EHRLICHE GRENZE: das behebt das UNTERANPASSEN, nicht die Verteilungsverschiebung (die
+        # Laufzeit-Divergenz 29mm liegt ueber dem Trainingsfehler 11mm).  Ein Teil bleibt stehen.
+        # ACT23_PHASE_W=1 schaltet die Gewichtung ab (alles Gewicht 1).
+        if PHASE_W != 1.0 and len(X):
+            pw = np.array([PHASE_WEIGHTS.get(self._phase_of(r), 1.0) for r in X], float)
+            w = pw if w is None else np.asarray(w, float) * pw
+        self.net.fit(X, Y, epochs=epochs, quiet=quiet, w=w)
         self.trained = True
 
     # -- runtime --
