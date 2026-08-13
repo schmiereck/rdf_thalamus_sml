@@ -48,8 +48,10 @@ SANE_M = 1.0           # POSITION SANITY BOUND (m): the hand/object/target all l
 #                        DAgger logged those and a quarter of the buffer went absurd, wrecking the policy.
 #                        Guard the buffer at the source + a load-time sanitize heal the damage.
 _POS_COLS = (0, 1, 2, 3, 4, 6, 7)   # hand xyz, obj xy, target xy (cz/j5/obj_h/obj_fp are not positions)
-PHASE_W = float(__import__("os").environ.get("ACT23_PHASE_W", "5"))   # Gewicht der KURZEN Phasen
-#   (tragen/ablegen) im Fit; 1 = aus.  Begruendung + Messung an der Anwendungsstelle in train().
+PHASE_W = float(__import__("os").environ.get("ACT23_PHASE_W", "1"))   # Gewicht der KURZEN Phasen
+#   (tragen/ablegen) im Fit.  VORGABE 1 = AUS seit 2026-08-13, nach gepaarter Messung: x5 hat die
+#   Lieferung im GESCHLOSSENEN Kreis verschlechtert (1/6 gegen 4/6, gleicher Seed und Zustand).
+#   Begruendung + beide Messungen an der Anwendungsstelle in train().
 PHASE_WEIGHTS = {"tragen": PHASE_W, "ablegen": PHASE_W}
 
 
@@ -302,9 +304,19 @@ class RuntimePolicyModule(ArmModule):
         # sogar leicht; x15 kippt (Ablage weiter besser, aber Anfahren/Greifen und gesamt schlechter).
         # Es ist eine TRAININGSDATEN-Gewichtung, keine Laufzeitregel -- sie multipliziert sich mit den
         # bestehenden AWR-Gewichten (graduelle Imitation, Schluessel-Balance), statt sie zu ersetzen.
-        # EHRLICHE GRENZE: das behebt das UNTERANPASSEN, nicht die Verteilungsverschiebung (die
-        # Laufzeit-Divergenz 29mm liegt ueber dem Trainingsfehler 11mm).  Ein Teil bleibt stehen.
-        # ACT23_PHASE_W=1 schaltet die Gewichtung ab (alles Gewicht 1).
+        # GEMESSEN GESCHEITERT, darum VORGABE 1 (aus).  Gepaarte Kontrolle, gleicher Seed 97,
+        # gleicher Zustand, nur der Schalter verschieden:
+        #     x5:  1/6 geliefert  (182, 66, 7, 195, 124, 219 mm)
+        #     aus: 4/6 geliefert  (182, 76, 9,  15,  19,  16 mm)
+        # Episoden 0-2 laufen praktisch gleich, 3-5 kippen: MIT Gewichtung erreichen sie die
+        # Ablagephase gar nicht mehr, sie scheitern frueher.  Die Umgewichtung nimmt Fit-Masse von
+        # anfahren/greifen weg (offline sichtbar als greifen 12.7 -> 13.5mm), und im geschlossenen
+        # Kreis kostet diese kleine Verschlechterung der LANGEN Phasen mehr, als die Verbesserung der
+        # kurzen einbringt -- die Episode kommt nie bis zum Ablegen.
+        # LEHRE: der zurueckgehaltene Zeilen-Fehler ist KEIN gueltiger Ersatz fuer den Erfolg im
+        # geschlossenen Kreis.  Er hat die Richtung dieser Aenderung falsch vorhergesagt.
+        # n=6 gepaart -- nicht endgueltig, aber die Beweislast liegt bei der Aenderung.
+        # ACT23_PHASE_W=5 schaltet sie fuer einen groesseren Test wieder ein.
         if PHASE_W != 1.0 and len(X):
             pw = np.array([PHASE_WEIGHTS.get(self._phase_of(r), 1.0) for r in X], float)
             w = pw if w is None else np.asarray(w, float) * pw
