@@ -3057,9 +3057,18 @@ def run_self_learning_steering(headless=False):
         #   the shifting aggregate (user watched the net under-CLOSE the gripper -- the BC smoothing
         #   artefact that stronger refits + DAgger labels at the visited close-states sharpen)
         if np.isfinite(div):
+            # PHASENWEISE Aufschluesselung (2026-08-13): der Gesamtwert mittelt ueber die Episode.
+            # Gemessen ist aber, dass die Policy den GREIFpunkt auf Millimeter trifft und das
+            # ABLAGEziel um Zentimeter verfehlt (18mm bei Erfolg, 44mm bei Fehlschlag), waehrend ihr
+            # eigener Teacher ~11mm schafft -- die Aufschluesselung zeigt, wo sie auseinanderlaeuft.
+            _ph = runtime.shadow_divergence_by_phase()
+            _pt = ""
+            if _ph:
+                _ord = [k for k in ("anfahren", "greifen", "tragen", "ablegen") if k in _ph]
+                _pt = " | " + "  ".join(f"{k} {_ph[k][0]:.0f}mm({_ph[k][1]})" for k in _ord)
             print(f"    [Stufe 2] Choreo-Schatten ({'Netz' if use_net else 'FSM'}-Lauf): "
                   f"|Netz-Teacher| {div:.0f} mm ({runtime.n()} DAgger + {runtime.n_imit()} Selbst, "
-                  f"nachtrainiert)", flush=True)
+                  f"nachtrainiert){_pt}", flush=True)
         if not EXV_FREEZE:
             save_state()                                       # lifelong progress survives a restart
         if os.environ.get("ACT23_ZEIT", "1") != "0":

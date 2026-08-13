@@ -61,6 +61,7 @@ class RuntimePolicyModule(ArmModule):
         self._k = 0                                   # subsample counter
         self.trained = False
         self._div: list[float] = []                   # shadow |aim_pred - aim_teacher| (m), per observe
+        self._div_ph: dict[str, list[float]] = {}     # dieselbe Groesse, nach PHASE getrennt (s. _phase_of)
         (self.add_in("policy_state", 13, "[hand xyz, obj xy, obj z, target xy, gripper, obj_h, obj_fp, "
                                          "druck_gueltig, druck_N]")
              .add_out("subgoal", 4, "[aim_xyz, gripper]"))
@@ -105,7 +106,13 @@ class RuntimePolicyModule(ArmModule):
             #                                               poison the lifelong DAgger buffer (897ca5a)
         if self.trained:
             p = self.net.predict(state)
-            self._div.append(float(np.linalg.norm(p[:3] - np.asarray(subgoal, float)[:3])))
+            _d = float(np.linalg.norm(p[:3] - np.asarray(subgoal, float)[:3]))
+            self._div.append(_d)
+            # LAZY: das Modul kommt aus dem Zustands-Pickle, __init__ lief dort nie (dasselbe
+            # Muster wie world_model._weights).  getattr statt Attributzugriff.
+            if getattr(self, "_div_ph", None) is None:
+                self._div_ph = {}
+            self._div_ph.setdefault(self._phase_of(s), []).append(_d)
         if self._k % SUBSAMPLE:
             return
         y = np.asarray(subgoal, float).copy()
@@ -285,6 +292,23 @@ class RuntimePolicyModule(ArmModule):
     def predict(self, state):
         return self.net.predict(state)
 
+    @staticmethod
+    def _phase_of(s) -> str:   # noqa: C901
+        """Phase AUS DEM ZUSTAND ableiten (nicht aus der FSM).
+
+        Gleiche Lehre wie bei der Griffdruck-Messung (pc_act16, 2026-08-07): im Netz-Modus fuehrt die
+        Policy den Arm, die FSM-Phase bleibt haengen und sortiert falsch ein.  Der Zustand traegt
+        alles Noetige: [hx,hy,hz, cx,cy,cz, tx,ty, j5, obj_h, obj_fp, ...].
+        Absicht ist NICHT eine exakte FSM-Nachbildung, sondern eine stabile Einteilung, unter der
+        sich die Divergenz zwischen Policy und Teacher vergleichen laesst."""
+        h = np.asarray(s[:3], float); c = np.asarray(s[3:6], float)
+        t = np.asarray(s[6:8], float); j5 = float(s[8]); obj_h = float(s[9])
+        from pc_cvnn.pc_act16 import J5_CLOSED_TH      # lokal: act16 importiert arm_modules (Zirkel)
+        lifted = c[2] > obj_h + 0.02 and j5 < J5_CLOSED_TH
+        if lifted:
+            return "ablegen" if float(np.linalg.norm(h[:2] - t)) < 0.05 else "tragen"
+        return "greifen" if float(np.linalg.norm(h[:2] - c[:2])) < 0.03 else "anfahren"
+
     def shadow_divergence_mm(self) -> float:
         """Mean |aim_policy - aim_teacher| (mm) since the last call; NaN if nothing accumulated."""
         if not self._div:
@@ -292,6 +316,18 @@ class RuntimePolicyModule(ArmModule):
         d = float(np.mean(self._div)) * 1000.0
         self._div.clear()
         return d
+
+    def shadow_divergence_by_phase(self) -> dict:
+        """{Phase: (Mittel in mm, Anzahl Schritte)} seit dem letzten Aufruf; leert den Speicher.
+
+        WOZU (2026-08-13): der Gesamtwert mittelt ueber die ganze Episode.  Gemessen ist aber, dass
+        die Policy den GREIFpunkt auf Millimeter trifft und das ABLAGEziel um Zentimeter verfehlt
+        (18mm bei Erfolg, 44mm bei Fehlschlag, waehrend ihr eigener Teacher ~11mm schafft) -- ein
+        phasenweiser Vergleich zeigt, ob sie speziell dort auseinanderlaeuft."""
+        d = getattr(self, "_div_ph", None) or {}
+        out = {k: (float(np.mean(v)) * 1000.0, len(v)) for k, v in d.items() if v}
+        d.clear()
+        return out
 
     def step(self) -> None:
         s = self.get_in("policy_state")
