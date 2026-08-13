@@ -2682,9 +2682,21 @@ def run_self_learning_steering(headless=False):
             _drift = 1000.0 * float(np.linalg.norm(_end - _rel["cxy"]))
             _lat = 1000.0 * float(np.linalg.norm(_rel["cxy"] - _rel["tgt"]))
             _fin = 1000.0 * float(np.linalg.norm(_end - _rel["tgt"]))
+            # ZERLEGUNG des seitlichen Fehlers in die KLAUENACHSE (entlang) und quer dazu.  Ein
+            # systematischer Anteil ENTLANG waere dieselbe Wurzel wie der Griff-Fehler (der
+            # Reichpunkt liegt nicht zwischen den Backen); ein richtungsloser Fehler waere
+            # Policy-Ungenauigkeit.  Vorzeichen: + = das Objekt liegt VOR dem Ziel in Klauenrichtung.
+            _dec = ""
+            _f = _rel.get("fwd")
+            if _f is not None and float(np.linalg.norm(_f)) > 1e-9:
+                _e = np.asarray(_rel["cxy"], float) - np.asarray(_rel["tgt"], float)
+                _u = np.asarray(_f, float) / float(np.linalg.norm(_f))
+                _al = 1000.0 * float(_e @ _u)
+                _qu = 1000.0 * float(_e @ np.array([-_u[1], _u[0]]))
+                _dec = f" | entlang Klaue {_al:+.0f}mm, quer {_qu:+.0f}mm"
             print(f"    [Ablage] {body}: beim Oeffnen Objekt {_fall:.0f}mm ueber Ruhelage, "
                   f"seitlich {_lat:.0f}mm vom Ziel -> danach {_drift:.0f}mm gedriftet, "
-                  f"final {_fin:.0f}mm", flush=True)
+                  f"final {_fin:.0f}mm{_dec}", flush=True)
         _fsv = getattr(vc, "_fsv", None)
         if FOVEA_SERVO != "0" and _fsv and (_fsv["nf"] or _fsv["nd"]):
             # measurement line (shadow AND live): how often the net belief carried the servo vs the

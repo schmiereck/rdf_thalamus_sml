@@ -589,7 +589,13 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 run_combined._release = {"hz": float(hz), "cz": float(cz),
                                          "obj_h": float(obj_h),
                                          "cxy": np.asarray(c_true, float).copy(),
-                                         "tgt": np.asarray(tgt_true, float).copy()}
+                                         "tgt": np.asarray(tgt_true, float).copy(),
+                                         # KLAUENRICHTUNG beim Loslassen, fuer die Zerlegung des
+                                         # Ablage-Fehlers (2026-08-13): der Klauenversatz CLAW_OFF
+                                         # korrigiert den GRIFF; ob er beim ABLEGEN richtig herum
+                                         # wirkt, hat nie jemand geprueft.  Ohne die Richtung sagt
+                                         # der Log nur den Betrag ("seitlich 44mm").
+                                         "fwd": np.asarray(sim.claw_fwd(), float)[:2].copy()}
             sim.target("joint_5", j5)
             if press >= 0:                                    # DRUCKMESSSTREIFEN (ein Finger, innen);
                 # PHASE FUER DIE MESSUNG aus der BEOBACHTBAREN Lage ableiten, nicht aus dem
