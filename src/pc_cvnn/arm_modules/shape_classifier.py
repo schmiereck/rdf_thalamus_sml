@@ -56,6 +56,20 @@ MERGE_MARGIN = 1.7                                                      # birth-
 #   (must sit BETWEEN same-form cross-pose spread (p90 ~11.2 -> merge pose-miss re-births) and the
 #   DISTANCE BETWEEN TWO DIFFERENT novel forms (long-I vs T measured p10 ~12.6: 2.0*th=14.6 FUSED them
 #   in the user's GUI session -> the T never got its own class); 1.7*th ~ 12.4 splits both measured sets)
+BIRTH_MARGIN = float(os.environ.get("ACT_SHAPE_BIRTH_MARGIN", "1.0"))   # GEBURTS-Radius, * novel_th.
+#   WARUM ES DEN KNOPF GIBT (gemessen 2026-08-14, offline am gespeicherten Zustand): novel_th ist
+#   LEAVE-ONE-OUT auf dem Trainingssatz kalibriert und beantwortet "gehoert das zu einer TRAINIERTEN
+#   Klasse".  Fuer die ANDERE Frage "gehoeren diese zwei Sichtungen ZUSAMMEN" wurde es nie kalibriert.
+#   Gemessen (je 10 Sichtungen obj_L/U/T/blue, alle Paarungen):
+#       Pose-Streuung INNERHALB eines Objekts   Median  9.25
+#       Abstand ZWISCHEN verschiedenen Objekten Median 14.58   Ueberlappung 0%
+#   novel_th = 7.72 liegt also UNTER der eigenen Streuung -- drei Sichtungen desselben neuen Objekts
+#   clustern nur zufaellig eng genug.  Ueber alle Tripel aus 14 Sichtungen eines neu proportionierten
+#   Koerpers:  Radius 7.72 -> 2% der Tripel, 10.03 (x1.3) -> 23%, 12.34 (x1.6) -> 74%, 14.66 -> 97%;
+#   Fremdpaare unter dem Radius entsprechend 0% / 4% / 28% / 74%.
+#   Die CLAIM-Seite hat dieselbe Sache laengst gemerkt und rechnet mit OPEN_MARGIN (s. dort, und der
+#   Kommentar oben: "p50 ~8.3 / p90 ~11.2 apart while novel_th is ~7.3") -- nur der Geburts-Pfad
+#   benutzte weiter den rohen Wert.  VORGABE 1.0 = bisheriges Verhalten.
 OPEN_CAP = 80                                                           # max stored exemplars per self-labelled class
 # STARVATION / CAP (phantom over-birth control): scattered transient sightings (edge/occlusion/odd-pose
 # renders) can birth open classes that then NEVER get claimed again -- the user's neu-* piled to 45+.  A
@@ -481,7 +495,8 @@ class ShapeClassifierModule(ArmModule):
             elif nm is None:                                 # NOVEL sighting -> temporal-consistency buffer
                 self.last_events.append(("novel", None if det["pos"] is None
                                          else np.round(det["pos"], 3).tolist(), int(det["area"])))
-                near = [b for b in self._novel_buf if float(np.linalg.norm(b - z)) < self.novel_th]
+                _br = self.novel_th * BIRTH_MARGIN            # s. BIRTH_MARGIN oben
+                near = [b for b in self._novel_buf if float(np.linalg.norm(b - z)) < _br]
                 if len(near) + 1 >= NOVEL_CONFIRM:
                     ex = near + [z]
                     # birth-time MERGE: a claim can MISS a young class across a pose change (deterministic
