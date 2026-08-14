@@ -1652,7 +1652,41 @@ def run_self_learning_steering(headless=False):
     # MEASURED 4-DOF grasp envelope (probes, 3-4/4 each: centre column any y, |x|<=0.06 at the top, |x|<=0.09
     # low; the mid band |x|>~0.085 / y 0.16..0.235 FAILS 0-2/4 -- pre-existing envelope hole, see REACH note).
     # Min pair 71mm at jitter +-2mm; (0,0.115) r>BASE_CLEAR=0.11.
-    SLOTS = [(-0.06, 0.24), (0.06, 0.24), (0.0, 0.19), (-0.09, 0.115), (0.09, 0.115), (0.0, 0.115)]
+    # OBJEKTABSTAND IN DER SZENE.  Gemessen (331-Ep-Lauf): in 42% der Episoden verschmelzen zwei
+    # Objekte im Bild zu einem Blob, und diese Episoden liefern 25% statt 38% (p=0.017) -- 13
+    # Prozentpunkte, der groesste gemessene Einzeleffekt.  Die alten Slots stehen minimal 75mm
+    # auseinander; das klingt nach viel, aber die Objekte sind gross (L halbe Laenge 28mm, T 21mm),
+    # der RAND-Abstand ist also viel kleiner als der Mittenabstand.
+    # Mehr Abstand ist bei SECHS Objekten geometrisch nicht drin: der Arbeitsbereich hat das
+    # dokumentierte Huellen-Loch (|x|>0.065 bei y>0.15 ist fuer den Teacher unerreichbar, s. oben)
+    # plus den Basis-Freiraum, und eine Optimierung ueber 60000 Layouts holt nur 75 -> 82mm heraus.
+    # Der Sprung kommt erst mit WENIGER Objekten je Szene (Optimum unter denselben Bedingungen):
+    #     6 Objekte  82mm | 5 Objekte 111mm | 4 Objekte 131mm | 3 Objekte 177mm
+    # ACT23_SCENE_N waehlt, wieviele Objekte GLEICHZEITIG auf dem Tisch stehen; die uebrigen werden
+    # geparkt (die Kamera sieht sie nicht, curious_pick ueberspringt sie darum von selbst).
+    # ACT23_SCENE_EVERY wuerfelt die Szene alle N Episoden neu und ROTIERT dabei, welche Objekte
+    # stehen -- ohne das uebte ein 4-Objekt-Lauf nur vier Formen, und die unterscheiden sich stark
+    # (21-56% Lieferung), was jeden Vergleich verfaelschen wuerde.
+    #
+    # NACHTRAG 2026-08-14, WICHTIG: der ABSTAND ist NICHT die Ursache.  Direkt nachgemessen -- bei der
+    # frischen Slot-Anordnung verschmilzt GAR NICHTS, bei keiner Objektzahl, auch nicht bei den
+    # heutigen 75mm (je 6 Aufbauten mit Jitter und geparkten Markern: 6/5/4/3 Objekte -> immer genau
+    # 6/5/4/3 Blobs).  Im echten Lauf beginnen die Verschmelzungen erst ab Episode 4 und steigen dann
+    # auf ~40%: die Objekte WANDERN im Laufe des Laufs zusammen, weil ein geliefertes Objekt am
+    # Zielmarker liegen bleibt und die Marker nah beieinander stehen.
+    # Damit ist SCENE_N das falsche Mittel; der wirksame Teil dieses Umbaus ist SCENE_EVERY, das die
+    # angesammelte Unordnung periodisch aufloest.
+    # VORGABE = bisheriges Verhalten (6 Objekte, Szene steht den ganzen Lauf).
+    SCENE_SLOTS = {
+        6: [(-0.06, 0.24), (0.06, 0.24), (0.0, 0.19), (-0.09, 0.115), (0.09, 0.115), (0.0, 0.115)],
+        5: [(-0.065, 0.24), (0.064, 0.24), (0.0, 0.149), (0.095, 0.091), (-0.095, 0.09)],
+        4: [(0.065, 0.24), (-0.065, 0.221), (0.057, 0.107), (-0.083, 0.091)],
+        3: [(0.0, 0.24), (0.095, 0.09), (-0.095, 0.09)],
+    }
+    SCENE_N = max(3, min(6, int(os.environ.get("ACT23_SCENE_N", "6"))))
+    SCENE_EVERY = int(os.environ.get("ACT23_SCENE_EVERY", "0"))    # 0 = nie neu wuerfeln (wie bisher)
+    SLOTS = SCENE_SLOTS[SCENE_N]
+    PARK_XY = [0.5, -0.6]                                          # ausserhalb des Kamerabildes
     scene_slots = {}                                           # body -> slot index (finds the FREE slot)
 
     # ERFAHRUNGS-GRUPPE fuer den Block-Bootstrap des Welt-Modells (s. world_model._bootstrap_blocks).
@@ -1667,19 +1701,40 @@ def run_self_learning_steering(headless=False):
     def group_id():
         return f"{exp_group['lauf']}:{exp_group['szene']}"
 
+    def _geparkt_jetzt(nm):
+        """Steht `nm` gerade ABSICHTLICH ausserhalb der Szene? (s. SCENE_N)"""
+        e = scene.get(nm)
+        if e is None:
+            return False
+        return float(np.linalg.norm(np.asarray(e[0], float) - np.asarray(PARK_XY, float))) < 0.05
+
     def randomize_objects():
         exp_group["szene"] += 1                                # neue stehende Szene -> neue Gruppe
         sim.reset_home()
         bodies = [(nm, m) for _l, nm, m in state.OBJECTS]
         if NOVEL_BODY in scene and all(nm != NOVEL_BODY for nm, _ in bodies):
             bodies.append((NOVEL_BODY, "shape"))               # introduced but not yet discovered: keep it in play
+        # WELCHE Objekte stehen: bei SCENE_N < len(bodies) rotiert das Fenster ueber die Liste, damit
+        # ueber den Lauf jedes Objekt gleich oft auf dem Tisch steht (sonst uebte ein kleiner Aufbau
+        # immer dieselben Formen).  Die uebrigen werden geparkt.
+        _k = len(bodies)
+        _rot = (exp_group["szene"] * SCENE_N) % max(_k, 1)
+        _steht = [bodies[(_rot + i) % _k] for i in range(min(SCENE_N, _k))]
+        _geparkt = [b for b in bodies if b not in _steht]
         order = list(range(len(SLOTS))); crng.shuffle(order)   # random object<->slot assignment (variety)
         scene_slots.clear()
-        for (nm, m), si in zip(bodies, order):
+        for (nm, m), si in zip(_steht, order):
             p = np.array(SLOTS[si], float) + crng.uniform(-0.002, 0.002, 2)   # small jitter
             z = float(LONG_HALF[2]) if m == "long" else 0.012
             yaw = crng.uniform(0, np.pi) if m == "long" else crng.uniform(0, 2 * np.pi)
             scene[nm] = (p, z, float(yaw)); scene_slots[nm] = si
+        for nm, m in _geparkt:                                 # geparkt: bleibt in `scene` (nichts
+            scene[nm] = (np.array(PARK_XY, float),             #   stromabwaerts bricht), steht aber
+                         float(LONG_HALF[2]) if m == "long" else 0.012, 0.0)   #   ausserhalb des Bildes
+        if _geparkt:
+            print(f"    [Szene] {len(_steht)} Objekte auf dem Tisch (min. Abstand "
+                  f"{1000*min(np.hypot(a[0]-b[0], a[1]-b[1]) for a, b in __import__('itertools').combinations(SLOTS, 2)):.0f}mm), "
+                  f"geparkt: {', '.join(nm for nm, _ in _geparkt)}", flush=True)
         place_all()
         open_set_glance()                                      # lifelong open-set look at the fresh scene
         if panel is not None:                                  # show the placed scene immediately (decide from it)
@@ -2803,11 +2858,16 @@ def run_self_learning_steering(headless=False):
         # unmarked object and throws it").  Return such objects to a free slot: ENVIRONMENT tidying
         # between episodes (the bounded act23 heir of act16's reposition_strays), not an agent rule.
         for _l2, nm, _m2 in state.OBJECTS:
+            if _geparkt_jetzt(nm):
+                continue                                       # ABSICHTLICH geparkt (ACT23_SCENE_N) --
+                #   die Aufraeumroutine darf es nicht auf den Tisch zurueckholen, sonst waere die
+                #   kleinere Szene nach einer Episode wieder voll (im Rauchtest genau so passiert)
             p = sim.obj_pos(nm)[:2]
             if abs(p[0]) <= 0.135 and 0.055 <= p[1] <= 0.265:
                 continue                                       # inside (generous bounds: a legit delivery can
                 #   rest tolerance-width past a top target -- CONTINUITY, only truly-LOST objects return)
-            occ = [sim.obj_pos(o)[:2] for _l3, o, _m3 in state.OBJECTS if o != nm]
+            occ = [sim.obj_pos(o)[:2] for _l3, o, _m3 in state.OBJECTS
+                   if o != nm and not _geparkt_jetzt(o)]
             free = [s for s in SLOTS
                     if all(float(np.linalg.norm(np.asarray(s) - q)) > 0.055 for q in occ)]
             if not free:
@@ -3226,6 +3286,8 @@ def run_self_learning_steering(headless=False):
         #   per-object trends.  ACT23_AUTO_PLACE=0 keeps the scene AS THE LAST EPISODE LEFT IT (the
         #   inheritance probe: failures shove/wedge the object and the next episode starts from that).
         for ep in range(N):
+            if SCENE_EVERY > 0 and ep > 0 and ep % SCENE_EVERY == 0:
+                randomize_objects()          # neue Szene + ROTATION, welche Objekte stehen (s. SCENE_N)
             if force_list:
                 want = force_list[ep % len(force_list)]
                 ks = [k for k, (l, _n, _m) in enumerate(state.OBJECTS) if want.lower() in l.lower()]
@@ -3256,7 +3318,11 @@ def run_self_learning_steering(headless=False):
             else:
                 pick = curious_pick() if AUTO_CURIOUS else None
             if pick is None and not force_list:
-                state.sel = int(crng.integers(len(state.OBJECTS)))
+                # nur Objekte, die auch AUF DEM TISCH stehen (ein geparktes waere unkommandierbar)
+                _auf = [k for k, (_l, _n, _m) in enumerate(state.OBJECTS)
+                        if float(np.linalg.norm(np.asarray(scene.get(_n, (np.zeros(2),))[0], float)
+                                                - np.asarray(PARK_XY, float))) > 0.05]
+                state.sel = int(crng.choice(_auf)) if _auf else int(crng.integers(len(state.OBJECTS)))
                 state.target_idx = int(crng.integers(len(state.MARKERS)))
                 state.place_selected_random(crng)
             elif pick is not None:
