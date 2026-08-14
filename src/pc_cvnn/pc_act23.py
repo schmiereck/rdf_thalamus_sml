@@ -1807,6 +1807,68 @@ def run_self_learning_steering(headless=False):
             panel.add_discovered(len(state.OBJECTS) - 1)
             panel.update(sim.render(CAM), f"Neue Form entdeckt und selbst benannt: '{cname}' — jetzt kommandierbar")
 
+    # ANEIGNUNGSKURVE (Nutzerziel 2026-08-14): nicht "wie oft liefert er", sondern "wie schnell
+    # eignet er sich NEUES an".  Gemessen ab der Geburt einer selbst benannten Klasse:
+    #   Alter        Episoden seit der Geburt
+    #   wiedererkannt  Anteil der Blicke, in denen die Klasse GECLAIMT wurde (statt erneut "novel"
+    #                zu erscheinen oder gar eine zweite Klasse zu gebaeren) -- Stufe "stabil erkannt"
+    #   kommandiert  wie oft sie als Befehl gewaehlt wurde, und wie oft das geliefert hat
+    # WARUM das noetig ist: in den letzten 431 Episoden gab es NULL Geburten -- die Faehigkeit, um
+    # die es geht, wird im Betrieb fast nie ausgeuebt, und im Log stand bisher nur die Geburt
+    # selbst, nichts danach.  Ohne diese Kurve waere jede Verbesserung daran unbelegbar.
+    acq = {}                                                   # Klassenname -> Aneignungszaehler
+    acq_ep = {"n": 0}                                          # laufende Episodennummer
+
+    def _acq_update(born, events):
+        """Einen Blick verbuchen: Geburten anlegen, claims/novel je Klasse zaehlen."""
+        for c in born:
+            acq.setdefault(c, {"born": acq_ep["n"], "claim": 0, "blick": 0, "cmd": 0, "ok": 0})
+        seen = {c for kind, c, *_ in events if kind == "claim"}
+        for c, a in acq.items():
+            a["blick"] += 1
+            if c in seen:
+                a["claim"] += 1
+
+    def acq_line(maxage=60):
+        """Eine Zeile je JUNGER Klasse; alte fallen raus, damit das Log nicht zuwaechst."""
+        out = []
+        for c, a in sorted(acq.items(), key=lambda kv: kv[1]["born"]):
+            age = acq_ep["n"] - a["born"]
+            if age > maxage or a["blick"] == 0:
+                continue
+            out.append(f"{c}: Alter {age} Ep, wiedererkannt {100*a['claim']/a['blick']:.0f}% "
+                       f"({a['claim']}/{a['blick']} Blicke), kommandiert {a['cmd']}x davon "
+                       f"{a['ok']} geliefert")
+        return out
+
+    # NEUHEITS-ERZEUGER (ACT23_NOVEL_EVERY).  Ohne ihn gibt es nichts zu messen: in den letzten 431
+    # Episoden ist NULL mal eine Klasse geboren worden, weil dieselben sechs Objekte im Umlauf sind
+    # und `introduce_object` an einem GUI-Knopf haengt.
+    # Erzeugt wird echte FORM-Neuheit ueber die Proportionen des Probe-Koerpers (set_object_size) --
+    # der Formdeskriptor ist rotationsinvariant, aber NICHT proportionsinvariant, ein deutlich
+    # anderes Seitenverhaeltnis ist fuer die Wahrnehmung also eine neue Form.  Der Koerper wird
+    # dabei NICHT umbenannt und bekommt kein Label: der Agent muss ihn selbst entdecken.
+    # ACHTUNG, ehrliche Grenze: das ist Neuheit in EINER Dimension (Proportion).  Ob sich daraus
+    # ableiten laesst, wie schnell er eine voellig andere Form lernt, ist damit NICHT beantwortet.
+    NOVEL_EVERY = int(os.environ.get("ACT23_NOVEL_EVERY", "0"))     # 0 = aus (bisheriges Verhalten)
+    _novel_shapes = [(0.030, 0.010, 0.012), (0.010, 0.032, 0.012), (0.026, 0.018, 0.012),
+                     (0.014, 0.014, 0.024), (0.034, 0.008, 0.012)]
+
+    def spawn_novel_shape():
+        """Dem Probe-Koerper eine NEUE Proportion geben und ihn frei hinstellen -- ohne Label."""
+        i = acq_ep["n"] // max(NOVEL_EVERY, 1)
+        half = _novel_shapes[i % len(_novel_shapes)]
+        sim.set_object_size(NOVEL_BODY, np.asarray(half, float))
+        free = [si for si in range(len(SLOTS)) if si not in scene_slots.values()]
+        si = int(free[0]) if free else int(crng.integers(len(SLOTS)))
+        p = np.array(SLOTS[si], float) + crng.uniform(-0.003, 0.003, 2)
+        yaw = float(crng.uniform(0, 2 * np.pi))
+        scene[NOVEL_BODY] = (p, float(half[2]), yaw); scene_slots[NOVEL_BODY] = si
+        sim.set_object(NOVEL_BODY, p.tolist(), z=float(half[2]), yaw=yaw)
+        mujoco.mj_forward(sim.m, sim.d)
+        print(f"    [Neuheit] Probe-Koerper mit neuer Proportion {tuple(round(1000*h) for h in half)}mm "
+              f"hingestellt -- ohne Label, der Agent muss ihn selbst entdecken", flush=True)
+
     def open_set_glance():
         """One open-set LOOK at the current scene: unknown blobs feed the novelty buffer, a young class's
         exemplar set grows over new poses (observe_scene); a class born here becomes a commandable object.
@@ -1821,6 +1883,7 @@ def run_self_learning_steering(headless=False):
         #   distorted and would read consistently-"novel" for a boring reason)
         if os.environ.get("ACT23_DEBUG", "0") == "1" and shape_clf.last_events:
             print(f"    [dbg open-set] {shape_clf.last_events}  buffer={len(shape_clf._novel_buf)}", flush=True)
+        _acq_update(born, shape_clf.last_events or [])
         for cname in born:
             _register_open_class(cname)
         # STAGE 3: OPEN-SET COLOURS from the same glance -- every in-workspace component's chromaticity
@@ -3137,6 +3200,14 @@ def run_self_learning_steering(headless=False):
             print(f"    [Stufe 2] Choreo-Schatten ({'Netz' if use_net else 'FSM'}-Lauf): "
                   f"|Netz-Teacher| {div:.0f} mm ({runtime.n()} DAgger + {runtime.n_imit()} Selbst, "
                   f"nachtrainiert){_pt}", flush=True)
+        # ANEIGNUNG: die Episode einer selbst benannten Klasse zuschreiben, falls sie kommandiert war
+        acq_ep["n"] += 1
+        _ck = state.SHAPE_KEY.get(body)
+        if _ck in acq:
+            acq[_ck]["cmd"] += 1
+            acq[_ck]["ok"] += int(bool(res.get("ok", False)))
+        for _al in acq_line():
+            print(f"    [Aneignung] {_al}", flush=True)
         if not EXV_FREEZE:
             save_state()                                       # lifelong progress survives a restart
         if os.environ.get("ACT23_ZEIT", "1") != "0":
@@ -3286,6 +3357,8 @@ def run_self_learning_steering(headless=False):
         #   per-object trends.  ACT23_AUTO_PLACE=0 keeps the scene AS THE LAST EPISODE LEFT IT (the
         #   inheritance probe: failures shove/wedge the object and the next episode starts from that).
         for ep in range(N):
+            if NOVEL_EVERY > 0 and ep > 0 and ep % NOVEL_EVERY == 0:
+                spawn_novel_shape()                            # neue FORM einfuehren (ohne Label)
             if SCENE_EVERY > 0 and ep > 0 and ep % SCENE_EVERY == 0:
                 randomize_objects()          # neue Szene + ROTATION, welche Objekte stehen (s. SCENE_N)
             if force_list:
