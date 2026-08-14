@@ -1880,8 +1880,21 @@ def run_self_learning_steering(headless=False):
     # ACHTUNG, ehrliche Grenze: das ist Neuheit in EINER Dimension (Proportion).  Ob sich daraus
     # ableiten laesst, wie schnell er eine voellig andere Form lernt, ist damit NICHT beantwortet.
     NOVEL_EVERY = int(os.environ.get("ACT23_NOVEL_EVERY", "0"))     # 0 = aus (bisheriges Verhalten)
-    _novel_shapes = [(0.030, 0.010, 0.012), (0.010, 0.032, 0.012), (0.026, 0.018, 0.012),
-                     (0.014, 0.014, 0.024), (0.034, 0.008, 0.012)]
+    # WELCHE Proportionen wirklich neu sind -- GEMESSEN, nicht geraten (2026-08-14).  Der erste
+    # Satz war unbrauchbar: der Deskriptor ist ROTATIONSINVARIANT konstruiert, also ist 10x32
+    # dieselbe Form wie 32x10 und damit wie das lange Objekt (34x9).  Alle fuenf alten Werte waren
+    # gedrehte BEKANNTE Formen; resolve() ordnete sie prompt einer bestehenden Klasse zu (10x32 ->
+    # neu-34 in 9 von 9 Sichtungen), der Geburts-Pfad wurde nie erreicht.  Das System hatte recht,
+    # der Erzeuger war falsch.
+    # Massgeblich ist das SEITENVERHAELTNIS.  Bekannt: Wuerfel 1.0:1, langes Objekt 3.8:1,
+    # T-Grundgeom 3.0:1.  Ueber je 8 Posen gemessen (Anteil NOVEL):
+    #     12x12 (1.0:1)  2/8      10x32 (3.2:1)  1/8      18x12 (1.5:1)  2/8
+    #     30x4  (7.5:1)  5/8      22x20 (1.1:1)  8/8
+    # Nur die beiden letzten sind zuverlaessig neu -- ein EXTREM schlanker Stab (jenseits des
+    # bekannten Bereichs) und ein fast quadratisches, aber deutlich GROESSERES Rechteck (die
+    # Groesse traegt, weil die Ringradien der Harmonischen in Weltmassen liegen).
+    _novel_shapes = [(0.022, 0.020, 0.012), (0.030, 0.004, 0.012),
+                     (0.024, 0.022, 0.012), (0.032, 0.005, 0.012)]
 
     def spawn_novel_shape():
         """Dem Probe-Koerper eine NEUE Proportion geben und ihn frei hinstellen -- ohne Label."""
