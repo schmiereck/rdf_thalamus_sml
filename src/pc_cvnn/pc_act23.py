@@ -1747,10 +1747,24 @@ def run_self_learning_steering(headless=False):
                 vc.viz.fovea(img, g, vc.fovea._ek(), np.clip(arr[:, :, 1:], 0, 1),
                              "Szene neu — Fovea zentriert")    # box + cells + image consistent (learn=False)
 
+    _novel_half = {"h": None}          # aktuell erzwungene Proportion des Probe-Koerpers (s. _set_sizes)
+
     def _set_sizes():
         sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "obj_red")]] = np.array([0.012] * 3)
         sim.m.geom_size[sim.m.body_geomadr[bid]] = np.asarray(LONG_HALF, float)   # obj_blue stays elongated
         for nm, h0 in shape_half0.items():                 # repair the L/U FIRST geom too: any set_object_size
+            if nm == NOVEL_BODY and _novel_half["h"] is not None:
+                # ABSICHTLICH verformter Probe-Koerper (ACT23_NOVEL_EVERY) -- NICHT zuruecksetzen.
+                # GEFUNDEN 2026-08-14: _set_sizes laeuft am ENDE JEDER EPISODE, und shape_half0
+                # enthaelt obj_T.  Die neue Proportion war damit eine Episode spaeter wieder weg,
+                # der Agent sah die neue Form hoechstens EINMAL statt der noetigen dreimal -- das
+                # ist der wahre Grund, warum in beiden A/B-Laeufen keine Klasse entstand (und
+                # warum beide bitgleich waren: die Neuheit war nie lange genug da, um irgendeine
+                # Schwelle zu erreichen).
+                sim.m.geom_size[sim.m.body_geomadr[
+                    mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)]] = np.asarray(
+                        _novel_half["h"], float)
+                continue
             sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)]] = h0
             #   on a composite body hits only its first geom and silently DEFORMS the shape ("a segment turns
             #   90 deg") -- with PERSIST above this is a no-op, but the shape must never stay deformed.
@@ -1900,9 +1914,17 @@ def run_self_learning_steering(headless=False):
         """Dem Probe-Koerper eine NEUE Proportion geben und ihn frei hinstellen -- ohne Label."""
         i = acq_ep["n"] // max(NOVEL_EVERY, 1)
         half = _novel_shapes[i % len(_novel_shapes)]
+        _novel_half["h"] = tuple(float(x) for x in half)    # gegen das Ruecksetzen in _set_sizes
         sim.set_object_size(NOVEL_BODY, np.asarray(half, float))
-        free = [si for si in range(len(SLOTS)) if si not in scene_slots.values()]
-        si = int(free[0]) if free else int(crng.integers(len(SLOTS)))
+        # NUR Slots, auf die der Open-Set-Blick ueberhaupt schaut.  open_set_glance filtert mit
+        # bounds=(-0.115, 0.115, 0.075, 0.235) -- die beiden oberen Slots liegen bei y=0.240 und damit
+        # AUSSERHALB; eine dort hingestellte neue Form wird nie gesehen, ihre Sichtungen werden
+        # verworfen (gefunden 2026-08-15, zweiter Fehler im Neuheits-Erzeuger nach dem Ruecksetzen).
+        _GB = (-0.115, 0.115, 0.075, 0.235)
+        _sichtbar = [i for i, (x, y) in enumerate(SLOTS)
+                     if _GB[0] <= x <= _GB[1] and _GB[2] <= y <= _GB[3]]
+        free = [si for si in _sichtbar if si not in scene_slots.values()]
+        si = int(free[0]) if free else int(crng.choice(_sichtbar))
         p = np.array(SLOTS[si], float) + crng.uniform(-0.003, 0.003, 2)
         yaw = float(crng.uniform(0, 2 * np.pi))
         scene[NOVEL_BODY] = (p, float(half[2]), yaw); scene_slots[NOVEL_BODY] = si
@@ -3250,6 +3272,16 @@ def run_self_learning_steering(headless=False):
             acq[_ck]["ok"] += int(bool(res.get("ok", False)))
         for _al in acq_line():
             print(f"    [Aneignung] {_al}", flush=True)
+        if NOVEL_EVERY > 0 and _novel_half["h"] is not None:
+            # KONTROLLE: steht der Probe-Koerper wirklich noch in der erzwungenen Proportion?
+            # _set_sizes setzt die Formkoerper am Ende JEDER Episode auf die XML-Masse zurueck;
+            # die Ausnahme dafuer muss nachweisbar greifen, sonst misst die ganze Kurve nichts.
+            _ist = sim.m.geom_size[sim.m.body_geomadr[
+                mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, NOVEL_BODY)]]
+            _soll = np.asarray(_novel_half["h"], float)
+            _ok = "haelt" if np.allclose(_ist[:3], _soll, atol=1e-6) else "ZURUECKGESETZT"
+            print(f"    [Neuheit-Kontrolle] {NOVEL_BODY} soll {tuple(round(1000*x) for x in _soll)}mm, "
+                  f"ist {tuple(round(1000*float(x)) for x in _ist[:3])}mm -> {_ok}", flush=True)
         if not EXV_FREEZE:
             save_state()                                       # lifelong progress survives a restart
         if os.environ.get("ACT23_ZEIT", "1") != "0":

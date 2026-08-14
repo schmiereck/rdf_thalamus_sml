@@ -56,6 +56,21 @@ MERGE_MARGIN = 1.7                                                      # birth-
 #   (must sit BETWEEN same-form cross-pose spread (p90 ~11.2 -> merge pose-miss re-births) and the
 #   DISTANCE BETWEEN TWO DIFFERENT novel forms (long-I vs T measured p10 ~12.6: 2.0*th=14.6 FUSED them
 #   in the user's GUI session -> the T never got its own class); 1.7*th ~ 12.4 splits both measured sets)
+NOVEL_CLUSTER = os.environ.get("ACT_SHAPE_NOVEL_CLUSTER", "1") != "0"   # Neuheits-Puffer als CLUSTER
+#   statt als FIFO.  GEMESSEN 2026-08-14, zwei A/B-Laeufe ueber den Geburts-Radius lieferten BITGLEICHE
+#   Arme -- der Radius war nie die bindende Bedingung.  Der Grund lag im Puffer: er hielt die LETZTEN 12
+#   Sichtungen rein nach AKTUALITAET, ueber alle Objekte und Blicke hinweg.  In einem echten Lauf mischen
+#   sich dort verformte Ansichten, verschmolzene Blobs und Randartefakte, also liegen drei SAUBERE
+#   Sichtungen desselben neuen Objekts selten gleichzeitig darin.  Dass die Form selbst eng genug
+#   clustert, ist gemessen: die neue Form 22x20 hat paarweisen Median 6.45 -- ENGER als der heutige
+#   Radius 7.72, 76 von 165 Tripeln liegen darunter.  Waeren drei ihrer Sichtungen gleichzeitig im
+#   Puffer, entstuende die Klasse schon mit den alten Werten.
+#   Der Cluster-Puffer gruppiert nach UEBEREINSTIMMUNG und laesst eine Gruppe reifen; sie stirbt durch
+#   ALTERN (kein neuer Beleg), nicht durch Verdraengung.  Das sollte zugleich die Phantome daempfen:
+#   bisher entstand eine Klasse, wenn drei ZUFAELLIG benachbarte Fremdsichtungen zusammentrafen -- 5 von
+#   8 Klassen im Zustand werden nie wieder geclaimt.  ACT_SHAPE_NOVEL_CLUSTER=0 stellt das FIFO her.
+NOVEL_GROUP_AGE = int(os.environ.get("ACT_SHAPE_NOVEL_GROUP_AGE", "12"))   # Blicke ohne neuen Beleg
+NOVEL_GROUP_MAX = int(os.environ.get("ACT_SHAPE_NOVEL_GROUP_MAX", "16"))   # Deckel fuer die Gruppenzahl
 BIRTH_MARGIN = float(os.environ.get("ACT_SHAPE_BIRTH_MARGIN", "1.0"))   # GEBURTS-Radius, * novel_th.
 #   WARUM ES DEN KNOPF GIBT (gemessen 2026-08-14, offline am gespeicherten Zustand): novel_th ist
 #   LEAVE-ONE-OUT auf dem Trainingssatz kalibriert und beantwortet "gehoert das zu einer TRAINIERTEN
@@ -475,6 +490,9 @@ class ShapeClassifierModule(ArmModule):
         (measured: a mis-delivered cube at y=0.24 bred a phantom class).  Returns newly created names."""
         born = []
         self.last_events = []                                # glance debug trail (novel/claim/born + where)
+        if getattr(self, "_novel_groups", None) is None:      # LAZY: aus dem Zustands-Pickle geladene
+            self._novel_groups = [{"ex": [b], "age": 0}       #   Instanzen haben das Feld nicht; die
+                                  for b in (self._novel_buf or [])]   # alten Eintraege werden Einzelgruppen
         for det in self.perceive_all(sim, min_area=min_area):
             if self.area_hi is not None and det["area"] > self.area_hi:
                 continue                                     # oversize blob = two objects MERGED (pushed
@@ -496,7 +514,23 @@ class ShapeClassifierModule(ArmModule):
                 self.last_events.append(("novel", None if det["pos"] is None
                                          else np.round(det["pos"], 3).tolist(), int(det["area"])))
                 _br = self.novel_th * BIRTH_MARGIN            # s. BIRTH_MARGIN oben
-                near = [b for b in self._novel_buf if float(np.linalg.norm(b - z)) < _br]
+                if NOVEL_CLUSTER:
+                    # CLUSTER-PUFFER statt FIFO (s. NOVEL_CLUSTER oben).  Die Sichtung sucht sich
+                    # eine GRUPPE, zu deren saemtlichen Mitgliedern sie naeher als _br liegt (nicht
+                    # nur zum naechsten -- sonst kettet sich eine Gruppe ueber weite Strecken
+                    # zusammen).  Passt keine, beginnt sie eine eigene.
+                    grp = next((g for g in self._novel_groups
+                                if all(float(np.linalg.norm(q - z)) < _br for q in g["ex"])), None)
+                    if grp is None:
+                        self._novel_groups.append({"ex": [z], "age": 0})
+                        near = []
+                    else:
+                        grp["ex"].append(z); grp["age"] = 0
+                        near = grp["ex"][:-1]
+                        if len(grp["ex"]) >= NOVEL_CONFIRM:
+                            self._novel_groups.remove(grp)     # reif -> unten Geburt/Wirt
+                else:
+                    near = [b for b in self._novel_buf if float(np.linalg.norm(b - z)) < _br]
                 if len(near) + 1 >= NOVEL_CONFIRM:
                     ex = near + [z]
                     # birth-time MERGE: a claim can MISS a young class across a pose change (deterministic
@@ -522,10 +556,24 @@ class ShapeClassifierModule(ArmModule):
                         name = f"neu-{self._name_seq}"
                         self.open_names.append(name); self.open[name] = ex
                         born.append(name)
-                    self._novel_buf = [b for b in self._novel_buf if not any(b is q for q in near)]
-                else:
+                    if not NOVEL_CLUSTER:
+                        self._novel_buf = [b for b in self._novel_buf if not any(b is q for q in near)]
+                elif not NOVEL_CLUSTER:
                     self._novel_buf.append(z)
-        self._novel_buf = self._novel_buf[-12:]              # stale far-pose sightings must not pile up
+        if NOVEL_CLUSTER:
+            # ALTERN statt verdraengen: eine Gruppe stirbt, wenn sie NOVEL_GROUP_AGE Blicke lang
+            # keinen neuen Beleg bekommt -- das ist dieselbe Absicht wie der alte 12er-Deckel
+            # ("stale far-pose sightings must not pile up"), nur nach UEBEREINSTIMMUNG statt nach
+            # Aktualitaet.  Eine Gruppe, die weiter belegt wird, ueberlebt beliebig lange; eine
+            # zufaellige Einzelsichtung verfaellt.
+            for g in self._novel_groups:
+                g["age"] += 1
+            self._novel_groups = [g for g in self._novel_groups if g["age"] <= NOVEL_GROUP_AGE]
+            if len(self._novel_groups) > NOVEL_GROUP_MAX:     # groesste zuerst behalten
+                self._novel_groups.sort(key=lambda g: (-len(g["ex"]), g["age"]))
+                del self._novel_groups[NOVEL_GROUP_MAX:]
+        else:
+            self._novel_buf = self._novel_buf[-12:]          # stale far-pose sightings must not pile up
         # CONSOLIDATE duplicates: the dko merge gate can force a SECOND class for the same form (far-pose
         # re-birth); once both sets densify, same-form sets grow INTO each other (T-T p50 ~5.8) while
         # different forms stay >= the cross floor (~12.5) -> min cross-distance < novel_th = same form.
