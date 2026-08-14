@@ -362,6 +362,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         run_combined._maxcz = float(obj_h)                   # CHECKPOINTS (act23 credit routing): three
         run_combined._slipped = False                        #   self-measurable predictions per episode.
         run_combined._attempted = False
+        run_combined._inclaw = None                          # (quer, tief) mm des Objekts relativ zur
+        #   Backenmitte beim Zufassen; None = die Klaue hat nie tief am Objekt geschlossen
         run_combined._release = None       # release snapshot (see the step loop)
         run_combined._grip = {}            # Fingerdruck-Streifen: Messreihe JE PHASE (N).
         #   Ein realer Streifen liefert durchgehend -- also wird er auch durchgehend aufgezeichnet und
@@ -425,6 +427,11 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                     and hz < obj_h + GRASP_OFFSET + 0.02
                     and sim.d.qpos[sim.jqadr["joint_5"]] < J5_CLOSED_TH):
                 run_combined._attempted = True                # claw closed low AT the object, object still
+                if run_combined._inclaw is None:              # LAGE IN DER KLAUE im Moment des
+                    try:                                      #   Zufassens (nur beim ERSTEN Mal, s.
+                        run_combined._inclaw = sim.in_claw(c_true)   # pc_act14.in_claw)
+                    except Exception:
+                        run_combined._inclaw = None
                 #                                               down -> the grasp was TESTED (see header)
             if via == "push" and np.linalg.norm(c - tgt) < tol:  # pushed home -> done
                 break

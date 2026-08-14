@@ -2655,6 +2655,14 @@ def run_self_learning_steering(headless=False):
             _off = not (_rb[0] - 0.01 <= _e[0] <= _rb[1] + 0.01 and _rb[2] - 0.01 <= _e[1] <= _rb[3] + 0.01)
             _trav = 1000.0 * float(np.linalg.norm(_e - snap[body][0][:2]))
             print(f"    [PlaceAB] {body} Weg {_trav:.0f}mm{'  VON-FLAECHE-GEFLOGEN' if _off else ''}", flush=True)
+        _ic = getattr(act16.run_combined, "_inclaw", None)
+        if _ic is not None:
+            # LAGE IN DER KLAUE beim Zufassen (quer zur Trennachse / tief in Richtung Backen).
+            # Prueft die Vermutung aus dem 331-Ep-Lauf: ein naher Nachbar kostet 13 Prozentpunkte
+            # Lieferung, OHNE dass der Griff scheitert (100% Kontakt, 100% gehalten) -- sitzt das
+            # Objekt dann aussermittig, und wandert dieser Versatz bis zur Ablage durch?
+            print(f"    [InKlaue] {body}: quer {_ic[0]:+.0f}mm, tief {_ic[1]:+.0f}mm "
+                  f"(0,0 = mittig zwischen den Backen)", flush=True)
         _g = dict(getattr(act16.run_combined, "_grip", {}) or {})
         def _ph(*names):                                       # Mittelwert ueber die genannten Phasen
             v = [x for n in names for x in _g.get(n, [])]

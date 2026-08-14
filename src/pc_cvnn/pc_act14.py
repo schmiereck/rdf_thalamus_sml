@@ -233,6 +233,35 @@ class BracketArmSim:
     def set_reach_site(self, name):
         self.reach_sid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_SITE, name)
 
+    def jaw_mid(self):
+        """Weltposition der BACKENMITTE (Mittelpunkt der beiden Klauenbacken).
+
+        Das ist der Punkt, zwischen dem ein gegriffenes Objekt sitzen SOLL -- nicht der Reichpunkt
+        (site "contact"), der 4-9mm dahinter liegt (s. claw_fwd)."""
+        import mujoco as _mj
+        if getattr(self, "_claw_gid", None) is None:
+            self._claw_gid = tuple(_mj.mj_name2id(self.m, _mj.mjtObj.mjOBJ_GEOM, n)
+                                   for n in ("claw_left", "claw_right"))
+        a, b = self._claw_gid
+        return 0.5 * (self.d.geom_xpos[a] + self.d.geom_xpos[b])
+
+    def in_claw(self, obj_xy):
+        """Lage eines Objekts RELATIV ZUR BACKENMITTE, im Klauenrahmen (mm): (quer, tief).
+
+        quer = entlang der Finger-Trennachse; 0 = mittig zwischen den Backen.
+        tief = entlang der Klauen-Vorwaertsachse; 0 = auf Hoehe der Backenmitte, + = weiter vorn.
+        WOZU (2026-08-14): gemessen kostet ein naher Nachbar 13 Prozentpunkte Lieferung, OHNE dass
+        der Griff scheitert (100% Kontakt, 100% gehalten) -- die Vermutung ist, dass der verschmolzene
+        Blob den Greifpunkt verschiebt, das Objekt AUSSERMITTIG in der Klaue sitzt und dieser Versatz
+        bis zur Ablage durchwandert.  Diese Groesse prueft genau das."""
+        import numpy as _np
+        e = _np.asarray(obj_xy, float)[:2] - _np.asarray(self.jaw_mid(), float)[:2]
+        f = _np.asarray(self.claw_fwd(), float)[:2]
+        n = float(_np.linalg.norm(f))
+        f = f / n if n > 1e-9 else _np.array([0.0, 1.0])
+        q = _np.array([-f[1], f[0]])                      # Trennachse = quer zur Vorwaertsachse
+        return 1000.0 * float(e @ q), 1000.0 * float(e @ f)
+
     def claw_fwd(self):
         """Einheitsvektor (Welt), in dessen Richtung die BACKENMITTE vor dem Reichpunkt liegt.
 
