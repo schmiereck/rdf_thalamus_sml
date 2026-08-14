@@ -60,6 +60,7 @@ for _k, _v in (("ACT_REACH_X0", "-0.12"), ("ACT_REACH_X1", "0.12"),
 os.environ.setdefault("ACT_GOAL_ROPE", "1")   # STAGE 4a: RoPE goal-latent (near-linear in position ->
 #   the learned latent-inverse is near-exact; measured in act21: servo isolated ~0mm vs 4.4mm blob)
 from pc_cvnn.pc_act14 import BracketArmSim, HOME, ARM3, ArmBodyModel3D
+from pc_cvnn.arm_modules import shape_classifier as _SC
 from pc_cvnn.pc_act18 import (F as HEX_F, warp_gaze_delta, fovea_gradient,
                               ZOOM as FOVEA_ZOOM, ZOOM_MIN, ZOOM_MAX)
 from pc_cvnn.test_pc_act10 import com2d
@@ -1894,6 +1895,7 @@ def run_self_learning_steering(headless=False):
     # ACHTUNG, ehrliche Grenze: das ist Neuheit in EINER Dimension (Proportion).  Ob sich daraus
     # ableiten laesst, wie schnell er eine voellig andere Form lernt, ist damit NICHT beantwortet.
     NOVEL_EVERY = int(os.environ.get("ACT23_NOVEL_EVERY", "0"))     # 0 = aus (bisheriges Verhalten)
+    NOVEL_HOLD = os.environ.get("ACT23_NOVEL_HOLD", "0") == "1"     # EINE Form festhalten (s. unten)
     # WELCHE Proportionen wirklich neu sind -- GEMESSEN, nicht geraten (2026-08-14).  Der erste
     # Satz war unbrauchbar: der Deskriptor ist ROTATIONSINVARIANT konstruiert, also ist 10x32
     # dieselbe Form wie 32x10 und damit wie das lange Objekt (34x9).  Alle fuenf alten Werte waren
@@ -1912,7 +1914,10 @@ def run_self_learning_steering(headless=False):
 
     def spawn_novel_shape():
         """Dem Probe-Koerper eine NEUE Proportion geben und ihn frei hinstellen -- ohne Label."""
-        i = acq_ep["n"] // max(NOVEL_EVERY, 1)
+        # ACT23_NOVEL_HOLD=1 haelt EINE Form ueber den ganzen Lauf fest, statt durchzuwechseln.
+        # Fuer den Nachweis, DASS eine Geburt zustande kommt, ist das noetig: eine Klasse braucht
+        # NOVEL_CONFIRM=3 Belege, und bei wechselnden Formen steht jede nur wenige Blicke lang da.
+        i = 0 if NOVEL_HOLD else acq_ep["n"] // max(NOVEL_EVERY, 1)
         half = _novel_shapes[i % len(_novel_shapes)]
         _novel_half["h"] = tuple(float(x) for x in half)    # gegen das Ruecksetzen in _set_sizes
         sim.set_object_size(NOVEL_BODY, np.asarray(half, float))
@@ -1946,7 +1951,14 @@ def run_self_learning_steering(headless=False):
         #   REACH_XY; anything beyond lies where a knocked/mis-dropped object renders clipped or
         #   distorted and would read consistently-"novel" for a boring reason)
         if os.environ.get("ACT23_DEBUG", "0") == "1" and shape_clf.last_events:
-            print(f"    [dbg open-set] {shape_clf.last_events}  buffer={len(shape_clf._novel_buf)}", flush=True)
+            _bufn = (sum(len(g["ex"]) for g in (getattr(shape_clf, "_novel_groups", None) or []))
+                     if _SC.NOVEL_CLUSTER else len(shape_clf._novel_buf))
+            _grpn = len(getattr(shape_clf, "_novel_groups", None) or []) if _SC.NOVEL_CLUSTER else 0
+            # buffer= zeigte bisher IMMER den FIFO -- mit aktivem Cluster-Puffer ist das der
+            # eingefrorene Stand aus dem Pickle und damit irrefuehrend (im Test konstant "11",
+            # waehrend die Gruppen wuchsen).  Jetzt die tatsaechlich benutzte Struktur.
+            print(f"    [dbg open-set] {shape_clf.last_events}  Belege={_bufn} in {_grpn} Gruppen",
+                  flush=True)
         _acq_update(born, shape_clf.last_events or [])
         for cname in born:
             _register_open_class(cname)
