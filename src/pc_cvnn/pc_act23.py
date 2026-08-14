@@ -1816,29 +1816,58 @@ def run_self_learning_steering(headless=False):
     # WARUM das noetig ist: in den letzten 431 Episoden gab es NULL Geburten -- die Faehigkeit, um
     # die es geht, wird im Betrieb fast nie ausgeuebt, und im Log stand bisher nur die Geburt
     # selbst, nichts danach.  Ohne diese Kurve waere jede Verbesserung daran unbelegbar.
+    ACQ_WIN = int(os.environ.get("ACT23_ACQ_WIN", "12"))        # Blicke im rollenden Fenster
     acq = {}                                                   # Klassenname -> Aneignungszaehler
     acq_ep = {"n": 0}                                          # laufende Episodennummer
 
     def _acq_update(born, events):
-        """Einen Blick verbuchen: Geburten anlegen, claims/novel je Klasse zaehlen."""
+        """Einen Blick verbuchen: Geburten anlegen, claims je Klasse zaehlen.
+
+        ALLE offenen Klassen werden gefuehrt, nicht nur die in diesem Lauf geborenen.  Grund
+        (2026-08-14 im ersten Messlauf beobachtet): ein verformter Probe-Koerper wurde von seiner
+        ALTEN Klasse weiter geclaimt, es kam zu keiner Geburt -- und weil die Kurve nur Neugeburten
+        fuehrte, war im Log NICHTS davon zu sehen.  Eine ausbleibende Geburt IST ein Ergebnis und
+        muss sichtbar sein."""
         for c in born:
             acq.setdefault(c, {"born": acq_ep["n"], "claim": 0, "blick": 0, "cmd": 0, "ok": 0})
+        for c in getattr(shape_clf, "open_names", []):         # auch die BESTEHENDEN Klassen
+            acq.setdefault(c, {"born": None, "claim": 0, "blick": 0, "cmd": 0, "ok": 0})
         seen = {c for kind, c, *_ in events if kind == "claim"}
+        for c, a in acq.items():                               # ROLLENDES FENSTER (s. acq_line)
+            h = a.setdefault("hist", [])
+            h.append(1 if c in seen else 0); del h[:-ACQ_WIN]
+        nnov = sum(1 for kind, *_ in events if kind == "novel")
+        acq_ep["novel"] = acq_ep.get("novel", 0) + nnov        # unzuordenbare Sichtungen gesamt
         for c, a in acq.items():
             a["blick"] += 1
             if c in seen:
                 a["claim"] += 1
 
     def acq_line(maxage=60):
-        """Eine Zeile je JUNGER Klasse; alte fallen raus, damit das Log nicht zuwaechst."""
-        out = []
-        for c, a in sorted(acq.items(), key=lambda kv: kv[1]["born"]):
-            age = acq_ep["n"] - a["born"]
-            if age > maxage or a["blick"] == 0:
+        """Eine Zeile je JUNGER Klasse plus eine Sammelzeile fuer die alten."""
+        out, alt = [], []
+        for c, a in sorted(acq.items(), key=lambda kv: (kv[1]["born"] is not None, kv[1]["born"] or 0)):
+            if a["blick"] == 0:
                 continue
-            out.append(f"{c}: Alter {age} Ep, wiedererkannt {100*a['claim']/a['blick']:.0f}% "
-                       f"({a['claim']}/{a['blick']} Blicke), kommandiert {a['cmd']}x davon "
-                       f"{a['ok']} geliefert")
+            # ROLLENDE Rate statt kumulativer.  Im ersten Messlauf fiel auf, dass ein kumulativer
+            # Mittelwert die Dynamik VERSTECKT: eine Klasse, die gerade angeeignet wird, klettert
+            # nur zaeh, und eine, die ihr Objekt gerade VERLIERT, faellt ebenso zaeh -- man sieht
+            # nicht, was JETZT passiert, sondern nur den Durchschnitt seit der Geburt.  Genau die
+            # Dynamik ist aber die Aneignung.  Die kumulative Rate bleibt in Klammern daneben.
+            h = a.get("hist") or []
+            q = 100 * sum(h) / len(h) if h else 0.0
+            qk = 100 * a["claim"] / a["blick"]
+            if a["born"] is None:                              # vor diesem Lauf geboren
+                alt.append(f"{c} {q:.0f}%")
+                continue
+            age = acq_ep["n"] - a["born"]
+            if age > maxage:
+                continue
+            out.append(f"{c}: Alter {age} Ep, wiedererkannt {q:.0f}% (letzte {len(h)} Blicke; "
+                       f"gesamt {qk:.0f}%), kommandiert {a['cmd']}x davon {a['ok']} geliefert")
+        if alt:
+            out.append("bestehende Klassen wiedererkannt: " + "  ".join(alt)
+                       + f"  | unzuordenbare Sichtungen gesamt: {acq_ep.get('novel', 0)}")
         return out
 
     # NEUHEITS-ERZEUGER (ACT23_NOVEL_EVERY).  Ohne ihn gibt es nichts zu messen: in den letzten 431
