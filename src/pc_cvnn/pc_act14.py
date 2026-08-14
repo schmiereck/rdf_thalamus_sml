@@ -253,7 +253,20 @@ class BracketArmSim:
         WOZU (2026-08-14): gemessen kostet ein naher Nachbar 13 Prozentpunkte Lieferung, OHNE dass
         der Griff scheitert (100% Kontakt, 100% gehalten) -- die Vermutung ist, dass der verschmolzene
         Blob den Greifpunkt verschiebt, das Objekt AUSSERMITTIG in der Klaue sitzt und dieser Versatz
-        bis zur Ablage durchwandert.  Diese Groesse prueft genau das."""
+        bis zur Ablage durchwandert.
+
+        GEMESSEN 2026-08-14 (44 Episoden) -- die Vermutung traegt NICHT, und die Groesse ist nur
+        halb verlaesslich:
+          * naher Nachbar verschiebt die Lage nicht (quer p=0.50, tief p=0.33)
+          * die Lage sagt den Ablagefehler nicht vorher (rho +0.14, p=0.45)
+          * sie trennt Erfolg nicht von Fehlschlag (p=0.28 / p=0.67)
+        VALIDIERUNG der Groesse selbst (Versatz muesste den Zufassdruck senken):
+          |tief| -> Druck  rho=-0.31 p=0.044   (richtige Richtung, schwach)
+          |quer| -> Druck  rho=-0.01 p=0.93    (KEIN Zusammenhang)
+        Die Querachse misst also vermutlich den falschen MOMENT: der Aufzeichnungspunkt haengt an
+        _attempted, das mit 30mm seitlicher Toleranz ausloest, waehrend die Klaue noch zufaehrt --
+        die Lage ist da noch nicht eingeschwungen.  Wer die Querachse braucht, muss den Moment
+        zuerst nach hinten legen (z.B. auf das Druckmaximum)."""
         import numpy as _np
         e = _np.asarray(obj_xy, float)[:2] - _np.asarray(self.jaw_mid(), float)[:2]
         f = _np.asarray(self.claw_fwd(), float)[:2]
