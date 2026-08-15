@@ -1939,10 +1939,19 @@ def run_self_learning_steering(headless=False):
         # ACT23_NOVEL_HOLD=1 haelt EINE Form ueber den ganzen Lauf fest, statt durchzuwechseln.
         # Fuer den Nachweis, DASS eine Geburt zustande kommt, ist das noetig: eine Klasse braucht
         # NOVEL_CONFIRM=3 Belege, und bei wechselnden Formen steht jede nur wenige Blicke lang da.
-        i = 0 if NOVEL_HOLD else acq_ep["n"] // max(NOVEL_EVERY, 1)
-        half = _novel_shapes[i % len(_novel_shapes)]
-        _novel_half["h"] = tuple(float(x) for x in half)    # gegen das Ruecksetzen in _set_sizes
-        sim.set_object_size(NOVEL_BODY, np.asarray(half, float))
+        # EIGENE FORM statt Verformung, wenn der Probe-Koerper eine hat.  set_object_size trifft bei
+        # einem ZUSAMMENGESETZTEN Koerper nur das ERSTE Geom und verformt ihn still zu einer
+        # Missgestalt -- genau davor warnt der Kommentar an _set_sizes, und obj_X (Kreuz) besteht aus
+        # zwei Bars.  Ein frischer Koerper BRAUCHT die Verformung auch nicht: seine Neuheit ist er
+        # selbst.  Verformt wird nur noch der verbrauchte obj_T, fuer den es keine andere Quelle gibt.
+        if NOVEL_BODY == "obj_T":
+            i = 0 if NOVEL_HOLD else acq_ep["n"] // max(NOVEL_EVERY, 1)
+            half = _novel_shapes[i % len(_novel_shapes)]
+            _novel_half["h"] = tuple(float(x) for x in half)   # gegen das Ruecksetzen in _set_sizes
+            sim.set_object_size(NOVEL_BODY, np.asarray(half, float))
+        else:
+            half = tuple(float(x) for x in sim.m.geom_size[sim.m.body_geomadr[
+                mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, NOVEL_BODY)]])
         # NUR Slots, auf die der Open-Set-Blick ueberhaupt schaut.  open_set_glance filtert mit
         # bounds=(-0.115, 0.115, 0.075, 0.235) -- die beiden oberen Slots liegen bei y=0.240 und damit
         # AUSSERHALB; eine dort hingestellte neue Form wird nie gesehen, ihre Sichtungen werden
