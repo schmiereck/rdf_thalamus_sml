@@ -697,7 +697,7 @@ def run_self_learning_steering(headless=False):
     # ACT23_POLICY=teacher starts in teacher mode (headless isolation: execution/perception WITHOUT the
     # young world model's action lottery; the GUI toggle changes it live as before)
     shape_half0 = {nm: sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)]].copy()
-                   for nm in ("obj_L", "obj_U", "obj_T")}  # pristine XML first-geom half-extents (repair below)
+                   for nm in ("obj_L", "obj_U", "obj_T", "obj_X")}  # pristine XML first-geom half-extents (repair below)
 
     # PERSISTENCE (user request): the four numpy learners -- body model, shape classifier incl. the
     # self-labelled OPEN-SET classes, world model incl. its trial buffer, runtime policy incl. its DAgger
@@ -709,6 +709,25 @@ def run_self_learning_steering(headless=False):
     STATE_PATH = os.environ.get("ACT23_STATE_PATH", os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "state", "act23_state.pkl"))
     PERSIST_STATE = (not headless) or os.environ.get("ACT23_STATE_HEADLESS", "0") == "1"
+    # PERSISTENZ-SPERRE fuer Neuheits-Experimente (Nutzerwunsch 2026-08-15).  Eine einfache Form ist
+    # eine EINMAL-RESSOURCE: sobald der Agent sie entdeckt und eine Klasse dafuer angelegt hat, taugt
+    # sie nie wieder als Neuheitstest, und es gibt nicht mehr viele davon.  Ein Versuch darf deshalb
+    # nicht versehentlich in den dauerhaften Zustand durchschlagen.
+    # DEFAULT-SICHER: sobald ein ANDERER Neuheits-Koerper als der verbrauchte obj_T gewaehlt wird,
+    # schaltet die Persistenz von selbst ab -- man muss sie bewusst mit ACT23_PROBE_PERSIST=1
+    # wieder einschalten, nicht umgekehrt daran denken sie auszuschalten.
+    # LADEN und SCHREIBEN sind ZWEI Richtungen und muessen getrennt schaltbar sein.  Der erste
+    # Entwurf setzte PERSIST_STATE=False und schaltete damit auch das LADEN ab (Zeile ~788 prueft
+    # dieselbe Variable) -- der Lauf startete bei null, alles war "neu", und die Aneignungsmessung
+    # haette Unsinn ergeben.  Gebraucht wird: auf dem gelernten Stand AUFSETZEN, aber nichts
+    # zurueckschreiben.
+    _probe = os.environ.get("ACT23_NOVEL_BODY", "obj_T") != "obj_T"
+    WRITE_STATE = PERSIST_STATE and not (
+        os.environ.get("ACT23_NO_PERSIST", "0") == "1"
+        or (_probe and os.environ.get("ACT23_PROBE_PERSIST", "0") != "1"))
+    if PERSIST_STATE and not WRITE_STATE:
+        print("  [Versuch] Zustand wird GELADEN, aber NICHT zurueckgeschrieben -- der Lauf ist "
+              "wegwerfbar (ACT23_PROBE_PERSIST=1 hebt das auf)", flush=True)
     STATE_SCHEMA = 2       # BUMP whenever a learner's STRUCTURE changes (action/feature dims, new fields)
 
     def _lg_pack(lg):
@@ -1327,7 +1346,7 @@ def run_self_learning_steering(headless=False):
 
     def save_state():
         """Persist the four learners + the self-discovered command objects (every episode; cheap)."""
-        if not PERSIST_STATE:
+        if not WRITE_STATE:                             # s. die Trennung Laden/Schreiben oben
             return
         try:
             os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
@@ -1790,7 +1809,10 @@ def run_self_learning_steering(headless=False):
     # sightings then claim that class instead of feeding the buffer.  It is not REGISTERED as a command
     # (it has its own button/path already); only obj_T maps to a new button, usually as 'neu-2'.
     # ------------------------------------------------------------------
-    NOVEL_BODY = "obj_T"
+    # WELCHER Koerper als Neuheit dient.  obj_T ist als Neuheit VERBRAUCHT (laengst entdeckt und als
+    # "Neue Form 7" kommandierbar); obj_X (Kreuz) ist der frische Ersatz.  Einfache Formen sind knapp --
+    # darum die Persistenz-Sperre gleich daneben.
+    NOVEL_BODY = os.environ.get("ACT23_NOVEL_BODY", "obj_T")
 
     def _register_open_class(cname):
         """A class the net just SELF-LABELLED becomes commandable: append the object to the GUI list and

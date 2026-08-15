@@ -140,6 +140,24 @@
       <geom type="box" pos=" 0.000 -0.007 0" size="0.007 0.014 0.012" rgba="0.45 0.12 0.9 1" density="700" friction="1.4 0.05 0.001"/>
     </body>
 
+    <body name="obj_X" pos="0.62 -0.6 0.012">      <!-- KREUZ (+): zwei gekreuzte Bars, 42mm Spannweite in
+         BEIDEN Achsen.  ZWECK: ein zweiter nie trainierter Probe-Koerper fuer die Aneignungs-Messung --
+         obj_T ist als Neuheit VERBRAUCHT (laengst entdeckt und als 'Neue Form 7' kommandierbar), und
+         einfache Formen sind eine knappe Ressource.
+         WARUM EIN KREUZ: der Formdeskriptor |F| ist rotationsinvariant, ein gedrehtes T waere also
+         keine neue Form (genau diese Falle hat 2026-08-14 einen ganzen Messfaden gekostet).  Das Kreuz
+         ist VIERZAEHLIG symmetrisch, das T asymmetrisch -- der Unterschied sitzt in den Harmonischen
+         selbst, nicht in der Lage.  Greifbar bleibt es an der Mitte wie das T.
+         CHARTREUSE: rot/gruen/blau/orange/cyan/violett sind belegt und Magenta gehoert den Zielmarken.
+         Hoher Rotanteil zieht den trainierten Rot-Trieb an (s. den Kommentar am obj_T), darum
+         Gruen-dominant mit deutlichem Rotanteil -- in der Chromatizitaet klar von reinem Gruen getrennt.
+         Geparkt NEBEN obj_T (0.58) und dem Sammelplatz 0.5,-0.6, damit sich die Parkpositionen nicht
+         ueberlagern. -->
+      <freejoint/>
+      <geom type="box" pos="0 0 0" size="0.021 0.006 0.012" rgba="0.65 0.95 0.15 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos="0 0 0" size="0.006 0.021 0.012" rgba="0.65 0.95 0.15 1" density="700" friction="1.4 0.05 0.001"/>
+    </body>
+
     <!-- target marker: a flat disk on the table (mocap = kinematic, moved per episode),
          no collision so it never disturbs the cubes; also a visible cue for the camera.
          target_marker is the ACTIVE-goal disk run_combined snaps onto the committed goal each episode.
