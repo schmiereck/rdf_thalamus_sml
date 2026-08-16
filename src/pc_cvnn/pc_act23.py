@@ -1875,7 +1875,16 @@ def run_self_learning_steering(headless=False):
         hits = _bind_hits[cname]
         if sum(hits) < BIND_CONFIRM:
             return
-        label = f"Neue Form {len(shape_clf.open_names)}"
+        # EINDEUTIGES Etikett, nicht len+1: die Klassen-Konsolidierung VERKUERZT open_names, also kann
+        # len+1 auf ein LEBENDES Etikett fallen.  Genau das ist am 2026-08-16 passiert -- das Kreuz bekam
+        # "Neue Form 7", das obj_T laengst traegt, und im Log liefen 18 Kommandos unter einem Namen fuer
+        # zwei Koerper.  Die Klassen-NAMEN haben dieselbe Lehre laengst gezogen (s. _name_seq im
+        # shape_classifier, "consolidation SHRINKS the list"); das Etikett hatte sie noch nicht.
+        _vergeben = {l for l, _b, _m in state.OBJECTS}
+        _n = len(shape_clf.open_names)
+        while f"Neue Form {_n}" in _vergeben:
+            _n += 1
+        label = f"Neue Form {_n}"
         state.add_object(label, NOVEL_BODY, cname)
         act16.OBJS = [nm for _l, nm, _m in state.OBJECTS]; act16.SCENE_N = len(act16.OBJS)
         print(f"  [open-set] NEUE FORM selbst benannt: '{cname}' -> Kommando '{label}' "

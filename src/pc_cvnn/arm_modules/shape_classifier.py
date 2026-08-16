@@ -634,8 +634,29 @@ class ShapeClassifierModule(ArmModule):
             self._novel_buf = self._novel_buf[-12:]          # stale far-pose sightings must not pile up
         # CONSOLIDATE duplicates: the dko merge gate can force a SECOND class for the same form (far-pose
         # re-birth); once both sets densify, same-form sets grow INTO each other (T-T p50 ~5.8) while
-        # different forms stay >= the cross floor (~12.5) -> min cross-distance < novel_th = same form.
+        # different forms stay >= the cross floor (~12.5) -> min cross-distance unter dem Radius = same form.
         # The OLDER name survives (it is the one act23 may have registered as a command).
+        # WARUM HIER WEITER novel_th UND NICHT DER SELBST GEMESSENE RADIUS -- GEMESSENES NEGATIV
+        # (2026-08-16, zwei gepaarte 50-Ep-Laeufe, Seed 907).  Die URSACHE der Zersplitterung ist sauber
+        # isoliert (act23_split_probe, Kreuz obj_X, Klassen aus je 3 Belegen):
+        #     Klasse aus 3 Sichtungen AM SELBEN ORT  -> beansprucht anderswo nur  47.2%
+        #     Klasse aus 3 VERTEILTEN Sichtungen     ->                           77.8%
+        # Die Geburt verlangt drei Sichtungen, die sich EINIG sind, also drei vom selben Fleck -- eine
+        # neugeborene Klasse ist zwangslaeufig ortsgebunden, verfehlt ihr Objekt anderswo in der Haelfte
+        # der Faelle, und die Fehlschlaege gebaeren die naechste ortsgebundene Klasse (das Kreuz erzeugte
+        # DREI).  Die TORE sind unschuldig: mit realistischen 3 Belegen laesst der Anspruchspfad 82% der
+        # eigenen Sichtungen durch und 0% fremde.
+        # NAHELIEGEND UND FALSCH war daraufhin, hier den selbst gemessenen Radius (11.46) einzusetzen.
+        # Das Fenster schien sauber -- gleiches Objekt min-Abstand p90 9.55, FREMDobjekt p10 12.50 --,
+        # ABER es ist an 3-Beleg-Mengen gemessen.  Diese Zeile vergleicht das MINIMUM ueber zwei Mengen
+        # mit bis zu OPEN_CAP=80 Belegen, also ueber bis zu 6400 Paare: eine viel extremere Groesse, die
+        # der p10 aus 3x3 Paaren nicht abdeckt.  Ergebnis im Lauf: die Kreuz-Klasse wurde zwar stabiler
+        # (Wiedererkennung 33% -> 100% der letzten 12 Blicke, 90% ihrer Ansprueche auf dem Kreuz), aber
+        # DREI etablierte Altklassen (neu-34, neu-72, neu-256) wurden verschluckt, und der Kommando-Pfad
+        # halbierte sich reproduzierbar von 8/8 auf 4/8 obj_X-Episoden "via Formklasse" (zwei Laeufe).
+        # LEHRE: ein Schwellwert, der an einer Stichprobengroesse kalibriert wurde, uebertraegt sich NICHT
+        # auf eine Extremwert-Statistik ueber viel groessere Mengen.  Wer das hier nochmal angeht, muss
+        # den Schwellwert MENGENGROESSEN-ABHAENGIG messen (min-Abstand als Funktion von |A|,|B|).
         for a in list(self.open_names):
             for b in list(self.open_names):
                 if (a in self.open and b in self.open                # a/b may have been MERGED AWAY by an
