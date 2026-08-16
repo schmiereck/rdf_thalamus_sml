@@ -1737,9 +1737,15 @@ def run_self_learning_steering(headless=False):
         # WELCHE Objekte stehen: bei SCENE_N < len(bodies) rotiert das Fenster ueber die Liste, damit
         # ueber den Lauf jedes Objekt gleich oft auf dem Tisch steht (sonst uebte ein kleiner Aufbau
         # immer dieselben Formen).  Die uebrigen werden geparkt.
+        # PLATZ FUER DEN PROBE-KOERPER freihalten: laeuft ein Neuheits-Versuch, stellt
+        # spawn_novel_shape zusaetzlich den Probe-Koerper hin.  Belegen die regulaeren Objekte schon
+        # ALLE sichtbaren Slots, landet er auf einem besetzten -- und verschmilzt sofort mit dessen
+        # Nachbarn, womit die ganze Aneignungsmessung wieder an Blob-Verschmelzung scheitert (der
+        # Fehlermodus aus b8d118e).  Darum steht ein regulaeres Objekt weniger.
+        _n_steht = max(1, SCENE_N - (1 if NOVEL_EVERY > 0 else 0))
         _k = len(bodies)
-        _rot = (exp_group["szene"] * SCENE_N) % max(_k, 1)
-        _steht = [bodies[(_rot + i) % _k] for i in range(min(SCENE_N, _k))]
+        _rot = (exp_group["szene"] * _n_steht) % max(_k, 1)
+        _steht = [bodies[(_rot + i) % _k] for i in range(min(_n_steht, _k))]
         _geparkt = [b for b in bodies if b not in _steht]
         order = list(range(len(SLOTS))); crng.shuffle(order)   # random object<->slot assignment (variety)
         scene_slots.clear()
@@ -1814,35 +1820,73 @@ def run_self_learning_steering(headless=False):
     # darum die Persistenz-Sperre gleich daneben.
     NOVEL_BODY = os.environ.get("ACT23_NOVEL_BODY", "obj_T")
 
+    # BINDUNG AN DEN KOMMANDO-KNOPF: nicht bei der GEBURT, sondern nach WIEDERHOLTER Uebereinstimmung.
+    # WARUM (gemessen 2026-08-15, Debug-Lauf ueber 30 Episoden mit dem Kreuz obj_X): aus demselben Kreuz
+    # wurden ZWEI Klassen geboren -- 'neu-285' auf einem VERSCHMOLZENEN Fleck (Kreuz + blauer Wuerfel,
+    # 1019px, 23mm neben dem Kreuz) und 'neu-286' auf dem sauberen Kreuz (382px, 0mm).  Die alte Bindung
+    # nahm die erste Klasse, die EINMAL innerhalb von 40mm sass -- das war das Gespenst (23mm < 40mm).
+    # Folge: select('neu-285') fand nie wieder etwas, ALLE 4 Kreuz-Kommandos liefen ueber den
+    # privilegierten Rueckfall, waehrend die brauchbare Klasse 'neu-286' (42-73% wiedererkannt) ohne
+    # Knopf danebenlag.  Und schaerfer: gebundene Klassen sind vor dem Verhungern geschuetzt
+    # (protect=SHAPE_KEY.values() im Blick), die Fehlbindung schaltete also genau die Aufraeum-Mechanik
+    # ab, die das Gespenst entfernt haette.
+    # WARUM WIEDERHOLUNG und nicht der Flaechenfilter: area_hi (=1411) liegt gemessen UEBER dem
+    # verschmolzenen Fleck (1019) und muss es auch, denn die groesste Trainingsform L misst ~940 -- ein
+    # Flaechen-Kriterium kann die beiden Faelle prinzipiell nicht trennen.  Ein einmalig verschmolzener
+    # Fleck WIEDERHOLT sich dagegen nicht; das trennt ihn vom echten Objekt, ohne irgendeine Annahme
+    # ueber Formen einzufuehren.
+    BIND_CONFIRM = int(os.environ.get("ACT23_BIND_CONFIRM", "3"))   # so viele Treffer ...
+    BIND_WIN = int(os.environ.get("ACT23_BIND_WIN", "6"))           # ... in den letzten so vielen Blicken
+    _bind_hits: dict = {}                                           # Klassenname -> [0/1, ...] je Blick
+
     def _register_open_class(cname):
-        """A class the net just SELF-LABELLED becomes commandable: append the object to the GUI list and
-        key its localisation/tracking on the open-class name.  The body handle is command PLUMBING only
-        (which MuJoCo body the button stands for) -- select / track / situation_feats run purely on the
-        class name the net invented.
-        VERIFY the match first (user-hit bug): a class born during the introduction glances is NOT
-        necessarily the introduced object's -- the untrained long I is usually STILL undiscovered then and
-        gets born FIRST from the same glances; blindly binding the first-born class put the I's class on
-        the T's button (fovea+grasp locked the blue I on every T command).  So only register `cname` if a
-        detection of that class sits AT the introduced object (privileged pos as plumbing aid only, same
-        role as in situation_feats)."""
+        """Eine eben SELBST BENANNTE Klasse wird KANDIDAT fuer den Kommando-Knopf.  Gebunden wird sie erst
+        von _try_bind, wenn sie wiederholt auf dem neuen Objekt sitzt (s. Block oben)."""
         if NOVEL_BODY in state.SHAPE_KEY or NOVEL_BODY not in scene:
             return
-        saved = sim.d.mocap_pos.copy()                         # perceive_all parks the markers -> restore
-        dets = shape_clf.perceive_all(sim)
-        sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+        _bind_hits.setdefault(cname, [])
+        print(f"  [open-set] neue Klasse '{cname}' geboren -- Kandidat fuer einen Knopf "
+              f"(braucht {BIND_CONFIRM} von {BIND_WIN} Blicken auf dem neuen Objekt)", flush=True)
+
+    def _try_bind(dets):
+        """Je Blick: sitzt eine noch UNGEBUNDENE junge Klasse wieder auf dem neuen Objekt?  Erreicht eine
+        Klasse BIND_CONFIRM Treffer im Fenster, bekommt sie den Knopf: das Objekt wandert in die GUI-Liste
+        und Lokalisierung/Verfolgung laufen auf dem selbst erfundenen Klassennamen.  Der Koerper-Handle ist
+        reine VERKABELUNG (welcher MuJoCo-Koerper der Knopf meint); die wahre Position dient nur dieser
+        Zuordnung -- dieselbe Rolle wie in situation_feats --, select/track/Griff laufen danach rein auf
+        dem Klassennamen."""
+        if NOVEL_BODY in state.SHAPE_KEY or NOVEL_BODY not in scene or not _bind_hits:
+            return
         pT = sim.obj_pos(NOVEL_BODY)[:2]
-        if not any(d["shape"] == cname and d["pos"] is not None
-                   and float(np.linalg.norm(np.asarray(d["pos"]) - pT)) < 0.04 for d in dets):
-            print(f"  [open-set] Klasse '{cname}' entdeckt, sitzt aber NICHT auf dem neuen Objekt "
-                  f"(z.B. der lange Balken) -- nicht als Kommando registriert", flush=True)
+        auf = {d["shape"] for d in dets if d["pos"] is not None
+               and float(np.linalg.norm(np.asarray(d["pos"]) - pT)) < 0.04}
+        for cname, hits in list(_bind_hits.items()):
+            if cname not in shape_clf.open_names:              # verhungert -> Kandidat faellt weg
+                del _bind_hits[cname]
+                print(f"  [open-set] Kandidat '{cname}' ist verhungert -- kein Knopf", flush=True)
+                continue
+            hits.append(1 if cname in auf else 0)
+            del hits[:-BIND_WIN]
+        if not _bind_hits:
+            return
+        # BESTER Kandidat, nicht der zuerst gepruefte: konkurrieren zwei Klassen um dasselbe Objekt
+        # (genau der Gespenst-Fall), soll die haeufiger bestaetigte gewinnen und nicht die aeltere.
+        cname = max(_bind_hits, key=lambda c: sum(_bind_hits[c]))
+        hits = _bind_hits[cname]
+        if sum(hits) < BIND_CONFIRM:
             return
         label = f"Neue Form {len(shape_clf.open_names)}"
         state.add_object(label, NOVEL_BODY, cname)
         act16.OBJS = [nm for _l, nm, _m in state.OBJECTS]; act16.SCENE_N = len(act16.OBJS)
-        print(f"  [open-set] NEUE FORM selbst benannt: '{cname}' -> Kommando '{label}'", flush=True)
+        print(f"  [open-set] NEUE FORM selbst benannt: '{cname}' -> Kommando '{label}' "
+              f"(bestaetigt in {sum(hits)} von {len(hits)} Blicken; "
+              f"Mitbewerber {{{', '.join(f'{c}:{sum(h)}' for c, h in _bind_hits.items() if c != cname)}}})",
+              flush=True)
         if panel is not None:
             panel.add_discovered(len(state.OBJECTS) - 1)
-            panel.update(sim.render(CAM), f"Neue Form entdeckt und selbst benannt: '{cname}' — jetzt kommandierbar")
+            panel.update(sim.render(CAM),
+                         f"Neue Form entdeckt und selbst benannt: '{cname}' — jetzt kommandierbar")
+        _bind_hits.clear()                                     # der Knopf ist vergeben
 
     # ANEIGNUNGSKURVE (Nutzerziel 2026-08-14): nicht "wie oft liefert er", sondern "wie schnell
     # eignet er sich NEUES an".  Gemessen ab der Geburt einer selbst benannten Klasse:
@@ -1999,6 +2043,9 @@ def run_self_learning_steering(headless=False):
         saved = sim.d.mocap_pos.copy()
         dets = shape_clf.perceive_all(sim)
         sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+        _try_bind(dets)                                        # Knopf-Bindung auf DERSELBEN Wahrnehmung
+        #   wie die Farbstufe -- kein zusaetzlicher perceive_all, also kostet die Wiederholungspruefung
+        #   nichts ausser dem Zaehler.
         bodies = list(dict.fromkeys([nm for _l, nm, _m in state.OBJECTS]
                                     + ([NOVEL_BODY] if NOVEL_BODY in scene else [])))
         for d in dets:
@@ -2039,7 +2086,10 @@ def run_self_learning_steering(headless=False):
         scene[NOVEL_BODY] = (p, 0.012, yaw); scene_slots[NOVEL_BODY] = si
         if panel is not None:
             panel.update(sim.render(CAM), "Ein unbekanntes Objekt ist aufgetaucht ...")
-        for g in range(4):                                     # NOVEL_CONFIRM sightings + one spare
+        for g in range(4 + BIND_WIN):                          # NOVEL_CONFIRM Sichtungen + eine Reserve,
+            #   PLUS das Bestaetigungsfenster: die Geburt allein vergibt den Knopf nicht mehr, die Klasse
+            #   muss sich erst wiederholt auf dem Objekt zeigen (s. BIND_CONFIRM).  Bricht ab, sobald
+            #   gebunden -- bei einer sauber sichtbaren Form sind das typisch 6-7 Blicke.
             open_set_glance()
             if NOVEL_BODY in state.SHAPE_KEY:
                 break
@@ -3655,7 +3705,8 @@ _CORE_KNOBS = ("ACT23_SEED", "ACT23_CHOREO", "ACT23_POLICY", "ACT23_STATE_PATH",
                "ACT23_GRASP_CANDS", "ACT23_GRASP_CANDS_NETZ", "ACT23_GRASP_CAND_CAP",
                "ACT23_GRIPLABEL", "ACT23_U_DENSEGRASP", "ACT23_CREDIT",
                "ACT23_TILT_ACTION", "ACT23_TILT_CURIOSITY", "ACT23_WRIST_REL",
-               "ACT23_LAM", "ACT23_HOME_Z_MIN", "ACT14_DOF")
+               "ACT23_LAM", "ACT23_HOME_Z_MIN", "ACT14_DOF",
+               "ACT23_BIND_CONFIRM", "ACT23_BIND_WIN")
 
 
 def _source_defaults():
