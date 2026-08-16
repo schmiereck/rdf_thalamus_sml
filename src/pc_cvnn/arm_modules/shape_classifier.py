@@ -84,7 +84,10 @@ BIRTH_MARGIN = float(os.environ.get("ACT_SHAPE_BIRTH_MARGIN", "1.0"))   # GEBURT
 #   Fremdpaare unter dem Radius entsprechend 0% / 4% / 28% / 74%.
 #   Die CLAIM-Seite hat dieselbe Sache laengst gemerkt und rechnet mit OPEN_MARGIN (s. dort, und der
 #   Kommentar oben: "p50 ~8.3 / p90 ~11.2 apart while novel_th is ~7.3") -- nur der Geburts-Pfad
-#   benutzte weiter den rohen Wert.  VORGABE 1.0 = bisheriges Verhalten.
+#   benutzte weiter den rohen Wert.
+#   SEIT 2026-08-16 IST DAS KEIN HANDGRIFF MEHR: der Radius wird in _fit_birth() vom Netz SELBST an
+#   seinen eigenen Sichtungen gemessen (s. dort).  BIRTH_MARGIN multipliziert nur noch den gemessenen
+#   Wert und dient dem A/B -- VORGABE 1.0 = rein selbst kalibriert, nichts eingestellt.
 OPEN_CAP = 80                                                           # max stored exemplars per self-labelled class
 # STARVATION / CAP (phantom over-birth control): scattered transient sightings (edge/occlusion/odd-pose
 # renders) can birth open classes that then NEVER get claimed again -- the user's neu-* piled to 45+.  A
@@ -443,6 +446,61 @@ class ShapeClassifierModule(ArmModule):
         sq = np.maximum(np.diag(G)[:, None] + np.diag(G)[None, :] - 2 * G, 0.0)
         loo = np.sqrt(np.sort(sq, axis=1)[:, NOVEL_K])       # k-th neighbour EXCLUDING self (index 0)
         self.novel_th = float(np.quantile(loo, 0.995)) * NOVEL_MARGIN
+        self._fit_birth()
+
+    def _fit_birth(self, cap=1200):
+        """GEBURTSRADIUS -- vom Netz SELBST an den eigenen Sichtungen gemessen, nicht eingestellt.
+
+        WARUM eine EIGENE Groesse (gemessen 2026-08-16, act23_split_probe, Objekt allein auf dem
+        Tisch, 3x3 Positionen x 6 Drehungen): novel_th ist leave-one-out gegen den DICHTEN
+        Trainingssatz kalibriert und misst "Abstand zu einem Mannigfaltigen aus 2500 Belegen"
+        (Median 3.7 bei obj_L).  Der Geburtspfad benutzt ihn aber als "Abstand zwischen zwei
+        EINZELNEN Sichtungen desselben Dings" -- und der liegt gemessen bei 9-11:
+            Eigenstreuung p50   obj_X 9.00   obj_T 10.28   obj_L 10.30   (novel_th 7.72)
+            davon Drehung        4.93         7.23          8.93         <- Rotation ist unschuldig
+            davon Ort            9.45        10.35          9.68         <- die Perspektive treibt es
+        65-86% der Paare ueberschreiten novel_th -- bei der TRAINIERTEN Form obj_L genauso wie beim
+        neuen Kreuz.  obj_L zersplittert trotzdem nie, weil ihr dichter Belegsatz jede Sichtung
+        auffaengt; eine junge Klasse mit drei Belegen kann das nicht und erfindet sich neu (das
+        Kreuz gebar DREI Klassen).  Der Fehler war, beide Fragen mit derselben Zahl zu messen.
+
+        SELBST GEMESSEN statt gedreht: der Klassifikator besitzt seine eigenen Sichtungen samt
+        Zugehoerigkeit (_X/_Y).  Daraus die beiden Verteilungen, die den Radius definieren -- Paare
+        DERSELBEN Form gegen Paare VERSCHIEDENER Formen -- und als Radius die Stelle, die sie am
+        besten trennt (Youden J = Anteil-innen-drin minus Anteil-fremd-drin, maximiert).  Kein
+        Zielwert, keine Handeinstellung, kein privilegiertes Wissen: verschiebt sich die Kamera oder
+        kommen Formen dazu, verschiebt sich der Radius beim naechsten train() mit.  Genau dieselbe
+        Rechnung wie novel_th -- nur an der Groesse, um die es hier wirklich geht.
+        """
+        Z, y = self._ZX, np.asarray(self._Y)
+        if len(Z) > cap:                                     # Paarzahl waechst quadratisch; die
+            idx = np.linspace(0, len(Z) - 1, cap).astype(int)   # Stichprobe reicht fuer Quantile
+            Z, y = Z[idx], y[idx]
+        G = Z @ Z.T
+        D = np.sqrt(np.maximum(np.diag(G)[:, None] + np.diag(G)[None, :] - 2 * G, 0.0))
+        iu = np.triu_indices(len(Z), 1)
+        gleich = (y[:, None] == y[None, :])[iu]
+        d_in, d_out = D[iu][gleich], D[iu][~gleich]
+        if len(d_in) < 50 or len(d_out) < 50:                # zu duenn -> beim naechsten Mal
+            self.birth_th = None
+            return
+        kand = np.quantile(d_in, np.linspace(0.05, 0.95, 91))
+        j, t = max((float(np.mean(d_in <= c) - np.mean(d_out <= c)), float(c)) for c in kand)
+        self.birth_th = t
+        self._birth_j = (j, float(np.mean(d_in <= t)), float(np.mean(d_out <= t)))
+
+    def _birth_radius(self):
+        """Der selbst gemessene Geburtsradius.  Faellt auf novel_th zurueck, solange nichts gemessen
+        ist -- etwa bei einem Zustand aus dem Pickle von VOR dieser Aenderung; dort wird beim ersten
+        Gebrauch nachgerechnet, ein Neu-Training ist nicht noetig."""
+        b = getattr(self, "birth_th", None)
+        if b is None and getattr(self, "_ZX", None) is not None and getattr(self, "_Y", None) is not None:
+            try:
+                self._fit_birth()
+            except Exception:
+                self.birth_th = None
+            b = getattr(self, "birth_th", None)
+        return float(b) if b else float(self.novel_th)
 
     def all_names(self):
         return SHAPES + self.open_names
@@ -513,7 +571,7 @@ class ShapeClassifierModule(ArmModule):
             elif nm is None:                                 # NOVEL sighting -> temporal-consistency buffer
                 self.last_events.append(("novel", None if det["pos"] is None
                                          else np.round(det["pos"], 3).tolist(), int(det["area"])))
-                _br = self.novel_th * BIRTH_MARGIN            # s. BIRTH_MARGIN oben
+                _br = self._birth_radius() * BIRTH_MARGIN     # selbst gemessen, s. _fit_birth()
                 if NOVEL_CLUSTER:
                     # CLUSTER-PUFFER statt FIFO (s. NOVEL_CLUSTER oben).  Die Sichtung sucht sich
                     # eine GRUPPE, zu deren saemtlichen Mitgliedern sie naeher als _br liegt (nicht
