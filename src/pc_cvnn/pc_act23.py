@@ -1897,6 +1897,52 @@ def run_self_learning_steering(headless=False):
                          f"Neue Form entdeckt und selbst benannt: '{cname}' — jetzt kommandierbar")
         _bind_hits.clear()                                     # der Knopf ist vergeben
 
+    def _streuung(body, p0, last):
+        """STREUUNG FUER EINE JUNGE KLASSE -- die Identitaet kommt aus der EIGENEN HANDLUNG.
+
+        DAS PROBLEM (gemessen 2026-08-16, act23_split_probe): die Geburt verlangt drei Sichtungen, die
+        sich EINIG sind, also drei vom selben Fleck.  Eine neugeborene Klasse ist damit ortsgebunden und
+        beansprucht ihr eigenes Objekt anderswo nur zu 47%; jeder Fehlschlag gebiert die naechste
+        ortsgebundene Klasse (das Kreuz erzeugte DREI).  Was fehlt, sind Belege von ANDEREN Orten:
+            zusaetzliche Sichtungen von anderswo   0 -> 47.2%   1 -> 70.8%   2 -> 81.9%   3 -> 91.0%
+            Fremdansprueche dabei durchgehend       0.0%
+        Eine einzige Sichtung von woanders hebt die Wiedererkennung also um 24 Punkte, und anders als bei
+        der zurueckgenommenen Klassen-Verschmelzung (s. shape_classifier) gibt es KEINE Kehrseite: es
+        kommen echte Sichtungen desselben Objekts dazu, keine fremden.
+
+        WOHER DIE IDENTITAET: der Agent hat das Objekt SELBST von p0 hierher getragen -- die Last auf dem
+        Fingersensor (`last`, Phase heben) ist seine eigene Propriozeption, kein Etikett und keine
+        Wahrheit ueber die Form.  Was er getragen hat, ist dasselbe Ding wie vorher; so lernt ein Kind
+        Objektkonstanz, durch Hinbewegen und Hinsehen.  KEIN Schwellwert auf der Strecke: hat er getragen
+        und sitzt am Zielort GENAU EIN sauberer Fleck, wird die Sichtung eingespeist -- lag sie nah an
+        einem vorhandenen Beleg, ist sie harmlos, lag sie fern, schliesst sie genau die Luecke.  Der
+        Koerper-Handle ist reine VERKABELUNG (welcher Fleck gemeint ist), dieselbe Rolle wie in
+        situation_feats und _try_bind."""
+        k = state.SHAPE_KEY.get(body)
+        if k is None or k not in shape_clf.open or p0 is None or last <= 0.0:
+            return                                             # nichts getragen -> keine Handlungs-Identitaet
+        p1 = np.asarray(sim.obj_pos(body)[:2], float)
+        if not (-0.115 <= p1[0] <= 0.115 and 0.075 <= p1[1] <= 0.235):
+            return                                             # ausserhalb des kalibrierten Bereichs
+        saved = sim.d.mocap_pos.copy()
+        dets = shape_clf.perceive_all(sim)
+        sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+        nah = [d for d in dets if d["pos"] is not None
+               and float(np.linalg.norm(np.asarray(d["pos"]) - p1)) < 0.04]
+        if len(nah) != 1:                                      # verschmolzen/mehrdeutig -- genau so ist
+            return                                             #   die Gespenst-Klasse entstanden
+        d = nah[0]
+        if shape_clf.area_hi is not None and d["area"] > shape_clf.area_hi:
+            return
+        if len(shape_clf.open[k]) >= _SC.OPEN_CAP:
+            return
+        z = shape_clf._z(d["desc"])
+        neu = min((float(np.linalg.norm(z - q)) for q in shape_clf.open[k]), default=float("inf"))
+        shape_clf.open[k].append(z)
+        print(f"    [Streuung] '{k}': Sichtung vom Zielort aufgenommen, "
+              f"{1000*float(np.linalg.norm(p1 - np.asarray(p0, float))):.0f}mm getragen, "
+              f"Abstand zum naechsten Beleg {neu:.1f} ({len(shape_clf.open[k])} Belege)", flush=True)
+
     # ANEIGNUNGSKURVE (Nutzerziel 2026-08-14): nicht "wie oft liefert er", sondern "wie schnell
     # eignet er sich NEUES an".  Gemessen ab der Geburt einer selbst benannten Klasse:
     #   Alter        Episoden seit der Geburt
@@ -3113,6 +3159,8 @@ def run_self_learning_steering(headless=False):
                 vc.viz.update(sim.render(CAM), "Szene aktualisiert")   # restore frame -> stale layout); a plain
             except Exception:                                  #   image refresh -- no colour-keyed track step
                 pass                                           #   that would walk the gaze off the final view
+        _streuung(body, snap.get(body, (None,))[0], _lift_m)   # zuerst die selbst getragene Sichtung
+        #   einspeisen, DANN der Blick -- so profitiert er schon von der breiteren Klasse
         open_set_glance()                  # lifelong OPEN-SET look at the settled scene: young self-labelled
         #   classes keep growing exemplars over the new poses; an undiscovered novel object keeps feeding
         #   the buffer (discovery can also happen HERE, not only at "Objekt hinzufügen")
