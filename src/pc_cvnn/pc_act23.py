@@ -1897,6 +1897,66 @@ def run_self_learning_steering(headless=False):
                          f"Neue Form entdeckt und selbst benannt: '{cname}' — jetzt kommandierbar")
         _bind_hits.clear()                                     # der Knopf ist vergeben
 
+    # NEUGIER AUF NAMENLOSE: eine eben geborene Klasse hat DREI Belege und alle vom selben Fleck --
+    # gemessen beansprucht sie ihr Objekt anderswo nur zu 47%, mit drei Sichtungen von anderswo zu 91%
+    # (s. _streuung).  Die Streuung entsteht beim TRAGEN, aber der Agent fasst ein Objekt nur an, wenn es
+    # ein Kommando dafuer gibt -- und den Knopf gibt es erst nach der Bestaetigung, gemessen rund zehn
+    # Episoden nach der Geburt.  Bis dahin hat die Klasse aus Anspruechen laengst 10-16 Belege, und die
+    # Streuung kommt zu spaet, um noch etwas zu bewegen (gemessen: wirkungslos, Commit 7f8fb28).
+    # DESHALB: die Neugier darf eine noch NAMENLOSE (ungebundene) junge Klasse ueben.  Dafuer wird sie
+    # VORUEBERGEHEND handhabbar gemacht und nach der Episode wieder ausgetragen -- sie bekommt also
+    # KEINEN Knopf, die Bestaetigung in _try_bind entscheidet darueber weiterhin allein.  So greift das
+    # Kind nach dem neuen Ding, WEIL es neu ist, und lernt es dabei von mehreren Orten kennen.
+    NAMENLOS = os.environ.get("ACT23_NAMENLOS", "1") == "1"    # 0 = alter Stand (nur Kommandierbares)
+    _uebung = {"body": None}
+
+    def _uebung_start(cname, body):
+        """Die namenlose Klasse voruebergehend handhabbar machen (kein Knopf, kein Eintrag auf Dauer)."""
+        _uebung["body"] = body
+        state.OBJECTS = state.OBJECTS + [(f"namenlos {cname}", body, "shape")]
+        state.SHAPE_KEY[body] = cname
+        act16.OBJS = [nm for _l, nm, _m in state.OBJECTS]      # SCENE_N NICHT anfassen: das ist die
+        #   SZENENGROESSE (ACT23_SCENE_N), nicht die Zahl der Knoepfe -- einmal mitgesetzt, zog
+        #   run_combined mehr Nachbarn als die Szene hergab und brach ab.
+        state.sel = len(state.OBJECTS) - 1
+
+    def _uebung_ende():
+        """Nach der Episode wieder austragen -- der Zustand sieht danach aus wie vorher."""
+        body = _uebung["body"]
+        if body is None:
+            return
+        _uebung["body"] = None
+        state.OBJECTS = [o for o in state.OBJECTS if not o[0].startswith("namenlos ")]
+        state.SHAPE_KEY.pop(body, None)
+        act16.OBJS = [nm for _l, nm, _m in state.OBJECTS]
+        state.sel = min(state.sel, len(state.OBJECTS) - 1)
+
+    def _namenlose_kandidaten():
+        """Ungebundene junge Klassen, die JETZT sichtbar sind -> (Klassenname, Koerper-Handle).
+        Die Lage kommt aus der WAHRNEHMUNG (perceive_all); der Koerper-Handle ist reine Verkabelung,
+        genau wie in _try_bind und situation_feats."""
+        if not NAMENLOS:
+            return []
+        gebunden = set(state.SHAPE_KEY.values())
+        offen = [c for c in shape_clf.open_names if c not in gebunden]
+        if not offen:
+            return []
+        saved = sim.d.mocap_pos.copy()
+        dets = shape_clf.perceive_all(sim)
+        sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+        schon = {nm for _l, nm, _m in state.OBJECTS}           # Koerper, die bereits einen Knopf haben,
+        #   NICHT nochmal eintragen -- ein Doppeleintrag brachte run_combined aus dem Tritt
+        koerper = [nm for nm in scene if nm not in schon]
+        out = []
+        for d in dets:
+            if d["shape"] not in offen or d["pos"] is None:
+                continue
+            p = np.asarray(d["pos"], float)
+            nah = min(koerper, key=lambda o: float(np.linalg.norm(sim.obj_pos(o)[:2] - p)), default=None)
+            if nah is not None and float(np.linalg.norm(sim.obj_pos(nah)[:2] - p)) < 0.04:
+                out.append((d["shape"], nah))
+        return out
+
     def _streuung(body, p0, last):
         """STREUUNG FUER EINE JUNGE KLASSE -- die Identitaet kommt aus der EIGENEN HANDLUNG.
 
@@ -3494,11 +3554,31 @@ def run_self_learning_steering(headless=False):
             h = sig_hist.setdefault(_l, []); h.append(s); del h[:-8]
             lp = float(np.mean(h[:len(h) // 2]) - np.mean(h[len(h) // 2:])) if len(h) >= 6 else 0.0
             scores.append((max(lp, 0.0) + 0.25 * s, lp, s, k, _l))
+        # NAMENLOSE mitbewerben lassen (s. _uebung oben): eine junge Klasse ohne Knopf wird nach
+        # DENSELBEN Regeln bewertet wie die kommandierbaren Objekte -- kein Bonus, kein Sonderweg.  Sie
+        # gewinnt von selbst oft genug, weil sie datenarm ist und das Welt-Modell dort am meisten
+        # widerspricht; genau dafuer ist die Neugier da.
+        for cname, nbody in _namenlose_kandidaten():
+            fe = situation_feats(nbody)
+            if fe is None:
+                continue
+            if NOVELTY_DIRECT:
+                s = float(world.novelty(fe))
+            else:
+                _mu, sd = world.predict(fe, world.candidates(0, yaw=world.yaw_of(fe)))
+                s = float(sd.max())
+            h = sig_hist.setdefault(cname, []); h.append(s); del h[:-8]
+            lp = float(np.mean(h[:len(h) // 2]) - np.mean(h[len(h) // 2:])) if len(h) >= 6 else 0.0
+            scores.append((max(lp, 0.0) + 0.25 * s, lp, s, ("namenlos", cname, nbody),
+                           f"namenlos {cname}"))
         if not scores or world.n() == 0:
             return None
         w = np.array([sc[0] for sc in scores]) + 1e-3
         _sc, lp_best, sd_best, k, lbl = scores[int(crng.choice(len(scores), p=w / w.sum()))]
-        state.sel = k
+        if isinstance(k, tuple):                               # namenlos gezogen -> nur fuer DIESE Episode
+            _uebung_start(k[1], k[2])                          #   handhabbar, danach wieder ausgetragen
+        else:
+            state.sel = k
         bodies = [nm for _l2, nm, _m2 in state.OBJECTS]
         best_p, best_z, best_nov = None, None, -1.0
         for _ in range(24):                                    # target = most NOVEL reachable spot;
@@ -3664,7 +3744,10 @@ def run_self_learning_steering(headless=False):
                     mujoco.mj_forward(sim.m, sim.d); sim.step(40)
                     world.rng.bit_generator.state = _rng0
                 print(f"  [Auto {ep}]{f' W{_rep}' if _reps > 1 else ''} {state.label()} ...", flush=True)
-                ok, err = run_one()
+                try:
+                    ok, err = run_one()
+                finally:
+                    _uebung_ende()                             # namenlose Uebung wieder austragen
                 print(f"  [Auto {ep}] {'GELIEFERT' if ok else 'NICHT geliefert'}  |  Abstand {err:.0f} mm",
                       flush=True)
                 _scene.append((bool(ok), float(err)))
@@ -3741,6 +3824,7 @@ def run_self_learning_steering(headless=False):
             ok, err = run_one()
         finally:
             state.busy = False
+            _uebung_ende()                                     # namenlose Uebung wieder austragen
         line = f"[{tag} {ep}] {'GELIEFERT' if ok else 'NICHT geliefert'}  |  Abstand {err:.0f} mm"
         print("  " + line); panel.update(sim.render(CAM), line); ep += 1
         bilanz["netz" if state.choreo == "netz" else "fsm"].append(bool(ok))
