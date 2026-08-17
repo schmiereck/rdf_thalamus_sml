@@ -1907,6 +1907,16 @@ def run_self_learning_steering(headless=False):
     # VORUEBERGEHEND handhabbar gemacht und nach der Episode wieder ausgetragen -- sie bekommt also
     # KEINEN Knopf, die Bestaetigung in _try_bind entscheidet darueber weiterhin allein.  So greift das
     # Kind nach dem neuen Ding, WEIL es neu ist, und lernt es dabei von mehreren Orten kennen.
+    # WIE OFT GIBT ES DIESES FENSTER UEBERHAUPT?  Gemessen ueber 8 Seeds (901-908, je 30-50 Episoden):
+    #     Geburt einer Kreuz-Klasse            8 von 8 Laeufen (Episode 8-15)
+    #     SOFORT gebunden (kein Fenster)       0 von 8
+    #     Fenster Geburt->Bindung              im Mittel 4.8 Ep (Spanne 2-14)
+    #     Neugier hat es genutzt               7 von 8 Laeufen (1-4 Uebungen)
+    #     nie gebunden bis Laufende            2 von 8  (offen, s. unten)
+    # Das Fenster ist also der NORMALFALL.  (Meine erste Lesart nach einem missglueckten A/B -- "Seed 908
+    # bindet sofort, es gibt keine namenlose Phase" -- war falsch: dort war das Fenster 2 Episoden lang und
+    # wurde nur nicht gezogen.)  OFFEN: in 2 von 8 Laeufen faellt die Bestaetigung binnen 30 Episoden NIE;
+    # ob das Laufzeit ist oder ob 3-von-6 fuer manche Klassen unerreichbar bleibt, ist ungemessen.
     NAMENLOS = os.environ.get("ACT23_NAMENLOS", "1") == "1"    # 0 = alter Stand (nur Kommandierbares)
     _uebung = {"body": None}
 
