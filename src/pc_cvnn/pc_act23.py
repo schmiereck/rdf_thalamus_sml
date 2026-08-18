@@ -1948,7 +1948,26 @@ def run_self_learning_steering(headless=False):
         if not NAMENLOS:
             return []
         gebunden = set(state.SHAPE_KEY.values())
-        offen = [c for c in shape_clf.open_names if c not in gebunden]
+        # NUR ORTSGEBUNDENE Klassen ueben.  WARUM (gemessen im 8-Seed-Sweep): in beiden Laeufen, die binnen
+        # 30 Episoden NIE gebunden haben, gingen die Zuege der Neugier an ALTE namenlose Klassen -- Seed 903
+        # uebte neu-13 und neu-250 (50 Belege!), Seed 904 uebte neu-250 sogar bevor die Kreuz-Klasse
+        # ueberhaupt geboren war.  Die frische Klasse bekam nichts ab und blieb bei 0-17% Wiedererkennung.
+        # Eine Klasse mit breiter Abdeckung gewinnt durch Tragen nichts mehr (der Zugewinn saettigt nach
+        # ~3 Sichtungen von anderswo, s. _streuung), sie zieht die Aufmerksamkeit nur ab.
+        # KRITERIUM ohne neuen Knopf: die SPANNWEITE der eigenen Belege gegen den selbst gemessenen Radius
+        # -- liegen alle Belege enger beieinander als zwei Sichtungen desselben Objekts typischerweise
+        # auseinanderliegen, ist die Klasse noch ortsgebunden und Streuung zahlt sich aus.  Am gespeicherten
+        # Zustand gemessen trennt das sauber: neu-13 24.2 / neu-250 21.2 / neu-34 25.8 fallen raus,
+        # neu-266 (Spannweite 0.00, alle Belege vom selben Fleck) bleibt drin.
+        _r = shape_clf._birth_radius()
+
+        def _ortsgebunden(c):
+            E = np.asarray(shape_clf.open.get(c) or [])
+            if len(E) < 2:
+                return True
+            return float(np.sqrt(((E[:, None, :] - E[None, :, :]) ** 2).sum(2)).max()) < _r
+
+        offen = [c for c in shape_clf.open_names if c not in gebunden and _ortsgebunden(c)]
         if not offen:
             return []
         saved = sim.d.mocap_pos.copy()
