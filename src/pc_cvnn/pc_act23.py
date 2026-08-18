@@ -1917,6 +1917,17 @@ def run_self_learning_steering(headless=False):
     # bindet sofort, es gibt keine namenlose Phase" -- war falsch: dort war das Fenster 2 Episoden lang und
     # wurde nur nicht gezogen.)  OFFEN: in 2 von 8 Laeufen faellt die Bestaetigung binnen 30 Episoden NIE;
     # ob das Laufzeit ist oder ob 3-von-6 fuer manche Klassen unerreichbar bleibt, ist ungemessen.
+    # REPLIKATION FEHLGESCHLAGEN (2026-08-18) -- die 33% -> 83% aus EINEM Seed-Paar (907, d483bc8)
+    # halten NICHT.  Gepaarter Sweep ueber 6 frische Seeds (901-906, je 30 Ep, gleicher Seed in beiden
+    # Armen; der Lauf ist bei gleichem Seed deterministisch -- zwei identische Laeufe ergaben null
+    # Unterschiede, Wiederholung desselben Seeds bringt also nichts, die REPLIKATE SIND DIE SEEDS):
+    #     gebunden            aus 6/6      an 6/6
+    #     Wiedererkennung     aus 53.7%    an 55.5%   (besser in 4 von 6 Paaren, Vorzeichentest p=0.69)
+    #     Lieferungen         2:2                     (p=1.00)
+    # Das Merkmal ist damit NEUTRAL, nicht nuetzlich.  Was gemessen BLEIBT: mit der urspruenglichen
+    # Kandidatenregel ("ungebunden" statt "ortsgebunden") war es SCHAEDLICH -- 2 von 8 Laeufen banden nie,
+    # weil die Zuege an alte Klassen mit 50-80 Belegen gingen (s. 8604ebf).  Der Fix hat den Schaden
+    # beseitigt, einen Nutzen darueber hinaus gibt es gemessen nicht.
     NAMENLOS = os.environ.get("ACT23_NAMENLOS", "1") == "1"    # 0 = alter Stand (nur Kommandierbares)
     _uebung = {"body": None}
 
