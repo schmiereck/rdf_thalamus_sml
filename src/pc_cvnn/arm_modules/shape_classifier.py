@@ -501,6 +501,19 @@ class ShapeClassifierModule(ArmModule):
         gefaerbten Nachbarn gibt es kaum Mischsignal und die Sperre greift nicht.  Sie faengt also
         etwa zwei Drittel der Phantom-Geburten, nicht alle.
 
+        GEPAART NACHGEMESSEN (4 Seeds, je 30 Ep, SCENE_N=6 wie in der GUI, nur ACT_SHAPE_MERGE_GUARD):
+            Seed   911   912   913   914   Summe
+            aus      1     2     1     2     6
+            an       1     1     0     1     3
+        Reduziert in 3 von 4 Paaren, nie erhoeht; Lieferbilanz unveraendert (13/13, 5->9, 7/7, 12/12).
+        Nach Vorzeichentest ist 3:0 bei einem Gleichstand p=0.25 -- ein Hinweis, kein Beleg.
+        WAS DABEI AUFFIEL und die Erzaehlung korrigiert: 29 der 64 Sperren betreffen ISOLIERTE Objekte
+        (kein Nachbar naeher als 45mm).  Es sind also ueberwiegend nicht Objekt+Objekt-Verschmelzungen,
+        sondern OBJEKT + ARM im Bild -- die Flaechen liegen beim 1.5- bis 3-fachen des Objekts allein
+        (572px an einem Wuerfel von ~267, 1347px an obj_U von ~762).  Auch das sind zwei Dinge in einem
+        Fleck und taugen nicht als Formsichtung, die Sperre arbeitet also richtig, nur breiter als
+        urspruenglich angenommen.  KEIN sauberer Einzelfleck wurde gesperrt (geprueft ueber alle 64).
+
         WARUM SCHON AB 12 WERTEN (und nicht ab 40, wie zuerst gebaut): die Phantom-Geburten fallen
         gemessen in Episode 10-19, und bei nur ~2 trainierten Flecken je Blick war die Sperre mit 40
         Werten erst um Episode 20 scharf -- sie kam zu spaet und blockierte im ersten Lauf NICHTS.
