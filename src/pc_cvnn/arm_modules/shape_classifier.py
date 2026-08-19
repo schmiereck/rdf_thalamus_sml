@@ -88,6 +88,7 @@ BIRTH_MARGIN = float(os.environ.get("ACT_SHAPE_BIRTH_MARGIN", "1.0"))   # GEBURT
 #   SEIT 2026-08-16 IST DAS KEIN HANDGRIFF MEHR: der Radius wird in _fit_birth() vom Netz SELBST an
 #   seinen eigenen Sichtungen gemessen (s. dort).  BIRTH_MARGIN multipliziert nur noch den gemessenen
 #   Wert und dient dem A/B -- VORGABE 1.0 = rein selbst kalibriert, nichts eingestellt.
+MERGE_GUARD = os.environ.get("ACT_SHAPE_MERGE_GUARD", "1") == "1"       # Verschmelzungs-Sperre, s. _merge_th
 OPEN_CAP = 80                                                           # max stored exemplars per self-labelled class
 # STARVATION / CAP (phantom over-birth control): scattered transient sightings (edge/occlusion/odd-pose
 # renders) can birth open classes that then NEVER get claimed again -- the user's neu-* piled to 45+.  A
@@ -489,6 +490,29 @@ class ShapeClassifierModule(ArmModule):
         self.birth_th = t
         self._birth_j = (j, float(np.mean(d_in <= t)), float(np.mean(d_out <= t)))
 
+    def _merge_th(self):
+        """Schwelle der FARBSTREUUNG, ab der ein Fleck als verschmolzen gilt -- aus den eigenen
+        Einzelobjekt-Flecken gemessen (0.995-Quantil, dieselbe Konvention wie novel_th), nichts
+        eingestellt.  None, solange zu wenig Referenz vorliegt -> keine Sperre, das alte Verhalten.
+
+        GRENZE, vorab gemessen und bewusst in Kauf genommen: Einzelobjekte streuen 0.046-0.107,
+        Verschmelzungen 0.099-0.275.  Vier von fuenf Verschmelzungen liegen bei 0.20-0.27 und werden
+        sicher erkannt; die Ausnahme ist obj_U+obj_blue (Cyan neben Blau, 0.099) -- bei AEHNLICH
+        gefaerbten Nachbarn gibt es kaum Mischsignal und die Sperre greift nicht.  Sie faengt also
+        etwa zwei Drittel der Phantom-Geburten, nicht alle.
+
+        WARUM SCHON AB 12 WERTEN (und nicht ab 40, wie zuerst gebaut): die Phantom-Geburten fallen
+        gemessen in Episode 10-19, und bei nur ~2 trainierten Flecken je Blick war die Sperre mit 40
+        Werten erst um Episode 20 scharf -- sie kam zu spaet und blockierte im ersten Lauf NICHTS.
+        Bei 12 Werten ist das 0.995-Quantil praktisch das Maximum der bisherigen Einzelobjekte, also
+        die konservative Richtung: lieber zu selten sperren als einen echten neuen Koerper verwerfen."""
+        if not MERGE_GUARD:
+            return None                                      # ACT_SHAPE_MERGE_GUARD=0 -> alter Stand
+        ref = getattr(self, "_cs_ref", None)
+        if not ref or len(ref) < 12:
+            return None
+        return float(np.quantile(np.asarray(ref, float), 0.995))
+
     def _birth_radius(self):
         """Der selbst gemessene Geburtsradius.  Faellt auf novel_th zurueck, solange nichts gemessen
         ist -- etwa bei einem Zustand aus dem Pickle von VOR dieser Aenderung; dort wird beim ersten
@@ -560,6 +584,20 @@ class ShapeClassifierModule(ArmModule):
                 if not (bounds[0] <= x <= bounds[1] and bounds[2] <= y <= bounds[3]):
                     continue                                 # outside the calibrated workspace -> no verdict
             z = self._z(det["desc"]); nm = det["shape"]
+            cs = det.get("cspread")
+            if cs is not None and nm is not None:
+                # SELBST-KALIBRIERUNG der Verschmelzungs-Sperre: ein Fleck, der eine BEKANNTE Form
+                # beansprucht (trainiert ODER selbst benannt), ist so gut wie immer EIN Objekt -- ein
+                # verschmolzener Fleck ist eine neue Silhouette und passt auf keine.  Seine Farbstreuung
+                # ist damit die Referenz.  Nichts eingestellt, s. _merge_th.
+                # WARUM NICHT NUR TRAINIERTE (erster Bau): davon gibt es in dieser Szene nur ~0.5 je Blick,
+                # die Sperre war damit erst ab Episode 23 scharf -- die Phantom-Geburten fallen aber in
+                # Episode 10-18, sie kam also IMMER zu spaet (gemessen: 13 Sperren, alle nach der letzten
+                # Geburt, Geburtenzahl unveraendert 3).  Mit allen Anspruechen sind es ~4-5 je Blick.
+                # RESTRISIKO, bewusst: existiert erst einmal eine Phantomklasse, koennen verschmolzene
+                # Flecken SIE beanspruchen und die Referenz nach oben ziehen.  Genau das soll die Sperre
+                # ja verhindern; solange sie greift, entsteht die Phantomklasse gar nicht erst.
+                self._cs_ref = (list(getattr(self, "_cs_ref", []) or []) + [float(cs)])[-400:]
             if nm is not None and nm not in SHAPES:          # open-class match -> grow its exemplar set
                 self.last_events.append(("claim", nm, None if det["pos"] is None
                                          else np.round(det["pos"], 3).tolist()))
@@ -569,6 +607,19 @@ class ShapeClassifierModule(ArmModule):
                 if len(self.open[nm]) < OPEN_CAP:
                     self.open[nm].append(z)
             elif nm is None:                                 # NOVEL sighting -> temporal-consistency buffer
+                _mth = self._merge_th()
+                if _mth is not None and cs is not None and cs > _mth:
+                    # VERSCHMOLZENER FLECK -> KEIN Geburts-Material.  WARUM (gemessen 2026-08-18 ueber
+                    # drei 50-Episoden-Laeufe): von drei geborenen Klassen waren ZWEI Phantome aus
+                    # verschmolzenen Flecken (ausloesende Flaechen 1019 und 855 px, das echte Objekt
+                    # misst ~450).  Und die Zersplitterung waechst mit der Lauflaenge -- 1.20 Klassen
+                    # bei 30 Episoden, 2.00 bei 50 (~0.04 je Episode), auf einen 300-Episoden-Lauf
+                    # hochgerechnet ueber zehn Klassen fuer EIN Objekt.  Der vorhandene Flaechen-Schutz
+                    # area_hi (1411) kann das prinzipiell nicht: die Verschmelzungen messen 822-1390,
+                    # die groesste TRAININGSform ~940.
+                    self.last_events.append(("verschmolzen", None if det["pos"] is None
+                                             else np.round(det["pos"], 3).tolist(), int(det["area"])))
+                    continue
                 self.last_events.append(("novel", None if det["pos"] is None
                                          else np.round(det["pos"], 3).tolist(), int(det["area"])))
                 _br = self._birth_radius() * BIRTH_MARGIN     # selbst gemessen, s. _fit_birth()
@@ -795,13 +846,22 @@ class ShapeClassifierModule(ArmModule):
                 _W = self._px_to_world(np.column_stack([xs, ys]))   # Aufrufer die zulaessige Greifpunkt-
                 span = float(np.percentile(np.linalg.norm(_W - ctr, axis=1), 95))   # Verschiebung an die
             #   OBJEKTGROESSE koppeln statt an eine feste Zahl (s. ACT23_GRASP_CAND_FRAC in pc_act23).
-            rgb = img[ys, xs].astype(float).mean(0) / 255.0     # component CHROMATICITY (stage-3 colour
+            _pix = img[ys, xs].astype(float)
+            rgb = _pix.mean(0) / 255.0                          # component CHROMATICITY (stage-3 colour
             csum = float(rgb.sum())                             #   open-set: brightness-normalised, so
             chroma = rgb / csum if csum > 1e-6 else rgb         #   shading/position largely cancel)
+            # FARBSTREUUNG IM FLECK: mittlere Abweichung der Pixel-Chromatizitaet vom Fleck-Mittel.  Ein
+            # VERSCHMOLZENER Fleck enthaelt zwei Farbpopulationen und streut deutlich staerker als ein
+            # einzelnes Objekt -- und anders als der mittlere Farbabstand braucht das KEIN Vorwissen ueber
+            # die Farbe (gemessen: das noch farblose Kreuz liegt beim Farbabstand mit 0.074 ueber einer
+            # echten Verschmelzung mit 0.028, ein Erkenner darauf wuerde genau die NEUEN Objekte
+            # verwerfen).  Wird in observe_scene als Geburts-Sperre benutzt, s. dort.
+            _pc = _pix / (_pix.sum(1, keepdims=True) + 1e-6)
+            cspread = float(np.sqrt(((_pc - _pc.mean(0)) ** 2).sum(1).mean()))
             out.append({"shape": name, "id": k, "prob": prob,   # shape=None + id=-1 = a NOVEL form (open set)
                         "pos": (ctr if self.H is not None else None), "grasp_xy": grasp, "grasp_yaw": 0.0,
                         "yaw": self._yaw_from(F), "yaw4": self._yaw4_from(F), "area": float(comp.sum()),
-                        "chroma": chroma,
+                        "chroma": chroma, "cspread": cspread,
                         "px": np.array([xs.mean(), ys.mean()]),
                         "span": span,                          # Material-Halbspanne (m), s. oben
                         "grasp_cands": gcands,                 # perception-grounded grasp-point candidates
