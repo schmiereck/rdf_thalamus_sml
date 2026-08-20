@@ -501,12 +501,20 @@ class ShapeClassifierModule(ArmModule):
         gefaerbten Nachbarn gibt es kaum Mischsignal und die Sperre greift nicht.  Sie faengt also
         etwa zwei Drittel der Phantom-Geburten, nicht alle.
 
-        GEPAART NACHGEMESSEN (4 Seeds, je 30 Ep, SCENE_N=6 wie in der GUI, nur ACT_SHAPE_MERGE_GUARD):
-            Seed   911   912   913   914   Summe
-            aus      1     2     1     2     6
-            an       1     1     0     1     3
-        Reduziert in 3 von 4 Paaren, nie erhoeht; Lieferbilanz unveraendert (13/13, 5->9, 7/7, 12/12).
-        Nach Vorzeichentest ist 3:0 bei einem Gleichstand p=0.25 -- ein Hinweis, kein Beleg.
+        GEPAART NACHGEMESSEN (14 Seeds 911-924, je 30 Ep, SCENE_N=6 wie in der GUI, nur
+        ACT_SHAPE_MERGE_GUARD unterschiedlich):
+            Geburten gesamt      aus 23  ->  an 13   (43% weniger)
+            besser 7   schlechter 0   gleich 7       Vorzeichentest p = 0.0156
+            nur Laeufe, die in der Kontrolle ZERSPLITTERN (>=2 Geburten, n=6):  15 -> 7
+            Lieferbilanz in 13 von 14 Paaren IDENTISCH -- die Sperre greift wie beabsichtigt nur in
+            den Geburtspfad, nicht in Ansprueche oder Ausfuehrung.
+        Die sieben Gleichstaende sind durchweg Laeufe mit nur EINER Geburt in der Kontrolle -- dort
+        gibt es nichts zu verbessern, diese eine Klasse ist das echte Objekt.
+        FEHLSPERRUNG, gemessen statt gehofft: 13 von 156 Sperren (8%) trafen ISOLIERTE, nicht
+        aufgeblaehte Flecken -- alle an obj_U (786-1027px gegen ~762 allein).  obj_U ist eine
+        TRAINIERTE Form und erreicht den Geburtspfad nur, wenn sie ohnehin schon als "neu" gelesen
+        wurde; sie dort zu sperren verhindert eine Zweitklasse fuer ein bekanntes Objekt.  Vertretbar,
+        aber es ist keine Null.
         WAS DABEI AUFFIEL und die Erzaehlung korrigiert: 29 der 64 Sperren betreffen ISOLIERTE Objekte
         (kein Nachbar naeher als 45mm).  Es sind also ueberwiegend nicht Objekt+Objekt-Verschmelzungen,
         sondern OBJEKT + ARM im Bild -- die Flaechen liegen beim 1.5- bis 3-fachen des Objekts allein
