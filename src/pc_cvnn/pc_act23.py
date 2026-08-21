@@ -3848,6 +3848,15 @@ def run_self_learning_steering(headless=False):
         if not (state.go or state.auto):
             panel.plt.pause(0.05); continue
         if state.auto:                                         # AUTO-Lauf: CURIOSITY picks what to practice
+            # NEUHEIT + SZENEN-WUERFELN AUCH IN DER GUI.  Beides stand bisher NUR in der kopflosen
+            # Schleife, ACT23_NOVEL_EVERY und ACT23_SCENE_EVERY waren im GUI-Lauf also WIRKUNGSLOS --
+            # der Nutzer startete am 2026-08-20 mit ACT23_NOVEL_BODY=obj_X und NOVEL_EVERY=6, und in
+            # 332 Episoden wurde der Probe-Koerper KEIN EINZIGES MAL hingestellt (null Geburten, null
+            # "[Neuheit]"-Zeilen).  Im GUI ging es bisher nur ueber den Knopf "Objekt hinzufügen".
+            if NOVEL_EVERY > 0 and ep > 0 and ep % NOVEL_EVERY == 0:
+                spawn_novel_shape()                            # neue FORM einfuehren (ohne Label)
+            if SCENE_EVERY > 0 and ep > 0 and ep % SCENE_EVERY == 0:
+                randomize_objects()                            # neue Szene + Rotation (s. SCENE_N)
             pick = curious_pick() if AUTO_CURIOUS else None    #   (model uncertainty + goal novelty); random
             if pick is None:                                   #   fallback if perception/model isn't ready
                 state.sel = int(crng.integers(len(state.OBJECTS)))
