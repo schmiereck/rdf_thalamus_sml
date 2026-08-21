@@ -721,7 +721,17 @@ def run_self_learning_steering(headless=False):
     # dieselbe Variable) -- der Lauf startete bei null, alles war "neu", und die Aneignungsmessung
     # haette Unsinn ergeben.  Gebraucht wird: auf dem gelernten Stand AUFSETZEN, aber nichts
     # zurueckschreiben.
-    _probe = os.environ.get("ACT23_NOVEL_BODY", "obj_T") != "obj_T"
+    # WAS EIN PROBE-LAUF IST: einer, der auf eine EIGENE Zustandsdatei zeigt (ACT23_STATE_PATH).
+    # ZUVOR hing das allein an ACT23_NOVEL_BODY != obj_T -- und das war falsch, teuer und meine Schuld:
+    # ich habe dem Nutzer am 2026-08-20 selbst empfohlen, fuer den GUI-Lauf ACT23_NOVEL_BODY=obj_X zu
+    # setzen, um das Kreuz zu sehen.  Damit galten SEINE echten Laeufe als wegwerfbar; drei GUI-Laeufe
+    # (332 Ep + zwei weitere) haben nichts zurueckgeschrieben, darunter der erste, in dem sich der
+    # Agent das Kreuz selbst angeeignet und einen Knopf dafuer bekommen hat.
+    # Die Hygiene bleibt erhalten: meine Messlaeufe legen IMMER eine Kopie an und setzen
+    # ACT23_STATE_PATH darauf -- genau daran sind sie erkennbar, und nur sie.  Ein GUI-Lauf ohne
+    # STATE_PATH schreibt wieder normal zurueck.  ACT23_NO_PERSIST=1 sperrt weiterhin von Hand.
+    _probe = (bool(os.environ.get("ACT23_STATE_PATH"))
+              and os.environ.get("ACT23_NOVEL_BODY", "obj_T") != "obj_T")
     WRITE_STATE = PERSIST_STATE and not (
         os.environ.get("ACT23_NO_PERSIST", "0") == "1"
         or (_probe and os.environ.get("ACT23_PROBE_PERSIST", "0") != "1"))
@@ -1761,6 +1771,18 @@ def run_self_learning_steering(headless=False):
             print(f"    [Szene] {len(_steht)} Objekte auf dem Tisch (min. Abstand "
                   f"{1000*min(np.hypot(a[0]-b[0], a[1]-b[1]) for a, b in __import__('itertools').combinations(SLOTS, 2)):.0f}mm), "
                   f"geparkt: {', '.join(nm for nm, _ in _geparkt)}", flush=True)
+        # DIE GEWUERFELTE SZENE AUCH AN act16 DURCHREICHEN.  run_combined baut zu Beginn JEDER Episode
+        # seine eigene Szene auf: keep = [cmd] + Ablenker aus act16.OBJS, und weil act16.SCENE_N beim
+        # Start auf len(OBJS) gesetzt wird (Absicht: "never PARKS a distractor off-table"), ist keep =
+        # ALLE.  Ohne die naechsten Zeilen holt act16 die eben geparkten Objekte sofort zurueck --
+        # ACT23_SCENE_N wirkte dann nur einen Wimpernschlag lang.  GEMELDET vom Nutzer 2026-08-21 mit
+        # Screenshot: SCENE_N=5 gesetzt, sichtbar waren alle SIEBEN Koerper, dicht gedraengt und teils
+        # ueberlappend -- genau die Nachbarschaft, aus der die Verschmelzungs-Phantome entstehen.
+        # Die Kontinuitaets-Absicht bleibt gewahrt: INNERHALB eines Szenen-Fensters (ACT23_SCENE_EVERY)
+        # bleibt die Menge fest, es teleportiert also nichts je Episode -- gewechselt wird nur beim
+        # Wuerfeln.  Ein Kommando auf ein geparktes Objekt stellt es weiterhin hin (keep enthaelt cmd).
+        act16.OBJS = [nm for nm, _m in _steht]
+        act16.SCENE_N = len(act16.OBJS)
         place_all()
         open_set_glance()                                      # lifelong open-set look at the fresh scene
         if panel is not None:                                  # show the placed scene immediately (decide from it)
@@ -1886,7 +1908,8 @@ def run_self_learning_steering(headless=False):
             _n += 1
         label = f"Neue Form {_n}"
         state.add_object(label, NOVEL_BODY, cname)
-        act16.OBJS = [nm for _l, nm, _m in state.OBJECTS]; act16.SCENE_N = len(act16.OBJS)
+        act16.OBJS = list(dict.fromkeys(list(act16.OBJS) + [NOVEL_BODY]))   # HINZUFUEGEN, nicht alles
+        act16.SCENE_N = len(act16.OBJS)                                     #   zurueckholen (s. randomize_objects)
         print(f"  [open-set] NEUE FORM selbst benannt: '{cname}' -> Kommando '{label}' "
               f"(bestaetigt in {sum(hits)} von {len(hits)} Blicken; "
               f"Mitbewerber {{{', '.join(f'{c}:{sum(h)}' for c, h in _bind_hits.items() if c != cname)}}})",
@@ -1936,7 +1959,8 @@ def run_self_learning_steering(headless=False):
         _uebung["body"] = body
         state.OBJECTS = state.OBJECTS + [(f"namenlos {cname}", body, "shape")]
         state.SHAPE_KEY[body] = cname
-        act16.OBJS = [nm for _l, nm, _m in state.OBJECTS]      # SCENE_N NICHT anfassen: das ist die
+        act16.OBJS = list(dict.fromkeys(list(act16.OBJS) + [body]))   # nur ERGAENZEN, sonst holt es die
+        #   geparkten Objekte zurueck (s. randomize_objects).  SCENE_N NICHT anfassen: das ist die
         #   SZENENGROESSE (ACT23_SCENE_N), nicht die Zahl der Knoepfe -- einmal mitgesetzt, zog
         #   run_combined mehr Nachbarn als die Szene hergab und brach ab.
         state.sel = len(state.OBJECTS) - 1
@@ -1949,7 +1973,8 @@ def run_self_learning_steering(headless=False):
         _uebung["body"] = None
         state.OBJECTS = [o for o in state.OBJECTS if not o[0].startswith("namenlos ")]
         state.SHAPE_KEY.pop(body, None)
-        act16.OBJS = [nm for _l, nm, _m in state.OBJECTS]
+        act16.OBJS = [nm for nm in act16.OBJS if nm != body or body in
+                      {n for _l, n, _m in state.OBJECTS}]     # nur den Uebungs-Eintrag zuruecknehmen
         state.sel = min(state.sel, len(state.OBJECTS) - 1)
 
     def _namenlose_kandidaten():
@@ -2267,12 +2292,15 @@ def run_self_learning_steering(headless=False):
     if panel is not None:
         panel._randomize_fn = randomize_objects     # wire "Objekte neu" (panel built before randomize_objects existed)
         panel._introduce_fn = introduce_object      # wire "Objekt hinzufügen" (open-set discovery)
-    randomize_objects()
-    # CONTINUITY: make run_combined treat ALL 5 objects as its scene -> with SCENE_N = all, keep=all so it never
+    # CONTINUITY: make run_combined treat ALL objects as its scene -> with SCENE_N = all, keep=all so it never
     # PARKS a distractor off-table, and reposition_strays never fires (nothing is a stray) -> nothing teleports.
     # The scene just evolves: only the commanded object is grasped + delivered (and STAYS), like real life.
+    # REIHENFOLGE (2026-08-21): das steht jetzt VOR randomize_objects(), nicht danach -- randomize_objects
+    # engt act16.OBJS auf die STEHENDE Menge ein (s. dort), und diese Zeilen haetten das sofort wieder
+    # aufgehoben.  Sie liefern hier nur noch die Vorbelegung fuer den Fall ohne Einschraenkung.
     act16.OBJS = [nm for _l, nm, _m in state.OBJECTS]
     act16.SCENE_N = len(act16.OBJS)
+    randomize_objects()
 
     def train_fovea_classes(rounds=None):
         """DETECTOR-FREE GAZE (user's goal): retrain the hex fovea net so its sel-channel dynamics
