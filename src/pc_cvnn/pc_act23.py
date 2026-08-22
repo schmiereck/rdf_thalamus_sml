@@ -1870,7 +1870,14 @@ def run_self_learning_steering(headless=False):
     def _register_open_class(cname):
         """Eine eben SELBST BENANNTE Klasse wird KANDIDAT fuer den Kommando-Knopf.  Gebunden wird sie erst
         von _try_bind, wenn sie wiederholt auf dem neuen Objekt sitzt (s. Block oben)."""
+        # GEBURT IMMER MELDEN, auch wenn kein Knopf mehr zu vergeben ist.  Bisher stand der Ausstieg
+        # VOR der Ausgabe: sobald der Probe-Koerper gebunden war, wurde jede weitere Geburt STILL
+        # vollzogen.  Im Lauf vom 2026-08-21 entstanden so zwei Klassen (neu-287, neu-288) ohne eine
+        # einzige Meldung -- ich habe daraus faelschlich "null Geburten" gelesen.
         if NOVEL_BODY in state.SHAPE_KEY or NOVEL_BODY not in scene:
+            print(f"  [open-set] neue Klasse '{cname}' geboren (kein Knopf zu vergeben -- "
+                  f"{'der Probe-Koerper ist schon gebunden' if NOVEL_BODY in state.SHAPE_KEY else 'er steht nicht in der Szene'})",
+                  flush=True)
             return
         _bind_hits.setdefault(cname, [])
         print(f"  [open-set] neue Klasse '{cname}' geboren -- Kandidat fuer einen Knopf "
@@ -2113,8 +2120,19 @@ def run_self_learning_steering(headless=False):
     def acq_line(maxage=60):
         """Eine Zeile je JUNGER Klasse plus eine Sammelzeile fuer die alten."""
         out, alt = [], []
+        # VERHUNGERTE Klassen nicht weiter fuehren.  `acq` vergisst nie, der Klassifikator raeumt aber
+        # auf (_starve_and_cap) -- eine laengst geloeschte Klasse wurde hier weiter mit "0% wiedererkannt"
+        # gemeldet und sah aus wie eine tote Klasse, die niemand abraeumt.  Genau das hat der Nutzer am
+        # 2026-08-22 an neu-288 bemerkt; die Klasse existierte da schon nicht mehr, die Verhungerung
+        # hatte korrekt gegriffen.  Einmal als verhungert vermerken, dann nicht mehr zeigen.
+        _lebt = set(getattr(shape_clf, "open_names", []) or [])
+        for c, a in list(acq.items()):
+            if c not in _lebt and not a.get("tot"):
+                a["tot"] = True
+                print(f"    [Aneignung] {c}: verhungert nach {acq_ep['n'] - (a['born'] or 0)} Ep "
+                      f"(nie stabil wiedererkannt) -- wird nicht mehr gefuehrt", flush=True)
         for c, a in sorted(acq.items(), key=lambda kv: (kv[1]["born"] is not None, kv[1]["born"] or 0)):
-            if a["blick"] == 0:
+            if a["blick"] == 0 or a.get("tot"):
                 continue
             # ROLLENDE Rate statt kumulativer.  Im ersten Messlauf fiel auf, dass ein kumulativer
             # Mittelwert die Dynamik VERSTECKT: eine Klasse, die gerade angeeignet wird, klettert

@@ -98,6 +98,18 @@ OPEN_CAP = 80                                                           # max st
 # classes are additionally PROTECTED (passed in).  A hard CAP bounds the total (prune the most-starved).
 STARVE_N = int(os.environ.get("ACT_OPEN_STARVE", "25"))
 STARVE_MIN_EX = int(os.environ.get("ACT_OPEN_STARVE_EX", "6"))
+# DIE GROESSEN-AUSNAHME FAELLT BEI HOHEM ALTER.  Sie schuetzt junge, ECHTE Klassen davor, wegen einer
+# Durststrecke geloescht zu werden -- ab einem gewissen Alter schuetzt sie aber nur noch Leichen.
+# GEMESSEN am Zustand des Nutzers (2026-08-22, nach 275 Episoden):
+#     lebende Klassen (werden beansprucht)   neu-9 Alter 8, neu-34 Alter 7, neu-285 Alter 8
+#     immun durch Groesse, aber tot          neu-250 Alter 120 (55 Belege), neu-254 Alter 388 (25),
+#                                            neu-266 Alter 998 (7), neu-256 Alter 1288 (9)
+# neu-256 wurde also 1288 Blicke lang kein einziges Mal wiedererkannt und war trotzdem unantastbar,
+# weil 9 > STARVE_MIN_EX.  Die Luecke zwischen lebend (7-8) und tot (>=120) ist riesig.
+# WARUM 10x STARVE_N und nicht knapper: ein echtes Objekt steht bei ACT23_SCENE_N < Objektzahl zeitweise
+# NICHT auf dem Tisch und sammelt dann voellig zu Recht Alter -- ueber die Szenen-Rotation sind das
+# Dutzende Blicke.  250 liegt weit darueber und weit unter den gemessenen Leichen.
+STARVE_OLD = int(os.environ.get("ACT_OPEN_STARVE_OLD", "10"))          # * STARVE_N; 0 = Ausnahme bleibt
 MAX_OPEN = int(os.environ.get("ACT_OPEN_MAX", "12"))
 SAT_TH = 0.15
 GRIP_PX = 18                                             # gripper-sized window (px) for the densest-grip-point search
@@ -753,7 +765,11 @@ class ShapeClassifierModule(ArmModule):
             self._age[nm] = 0 if nm in born else self._age.get(nm, 0) + 1
 
         def _prunable(nm):
-            return nm not in prot and len(self.open.get(nm, [])) <= STARVE_MIN_EX
+            if nm in prot:                                   # gebundene Kommandos nie
+                return False
+            if len(self.open.get(nm, [])) <= STARVE_MIN_EX:
+                return True
+            return STARVE_OLD > 0 and self._age.get(nm, 0) > STARVE_N * STARVE_OLD   # s. STARVE_OLD
 
         for nm in [n for n in self.open_names if _prunable(n) and self._age.get(n, 0) > STARVE_N]:
             del self.open[nm]; self.open_names.remove(nm); self._age.pop(nm, None)
