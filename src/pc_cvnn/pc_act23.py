@@ -1752,7 +1752,13 @@ def run_self_learning_steering(headless=False):
         # ALLE sichtbaren Slots, landet er auf einem besetzten -- und verschmilzt sofort mit dessen
         # Nachbarn, womit die ganze Aneignungsmessung wieder an Blob-Verschmelzung scheitert (der
         # Fehlermodus aus b8d118e).  Darum steht ein regulaeres Objekt weniger.
-        _n_steht = max(1, SCENE_N - (1 if NOVEL_EVERY > 0 else 0))
+        # ... ABER NUR, SOLANGE ER NOCH NICHT ENTDECKT IST.  Ist der Probe-Koerper laengst als Kommando
+        # registriert (state.SHAPE_KEY), ist er ein GANZ NORMALES Objekt in `bodies` -- dann bekaeme er
+        # einen reservierten Sonderplatz UND einen regulaeren, und es stuende ein Objekt weniger da als
+        # eingestellt.  Genau das ist dem Nutzer am 2026-08-21 aufgefallen: ACT23_SCENE_N=4 gesetzt, nur
+        # DREI Objekte auf dem Tisch, weil das Kreuz inzwischen "Neue Form 10" ist.
+        _probe_offen = NOVEL_EVERY > 0 and NOVEL_BODY not in state.SHAPE_KEY
+        _n_steht = max(1, SCENE_N - (1 if _probe_offen else 0))
         _k = len(bodies)
         _rot = (exp_group["szene"] * _n_steht) % max(_k, 1)
         _steht = [bodies[(_rot + i) % _k] for i in range(min(_n_steht, _k))]
@@ -2159,7 +2165,14 @@ def run_self_learning_steering(headless=False):
                      (0.024, 0.022, 0.012), (0.032, 0.005, 0.012)]
 
     def spawn_novel_shape():
-        """Dem Probe-Koerper eine NEUE Proportion geben und ihn frei hinstellen -- ohne Label."""
+        """Dem Probe-Koerper eine NEUE Proportion geben und ihn frei hinstellen -- ohne Label.
+
+        NICHTS ZU TUN, wenn er laengst entdeckt und als Kommando registriert ist: dann ist er ein
+        normales Objekt, das randomize_objects verwaltet, und ein zusaetzliches Hinstellen wuerde die
+        Szene ueber ACT23_SCENE_N hinaus fuellen.  Im Lauf vom 2026-08-21 geschah das 45 Mal, obwohl
+        das Kreuz schon "Neue Form 10" war."""
+        if NOVEL_BODY in state.SHAPE_KEY:
+            return
         # ACT23_NOVEL_HOLD=1 haelt EINE Form ueber den ganzen Lauf fest, statt durchzuwechseln.
         # Fuer den Nachweis, DASS eine Geburt zustande kommt, ist das noetig: eine Klasse braucht
         # NOVEL_CONFIRM=3 Belege, und bei wechselnden Formen steht jede nur wenige Blicke lang da.
