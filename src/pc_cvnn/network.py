@@ -72,6 +72,7 @@ class PCNetwork:
         self._nodes: dict[str, PCNode] = {}
         self._connections: list[PCConnection] = []
         self._modules: dict[str, PCModule] = {}
+        self._plan = "unset"                  # gebuendelte Relaxation, faul gebaut (s. relax_vec)
 
         # Global neuromodulator ("dopamine"): scales every learning update in the
         # next learn phase.  1.0 = neutral ("weiter so", no influence).  Set via
@@ -81,6 +82,33 @@ class PCNetwork:
         self.reward_gain: float = 1.0
 
     # ------------------------------------------------------------------
+    # Gebuendelte Relaxation (s. relax_vec)
+    # ------------------------------------------------------------------
+
+    def _relax_plan(self):
+        """Den kompilierten Relaxations-Plan liefern, faul gebaut.  None = Objekt-Pfad.
+
+        getattr statt self._plan: ALTE PICKLES kennen das Feld nicht, und __getstate__ laesst es
+        bewusst weg -- der Plan haelt Verweise auf die Knoten- und Verbindungsobjekte und wuerde
+        die Zustandsdateien sonst unnoetig aufblaehen.
+        """
+        plan = getattr(self, "_plan", "unset")
+        if plan == "unset":
+            from .relax_vec import plan_fuer
+            plan = plan_fuer(self)
+            self._plan = plan
+        return plan
+
+    def _invalidate_plan(self) -> None:
+        """Nach jeder Topologie-Aenderung: der Plan beschreibt dann ein anderes Netz."""
+        self._plan = "unset"
+
+    def __getstate__(self):
+        d = dict(self.__dict__)
+        d.pop("_plan", None)                  # nie mitpickeln, s. _relax_plan
+        return d
+
+    # ------------------------------------------------------------------
     # Graph construction
     # ------------------------------------------------------------------
 
@@ -88,6 +116,7 @@ class PCNetwork:
         """Register a node.  Returns the node for inline use."""
         if node.id in self._nodes:
             raise ValueError(f"Node id '{node.id}' already exists.")
+        self._invalidate_plan()
         # Inject network-level temporal learning rate into newly added nodes
         if not node.is_clamped:
             node.eta_temporal = self.eta_temporal
@@ -128,6 +157,7 @@ class PCNetwork:
             rng=self._rng,
         )
         self._connections.append(conn)
+        self._invalidate_plan()
         return conn
 
     def node(self, node_id: str) -> PCNode:
@@ -270,6 +300,10 @@ class PCNetwork:
           (b) Every connection pushes a top-down prediction to its target.
           (c) Each node finalises its pi.
         """
+        plan = self._relax_plan()
+        if plan is not None:
+            plan.predict(self)                 # gebuendelt, s. relax_vec
+            return
         for node in self._nodes.values():
             node.load_predicted_state()
         for conn in self._connections:
@@ -283,7 +317,16 @@ class PCNetwork:
             node.compute_error()
 
     def _phase_relax(self) -> int:
-        """Phase 3: iterative state update until convergence or n_relax steps."""
+        """Phase 3: iterative state update until convergence or n_relax steps.
+
+        GEBUENDELT, wenn moeglich (s. relax_vec): diese Phase war gemessen 223 der 340 ms eines
+        Fovea-Schritts und davon ~99% Interpreter-Overhead auf winzigen numpy-Aufrufen.  Der Plan
+        rechnet dieselbe Abfolge gestapelt; er faellt still auf die Schleife unten zurueck, wenn
+        das Netz zu klein ist (ACT_PC_VEC_MIN) oder ACT_PC_VEC=0 gesetzt ist.
+        """
+        plan = self._relax_plan()
+        if plan is not None:
+            return plan.relax(self)
         for step in range(self.n_relax):
             for conn in self._connections:
                 conn.propagate_error(beta=self.beta, gamma=self.gamma)
@@ -309,10 +352,14 @@ class PCNetwork:
         1.0 afterwards so it only affects the step it was set for.
         """
         m = self.neuromod
-        for conn in self._connections:
-            conn.learn(m)
-        for node in self._nodes.values():
-            node.learn_temporal(m)
+        plan = self._relax_plan()
+        if plan is not None:
+            plan.learn(self, m)                # gebuendelt, s. relax_vec
+        else:
+            for conn in self._connections:
+                conn.learn(m)
+            for node in self._nodes.values():
+                node.learn_temporal(m)
         self.neuromod = 1.0   # consume the one-shot signal
 
     # ------------------------------------------------------------------
