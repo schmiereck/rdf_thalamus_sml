@@ -37,6 +37,7 @@ import numpy as np
 
 LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "log")
 CACHE_DIR = os.path.join(LOG_DIR, ".runviz_cache")
+MIN_PTS = 5                            # Mindestbelegung des Glaettungsfensters, s. series()
 MIN_EPISODES = 20                      # kuerzere Laeufe sind Rauchtests, nicht Lernlaeufe
 
 # --------------------------------------------------------------------------- Parser
@@ -161,17 +162,37 @@ PANELS = ["Ergebnis (Anteile)", "Griffkraft", "Wahrnehmung / Policy-Naehe",
 
 
 def series(recs, key, window):
-    """Geglaettete Kurve (gleitendes Mittel) + die Episoden-Indizes dazu."""
+    """Geglaettete Kurve (gleitendes Mittel der letzten `window` Episoden) + die Episoden dazu.
+
+    Das Fenster WAECHST am Anfang mit: der erste Punkt mittelt ueber eine Episode, der zweite
+    ueber zwei, ab der `window`-ten ueber volle `window`.  Frueher stand hier ein
+    np.convolve(..., mode="valid"), das die ersten window-1 Punkte verwarf -- die Kurven
+    begannen dadurch erst bei Episode 24 statt bei 0, und im concat-Modus klaffte zwischen der
+    Trennlinie eines Laufs und seinem Kurvenanfang genau diese Luecke (Nutzerbefund 2026-08-23:
+    "verbraucht unnoetig Platz").
+
+    Ab Episode window-1 sind die Werte dieselben wie vorher -- es kommt nur der Anfang dazu.
+
+    MIN_PTS: ein Mittel ueber ein oder zwei Episoden ist kein Trend, sondern der Messwert selbst.
+    Solche Punkte sahen nicht nur unruhig aus, sie zogen die AUTOSKALIERUNG der y-Achse mit
+    (gemessen an drei echten Laeufen: die Ablagegenauigkeit reichte dadurch bis 125mm statt 90,
+    die eigentliche Variation wurde zusammengedrueckt).  Deshalb beginnt die Kurve erst, wenn
+    mindestens MIN_PTS Episoden im Fenster liegen -- bei Glaettung 25 also ab Episode 4 statt 24.
+    Sichtbar ist das bei Laufeslaengen von einigen hundert Episoden nicht mehr.
+    """
     x = [r["episode"] for r in recs if key in r]
     y = [r[key] for r in recs if key in r]
     if len(y) < 3:
         return np.array([]), np.array([])
     y = np.asarray(y, float); x = np.asarray(x, float)
     w = max(3, min(int(window), len(y)))
-    k = np.ones(w) / w
-    ys = np.convolve(y, k, mode="valid")
-    xs = x[w - 1:]
-    return xs, ys
+    c = np.concatenate([[0.0], np.cumsum(y)])          # Praefixsummen -> Fenstermittel in O(n)
+    hi = np.arange(1, len(y) + 1)
+    lo = np.maximum(0, hi - w)                          # am Anfang kuerzeres Fenster
+    belegt = hi - lo
+    ys = (c[hi] - c[lo]) / belegt
+    gueltig = belegt >= max(3, min(w, MIN_PTS))
+    return x[gueltig], ys[gueltig]
 
 
 # --------------------------------------------------------------------------- Fenster
