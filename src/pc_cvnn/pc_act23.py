@@ -3200,6 +3200,27 @@ def run_self_learning_steering(headless=False):
         use_latent = state.goalmode == "latent"
         pol_trace = []                                         # STEP 3: (state, action) the POLICY drives
         #   this episode -> becomes self-imitation demonstrations IF the agent self-judges a delivery
+        _imit_verworfen = [0]
+
+        def _imit_log_frisch(s, out):
+            """PUNKT 3 AN DER LERNSTELLE: nur FRISCHE Entscheidungen werden Demonstration.
+
+            run_combined ruft policy_log_fn BEDINGUNGSLOS nach jedem policy_fn (act16:555).  Bei
+            ACT23_POLICY_RATE > 1 liefert der subgoal-Port zwischen zwei gerechneten Takten aber
+            den GEHALTENEN Wert -- die Selbst-Imitation bekaeme dann einen FRISCHEN Zustand mit
+            einer VERALTETEN Aktion gepaart.  Das ist nicht verrauscht, sondern falsch: sie lernte
+            "in diesem Zustand tue das, was ich im vorigen entschieden habe".
+
+            Das Wasserzeichen des Ports (Verbraucher "imitation") gibt jede Entscheidungs-Nummer
+            genau einmal heraus.  Bei Rate 1 ist jeder Takt frisch -> unveraendertes Verhalten.
+
+            Der REGLER bekommt den gehaltenen Wert weiterhin -- das ist die gewollte Bedeutung
+            einer langsamen Entscheidung.  Nur das LERNEN daraus ist unzulaessig.
+            """
+            if not runtime.out_ports["subgoal"].frisch_fuer("imitation"):
+                _imit_verworfen[0] += 1
+                return
+            pol_trace.append((s.copy(), out.copy()))
         runtime.begin_episode()                                # PEND the teacher rows; committed only if
         #   this episode is NOT a self-validated success (teacher corrects failures, see end_episode)
         # dir_ref wurde ggf. oben aus der gewaehlten AKTION gekippt -- Originalwert sichern und nach
@@ -3252,8 +3273,7 @@ def run_self_learning_steering(headless=False):
                            policy_fn=(_policy_ueber_ports if use_net else None),
                            log_fn=(None if use_net else choreo_log),
                            teacher_log_fn=(choreo_log if use_net else None),
-                           policy_log_fn=((lambda s, out: pol_trace.append((s.copy(), out.copy())))
-                                          if use_net else None),
+                           policy_log_fn=(_imit_log_frisch if use_net else None),
                            post_goal_fn=(lambda c, o, g: lgoal.set_goal_vector(g) if (isinstance(g, np.ndarray) and g.ndim==1 and len(g)>2) else lgoal.set_goal(g)),
                            #   (seval) needs the episode's goal latent even in "Ziel: Koord" mode
                            place_servo_fn=_plan_ueber_ports,
@@ -3615,6 +3635,14 @@ def run_self_learning_steering(headless=False):
                 # under ACT23_WORLD_LABEL=welt there is no self-distance and the label stays binary.
                 _qd = s_d if (lbl_src == "Selbst" and s_d is not None) else None
                 if not EXV_FREEZE:
+                    # PUNKT 3, GEPRUEFT UND NICHT NOETIG: diese Paarung ist von den logischen
+                    # Raten unberuehrt.  `fe` entsteht in situation_feats VOR run_combined (also
+                    # ausserhalb des Bild-Takts), `a_obs` ist die EINE Wahl dieser Episode
+                    # (world.rate bleibt 1, das Modul wird genau einmal getaktet) und `outcome`
+                    # das Episodenergebnis.  Kein Wert kann hier gehalten sein.  Bewusst KEINE
+                    # Wache: eine Wache gegen ein Phantom taeuscht Sicherheit vor und verdeckt,
+                    # wo die echte Gefahr sitzt (das war die Selbst-Imitation, s. _imit_log_frisch).
+                    # WER world.rate > 1 SETZT, muss hier zuerst hinsehen.
                     world.observe(fe, a_obs, outcome, dist=_qd, weight=obs_w, group=group_id())
                     world.train(epochs=600)
                 _qs = ("" if (_qd is None or not outcome)
@@ -3653,9 +3681,14 @@ def run_self_learning_steering(headless=False):
             imitated = added > 0
             mix = ", ".join(f"{k or 'alt'} {v}" for k, v in
                             sorted(runtime.imit_mix().items(), key=lambda kv: -kv[1]))
+            # Die Frische-Wache meldet ihren eigenen Fang: ohne sie waeren diese Zeilen als
+            # Demonstration eingegangen -- frischer Zustand, veraltete Aktion.  Bei Rate 1 ist
+            # der Zaehler immer 0, die Zeile erscheint dann gar nicht.
+            _vw = (f"; {_imit_verworfen[0]} gehaltene Takte NICHT gelernt (Frische-Wache)"
+                   if _imit_verworfen[0] else "")
             print(f"    [Selbst-Imitation] Lieferung {s_d * 1000:.0f}mm (Gewicht {_q:.2f}) -> +{added} "
                   f"Demo-Schritte ({runtime.n_imit()} im Selbst-Puffer: {mix})"
-                  f"{'; Teacher-Zeilen verworfen (eigener Erfolg zählt)' if confident else ''}",
+                  f"{'; Teacher-Zeilen verworfen (eigener Erfolg zählt)' if confident else ''}{_vw}",
                   flush=True)
         elif use_net and pol_trace and lifted and delivered:
             print(f"    [Selbst-Imitation] Lieferung zu unsicher ({(s_d or 0) * 1000:.0f}mm) -- "
