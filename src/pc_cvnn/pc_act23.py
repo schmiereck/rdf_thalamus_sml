@@ -1143,6 +1143,13 @@ def run_self_learning_steering(headless=False):
     # Callback-Pfad.  >1 laesst das Modul dazwischen den GEHALTENEN Stand liefern; das ist der
     # Knopf, an dem Punkt 4 misst.  Die Rate MULTIPLIZIERT sich mit dem `k % 4` aus act16:403.
     perception = PerceptionModule(rate=int(os.environ.get("ACT23_PERCEPT_RATE", "1")))
+    # ETAPPE 5: der REGELPFAD bekommt ebenfalls eine eigene Rate.  Die Kante liegt seit Etappe 2
+    # auf Ports, also ist hier nichts umzustecken -- es genuegt, die Rate zu setzen; durchgesetzt
+    # wird sie im ArmAgent.  ACT23_POLICY_RATE=2 heisst: die Policy entscheidet nur jeden zweiten
+    # Takt neu, dazwischen faehrt der Arm auf dem GEHALTENEN Teilziel weiter.  Zusammen mit
+    # ACT23_PERCEPT_RATE ist damit beisammen, was Punkt 4 braucht: eine langsame Entscheidung
+    # ueber einer schnellen Wahrnehmung -- oder umgekehrt.
+    runtime.rate = int(os.environ.get("ACT23_POLICY_RATE", "1"))
     for _m in (vc, shape_clf, objmem, seval, world, runtime, bm, lat_dyn, perception):
         if _m is not None:
             agent.add(_m)
@@ -3146,7 +3153,8 @@ def run_self_learning_steering(headless=False):
         # Unterschied zu einer blossen Weiterreichung: das MODUL entscheidet, ob dieser Takt
         # gerechnet oder der letzte Stand gehalten wird (ACT23_PERCEPT_RATE).  Der Aufrufer kann
         # beides nicht unterscheiden -- genau darum geht es bei Punkt 4.
-        perception.bind(track_fn)
+        perception.bind(track_fn)                              # setzt den Takt mit zurueck
+        runtime.reset_takt()                                   # Regelpfad-Takt je Episode neu
 
         def _wahrnehmung_ueber_ports():
             agent.step(["Perception"])

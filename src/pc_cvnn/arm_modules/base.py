@@ -43,6 +43,36 @@ class ArmModule:
         self.name = name
         self.in_ports: dict[str, Port] = {}
         self.out_ports: dict[str, Port] = {}
+        # LOGISCHE RATE (Nutzerplan 2026-08-23, Punkt 4).  rate=n heisst: dieses Modul rechnet nur
+        # jeden n-ten Takt; dazwischen behalten seine Out-Ports ihren letzten Stand, und der
+        # Verbraucher kann das nicht unterscheiden.  Genau das ist der Gegenstand von Punkt 4.
+        # Durchgesetzt wird sie im ArmAgent, nicht im Modul -- sonst muesste jedes Modul dieselbe
+        # Buchhaltung noch einmal schreiben (die erste Fassung im PerceptionModule tat genau das).
+        self.rate = 1
+        self._tick = 0
+        self.seq = 0                       # tatsaechlich GERECHNETE Takte
+        self.fresh = False                 # war der letzte Takt neu oder gehalten?
+        self.n_gehalten = 0
+
+    # -- logische Rate --
+    def faellig(self) -> bool:
+        """Rechnet dieses Modul im aktuellen Takt?  Zaehlt den Takt mit hoch.
+
+        getattr statt direktem Zugriff: der Projektzustand enthaelt GEPICKELTE Modulinstanzen aus
+        einer Zeit vor diesen Feldern -- __init__ laeuft beim Laden nicht, ein direkter Zugriff
+        waere ein AttributeError mitten im Lauf.  Gleiche Lehre wie _ensure_ports im Welt-Modell.
+        """
+        r = max(1, int(getattr(self, "rate", 1)))
+        t = int(getattr(self, "_tick", 0))
+        self._tick = t + 1
+        return (t % r) == 0
+
+    def reset_takt(self) -> None:
+        """Taktzaehler und Diagnose zuruecksetzen (z.B. zu Episodenbeginn)."""
+        self._tick = 0
+        self.seq = 0
+        self.fresh = False
+        self.n_gehalten = 0
 
     # -- port declaration (chainable) --
     def add_in(self, name: str, dim: int, desc: str = "") -> "ArmModule":
@@ -116,10 +146,24 @@ class ArmAgent:
             self.modules[dm].in_ports[dp].set(self.modules[sm].out_ports[sp].value)
 
     def step(self, order: list[str]) -> None:
-        """Step the modules named in `order`, propagating wired port values before each."""
+        """Step the modules named in `order`, propagating wired port values before each.
+
+        HAELT DIE LOGISCHE RATE EIN: ein Modul mit rate=n rechnet nur jeden n-ten Takt.  Faellt
+        ein Takt aus, behalten seine Out-Ports einfach ihren letzten Stand -- es wird nichts
+        geschrieben, also steht der alte Wert noch da.  Der Verbraucher liest ihn und kann NICHT
+        unterscheiden, ob er frisch ist; `fresh` und `seq` am Modul machen den Unterschied fuer
+        die MESSUNG wieder sichtbar (Vorgriff auf Punkt 3).
+        """
         for nm in order:
             self._propagate()
-            self.modules[nm].step()
+            m = self.modules[nm]
+            if m.faellig():
+                m.step()
+                m.seq = int(getattr(m, "seq", 0)) + 1
+                m.fresh = True
+            else:
+                m.fresh = False
+                m.n_gehalten = int(getattr(m, "n_gehalten", 0)) + 1
         self._propagate()
 
     def surprises(self) -> dict:

@@ -9,10 +9,14 @@ Form-Klassifikator, den Farb-Split und das Objektgedaechtnis orchestriert.  Den 
 einen Port zu schreiben und sofort zurueckzulesen waere ein zusaetzlicher Sprung ohne entfernte
 Kopplung gewesen -- eine Attrappe.
 
-WAS DIESES MODUL ANDERS MACHT.  Es besitzt die RATE.  Nicht der Aufrufer entscheidet, ob dieser
-Takt gerechnet wird, sondern das Modul: bei `rate > 1` rechnet es nur jeden n-ten Takt und
-liefert dazwischen den GEHALTENEN letzten Stand aus seinen Ports.  Damit ist es kein Umweg mehr,
-sondern die Stelle, an der Punkt 4 ansetzt -- "logische Raten, seriell und deterministisch".
+WAS DIESES MODUL ANDERS MACHT.  Es hat eine RATE.  Nicht der Aufrufer entscheidet, ob dieser
+Takt gerechnet wird: bei `rate > 1` rechnet das Modul nur jeden n-ten Takt und die Ports liefern
+dazwischen den GEHALTENEN letzten Stand.  Damit ist es kein Umweg mehr, sondern die Stelle, an
+der Punkt 4 ansetzt -- "logische Raten, seriell und deterministisch".
+
+Die Takt-Buchhaltung liegt seit der Rate fuer den Regelpfad in ArmModule/ArmAgent, nicht mehr
+hier: die erste Fassung hatte sie im Modul, und beim zweiten Modul mit Rate waere sie ein
+zweites Mal dagestanden.  `rate` ist jetzt eine Eigenschaft JEDES Moduls, durchgesetzt vom Agenten.
 
 WARUM DAS NICHT AUS DER LUFT GEGRIFFEN IST.  run_combined taktet die Wahrnehmung heute schon
 hart kodiert mit `k % 4 == 0` (pc_act16:403) und `s % 2 == 0` (:679).  Die Multi-Raten-Struktur
@@ -40,12 +44,8 @@ from .base import ArmModule
 class PerceptionModule(ArmModule):
     def __init__(self, rate: int = 1, name: str = "Perception") -> None:
         super().__init__(name)
-        self.rate = max(1, int(rate))
+        self.rate = max(1, int(rate))              # Takt-Buchhaltung liegt in ArmModule/ArmAgent
         self._tracker = None                       # die act23-Closure, je Episode neu gebunden
-        self._tick = 0                             # Takte seit dem letzten bind()
-        self.seq = 0                               # tatsaechlich GERECHNETE Takte
-        self.fresh = False                         # war der letzte Takt neu oder gehalten?
-        self.n_gehalten = 0                        # Diagnose: wie oft gehalten wurde
         (self.add_out("object_xy", 2, "wahrgenommene Objekt-Weltposition (None = nicht gesehen)")
              .add_out("obs_conf", 1, "abgestufte Verlaesslichkeit der Sichtung [0,1]"))
 
@@ -57,26 +57,19 @@ class PerceptionModule(ArmModule):
         Modul bleibt dasselbe -- es kapselt die RATE und die Ports, nicht die Wahrnehmungsart.
         """
         self._tracker = tracker
-        self._tick = 0
-        self.fresh = False
-        self.n_gehalten = 0
+        self.reset_takt()
         return self
 
     def step(self) -> None:
+        """EINEN Takt rechnen.  Ob dieser Takt ueberhaupt drankommt, entscheidet die Rate --
+        durchgesetzt im ArmAgent, nicht hier.  Faellt er aus, wird step() gar nicht gerufen und
+        die Out-Ports behalten von selbst ihren letzten Stand."""
         if self._tracker is None:
-            return
-        gerechnet = (self._tick % self.rate) == 0
-        self._tick += 1
-        if not gerechnet:                          # HALTEN: die Ports behalten ihren letzten Stand
-            self.fresh = False
-            self.n_gehalten += 1
             return
         tr = self._tracker()
         obs, conf = tr if isinstance(tr, tuple) else (tr, 0.0)
         self.set_out("object_xy", obs)             # None-faehig: Port.set(None) -> value None
         self.set_out("obs_conf", [float(conf)])
-        self.seq += 1
-        self.fresh = True
 
     # ------------------------------------------------------------------
     def observation(self):
