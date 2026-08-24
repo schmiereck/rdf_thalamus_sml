@@ -3145,9 +3145,27 @@ def run_self_learning_steering(headless=False):
         # in Transport/Ablage und die naechste Episode durchschlaegt.
         _dir_ref_orig = None if not TILT_ACTION else np.array(bm.body.dir_ref, float).copy()
         _T["vor_ausfuehrung"] = _time.perf_counter()           # alles davor = Wahrnehmung + Aktionswahl
+
+        def _policy_ueber_ports(s):
+            """ETAPPE 2 des Port-Umbaus: der Regelpfad laeuft ueber die Ports statt ueber einen
+            durchgereichten Bound Method (vorher policy_fn=runtime.predict).
+
+            Zustand in policy_state, Modul ueber den ArmAgent takten, Teilziel aus subgoal.
+            RuntimePolicyModule.step() existierte bereits fertig und wurde nie gerufen.
+
+            STELLVERTRETEND FUER PUNKT 3: step() setzt subgoal NUR, wenn der Zustand da und die
+            Policy trainiert ist -- sonst bliebe der VORIGE Wert im Port stehen und der Aufrufer
+            wuerde ihn fuer frisch halten.  Hier kann das nicht eintreten (use_net verlangt
+            runtime.trained, und s ist nie None), aber genau diese stille Veralterung ist der
+            Grund, warum Punkt 3 Nummer und Frische in den Port legen will.
+            """
+            runtime.set_in("policy_state", s)
+            agent.step(["RuntimePolicy"])
+            return runtime.get_out("subgoal")
+
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_fn,
-                           policy_fn=(runtime.predict if use_net else None),
+                           policy_fn=(_policy_ueber_ports if use_net else None),
                            log_fn=(None if use_net else choreo_log),
                            teacher_log_fn=(choreo_log if use_net else None),
                            policy_log_fn=((lambda s, out: pol_trace.append((s.copy(), out.copy())))
