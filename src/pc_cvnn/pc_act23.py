@@ -669,7 +669,7 @@ def run_self_learning_steering(headless=False):
     grasp + deliver.  The self-learned wrist (world model) drives the LONG object; cube/L/U use the scripted
     controller exactly as pc_act21/shape_grasp_viz."""
     import pc_cvnn.pc_act16 as act16
-    from pc_cvnn.arm_modules import (ArmAgent, PerceptionModule, VisualCortexModule,
+    from pc_cvnn.arm_modules import (ArmAgent, PerceptionModule, RateWrapper, VisualCortexModule,
                                      ShapeClassifierModule)
     act16.ELONG_RATE = 0.0                                 # don't let run_combined elongate a distractor cube
     # run_combined must NEVER rebuild the scene itself: without PERSIST it calls reset_home()+scatter() at
@@ -1150,7 +1150,18 @@ def run_self_learning_steering(headless=False):
     # ACT23_PERCEPT_RATE ist damit beisammen, was Punkt 4 braucht: eine langsame Entscheidung
     # ueber einer schnellen Wahrnehmung -- oder umgekehrt.
     runtime.rate = int(os.environ.get("ACT23_POLICY_RATE", "1"))
-    for _m in (vc, shape_clf, objmem, seval, world, runtime, bm, lat_dyn, perception):
+    # GEGENMESSUNG zu Punkt 4: der PLANER bekommt ebenfalls eine Rate.  Gemessen wurde dort nur
+    # ein langsamerer REGLER (RuntimePolicy) -- und der ist kein Planer.  Der planende Anteil, der
+    # im Bild-Takt laeuft, ist der latente Ziel-Servo (place_servo_fn -> lgoal.servo, act16:506,
+    # jedes Bild waehrend des Tragens).  SCHNELLER geht dort nicht: er ist bereits am Anschlag,
+    # und die uebrigen Planer-Anteile (Objektwahl, Ablageziel) laufen 1x je Episode und sind
+    # festgeschrieben, weil der Erfolg gegen sie gemessen wird.  Messbar ist deshalb nur der
+    # Spiegel: den Planer VERLANGSAMEN und sehen, ob "langsamer schadet" spezifisch fuer den
+    # Regler ist oder allgemein gilt.
+    # Der Ziel-Servo hat keine Portschicht (er wird aus einem Blob per __new__ wiederhergestellt),
+    # deshalb die generische Huelle statt einer Modulisierung.
+    plan_takt = RateWrapper(2, 2, rate=int(os.environ.get("ACT23_PLAN_RATE", "1")), name="PlanTakt")
+    for _m in (vc, shape_clf, objmem, seval, world, runtime, bm, lat_dyn, perception, plan_takt):
         if _m is not None:
             agent.add(_m)
     # NOCH KEINE wire()-Kanten: eine Kante wird erst deklariert, wenn sie auch WIRKLICH ueber die
@@ -3214,6 +3225,28 @@ def run_self_learning_steering(headless=False):
             agent.step(["RuntimePolicy"])
             return runtime.get_out("subgoal")
 
+
+        # PLANER-TAKT: dieselbe Fallunterscheidung wie zuvor, nur hinter der Rate-Huelle.
+        # None bleibt None -- ohne latentes Ziel gibt es keinen Ablage-Servo, und run_combined
+        # darf dann auch keine Huelle bekommen, sonst haenge ich ihm ein Verhalten an, das es
+        # vorher nicht gab.
+        if state.choreo == "attractor":
+            _plan_roh = (lambda hxy: lat_attractor.plan_step(
+                lgoal.encode_world(hxy), lgoal.get_goal_vector(), hxy)[2])
+        elif use_latent:
+            _plan_roh = (lambda hxy: lgoal.servo(hxy, gain=0.6))
+        else:
+            _plan_roh = None
+        if _plan_roh is None:
+            _plan_ueber_ports = None
+        else:
+            plan_takt.bind(_plan_roh)
+
+            def _plan_ueber_ports(hxy):
+                plan_takt.set_in("arg", hxy)
+                agent.step(["PlanTakt"])
+                return plan_takt.get_out("ergebnis")
+
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_fn,
                            policy_fn=(_policy_ueber_ports if use_net else None),
@@ -3223,9 +3256,7 @@ def run_self_learning_steering(headless=False):
                                           if use_net else None),
                            post_goal_fn=(lambda c, o, g: lgoal.set_goal_vector(g) if (isinstance(g, np.ndarray) and g.ndim==1 and len(g)>2) else lgoal.set_goal(g)),
                            #   (seval) needs the episode's goal latent even in "Ziel: Koord" mode
-                           place_servo_fn=((lambda hxy: lat_attractor.plan_step(lgoal.encode_world(hxy), lgoal.get_goal_vector(), hxy)[2])
-                                            if state.choreo == "attractor" else
-                                            ((lambda hxy: lgoal.servo(hxy, gain=0.6)) if use_latent else None)),
+                           place_servo_fn=_plan_ueber_ports,
                            servo=(method in ("color", "shape")), rescatter=False, episode_end_fn=ep_end,
                            lifelong=True, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
                            arm_reset=False)

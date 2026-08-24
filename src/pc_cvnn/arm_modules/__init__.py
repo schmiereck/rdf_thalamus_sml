@@ -19,10 +19,11 @@ from .obstacle import ObstacleModule
 from .wrist import WristRollModule
 from .shape_classifier import ShapeClassifierModule, SHAPES
 from .perception import PerceptionModule
+from .rate_wrapper import RateWrapper
 
 __all__ = ["Port", "ArmModule", "ArmAgent", "VisualCortexModule", "BodyModelModule",
            "GoalModule2D", "PlannerModule", "rule_mirror", "rule_centre", "MotorModule",
            "LearnedInverseKinematics", "DistanceNovelty", "CuriosityPlanner", "LatentGoalServo",
            "LatentGoalLanguage", "LatentDynamicsModule", "LatentAttractorController",
            "ObstacleVisionModule", "ObstacleModule", "WristRollModule",
-           "ShapeClassifierModule", "SHAPES", "PerceptionModule"]
+           "ShapeClassifierModule", "SHAPES", "PerceptionModule", "RateWrapper"]
