@@ -3158,7 +3158,19 @@ def run_self_learning_steering(headless=False):
 
         def _wahrnehmung_ueber_ports():
             agent.step(["Perception"])
-            return perception.observation()
+            xy, c = perception.observation()
+            # PUNKT 3 an seiner ersten echten Fundstelle.  Die Servo-Korrektur des Verbrauchers
+            # ist KUMULATIV (pc_act16:412):
+            #     obj_belief += SERVO_K * conf * (obs - obj_belief)
+            # Bei PERCEPT_RATE > 1 liefert der Port zwischen zwei gerechneten Takten denselben
+            # gehaltenen Wert -- und diese Korrektur wuerde ihn ein zweites Mal anwenden und den
+            # Glauben doppelt so stark zu einer veralteten Sichtung ziehen.  Eine Beobachtung
+            # zaehlte dann n-fach; genau die Fehlerklasse, wegen der Punkt 3 vor Punkt 4 gehoert.
+            # Das Wasserzeichen des Ports (je Verbraucher) gibt jede Nummer nur EINMAL heraus.
+            # Bei rate=1 ist jeder Takt frisch -> unveraendertes Verhalten.
+            if not perception.out_ports["object_xy"].frisch_fuer("servo"):
+                return xy, 0.0                                 # gehalten: nicht noch einmal ziehen
+            return xy, c
 
         track_fn = _wahrnehmung_ueber_ports
         if a_exec is not None:                                 # SELF: the model's grip + gentle dims

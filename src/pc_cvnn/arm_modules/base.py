@@ -19,20 +19,89 @@ import numpy as np
 
 
 class Port:
-    """A named, typed data channel on a module; holds the most recent value (or None)."""
+    """Ein benannter Datenkanal an einem Modul: haelt den letzten Wert, SEINE NUMMER und die
+    Nummer der Eingabe, aus der er entstand (Nutzerplan 2026-08-23, Punkt 3).
+
+    WOZU DIE NUMMERN.  Seit Modulen eine logische Rate haben (Punkt 4), liefert ein Port zwischen
+    zwei gerechneten Takten seinen GEHALTENEN Stand -- und der Verbraucher kann das nicht
+    unterscheiden.  Fuer einen Regler ist das harmlos; fuer alles KUMULATIVE ist es ein Fehler:
+    derselbe Messwert zaehlt dann n-mal.
+
+    Das ist kein erfundenes Risiko.  Live im Projekt: die Servo-Korrektur in pc_act16:412 lautet
+        obj_belief += SERVO_K * conf * (obs - obj_belief)
+    Bei PERCEPT_RATE=2 wird dieselbe gehaltene Sichtung ZWEIMAL angewendet und zieht den Glauben
+    doppelt so stark zu einem veralteten Wert.  Dieselbe Bauart steckt in den Zaehlschwellen des
+    Form-Klassifikators (NOVEL_CONFIRM=3, BIND_CONFIRM=3, STARVE_MIN_EX=6, OPEN_CAP=80): jede
+    unterstellt, dass eine gezaehlte Sichtung eine FRISCHE, unabhaengige Sichtung ist.
+
+    seq       Nummer des Erzeugers, als dieser Wert geschrieben wurde.  Aendert sich NUR, wenn
+              wirklich gerechnet wurde -- ein gehaltener Takt laesst sie stehen.
+    src_seq   Nummer der Eingabe, aus der dieser Wert entstand (ueber Kanten weitergereicht).
+              Damit laesst sich beim Lernen eine Vorhersage mit dem PASSENDEN Ausgang paaren
+              statt mit dem, der zufaellig gerade vorliegt.
+    """
 
     def __init__(self, name: str, dim: int, desc: str = "") -> None:
         self.name = name
         self.dim = dim
         self.desc = desc
         self.value = None
+        self.seq = 0                       # 0 = noch nie geschrieben
+        self.src_seq = None
+        self._gesehen: dict[str, int] = {}  # Verbraucher -> zuletzt verbrauchte Nummer
+        self._geschrieben = False
 
-    def set(self, v):
-        self.value = None if v is None else np.asarray(v, float)
+    def __setstate__(self, d):
+        """Alte Ports aus der Zustandsdatei nachruesten.
+
+        Module werden MITSAMT ihrer Port-Objekte gepickelt; ein Port aus der Zeit vor Punkt 3 hat
+        weder seq noch src_seq noch das Wasserzeichen.  Einmal beim Laden auffuellen ist billiger
+        und sicherer als getattr an jeder Zugriffsstelle -- und es kann nicht vergessen werden.
+        """
+        self.__dict__.update(d)
+        self.__dict__.setdefault("seq", 0)
+        self.__dict__.setdefault("src_seq", None)
+        self.__dict__.setdefault("_gesehen", {})
+        self.__dict__.setdefault("_geschrieben", False)
+
+    def set(self, v, seq: int | None = None, src_seq=None):
+        """Wert setzen (atomar: erst umwandeln, dann zuweisen)."""
+        neu = None if v is None else np.asarray(v, float)
+        self.value = neu
+        self._geschrieben = True           # fuer _stempeln: DIESER Takt hat den Port beschrieben
+        if seq is not None:
+            self.seq = int(seq)
+        if src_seq is not None:
+            self.src_seq = src_seq
         return self.value
 
+    # ------------------------------------------------------------------
+    def frisch_fuer(self, verbraucher: str) -> bool:
+        """Hat `verbraucher` diese Nummer noch NICHT verbraucht?  Merkt sie sich dabei.
+
+        Der Wasserzeichen-Zaehler steht JE VERBRAUCHER, weil derselbe Port mehrere haben kann und
+        einer davon lernen darf, waehrend ein anderer nur regelt.  Genau die Regel aus Punkt 3:
+        "Lernen nur auf geaenderter Nummer".
+        """
+        if self.seq == 0:
+            return False                   # noch nie geschrieben -> nichts zu verbrauchen
+        if self._gesehen.get(verbraucher) == self.seq:
+            return False
+        self._gesehen[verbraucher] = self.seq
+        return True
+
+    def passt_zu(self, anderer: "Port") -> bool:
+        """Stammen beide Werte aus DERSELBEN Eingabe-Generation?  Die Paarungsregel aus Punkt 3.
+
+        Fuer das Lernen aus (Vorhersage, Ausgang): stimmen die Herkunftsnummern nicht ueberein,
+        gehoert der Ausgang zu einer anderen Vorhersage und das Paar ist WERTLOS -- nicht nur
+        verrauscht, sondern falsch.
+        """
+        return (self.src_seq is not None and anderer.src_seq is not None
+                and self.src_seq == anderer.src_seq)
+
     def __repr__(self) -> str:
-        return f"Port({self.name!r}, dim={self.dim})"
+        return f"Port({self.name!r}, dim={self.dim}, seq={self.seq})"
 
 
 class ArmModule:
@@ -73,6 +142,19 @@ class ArmModule:
         self.seq = 0
         self.fresh = False
         self.n_gehalten = 0
+
+    def _stempeln(self, seq: int) -> None:
+        """Die Nummer dieses Takts auf die Ports schreiben, die DIESER Takt gesetzt hat.
+
+        Nicht auf alle: ein Modul, dessen step() diesmal nichts geschrieben hat (fehlender
+        Eingang, nicht trainiert, kein Glaube vorhanden), soll seine alte Nummer behalten --
+        sonst saehe der Verbraucher einen unveraenderten Wert faelschlich als frisch an.  Genau
+        diese stille Veralterung war der Anlass fuer Punkt 3 (s. die Anmerkung am Regelpfad).
+        """
+        for p in self.out_ports.values():
+            if getattr(p, "_geschrieben", False):
+                p.seq = int(seq)
+                p._geschrieben = False
 
     # -- port declaration (chainable) --
     def add_in(self, name: str, dim: int, desc: str = "") -> "ArmModule":
@@ -142,8 +224,15 @@ class ArmAgent:
         return self
 
     def _propagate(self) -> None:
+        """Werte ueber die Kanten reichen -- MITSAMT ihrer Herkunft.
+
+        Der Zielport uebernimmt die Nummer der Quelle als seine src_seq: was hier ankommt, wurde
+        aus GENAU dieser Generation der Quelle gebildet.  Damit kann ein Modul spaeter pruefen,
+        ob eine Vorhersage und ein Ausgang zur selben Eingabe gehoeren (Port.passt_zu).
+        """
         for (sm, sp, dm, dp) in self.edges:
-            self.modules[dm].in_ports[dp].set(self.modules[sm].out_ports[sp].value)
+            q = self.modules[sm].out_ports[sp]
+            self.modules[dm].in_ports[dp].set(q.value, seq=q.seq, src_seq=q.seq)
 
     def step(self, order: list[str]) -> None:
         """Step the modules named in `order`, propagating wired port values before each.
@@ -161,6 +250,7 @@ class ArmAgent:
                 m.step()
                 m.seq = int(getattr(m, "seq", 0)) + 1
                 m.fresh = True
+                m._stempeln(m.seq)
             else:
                 m.fresh = False
                 m.n_gehalten = int(getattr(m, "n_gehalten", 0)) + 1
