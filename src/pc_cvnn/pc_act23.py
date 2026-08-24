@@ -669,7 +669,7 @@ def run_self_learning_steering(headless=False):
     grasp + deliver.  The self-learned wrist (world model) drives the LONG object; cube/L/U use the scripted
     controller exactly as pc_act21/shape_grasp_viz."""
     import pc_cvnn.pc_act16 as act16
-    from pc_cvnn.arm_modules import VisualCortexModule, ShapeClassifierModule
+    from pc_cvnn.arm_modules import ArmAgent, VisualCortexModule, ShapeClassifierModule
     act16.ELONG_RATE = 0.0                                 # don't let run_combined elongate a distractor cube
     # run_combined must NEVER rebuild the scene itself: without PERSIST it calls reset_home()+scatter() at
     # EVERY episode, and scatter() set_object_size()s every body in OBJS to CUBE_HALF.  On the composite L/U
@@ -1114,6 +1114,35 @@ def run_self_learning_steering(headless=False):
         del colour_of_body[b]                                  #   never match again -> drop, re-binds
     if _stale:                                                 #   itself at the next discovery glance
         print(f"  [Persistenz] verwaiste Farb-Bindungen entfernt: {_stale}", flush=True)
+
+    # ------------------------------------------------------------------------------------------
+    # ArmAgent: der VERKEHR SOLL DURCH DIE PORTS (Nutzerplan 2026-08-23, Punkt 2)
+    # ------------------------------------------------------------------------------------------
+    # BEFUND, der das ausgeloest hat: die Connector-Schicht war zur Laufzeit KOMPLETT INERT.
+    # act23 nannte ArmAgent 0x, .wire() 0x, agent.step() 0x; kein Modul las je den Port eines
+    # anderen -- nur Selbstzugriffe; ArmModule.step() wurde von genau einer Stelle gerufen
+    # (ArmAgent.step in base.py), die niemand ruft.  Zehn Module befuellten dreissig Out-Ports,
+    # die nie jemand las.  Die echte Verdrahtung sind 15 Closure-Callbacks in run_combined.
+    #
+    # WARUM IN ETAPPEN und nicht in einem Zug: der vorhandene Portsatz beschreibt die echten
+    # Schnittstellen gar nicht (fuer size_fn/wrist_fn/orient_fn/carry_target_fn gibt es keinen
+    # Port), und run_combined wird von sieben Dateien benutzt -- ein Big-Bang waere weder
+    # pruefbar noch rueckholbar.  Deshalb wandert je Etappe EINE Kante auf die Ports, mit einer
+    # Gleichheitsprobe: der Lauf ist bei gegebenem Seed deterministisch, also muss das Ergebnis
+    # nach dem Umbau BITGLEICH sein, sonst war die Kante nicht verhaltensneutral.
+    #
+    # ETAPPE 1 = ObjectMemory (s. die Aufrufstelle im Fovea-Tracker).  Bewusst diese zuerst:
+    # ihre drei In-Ports entsprechen exakt der Signatur von update(), sie liegt im Bild-fuer-Bild-
+    # Pfad, und genau dort setzt spaeter Punkt 4 an -- run_combined taktet die Wahrnehmung heute
+    # schon mit einem hart kodierten `k % 4 == 0` (act16:403), also existiert die Multi-Raten-
+    # Struktur bereits, nur unsichtbar und unveraenderlich.
+    agent = ArmAgent("act23")
+    for _m in (vc, shape_clf, objmem, seval, world, runtime, bm, lat_dyn):
+        if _m is not None:
+            agent.add(_m)
+    # NOCH KEINE wire()-Kanten: eine Kante wird erst deklariert, wenn sie auch WIRKLICH ueber die
+    # Ports laeuft.  Eine deklarierte, aber nicht gefahrene Verdrahtung waere genau die Attrappe,
+    # die dieser Umbau beseitigen soll.
 
     # ACT23_REDDIAG=1: RED<->L CONFUSION diagnosis (mechanism-ID, no fix).  The user watched the red
     # cube command grasp the nearby L instead; the 24-ep GUI log shows red LOSING the fovea servo in
@@ -2722,7 +2751,17 @@ def run_self_learning_steering(headless=False):
                         except Exception:
                             hand_px = None
                         carrying = bool(sim.d.qpos[sim.jqadr["joint_5"]] < act16.J5_CLOSED_TH)
-                        belief, _mode = objmem.update(obs_mem, hand_px, carrying)
+                        # ETAPPE 1 des Port-Umbaus: statt objmem.update(obs, hand, carrying) laeuft
+                        # diese Kante jetzt UEBER DIE PORTS -- Werte in die In-Ports, Modul ueber den
+                        # ArmAgent takten, Ergebnis aus dem Out-Port lesen.  Das Modul bekommt keine
+                        # Argumente mehr.  Verhaltensneutral: belief_px wird in step() nur gesetzt,
+                        # wenn der Glaube existiert, und update() gibt ohnehin eine Kopie zurueck --
+                        # vor der ersten Sichtung liefern beide Wege None.
+                        objmem.set_in("obj_px_obs", obs_mem)
+                        objmem.set_in("hand_px", hand_px)
+                        objmem.set_in("carrying", [1.0 if carrying else 0.0])
+                        agent.step(["ObjectMemory"])
+                        belief = objmem.get_out("belief_px")
                         # CONFIDENCE GATE (user-observed): after the release the belief HELD the last
                         # hand px, so the gaze parked on the ROBOT and never returned to the object.
                         # A decayed belief must release the gaze -> the occupancy/identity centering
