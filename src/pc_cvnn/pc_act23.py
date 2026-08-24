@@ -669,7 +669,8 @@ def run_self_learning_steering(headless=False):
     grasp + deliver.  The self-learned wrist (world model) drives the LONG object; cube/L/U use the scripted
     controller exactly as pc_act21/shape_grasp_viz."""
     import pc_cvnn.pc_act16 as act16
-    from pc_cvnn.arm_modules import ArmAgent, VisualCortexModule, ShapeClassifierModule
+    from pc_cvnn.arm_modules import (ArmAgent, PerceptionModule, VisualCortexModule,
+                                     ShapeClassifierModule)
     act16.ELONG_RATE = 0.0                                 # don't let run_combined elongate a distractor cube
     # run_combined must NEVER rebuild the scene itself: without PERSIST it calls reset_home()+scatter() at
     # EVERY episode, and scatter() set_object_size()s every body in OBJS to CUBE_HALF.  On the composite L/U
@@ -1137,7 +1138,12 @@ def run_self_learning_steering(headless=False):
     # schon mit einem hart kodierten `k % 4 == 0` (act16:403), also existiert die Multi-Raten-
     # Struktur bereits, nur unsichtbar und unveraenderlich.
     agent = ArmAgent("act23")
-    for _m in (vc, shape_clf, objmem, seval, world, runtime, bm, lat_dyn):
+    # ETAPPE 4: die Bild-fuer-Bild-Wahrnehmung als eigenes Modul MIT EIGENER RATE (s. perception.py).
+    # ACT23_PERCEPT_RATE=1 (Vorgabe) = jeden Takt rechnen -> verhaltensneutral, bitgleich zum
+    # Callback-Pfad.  >1 laesst das Modul dazwischen den GEHALTENEN Stand liefern; das ist der
+    # Knopf, an dem Punkt 4 misst.  Die Rate MULTIPLIZIERT sich mit dem `k % 4` aus act16:403.
+    perception = PerceptionModule(rate=int(os.environ.get("ACT23_PERCEPT_RATE", "1")))
+    for _m in (vc, shape_clf, objmem, seval, world, runtime, bm, lat_dyn, perception):
         if _m is not None:
             agent.add(_m)
     # NOCH KEINE wire()-Kanten: eine Kante wird erst deklariert, wenn sie auch WIRKLICH ueber die
@@ -3135,6 +3141,18 @@ def run_self_learning_steering(headless=False):
         else:
             track_fn = track_and_plot
             vc._fsv = None                                     # no form tracker -> no fovea-servo stats
+        # ETAPPE 4 des Port-Umbaus: die gewaehlte Tracker-Closure wird ins PerceptionModule
+        # gehaengt, und run_combined bekommt nicht mehr sie, sondern einen Port-Leser.  Der
+        # Unterschied zu einer blossen Weiterreichung: das MODUL entscheidet, ob dieser Takt
+        # gerechnet oder der letzte Stand gehalten wird (ACT23_PERCEPT_RATE).  Der Aufrufer kann
+        # beides nicht unterscheiden -- genau darum geht es bei Punkt 4.
+        perception.bind(track_fn)
+
+        def _wahrnehmung_ueber_ports():
+            agent.step(["Perception"])
+            return perception.observation()
+
+        track_fn = _wahrnehmung_ueber_ports
         if a_exec is not None:                                 # SELF: the model's grip + gentle dims
             grip_exec = float(np.clip(a_exec[4], 0.0, 0.45)); gentle_exec = bool(a_exec[5] > 0.5)
         else:                                                  # TEACHER: the old rules, now demonstrations
