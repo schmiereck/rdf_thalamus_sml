@@ -2977,8 +2977,21 @@ def run_self_learning_steering(headless=False):
                 _span = float(det.get("span") or 0.0)
                 _cap = min(_abs, _frac * _span) if (_frac > 0 and _span > 0) else _abs
                 offs = [o for o in offs if float(np.linalg.norm(o)) <= _cap]
-            a, _mu_a, _sd_a = world.select_action(fe, n=n_cand, lam=LAM, offsets=offs,
-                                                  curiosity=TILT_CURIOSITY)
+            # ETAPPE 3 des Port-Umbaus: die AKTIONSWAHL laeuft ueber die Ports.  Erste Etappe, in
+            # der ein Port ENTWORFEN werden musste -- das Welt-Modell hatte bisher nur einen
+            # action-EINGANG (Aktion bewerten), aber keinen Ausgang fuer eine selbst GEWAEHLTE
+            # Aktion.  chosen_action ist neu; step() unterscheidet die beiden Betriebsarten am
+            # action-Port (gesetzt = bewerten, None = auswaehlen).
+            # Die Auswahl-KNOEPFE bleiben bewusst ausserhalb der Ports (select_cfg): `offsets` ist
+            # eine Liste variabler Laenge und `n` eine Anzahl -- ein Port ist ein Vektor fester
+            # Dimension.  Datenfluss ueber Ports, Einstellungen daneben.
+            world.set_in("situation", fe)
+            world.set_in("action", None)
+            world.select_cfg = dict(n=n_cand, lam=LAM, offsets=offs, curiosity=TILT_CURIOSITY)
+            agent.step(["WorldModel"])
+            a = world.get_out("chosen_action")
+            _mu_a = float(np.ravel(world.get_out("p_success"))[0])
+            _sd_a = float(np.ravel(world.get_out("uncertainty"))[0])
             a_exec = a; wf = (lambda s, _w=wrist_of(a): _w)
             # ANFAHR-NEIGUNG AUS DER AKTION: bisher stand dir_ref FEST auf senkrecht (0,0,-1) und die
             # Klaue kippte bei grossem Radius zwangslaeufig (gemessen: 45 Grad bei r=0.27, Korrelation

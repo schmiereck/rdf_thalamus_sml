@@ -810,8 +810,43 @@ class WorldModelModule(ArmModule):
                             i = j
         return A[i], float(mu[i]), float(sd[i])
 
+    def _ensure_ports(self) -> None:
+        """Ports nachruesten, die es beim Einfrieren dieses Objekts noch nicht gab.
+
+        Der Zustand des Projekts enthaelt GEPICKELTE Modulinstanzen; __init__ laeuft beim Laden
+        nicht, also fehlt jeder spaeter deklarierte Port und der erste Zugriff waere ein KeyError
+        mitten im Lauf.  Gleiche Denkart wie die Schema-Migration in _validate_loaded: die alte
+        Datei bleibt brauchbar, statt sie zu verwerfen.
+        """
+        if "chosen_action" not in self.out_ports:
+            self.add_out("chosen_action", ACT_DIM, "LCB-gewaehlte Aktion (Auswahl-Betrieb)")
+
     def step(self) -> None:
-        s = self.get_in("situation"); a = self.get_in("action")
-        if s is not None and a is not None and self.n() > 0:
+        """Zwei Betriebsarten, am `action`-Port unterschieden:
+
+          action gesetzt  BEWERTEN -- wie bisher: Erfolgswahrscheinlichkeit und Unsicherheit
+                          fuer genau diese Aktion.
+          action None     AUSWAEHLEN -- LCB ueber einen selbst gezogenen Kandidatensatz;
+                          Ergebnis in chosen_action, dazu p_success/uncertainty der Wahl.
+
+        WARUM die Auswahl-Knoepfe (n, lam, offsets, curiosity) NICHT ueber Ports laufen: ein Port
+        ist ein Vektor fester Dimension.  `offsets` ist eine Liste variabler Laenge, `n` eine
+        Anzahl -- beides passt nicht hinein.  Das ist eine echte Grenze des Port-Modells, und die
+        ehrliche Trennung lautet: DATENFLUSS (Situation -> Aktion, Guete, Unsicherheit) laeuft
+        ueber Ports, EINSTELLUNGEN der Auswahl werden vorher am Modul gesetzt (select_cfg).
+        """
+        self._ensure_ports()
+        s = self.get_in("situation")
+        if s is None:
+            return
+        a = self.get_in("action")
+        if a is None:                                          # AUSWAEHLEN
+            cfg = getattr(self, "select_cfg", None)
+            if cfg is None:
+                return
+            act, mu, sd = self.select_action(s, **cfg)
+            self.set_out("chosen_action", act)
+            self.set_out("p_success", [mu]); self.set_out("uncertainty", [sd])
+        elif self.n() > 0:                                     # BEWERTEN (unveraendert)
             mu, sd = self.predict(s, np.atleast_2d(a))
             self.set_out("p_success", mu[:1]); self.set_out("uncertainty", sd[:1])
