@@ -187,7 +187,7 @@ def reactive_subgoal(state):
 def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, perceive_fn=None,
                  mixed=False, track_fn=None, lifelong=False, log_fn=None, policy_fn=None,
                  episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None,
-                 ood_rate=0.0, ood_rng=None, size_fn=None, tol=None, carry_target_fn=None,
+                 ood_rate=0.0, ood_rng=None, tol=None, carry_target_fn=None,
                  post_goal_fn=None, macro_log_fn=None, servo=False, rescatter=True, orient_fn=None,
                  carry_gentle=False, grip_close=None, wrist_fn=None, arm_reset=True, policy_log_fn=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
@@ -310,10 +310,6 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             wrist_tgt, wrist_mod = WRIST_TGT, np.pi / 2
         run_combined._wrist_tgt = float(wrist_tgt)            # expose the teacher's wrist target so a BC
         #   collector (act23) can log it as the 5th action dim (learn the wrist from the teacher).
-        if size_fn is not None:
-            fpp = size_fn(cmd)
-            if fpp is not None:
-                obj_fp = float(fpp)
         tgt = _rand_xy(rng)                                  # target: away from the cube, off any cube, off base
         while np.linalg.norm(tgt - c0) < 0.06 or not clear(tgt, OBJS, 0.05) or np.linalg.norm(tgt) < BASE_CLEAR:
             tgt = _rand_xy(rng)

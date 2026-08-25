@@ -1126,7 +1126,7 @@ def run_self_learning_steering(headless=False):
     # die nie jemand las.  Die echte Verdrahtung sind 15 Closure-Callbacks in run_combined.
     #
     # WARUM IN ETAPPEN und nicht in einem Zug: der vorhandene Portsatz beschreibt die echten
-    # Schnittstellen gar nicht (fuer size_fn/wrist_fn/orient_fn/carry_target_fn gibt es keinen
+    # Schnittstellen gar nicht (fuer wrist_fn/orient_fn/carry_target_fn gab es keinen
     # Port), und run_combined wird von sieben Dateien benutzt -- ein Big-Bang waere weder
     # pruefbar noch rueckholbar.  Deshalb wandert je Etappe EINE Kante auf die Ports, mit einer
     # Gleichheitsprobe: der Lauf ist bei gegebenem Seed deterministisch, also muss das Ergebnis
