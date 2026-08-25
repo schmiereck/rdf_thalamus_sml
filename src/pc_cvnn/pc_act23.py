@@ -1161,7 +1161,10 @@ def run_self_learning_steering(headless=False):
     # Der Ziel-Servo hat keine Portschicht (er wird aus einem Blob per __new__ wiederhergestellt),
     # deshalb die generische Huelle statt einer Modulisierung.
     plan_takt = RateWrapper(2, 2, rate=int(os.environ.get("ACT23_PLAN_RATE", "1")), name="PlanTakt")
-    for _m in (vc, shape_clf, objmem, seval, world, runtime, bm, lat_dyn, perception, plan_takt):
+    lgoal._ensure_ports()          # aus dem Persistenz-Blob wiederhergestellte Servos haben keine
+    #                                Portschicht (s. _lg_unpack); vor agent.add nachruesten
+    for _m in (vc, shape_clf, objmem, seval, world, runtime, bm, lat_dyn, perception, plan_takt,
+               lgoal):
         if _m is not None:
             agent.add(_m)
     # NOCH KEINE wire()-Kanten: eine Kante wird erst deklariert, wenn sie auch WIRKLICH ueber die
@@ -3269,13 +3272,32 @@ def run_self_learning_steering(headless=False):
                 agent.step(["PlanTakt"])
                 return plan_takt.get_out("ergebnis")
 
+        def _ziel_ueber_ports(c, o, g):
+            """Das FESTGELEGTE Ablageziel geht ueber den Port in den Ziel-Servo.
+
+            Frueher rief der Ausfuehrer lgoal.set_goal()/set_goal_vector() direkt ueber eine
+            Closure.  Das war die letzte echte Modul-Datenfluss-Kante in der Verdrahtung von
+            run_combined -- alles uebrige ist Kommando-Schnittstelle, Konfiguration,
+            Protokoll-Abgriff oder eine Projektion eines schon geporteten Werts (geprueft).
+
+            Der Latent-Zweig bleibt AUSSERHALB des Ports: ein Ziel-LATENT hat die Dimension des
+            Latentraums, ein Port eine feste.  Auf diesem Pfad ist er ohnehin tot -- state.goal_fn
+            liefert marker_xy()[:2], also kommt hier immer ein 2-Vektor an.  Er steht als
+            Absicherung fuer andere goal_fn.
+            """
+            if isinstance(g, np.ndarray) and g.ndim == 1 and len(g) > 2:
+                lgoal.set_goal_vector(g)
+                return
+            lgoal.set_in("goal_xy", g)
+            agent.step(["LatentGoal"])
+
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_fn,
                            policy_fn=(_policy_ueber_ports if use_net else None),
                            log_fn=(None if use_net else choreo_log),
                            teacher_log_fn=(choreo_log if use_net else None),
                            policy_log_fn=(_imit_log_frisch if use_net else None),
-                           post_goal_fn=(lambda c, o, g: lgoal.set_goal_vector(g) if (isinstance(g, np.ndarray) and g.ndim==1 and len(g)>2) else lgoal.set_goal(g)),
+                           post_goal_fn=_ziel_ueber_ports,
                            #   (seval) needs the episode's goal latent even in "Ziel: Koord" mode
                            place_servo_fn=_plan_ueber_ports,
                            servo=(method in ("color", "shape")), rescatter=False, episode_end_fn=ep_end,

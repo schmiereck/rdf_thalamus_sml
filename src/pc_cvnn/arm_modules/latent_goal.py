@@ -20,11 +20,14 @@ from __future__ import annotations
 
 import numpy as np
 
+from .base import ArmModule
 from .planner import GoalModule2D, G, LO, HI, SPAN, world_to_grid, grid_to_world
 
 
-class LatentGoalServo:
-    def __init__(self, gm: GoalModule2D, rng=None):
+class LatentGoalServo(ArmModule):
+    def __init__(self, gm: GoalModule2D, rng=None, name: str = "LatentGoal"):
+        super().__init__(name)
+        self._ensure_ports()
         self.gm = gm
         self.rng = rng or np.random.default_rng(0)
         self.z_g = None
@@ -64,6 +67,28 @@ class LatentGoalServo:
         self.D = np.linalg.lstsq(DZn, DP, rcond=None)[0]    # (latent, 2); complex if latents are RoPE
         rec = np.real(DZn @ self.D) - DP                    # the action is the REAL part of the latent step
         return float(np.mean(np.linalg.norm(rec, axis=1))) * 1000.0
+
+    # ------------------------------------------------------------------
+    # Port-Schicht (Nutzerplan Punkt 2): das FESTGELEGTE Ablageziel kommt vom Ausfuehrer
+    # ------------------------------------------------------------------
+    def _ensure_ports(self) -> None:
+        """Portschicht nachruesten -- noetig, weil act23 diesen Servo auch per __new__ aus einem
+        Persistenz-Blob wiederherstellt (_lg_unpack): dort laeuft __init__ nicht, es gibt also
+        weder name noch in_ports.  Gleiche Lehre wie _ensure_ports im Welt-Modell und
+        Port.__setstate__: die alte Datei bleibt brauchbar, statt verworfen zu werden.
+        """
+        if not hasattr(self, "in_ports"):
+            ArmModule.__init__(self, "LatentGoal")
+        if "goal_xy" not in self.in_ports:
+            self.add_in("goal_xy", 2, "das festgelegte Ablageziel dieser Episode (Welt-xy)")
+
+    def step(self) -> None:
+        """Das anliegende Ziel uebernehmen.  Frueher rief der Ausfuehrer set_goal() direkt ueber
+        eine Closure (post_goal_fn); jetzt kommt der Wert durch den Port."""
+        self._ensure_ports()
+        g = self.get_in("goal_xy")
+        if g is not None:
+            self.set_goal(g)
 
     def set_goal(self, goal_xy):
         self.z_g = self.encode_world(goal_xy)
