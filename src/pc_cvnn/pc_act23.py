@@ -2460,7 +2460,8 @@ def run_self_learning_steering(headless=False):
     sel_off = {"dxy": None}                                    # the self-selected grasp-point OFFSET (dx,dy)
     #   of the CURRENT command: perceive() and the form tracker's servo obs both add it, so the executed
     #   grasp target is (perceived point + learned offset) consistently through approach corrections
-    _sel_seed = {}                                             # last select() detection: seeds the form tracker
+    # (frueher `_sel_seed = {}` -- der Episoden-Keim liegt jetzt als Ports am PerceptionModule,
+    #  s. perception.publish_seed/seed_for: Identitaet, Frische und Ruecksetzung kommen vom Port)
     #   with the SAME object the grasp targets (the tracker's own first-frame max-prob pick can differ --
     #   the user watched the U command start focused on the L before snapping over)
 
@@ -2519,9 +2520,9 @@ def run_self_learning_steering(headless=False):
                           f"Teil erkannt als '{det['shape']}' ({det['area']:.0f}px)", flush=True)
             sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
             if det is not None:
-                _sel_seed.update(key=state.SHAPE_KEY[body], xy=np.asarray(det["pos"], float),
-                                 px=np.asarray(det["px"], float),
-                                 gxy=np.asarray(_gp(det, body), float))    # raw seed grasp point: the
+                perception.publish_seed(state.SHAPE_KEY[body], np.asarray(det["pos"], float),
+                                        np.asarray(det["px"], float),
+                                        np.asarray(_gp(det, body), float))  # raw seed grasp point: the
                 #   fovea servo shifts THIS by the gaze's world motion (grasp geometry preserved)
                 if os.environ.get("ACT23_DEBUG", "0") == "1":
                     print(f"    [dbg] {body} via Formklasse: Greifziel "
@@ -2556,17 +2557,17 @@ def run_self_learning_steering(headless=False):
                 sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
                 if cands:
                     best = min(cands, key=lambda d: colours.classify(d["chroma"])[1])
-                    _sel_seed.update(key=None, xy=np.asarray(best["pos"], float),
-                                     px=np.asarray(best["px"], float),
-                                     gxy=np.asarray(best["grasp_xy"], float))
+                    perception.publish_seed(None, np.asarray(best["pos"], float),
+                                            np.asarray(best["px"], float),
+                                            np.asarray(best["grasp_xy"], float))
                     if os.environ.get("ACT23_DEBUG", "0") == "1":
                         print(f"    [dbg] {body} via Farbklasse '{cname}' lokalisiert", flush=True)
                     return _off(best["grasp_xy"]), None, "grasp"
             if method == "long":
                 p0 = np.asarray(sim.obj_pos(body)[:2], float)  # fallback: class unborn / not in sight
                 try:
-                    _sel_seed.update(key=None, xy=p0, gxy=p0,
-                                     px=np.asarray(shape_clf._world_to_px(p0)[0], float))
+                    perception.publish_seed(None, p0,
+                                            np.asarray(shape_clf._world_to_px(p0)[0], float), p0)
                 except Exception:
                     pass
                 return _off(p0), None, "grasp"
@@ -2607,7 +2608,7 @@ def run_self_learning_steering(headless=False):
             table plane (world pos wrong) and often mis-classifies, but its image blob stays trackable ->
             the fovea window follows the shape through grasp AND transport, like the colour fovea does.
         SEEDING: for shapes the belief starts LAZILY from the select() detection the grasp actually
-        targets (_sel_seed; the first-frame max-prob pick can be a DIFFERENT same-class blob -- the user
+        targets (perception.seed_for; the first-frame max-prob pick can be a DIFFERENT same-class blob -- the user
         watched the U command start focused on the L).  key=None = the LONG object: no class to key on ->
         DISPLAY-ONLY blob follower seeded from the object's start position, obs stays None (the colour
         fovea drive locked the CYAN U here: the obj_blue code fires on cyan, user-observed).
@@ -2620,8 +2621,8 @@ def run_self_learning_steering(headless=False):
         fight the pin, no zoom-out spiral (v1 called vc.track() from the pin: the colour drive walked the
         box away from the sampled crop and zoomed out every frame -- the user's frozen/mismatched views)."""
         mem = {"xy": None, "px": None}                         # world belief (servo) + image belief (display)
-        #   (the long object used to be seeded PRIVILEGED here; stage 3: perceive() now always writes
-        #   _sel_seed for it too -- colour-class localization, or its explicit fallback -- so the lazy
+        #   (the long object used to be seeded PRIVILEGED here; stage 3: perceive() now always publishes
+        #   the seed for it too -- colour-class localization, or its explicit fallback -- so the lazy
         #   seed below covers key=None as well)
         objmem.reset()                                         # fresh predictive belief per episode
         vc.fovea.z = 1.0                                       # defined DETAIL zoom for the form view
@@ -2629,8 +2630,8 @@ def run_self_learning_steering(headless=False):
         #   with a net obs / a detector obs, and |net - detector| mm where both exist (shadow metric)
 
         def _track():
-            if mem["px"] is None and _sel_seed.get("key", "__unset__") == key:
-                mem["xy"] = _sel_seed.get("xy"); mem["px"] = _sel_seed.get("px")   # lazy: perceive() runs
+            if mem["px"] is None and (_sd := perception.seed_for(key)) is not None:
+                mem["xy"], mem["px"] = _sd[0], _sd[1]                              # lazy: perceive() runs
                 #   INSIDE run_combined, after this tracker was built -> read the seed on the first frame
                 #   (key=None = the long object; its seed now comes from perceive() too, stage 3)
             saved = sim.d.mocap_pos.copy()                     # perceive_all parks the markers -> restore
@@ -2722,8 +2723,8 @@ def run_self_learning_steering(headless=False):
                         # wrong-object fixation (user-observed) cannot steer the arm: the lock IS the
                         # gate.  "shadow" only measures |net - detector|.
                         if (FOVEA_SERVO != "0" and com is not None and shape_clf.H is not None
-                                and _sel_seed.get("gxy") is not None
-                                and _sel_seed.get("key", "__unset__") == key
+                                and (_sk := perception.seed_for(key)) is not None
+                                and _sk[2] is not None
                                 and sim.d.qpos[sim.jqadr["joint_5"]] >= act16.J5_CLOSED_TH):
                             # gripper-open gate: while CARRYING, the table-plane px->world map is wrong
                             # for the lifted object (run_combined ignores servo obs outside over/lower
@@ -2733,9 +2734,9 @@ def run_self_learning_steering(headless=False):
                             if mem.get("fs0") is None:
                                 mem["fs0"] = wg
                             dxy = wg - mem["fs0"]
-                            pos_f = _sel_seed["xy"] + dxy
+                            pos_f = _sk[0] + dxy
                             if mem["xy"] is None or float(np.linalg.norm(pos_f - mem["xy"])) <= 0.05:
-                                obs_f = _off(_sel_seed["gxy"] + dxy)
+                                obs_f = _off(_sk[2] + dxy)
                                 vc._fsv["nf"] += 1
                                 if obs is not None:
                                     vc._fsv["d"].append(float(np.linalg.norm(obs_f - obs)) * 1000.0)
@@ -2893,7 +2894,7 @@ def run_self_learning_steering(headless=False):
                 for _l2, nm, _m in state.OBJECTS}
         if _dbg: print(f"    [dbg] before  : {_pos()}", flush=True)
         _save(f"{body}_0before")
-        _sel_seed.clear()                                      # form tracker seeds from THIS command's select()
+        perception.clear_seed()                                # form tracker seeds from THIS command's select()
         # STAGE 3 cube de-crutching: a cube with a bound SELF-LABELLED colour class localises + servos
         # via that class (like the long object) -- the trained vc hex codes and the red marker parking
         # remain only as FALLBACK while the class isn't born/bound yet (or ACT23_CUBE_VC=1 restores them).

@@ -46,8 +46,12 @@ class PerceptionModule(ArmModule):
         super().__init__(name)
         self.rate = max(1, int(rate))              # Takt-Buchhaltung liegt in ArmModule/ArmAgent
         self._tracker = None                       # die act23-Closure, je Episode neu gebunden
+        self.seed_key = "__unset__"                # Identitaet des Keims (String -> kein Port, s.u.)
         (self.add_out("object_xy", 2, "wahrgenommene Objekt-Weltposition (None = nicht gesehen)")
-             .add_out("obs_conf", 1, "abgestufte Verlaesslichkeit der Sichtung [0,1]"))
+             .add_out("obs_conf", 1, "abgestufte Verlaesslichkeit der Sichtung [0,1]")
+             .add_out("seed_xy", 2, "Episoden-Keim: Weltposition aus der Erst-Wahrnehmung")
+             .add_out("seed_px", 2, "Episoden-Keim: Bildposition")
+             .add_out("seed_gxy", 2, "Episoden-Keim: roher Greifpunkt"))
 
     # ------------------------------------------------------------------
     def bind(self, tracker) -> "PerceptionModule":
@@ -79,6 +83,47 @@ class PerceptionModule(ArmModule):
         xy = self.get_out("object_xy")
         c = self.get_out("obs_conf")
         return xy, (0.0 if c is None else float(np.ravel(c)[0]))
+
+    # ------------------------------------------------------------------
+    # EPISODEN-KEIM: die Erst-Wahrnehmung, die den Bild-Tracker anwirft
+    # ------------------------------------------------------------------
+    # Frueher ein GETEILTES DICT (`_sel_seed` in act23) zwischen zwei weit auseinanderliegenden
+    # Closures, mit von Hand gebauter Identitaets-, Frische- und Ruecksetz-Logik:
+    #     _sel_seed.get("key", "__unset__") == key     Identitaet
+    #     if mem["px"] is None: ...                    Frische (genau einmal je Episode lesen)
+    #     _sel_seed.clear()                            Ruecksetzung zum Episodenbeginn
+    # Also genau das, was ein Port mit Nummer leistet -- nur handgeschrieben und an zwei Stellen
+    # verstreut.  ZWEI VERBRAUCHER MIT VERSCHIEDENER SEMANTIK: der Tracker liest den Keim einmal
+    # je Episode, der Fovea-Servo-Anker jeden Frame den neuesten.  Das ist der Fall, fuer den
+    # Port.frisch_fuer() sein Wasserzeichen JE VERBRAUCHER hat.
+    #
+    # GRENZE DES PORT-MODELLS, wie schon bei `offsets` im Welt-Modell: die Identitaet `key` ist ein
+    # STRING.  Ein Port ist ein Vektor fester Dimension, also bleibt der Schluessel ein Attribut.
+
+    def publish_seed(self, key, xy, px=None, gxy=None) -> None:
+        """Die Erst-Wahrnehmung dieser Episode veroeffentlichen.  Jeder Aufruf erhoeht die Nummer --
+        auch ein Wiederfinden (act16:417 ruft perceive_fn erneut), damit Verbraucher, die auf
+        Frische achten, es bemerken koennen."""
+        self.seed_key = key
+        self.seed_seq = int(getattr(self, "seed_seq", 0)) + 1
+        for nm, v in (("seed_xy", xy), ("seed_px", px), ("seed_gxy", gxy)):
+            self.out_ports[nm].set(v, seq=self.seed_seq)
+
+    def clear_seed(self) -> None:
+        """Zum Episodenbeginn: der Keim der VORIGEN Episode darf nicht durchschlagen."""
+        self.seed_key = "__unset__"
+        for nm in ("seed_xy", "seed_px", "seed_gxy"):
+            self.out_ports[nm].set(None)
+
+    def seed_for(self, key):
+        """Der Keim, WENN er zu diesem Schluessel gehoert -- sonst None.
+
+        Ersetzt den `_sel_seed.get("key", "__unset__") == key`-Vergleich; ein Keim fuer ein
+        anderes Objekt darf den Tracker nicht anwerfen.
+        """
+        if self.seed_key != key:
+            return None
+        return (self.get_out("seed_xy"), self.get_out("seed_px"), self.get_out("seed_gxy"))
 
     def surprise(self) -> dict | None:
         if self._tracker is None:
