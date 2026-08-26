@@ -108,6 +108,38 @@ CLOSE_GUARD = os.environ.get("ACT16_CLOSE_GUARD", "1") == "1"   # in the grasp a
 #   SLOWLY, so the policy/reflex would otherwise close ~15mm too HIGH and miss -- the hand CAN reach the object,
 #   it is just not DOWN yet (verified by a pure forced-open reach test).  Mirrors the teacher's own close rule
 #   (hz <= grasp_z + 0.012), now ENFORCED on the learned policy too.  Disable with ACT16_CLOSE_GUARD=0.
+RULEDIAG = os.environ.get("ACT16_RULEDIAG", "0") == "1"      # RIEGEL-DIAGNOSE (Vorgabe AUS): je Episode
+#   zaehlen, wie oft Reflex und Schliess-Riegel die Entscheidung der Policy tatsaechlich UEBERSCHRIEBEN
+#   haben -- und, davon getrennt, wie oft sie es GETAN HAETTEN.  Anlass: beide sind Laufzeitregeln
+#   ausserhalb des Trainings (Nutzerprinzip: das Netz soll selbst entscheiden, wann die Klaue schliesst).
+#   act21 schaltet sie zur Laufzeit ab (ACT21_RULES_TRAIN_ONLY, Vorgabe 1) und hat gemessen, dass das
+#   Netz allein gleich gut liefert; act23 hat das nie nachgeholt -- dort laufen beide mit.
+#   OHNE DIESE ZAEHLER WAERE DIE MESSUNG BLIND: greift eine Regel ohnehin nie, kann ihr Abschalten
+#   per Konstruktion nichts aendern, und ein unauffaelliges Ergebnis haette nichts bewiesen.
+TASTDIAG = os.environ.get("ACT16_TASTDIAG", "0") == "1"      # TASTSINN-DIAGNOSE (Vorgabe AUS).
+#   FRAGE WAR: kann ein GEFUEHLTES Signal die Hoehenschwelle des Schliess-Riegels ersetzen?  Der
+#   Riegel haengt an gz = obj_h + GRASP_OFFSET, also am WISSEN ueber die Objekthoehe -- und obj_h
+#   kommt aus geom_half(cmd), der ECHTEN MuJoCo-Geometrie (act16:311).  Auf dem realen Roboter
+#   existiert der Wert nicht.
+#
+#   ANTWORT: NEIN, dreifach gemessen 2026-08-25/26.  Diese Diagnose bleibt als Messwerkzeug da;
+#   der gebaute Ersatz ist wieder entfernt.  Wer es erneut versuchen will, weiss damit, was
+#   bereits widerlegt ist:
+#     (1) "Schliesse, wenn der Abstieg stoppt" -- der Abstieg stoppt NIE (40/40 Episoden).  Die
+#         Backen fahren am Objekt VORBEI nach unten, statt darauf aufzusetzen; die Hand erreicht
+#         den Greifpunkt trotzdem (tiefster Punkt Median -0.3 mm).  Es gibt keinen Aufsetzstoss.
+#     (2) "Schliesse, wenn du etwas spuerst" -- die OFFENE Klaue misst in 26/40 Episoden exakt
+#         0.00 N.  Der Streifen sitzt innen und meldet erst, wenn die Backen druecken; er kann
+#         den Schluss also bestaetigen, nie ausloesen.
+#     (3) "Merke den LEEREN Griff frueher" (Backenwinkel < 0.10 + Druck < 0.5N, im Teacher) --
+#         gebaut und dort gemessen, wo die Regel FAEHRT (act19-Aufbau, policy_fn=reactive_subgoal,
+#         6 Seeds x 40 Ep gepaart): 128/240 gegen 129/240, +0.4 Punkte, p=1.000, bei 431
+#         Ausloesungen.  Nicht stumm, sondern wirkungslos: sie liefert dasselbe Teilziel wie die
+#         vorhandene Wiederhol-Regel, nur frueher -- und zu diesem Zeitpunkt ist der Griff
+#         laengst danebengegangen.  Der leere Griff ist die FOLGE, nicht die Ursache.
+#   Was die Diagnose stattdessen zeigte: in GESCHEITERTEN Episoden liegt der Schliesswunsch in
+#   67% der Schritte ueber der Schwelle (in gelieferten: 21%), teils dauerhaft 30-60 mm zu hoch.
+#   Das sieht nach falschem Glauben ueber die eigene Lage aus, nicht nach falschem Zeitpunkt.
 SIZE_ADAPT = os.environ.get("ACT_SIZE_ADAPT", "1") == "1"    # (c) derive grasp heights from object size
 PERSIST = os.environ.get("ACT16_PERSIST", "0") == "1"        # keep the scene between episodes
 SCENE_N = int(os.environ.get("ACT16_SCENE_N", "3"))         # objects PLACED per episode (cmd + distractors);
@@ -163,6 +195,8 @@ def reactive_subgoal(state):
         if hz > grasp_z + 0.012:                          # lower onto the target
             return np.array([tx, ty, grasp_z, J5_GRIP])
         return np.array([tx, ty, grasp_z, J5_OPEN])       # release
+    # (Ein gefuehlter LEERGRIFF -- Backenwinkel + Fingerdruck statt Hub-Hoehe -- stand hier und ist
+    #  nach der Messung wieder entfernt: +0.4 Punkte bei p=1.000, s. die TASTDIAG-Notiz oben.)
     # RETRY a MISSED grasp instead of dragging the cube to the foot (obs 4): if the gripper is closed and
     # raised to carry height but the cube is STILL on the table, the grasp clearly missed -> re-OPEN above
     # the cube and retry the approach.  Triggers only once the empty lift is COMPLETE (a real grasp would
@@ -352,6 +386,11 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         servo_lost = 0; reacquires = 0; hover = 0            # (#4) grasp-reflex hover counter
         wrist_hold = None                                    # last aligned joint_4 (held through the grip)
         guard_minz = 1.0; guard_stall = 0                    # close-guard: deepest descent + stall counter
+        run_combined._rule = {"schritte": 0, "reflex": 0, "reflex_wuerde": 0,
+                              "riegel": 0, "riegel_wuerde": 0}   # RIEGEL-DIAGNOSE (s. RULEDIAG)
+        run_combined._tast = {"n": 0, "stall_h": None, "stall_p": None,   # TASTSINN-DIAGNOSE
+                              "close_h": None, "close_p": None, "p_max_offen": 0.0,
+                              "min_h": None, "wunsch": [], "gesenkt": 0}
         last_phase = phase; phase_age = 0                    # STALL-ESCAPE: don't hang in one phase forever
         run_combined._cobs = None; run_combined._held_prev = False   # beobachtbare Objektschaetzung (Stufe C)
         run_combined._lift_xy = None                         # Handposition beim ABHEBEN (Trage-Etikett)
@@ -564,15 +603,55 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 hover += 1
             else:
                 hover = 0
-            if REFLEX and hover > HOVER_LIMIT:
-                aim = np.array([c[0], c[1], gz]); j5 = max(J5_GRIP, j5 - 0.2); via = "reflex"
-            if CLOSE_GUARD and mode == "grasp" and cz < obj_h + 0.014:   # PROGRESS-aware close guard: keep the
+            # RIEGEL-DIAGNOSE: die BEDINGUNG wird getrennt vom SCHALTER ausgewertet, damit der Zaehler
+            # auch im Arm OHNE Regel sagt, wie oft sie gegriffen HAETTE.  Verhaltensneutral: bei
+            # REFLEX/CLOSE_GUARD=1 ist der Ablauf Zeile fuer Zeile derselbe; bei =0 werden nur Zaehler
+            # gefuehrt (guard_minz/guard_stall wirken ausschliesslich innerhalb dieses Blocks).
+            run_combined._rule["schritte"] += 1
+            if hover > HOVER_LIMIT:
+                run_combined._rule["reflex_wuerde"] += 1
+                if REFLEX:
+                    run_combined._rule["reflex"] += 1
+                    aim = np.array([c[0], c[1], gz]); j5 = max(J5_GRIP, j5 - 0.2); via = "reflex"
+            if mode == "grasp" and cz < obj_h + 0.014:        # PROGRESS-aware close guard: keep the
                 if hz < guard_minz - 0.0008:                  # claw OPEN while the hand is still DESCENDING toward
                     guard_minz = hz; guard_stall = 0          # the object (slow at the edges), so it does not close
                 else:                                         # in the air -- BUT release once the descent STALLS
                     guard_stall += 1                          # (no downward progress) so a genuine stall still
+                if TASTDIAG:
+                    # HIER, VOR dem Riegel: j5 ist noch das, was Policy/Reflex WOLLEN.  Nach dem
+                    # Riegel waere es sein Ergebnis, und die Frage "wann wollte sie schliessen"
+                    # waere nicht mehr beantwortbar.
+                    _t = run_combined._tast
+                    _t["n"] += 1
+                    _sinkt = hz < guard_minz - 0.0008          # eigener Abstieg -- propriozeptiv
+                    # NUR IM ECHTEN ABSTIEG messen.  Die erste Fassung zaehlte jeden nicht-sinkenden
+                    # Schritt als "Stillstand" -- auch den allerersten, als die Hand noch in Ruhelage
+                    # stand.  Ergebnis waren 148 mm ueber dem Greifpunkt, also die Starthoehe des Arms,
+                    # und nicht der gesuchte Aufsetzpunkt.  Ein Stillstand zaehlt erst, wenn die Hand
+                    # (a) ueber dem Objekt steht und (b) vorher wirklich abgestiegen ist.
+                    _t["gesenkt"] += 1 if _sinkt else 0
+                    _ueber = float(np.linalg.norm(hxy - c)) < NEAR
+                    if _ueber and (_t["min_h"] is None or hz - gz < _t["min_h"]):
+                        _t["min_h"] = float(hz - gz)           # tiefster Punkt ueber dem Greifpunkt
+                    if (_t["stall_h"] is None and _ueber and _t["gesenkt"] >= 20
+                            and guard_stall >= 5):             # 5 Schritte ohne Fortschritt = aufgesetzt
+                        _t["stall_h"] = float(hz - gz)
+                        _t["stall_p"] = float(max(press, 0.0))
+                    if j5 < J5_OPEN_TH:                        # JEDER Schliesswunsch, nicht nur der erste:
+                        _t["wunsch"].append(float(hz - gz))    #   der Riegel faengt die Ausreisser, also
+                        if _t["close_h"] is None:              #   sagt erst die Verteilung, was er leistet
+                            _t["close_h"] = float(hz - gz)
+                            _t["close_p"] = float(max(press, 0.0))
+                    else:                                      # Druck, den der OFFENE Greifer schon spuert
+                        _t["p_max_offen"] = max(_t["p_max_offen"], float(max(press, 0.0)))
                 if hz > gz + 0.012 and guard_stall < HOVER_LIMIT:   # closes (the reflex) and never DEADLOCKS open
-                    j5 = max(j5, J5_OPEN)
+                    if j5 < J5_OPEN:                          # nur zaehlen, wenn die Klaue WIRKLICH
+                        run_combined._rule["riegel_wuerde"] += 1   # aufgerissen wuerde -- sonst zaehlte
+                        if CLOSE_GUARD:                       # man Schritte mit ohnehin offener Klaue mit
+                            run_combined._rule["riegel"] += 1
+                    if CLOSE_GUARD:
+                        j5 = max(j5, J5_OPEN)
             else:
                 guard_minz = 1.0; guard_stall = 0             # not in the grasp approach -> reset the tracker
             if log_fn is not None:                            # log the EXECUTED (state -> subgoal)
@@ -695,6 +774,27 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             narrow_n += 1; narrow_ok += ok
         if episode_end_fn is not None:                       # self-improvement: reward = f(ok, err)
             episode_end_fn(ep, bool(ok), float(err))
+        if RULEDIAG:                                          # bewusst NICHT an _quiet gehaengt: act23
+            _r = run_combined._rule                            # fuehrt run_combined stumm, und genau dort
+            print(f"    [Riegel] Schritte {_r['schritte']:4d} | Reflex {_r['reflex']:3d}"   # soll gezaehlt
+                  f" (haette {_r['reflex_wuerde']:3d}) | Riegel {_r['riegel']:3d}"          # werden
+                  f" (haette {_r['riegel_wuerde']:3d})", flush=True)
+        if TASTDIAG:
+            _t = run_combined._tast
+            def _mm(v):
+                return "  --  " if v is None else f"{1000.0 * v:+6.1f}"
+            def _n(v):
+                return " -- " if v is None else f"{v:4.2f}"
+            _w = sorted(_t["wunsch"])
+            _wmed = _mm(_w[len(_w) // 2]) if _w else "  --  "
+            _whi = _mm(_w[-1]) if _w else "  --  "
+            _wueber = sum(1 for v in _w if v > 0.012)          # oberhalb der Riegel-Schwelle
+            print(f"    [Tastsinn] Aufsetzen {_mm(_t['stall_h'])} mm (Druck {_n(_t['stall_p'])} N)"
+                  f" | tiefster Punkt {_mm(_t['min_h'])} mm"
+                  f" | Schliesswunsch: erst {_mm(_t['close_h'])} Median {_wmed} hoechst {_whi} mm,"
+                  f" {_wueber}/{len(_w)} ueber der Schwelle"
+                  f" | Druck offen max {_t['p_max_offen']:4.2f} N | {'OK' if ok else 'daneben'}",
+                  flush=True)
         typ = "OOD " if ood_ep else (("wide" if obj_wide.get(cmd, False) else "cube") if perceive_fn else "")
         if not getattr(run_combined, "_quiet", False):
             print(f"  ep {ep:2d}: {'OK ' if ok else 'no '} {typ:4s} via {via:5s}  obj->tgt {err*1000:.0f} mm")
