@@ -116,6 +116,14 @@ RULEDIAG = os.environ.get("ACT16_RULEDIAG", "0") == "1"      # RIEGEL-DIAGNOSE (
 #   Netz allein gleich gut liefert; act23 hat das nie nachgeholt -- dort laufen beide mit.
 #   OHNE DIESE ZAEHLER WAERE DIE MESSUNG BLIND: greift eine Regel ohnehin nie, kann ihr Abschalten
 #   per Konstruktion nichts aendern, und ein unauffaelliges Ergebnis haette nichts bewiesen.
+GLAUBDIAG = os.environ.get("ACT16_GLAUBDIAG", "0") == "1"    # GLAUBENS-DIAGNOSE (Vorgabe AUS).
+#   ANLASS: die Tastsinn-Diagnose zeigte, dass in GESCHEITERTEN Episoden der Schliesswunsch in 67%
+#   der Schritte ueber der Riegel-Schwelle liegt (in gelieferten: 21%), teils dauerhaft 30-60 mm zu
+#   hoch -- und zwar WAEHREND das Objekt laut Wahrheit noch auf dem Tisch liegt.  Das ist kein
+#   verpasster Zeitpunkt, das sieht nach einem falschen ZUSTAND aus.
+#   Diese Diagnose zerlegt den Policy-Zustand an den drei Stellen, an denen er kaputtgehen kann
+#   (Wahrnehmung / _cobs-Logik / Phantom-Griff) und aendert nichts.  Sie ist privilegiert und rein
+#   messend: die Wahrheit geht in keinen Lernenden und in keine Entscheidung.
 TASTDIAG = os.environ.get("ACT16_TASTDIAG", "0") == "1"      # TASTSINN-DIAGNOSE (Vorgabe AUS).
 #   FRAGE WAR: kann ein GEFUEHLTES Signal die Hoehenschwelle des Schliess-Riegels ersetzen?  Der
 #   Riegel haengt an gz = obj_h + GRASP_OFFSET, also am WISSEN ueber die Objekthoehe -- und obj_h
@@ -388,6 +396,10 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         guard_minz = 1.0; guard_stall = 0                    # close-guard: deepest descent + stall counter
         run_combined._rule = {"schritte": 0, "reflex": 0, "reflex_wuerde": 0,
                               "riegel": 0, "riegel_wuerde": 0}   # RIEGEL-DIAGNOSE (s. RULEDIAG)
+        run_combined._glaub = {"n": 0, "wahrn": 0.0, "orts": 0.0, "orts_max": 0.0,   # GLAUBENS-DIAGNOSE
+                               "hoehe": 0.0, "phantom": 0, "phantom_ab": None,
+                               "anfahrt": 0, "anfahrt_orts": 0.0,
+                               "a1": 0, "a1_orts": 0.0, "a1_offen": True}
         run_combined._tast = {"n": 0, "stall_h": None, "stall_p": None,   # TASTSINN-DIAGNOSE
                               "close_h": None, "close_p": None, "p_max_offen": 0.0,
                               "min_h": None, "wunsch": [], "gesenkt": 0}
@@ -577,6 +589,41 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             state = np.array([h[0], h[1], h[2], c_st[0], c_st[1], cz_st, tgt_eff[0], tgt_eff[1],
                               _j5q, obj_h, obj_fp,
                               1.0 if press >= 0 else 0.0, max(press, 0.0)], float)
+            if GLAUBDIAG:
+                # GLAUBENS-DIAGNOSE: wo genau geht der Zustand kaputt, den die Policy sieht?
+                # ZERLEGT in die drei Stellen, an denen er entstehen kann -- eine Gesamtabweichung
+                # allein saehe bei allen dreien gleich aus:
+                #   wahrn   |c - c_true|      die FOVEA-Schaetzung selbst (Wahrnehmung)
+                #   orts    |c_st - c_true|   was am Ende IM ZUSTAND steht (nach der _cobs-Logik)
+                #   phantom _holding, WAEHREND das Objekt laut Wahrheit noch auf dem Tisch liegt
+                #           -> der Agent glaubt zu tragen und faehrt Ablage statt Griff.  Das ist die
+                #           Kandidatenerklaerung fuer die dauerhaft 30-60 mm zu hohen Schliesswuensche.
+                # PRIVILEGIERT und AUSSCHLIESSLICH Messung: c_true/cz gehen nirgends in einen
+                # Lernenden, in keinen Zustand und in keine Entscheidung -- nur in diese Zaehler.
+                _g = run_combined._glaub
+                _g["n"] += 1
+                _g["wahrn"] += float(np.linalg.norm(np.asarray(c, float) - c_true))
+                _do = float(np.linalg.norm(np.asarray(c_st, float) - c_true))
+                _g["orts"] += _do
+                _g["orts_max"] = max(_g["orts_max"], _do)
+                _g["hoehe"] += abs(float(cz_st) - float(cz))
+                if _holding and cz < obj_h + 0.014:            # zu tragen geglaubt, liegt aber noch
+                    _g["phantom"] += 1
+                    if _g["phantom_ab"] is None:
+                        _g["phantom_ab"] = _g["n"]
+                if phase in ("over", "lower", "close"):
+                    _g["anfahrt"] += 1
+                    _g["anfahrt_orts"] += _do
+                    # NUR DIE ERSTE ANFAHRT, bis zum ersten Schliesswunsch.  Danach ist der Wert
+                    # WERTLOS als Ursache: eine gescheiterte Episode faehrt mehrfach an, und die
+                    # spaeteren Anfahrten sehen ein Objekt, das der erste Fehlgriff schon
+                    # angestossen hat -- der Ortsfehler waere dann FOLGE des Fehlschlags und nicht
+                    # seine Ursache.  Ohne diese Trennung misst man die Richtung falsch herum.
+                    if _g["a1_offen"]:
+                        _g["a1"] += 1
+                        _g["a1_orts"] += _do
+                if _j5q < J5_OPEN_TH:
+                    _g["a1_offen"] = False                     # ab hier: Klaue geschlossen gewesen
             if teacher_log_fn is not None:                    # DAgger: the FSM's sub-goal at the
                 teacher_log_fn(state, np.asarray(aim, float).copy(), float(j5))   # (policy-)VISITED state
             route_carry = carry_target_fn is not None and phase == "carry"   # the routed carry follows the
@@ -779,6 +826,17 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             print(f"    [Riegel] Schritte {_r['schritte']:4d} | Reflex {_r['reflex']:3d}"   # soll gezaehlt
                   f" (haette {_r['reflex_wuerde']:3d}) | Riegel {_r['riegel']:3d}"          # werden
                   f" (haette {_r['riegel_wuerde']:3d})", flush=True)
+        if GLAUBDIAG:
+            _g = run_combined._glaub
+            _m = max(1, _g["n"]); _a = max(1, _g["anfahrt"])
+            print(f"    [Glaube] Schritte {_g['n']:4d} | Wahrnehmung {1000*_g['wahrn']/_m:5.1f} mm"
+                  f" | Zustand {1000*_g['orts']/_m:5.1f} mm (max {1000*_g['orts_max']:5.1f})"
+                  f" | Anfahrt {1000*_g['anfahrt_orts']/_a:5.1f} mm"
+                  f" | ERSTE Anfahrt {1000*_g['a1_orts']/max(1, _g['a1']):5.1f} mm ({_g['a1']:3d} Schritte)"
+                  f" | Hoehe {1000*_g['hoehe']/_m:5.1f} mm"
+                  f" | Phantom-Griff {_g['phantom']:4d}"
+                  f" (ab {'--' if _g['phantom_ab'] is None else _g['phantom_ab']})"
+                  f" | {'OK' if ok else 'daneben'}", flush=True)
         if TASTDIAG:
             _t = run_combined._tast
             def _mm(v):
