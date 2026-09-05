@@ -1768,7 +1768,14 @@ def run_self_learning_steering(headless=False):
                     "dream_seen": [np.asarray(z) for z in dream_nov.seen],
                     "self_eval": seval,
 
-                    "objects": [o for o in state.OBJECTS if o[1] not in base],
+                    # EIGENSCHAFTS-ADRESSEN WERDEN NICHT GESPEICHERT.  Sie sind fluechtig: der
+                    # Auto-Lauf schreibt sie in JEDER Episode neu aus der aktuellen Detektion.
+                    # Gespeichert blieben sie als zweiter Eintrag desselben Koerpers liegen und
+                    # haben beim naechsten Start act16.OBJS verdoppelt -> Absturz in run_combined
+                    # (s. randomize_objects).  Der Zustand des Nutzers trug genau das:
+                    # ('Neue Form 10', 'obj_X', 'shape') UND ('farbe-6 + neu-34', 'obj_X', ...).
+                    "objects": [o for o in state.OBJECTS
+                                if o[1] not in base and o[2] != "eigenschaft"],
                     "shape_key": {k: v for k, v in state.SHAPE_KEY.items()
                                   if k not in CommandState23.SHAPE_KEY}}
             if FOVEA_NET:                                      # task 3: persist the warmed+class-trained
@@ -2140,7 +2147,19 @@ def run_self_learning_steering(headless=False):
     def randomize_objects():
         exp_group["szene"] += 1                                # neue stehende Szene -> neue Gruppe
         sim.reset_home()
-        bodies = [(nm, m) for _l, nm, m in state.OBJECTS]
+        # EIN EINTRAG JE KOERPER.  state.OBJECTS ist eine Liste von ADRESSEN, nicht von Koerpern:
+        # seit dem Eigenschafts-Kommando kann derselbe Koerper zweimal drin stehen (einmal ueber
+        # den Namen, einmal ueber Farbe/Form/Groesse).  Ungefiltert bekam er zwei Slots, und
+        # act16.OBJS enthielt ihn doppelt -- dort rechnet run_combined die Ablenker-Stichprobe mit
+        # len(OBJS)-1, waehrend others(cmd) BEIDE Vorkommen entfernt: ValueError "Cannot take a
+        # larger sample than population" (vom Nutzer gemeldet 2026-09-05, Absturz in Episode 0).
+        # VORRANG fuer den Nicht-Eigenschafts-Eintrag: nur der traegt das echte Verfahren, und
+        # daran haengt die Ablagehoehe ("long" -> LONG_HALF[2] statt 0.012).
+        _vorrang = {}
+        for _l, nm, m in state.OBJECTS:
+            if nm not in _vorrang or (_vorrang[nm] == "eigenschaft" and m != "eigenschaft"):
+                _vorrang[nm] = m
+        bodies = list(_vorrang.items())
         if NOVEL_BODY in scene and all(nm != NOVEL_BODY for nm, _ in bodies):
             bodies.append((NOVEL_BODY, "shape"))               # introduced but not yet discovered: keep it in play
         # WELCHE Objekte stehen: bei SCENE_N < len(bodies) rotiert das Fenster ueber die Liste, damit
@@ -2186,7 +2205,7 @@ def run_self_learning_steering(headless=False):
         # Die Kontinuitaets-Absicht bleibt gewahrt: INNERHALB eines Szenen-Fensters (ACT23_SCENE_EVERY)
         # bleibt die Menge fest, es teleportiert also nichts je Episode -- gewechselt wird nur beim
         # Wuerfeln.  Ein Kommando auf ein geparktes Objekt stellt es weiterhin hin (keep enthaelt cmd).
-        act16.OBJS = [nm for nm, _m in _steht]
+        act16.OBJS = list(dict.fromkeys(nm for nm, _m in _steht))   # Koerper, nicht Adressen
         act16.SCENE_N = len(act16.OBJS)
         place_all()
         open_set_glance()                                      # lifelong open-set look at the fresh scene
@@ -2762,6 +2781,8 @@ def run_self_learning_steering(headless=False):
 
     if _loaded is not None:                                    # restore SELF-DISCOVERED command objects: the
         for lbl, nm, m in _loaded.get("objects", []):          #   open-set classes live in shape_clf; the GUI
+            if m == "eigenschaft":                             # SELBSTHEILUNG aelterer Zustaende: die
+                continue                                       #   fluechtige Adresse wurde frueher mit-
             state.OBJECTS = state.OBJECTS + [(lbl, nm, m)]     #   plumbing (button, body<->class key) is re-
             if panel is not None:                              #   registered here so "Neue Form" survives
                 panel.add_discovered(len(state.OBJECTS) - 1)   #   the restart as a commandable object
@@ -2779,8 +2800,8 @@ def run_self_learning_steering(headless=False):
     # REIHENFOLGE (2026-08-21): das steht jetzt VOR randomize_objects(), nicht danach -- randomize_objects
     # engt act16.OBJS auf die STEHENDE Menge ein (s. dort), und diese Zeilen haetten das sofort wieder
     # aufgehoben.  Sie liefern hier nur noch die Vorbelegung fuer den Fall ohne Einschraenkung.
-    act16.OBJS = [nm for _l, nm, _m in state.OBJECTS]
-    act16.SCENE_N = len(act16.OBJS)
+    act16.OBJS = list(dict.fromkeys(nm for _l, nm, _m in state.OBJECTS))   # s. randomize_objects:
+    act16.SCENE_N = len(act16.OBJS)                                       #   Adressen != Koerper
     randomize_objects()
 
     def train_fovea_classes(rounds=None):
