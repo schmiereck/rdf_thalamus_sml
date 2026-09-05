@@ -50,6 +50,40 @@ NOVEL_MARGIN = float(os.environ.get("ACT_SHAPE_NOVEL_MARGIN", "1.2"))   # novelt
 NOVEL_CONFIRM = int(os.environ.get("ACT_SHAPE_NOVEL_CONFIRM", "3"))     # consistent sightings before a class is born
 NOVEL_K = 3                                                             # kNN order of the novelty distance
 OPEN_MARGIN = float(os.environ.get("ACT_SHAPE_OPEN_MARGIN", "1.6"))     # claim radius for open classes, * novel_th
+# AUFFRISCHUNG der Exemplarmengen bei OPEN_CAP, s. observe_scene.  Ohne sie friert eine
+# Klasse bei 80 Eintraegen fuer immer ein und veraltet gegenueber dem, was die Kamera liefert.
+# DICKEN-WACHE am Anspruchstor (2026-09-03).  Die MATERIALDICKE ist ein eigener,
+# messtechnisch sauberer Kanal: gemessen ueber je 25 Lagen liegt sie bei Y10 7,07 px
+# (Streuung 0,07), Y14 8,25 (0,16), Y20 10,00 (0,05), T14 8,49 (0,21).  Der Fehlerfall
+# T14 gegen Y10 ist 1,42 px = das 7-fache der Streuung, der Grenzfall T14 gegen Y14 nur
+# 0,24 px.  Eine Schwelle um 0,8 px verwirft den einen und laesst den anderen der FORM.
+# WARUM HIER UND NICHT IM DESKRIPTOR: die Form laesst sich NICHT groessenfrei normieren --
+# vier Varianten gemessen (feste Ringe / dickenskalierte Ringe / DC-normiert je Ring /
+# global fuellungsnormiert), Kennzahl Groessen-Abstand durch Form-Abstand blieb bei
+# 2,1-2,5 statt unter 1,0.  Die Groesse ist kein Skalenfaktor, sie ist eingewoben.
+# VORGABE AUS seit 2026-09-04.  BEIDE Fassungen gemessen gescheitert:
+#   Fassung 1 (hinter resolve, nur annullierend): Kandidat 1 Treffer in 8 Blicken, kein Knopf.
+#   Fassung 2 (in der Kandidatenschleife): 567 Ansprueche verworfen, aber der Kandidat bekam
+#     NULL Treffer statt 2 im Kontrollarm -- schlechter, nicht besser.  Lieferquote 48,0 -> 44,5%.
+# Der Engpass liegt NICHT im Anspruchswettbewerb: mit UND ohne Wache holt der Kandidat 0-2
+# Treffer in 12 Blicken.  Eine junge Klasse, aus 3 Sichtungen EINER Lage geboren, erkennt ihr
+# Objekt in anderen Lagen schlicht nicht wieder -- das ist eine Repraesentations-, keine
+# Wettbewerbsgrenze.  Die Dicke selbst bleibt ein sauberer Kanal (Y10/Y14/Y20 trennen mit dem
+# 6- bis 40-fachen ihrer Streuung); nur ihre Verwendung am Anspruchstor traegt nicht.
+DICKE_WACHE = os.environ.get("ACT_SHAPE_DICKE_WACHE", "0") != "0"
+DICKE_TOL = float(os.environ.get("ACT_SHAPE_DICKE_TOL", "0.8"))     # px
+DICKE_MIN_N = int(os.environ.get("ACT_SHAPE_DICKE_MIN_N", "8"))     # vorher faellt sie AUS
+DICKE_CAP = 40
+DICKE_LOG = os.environ.get("ACT_SHAPE_DICKE_LOG", "0") != "0"   # Vetos mitschreiben
+# VORGABE AUS seit 2026-09-03: im Dicken-Wachen-A/B entstanden in BEIDEN Armen 0 Klassen,
+# waehrend derselbe Aufbau (10-mm-Y, Seed 11, gleicher Zustand) VOR dieser Auffrischung
+# 4 Geburten hatte.  Die Auffrischung ist die einzige Aenderung, die im Kontrollarm wirkt --
+# der Verdacht, dass sie Geburten unterdrueckt (aufgefrischte Klassen beanspruchen besser
+# und schlucken Neuheits-Belege), ist damit begruendet, aber NICHT isoliert gemessen.
+# Bis das geklaert ist, gilt der alte Zustand.  Sie war ohnehin ohne Nutzennachweis an.
+EX_REFRESH = os.environ.get("ACT_SHAPE_EX_REFRESH", "0") != "0"
+EX_DUP_TH = float(os.environ.get("ACT_SHAPE_EX_DUP_TH", "0.01"))   # Abstand, ab dem zwei
+#   Exemplare als verschieden gelten (gemessen: Duplikate liegen bei exakt 0.00)
 #   (measured: the same novel form seen at DIFFERENT poses sits p50 ~8.3 / p90 ~11.2 apart while novel_th
 #   is ~7.3 -- a sparse young exemplar set needs the relaxed radius or later poses would read novel again)
 MERGE_MARGIN = 1.7                                                      # birth-time merge radius, * novel_th
@@ -97,6 +131,11 @@ OPEN_CAP = 80                                                           # max st
 # class keeps getting claimed (age resets) and accumulates exemplars, so it survives.  Bound-command
 # classes are additionally PROTECTED (passed in).  A hard CAP bounds the total (prune the most-starved).
 STARVE_N = int(os.environ.get("ACT_OPEN_STARVE", "25"))
+# FARBFREIER SPLIT verschmolzener Blobs, s. perceive_all.  ACT_SHAPE_SPLIT=0 stellt den alten
+# Zustand her (nur der farbbasierte Form-Split, der ohne Farbklasse nicht laufen kann).
+SPLIT_FUSED = os.environ.get("ACT_SHAPE_SPLIT", "1") != "0"
+SPLIT_ERODE_MAX = int(os.environ.get("ACT_SHAPE_SPLIT_ERODE", "10"))
+SPLIT_ALWAYS = os.environ.get("ACT_SHAPE_SPLIT_ALWAYS", "0") != "0"
 STARVE_MIN_EX = int(os.environ.get("ACT_OPEN_STARVE_EX", "6"))
 # DIE GROESSEN-AUSNAHME FAELLT BEI HOHEM ALTER.  Sie schuetzt junge, ECHTE Klassen davor, wegen einer
 # Durststrecke geloescht zu werden -- ab einem gewissen Alter schuetzt sie aber nur noch Leichen.
@@ -562,7 +601,21 @@ class ShapeClassifierModule(ArmModule):
     def all_names(self):
         return SHAPES + self.open_names
 
-    def resolve(self, desc):
+    def _dicke_passt(self, nm, dicke):
+        """Passt die gemessene Materialdicke zu dem, was die Klasse bisher gesehen hat?
+        Faellt AUS (True), solange die Klasse < DICKE_MIN_N Messwerte hat -- ein geladener
+        Zustand bringt keine mit."""
+        if not DICKE_WACHE or dicke is None:
+            return True
+        h = (getattr(self, "open_dicke", None) or {}).get(nm) or []
+        if len(h) < DICKE_MIN_N:
+            return True
+        passt = abs(float(dicke) - float(np.median(h))) <= DICKE_TOL
+        if not passt:
+            self._veto_n = getattr(self, "_veto_n", 0) + 1
+        return passt
+
+    def resolve(self, desc, dicke=None):
         """OPEN-SET classification of one |F| descriptor -> (name, kNN distance).  Stage 1: within
         novel_th of the TRAINING exemplars -> a base class, the trained head decides (it is the accurate
         boundary there).  Stage 2: nearest self-labelled class within the RELAXED claim radius
@@ -574,8 +627,19 @@ class ShapeClassifierModule(ArmModule):
         dk = self._knn(z, self._ZX)
         if dk <= self.novel_th:
             return SHAPES[int(self.classify(desc).argmax())], dk
+        # DICKEN-WACHE IN DER KANDIDATENSCHLEIFE (Fassung 2, 2026-09-04).  Fassung 1 sass HINTER
+        # resolve und konnte den Anspruch nur ANNULLIEREN, nicht UMLEITEN: neu-9 gewann hier den
+        # Wettbewerb, die Wache machte daraus spaeter ein None, und die junge Klasse -- die schon
+        # innerhalb dieser Schleife verloren hatte -- kam nie zum Zug.  GEMESSEN: der Kandidat
+        # bekam in 8 Blicken GENAU EINEN Treffer, ein Knopf ist so unerreichbar (die Bestaetigung
+        # in pc_act23.py:1991 zaehlt genau das Feld, das Fassung 1 leerte).
+        # JETZT: unpassende Klassen werden UEBERSPRUNGEN, bevor bester und zweitbester feststehen.
+        # Das leitet den Anspruch an die legitime naechste Klasse um UND entzerrt die relative
+        # Wache unten, die sonst gegen einen Konkurrenten rechnet, der hinterher vetiert wird.
         best_nm, best_d, second_d = None, np.inf, np.inf
         for nm, ex in self.open.items():
+            if not self._dicke_passt(nm, dicke):
+                continue
             d = self._knn(z, ex, k=1)                        # nearest exemplar (young sets are small)
             if d < best_d:
                 best_nm, best_d, second_d = nm, d, best_d
@@ -605,6 +669,7 @@ class ShapeClassifierModule(ArmModule):
         (measured: a mis-delivered cube at y=0.24 bred a phantom class).  Returns newly created names."""
         born = []
         self.last_events = []                                # glance debug trail (novel/claim/born + where)
+        _veto0 = getattr(self, "_veto_n", 0)                 # Vetos DIESES Blicks zaehlen (s. unten)
         if getattr(self, "_novel_groups", None) is None:      # LAZY: aus dem Zustands-Pickle geladene
             self._novel_groups = [{"ex": [b], "age": 0}       #   Instanzen haben das Feld nicht; die
                                   for b in (self._novel_buf or [])]   # alten Eintraege werden Einzelgruppen
@@ -639,6 +704,49 @@ class ShapeClassifierModule(ArmModule):
                 self._age[nm] = 0                            # a fresh claim keeps the class alive (starvation)
                 if len(self.open[nm]) < OPEN_CAP:
                     self.open[nm].append(z)
+                elif EX_REFRESH and self._knn(z, np.asarray(self.open[nm]), k=1) <= self.novel_th:
+                    # NUR SICHERE ANSPRUECHE FRISCHEN AUF (2026-09-02, nach einem gemessenen
+                    # Fehlschlag meiner ersten Fassung).  Ohne diese Bedingung nimmt die Klasse auch
+                    # BAND-Ansprueche auf (novel_th < d <= novel_th*OPEN_MARGIN) -- also genau die
+                    # unsicheren -- und frisst sich an ihrem eigenen Irrtum fest.  GEMESSEN am
+                    # 10-mm-Y gegen neu-9 (obj_T), 15 Sichtungen nacheinander:
+                    #     ohne Auffrischung: Abstand 11,2 -> 10,3   (stabil)
+                    #     MIT (erste Fassung): 7,0 -> 4,2           (kollabiert, Y wird einverleibt)
+                    # Der erste Kontakt lag bei 13,4, also AUSSERHALB -- der Fehler beginnt erst mit
+                    # der Aufnahme des unsicheren Anspruchs.  Mit dieser Schranke kann er nicht
+                    # beginnen: was nur im Band liegt, haelt die Klasse am Leben (Alterszaehler),
+                    # veraendert sie aber NICHT.
+                    # AUFFRISCHUNG STATT ABWEISUNG (2026-09-02).  BEFUND: bei OPEN_CAP nahm eine
+                    # Klasse NIE wieder ein Exemplar auf -- sie fror ein.  Alle vier Klassen im
+                    # Nutzerzustand stehen bei exakt 80, ueber alle seitherigen Aenderungen hinweg
+                    # (Greifergeometrie, Fovea-Zoom).  GEMESSEN: 85% der VERSCHIEDENEN Exemplare von
+                    # neu-9 (obj_T) liegen weiter als novel_th von JEDER frischen Sichtung des T
+                    # entfernt, Median 10,85.  Die Klasse ist damit eine breite VERALTETE Wolke --
+                    # und eine breite Wolke beansprucht alles in ihrer Naehe.  Genau daran ist das
+                    # 10-mm-Y gescheitert: es lag 9,47 von neu-9 entfernt, bei einem Eigendurchmesser
+                    # der Klasse von 9,78.  Der Anspruch war nach ihrer eigenen Geometrie normal.
+                    #
+                    # ERSETZT WIRD ZUERST EIN DUPLIKAT: von 80 Eintraegen sind nur 18-36 verschieden,
+                    # es ist also reichlich redundantes Material da, dessen Wegfall KEINE Abdeckung
+                    # kostet.  Erst wenn keine Duplikate mehr da sind, weicht das aelteste.
+                    # ACT_SHAPE_EX_REFRESH=0 stellt das Einfrieren wieder her.
+                    ex = self.open[nm]
+                    i_weg = 0
+                    for i in range(len(ex)):
+                        if self._knn(ex[i], np.asarray(ex[:i] + ex[i+1:]), k=1) <= EX_DUP_TH:
+                            i_weg = i
+                            break
+                    ex.pop(i_weg)
+                    ex.append(z)
+                # DICKE der Klasse lernen -- NUR aus SICHEREN Anspruechen, aus demselben Grund wie
+                # die Exemplar-Auffrischung: lernte sie aus Band-Anspruechen, fraesse sie sich an
+                # ihrem eigenen Irrtum fest (gemessene Kaskade, s. EX_REFRESH).
+                if (DICKE_WACHE and det.get("dicke") is not None
+                        and self._knn(z, np.asarray(self.open[nm]), k=1) <= self.novel_th):
+                    if getattr(self, "open_dicke", None) is None:
+                        self.open_dicke = {}
+                    self.open_dicke[nm] = (self.open_dicke.get(nm, [])
+                                           + [float(det["dicke"])])[-DICKE_CAP:]
             elif nm is None:                                 # NOVEL sighting -> temporal-consistency buffer
                 _mth = self._merge_th()
                 if _mth is not None and cs is not None and cs > _mth:
@@ -751,6 +859,14 @@ class ShapeClassifierModule(ArmModule):
                     self.open[a] = (self.open[a] + self.open[b])[:OPEN_CAP]
                     del self.open[b]; self.open_names.remove(b)
                     born = [nm for nm in born if nm != b]
+        # WACHE ZAEHLBAR MACHEN: ohne diese Zeile war "berechtigter Anspruch getoetet" nur
+        # erschlossen (aus fallenden Anspruchszahlen), nie gemessen.  ACT_SHAPE_DICKE_LOG=1.
+        if DICKE_LOG and getattr(self, "_veto_n", 0) > _veto0:
+            print(f"    [Dicken-Wache] {getattr(self, '_veto_n', 0) - _veto0} Anspruch/Ansprueche "
+                  f"verworfen (gesamt {getattr(self, '_veto_n', 0)}); Klassen-Mediane: "
+                  + ", ".join(f"{k} {np.median(v):.1f}" for k, v in
+                              sorted((getattr(self, "open_dicke", None) or {}).items())
+                              if len(v) >= DICKE_MIN_N), flush=True)
         self._starve_and_cap(born, protect)
         return born
 
@@ -831,17 +947,72 @@ class ShapeClassifierModule(ArmModule):
         min_area = min_area * self.px_scale() ** 2          # FLAECHE -> s^2 (s. px_scale)
         mask = self._mask(img)
         labels, n = ndimage.label(mask)
-        out = []
+        # FARBFREIER SPLIT verschmolzener Blobs (2026-08-31).  ANLASS: obj_X teilt seine RGBA mit
+        # obj_T, bekam deshalb NIE eine eigene Farbklasse, und der farbbasierte Form-Split lief fuer
+        # es in 0% der Episoden (L/U/T: 12-33%).  Jede Verschmelzung fiel damit auf den
+        # PRIVILEGIERTEN Rueckfall durch -> Erkennung 80,7% statt 97-98%, 148 von 259 Rueckfaellen.
+        # Gemessen ist auch die Ursache der Verschmelzung: der naechste Nachbar liegt bei Misserfolg
+        # im Median 52 mm entfernt, bei Erfolg 94 mm.
+        #
+        # VERFAHREN, bewusst OHNE Farbe: eine Komponente, deren Deskriptor KEINE Klasse trifft
+        # (resolve -> None), ist der Verdachtsfall.  Sie wird erodiert, bis sie in >= 2 Kerne
+        # zerfaellt; dann bekommt jedes Ursprungspixel den naechstgelegenen Kern zugeschlagen
+        # (Distanztransformation mit return_indices, kein skimage noetig).  Die Teile laufen durch
+        # DENSELBEN Klassifikationsweg wie normale Komponenten -- kein zweiter Codepfad.
+        # Die Original-Komponente bleibt zusaetzlich in der Liste: faellt der Split daneben, geht
+        # nichts verloren, und der Aufrufer filtert ohnehin nach der gesuchten Form.
+        _masks = []
         for lab in range(1, n + 1):
-            comp = (labels == lab).astype(np.float32)
-            if comp.sum() < min_area:
+            _c = (labels == lab)
+            if _c.sum() < min_area:
                 continue                                     # drop specks / glints
+            _masks.append(_c)
+            if not SPLIT_FUSED or _c.sum() < 1.6 * min_area:
+                continue                                     # zu klein, um zwei Objekte zu halten
+            _cf = _c.astype(np.float32)
+            if not SPLIT_ALWAYS and self.resolve(
+                    np.abs(self._harmonics_at(_cf, self._centroid(_cf))).ravel())[0] is not None:
+                continue                # loest auf -> nicht verschmolzen.  ABER: eine verschmolzene
+                #   Komponente loest oft FALSCH auf die groessere Nachbarform auf, dann greift der
+                #   Split nie.  ACT_SHAPE_SPLIT_ALWAYS=1 spaltet jede grosse Komponente.
+            _er = _c
+            for _ in range(SPLIT_ERODE_MAX):
+                _er = ndimage.binary_erosion(_er)
+                if not _er.any():
+                    break
+                _sl, _sn = ndimage.label(_er)
+                _big = [i for i in range(1, _sn + 1) if (_sl == i).sum() >= 0.25 * min_area]
+                if len(_big) >= 2:
+                    _seed = np.isin(_sl, _big)
+                    _, _idx = ndimage.distance_transform_edt(~_seed, return_indices=True)
+                    _own = _sl[_idx[0], _idx[1]]
+                    for _i in _big:
+                        _p = _c & (_own == _i)
+                        if _p.sum() >= min_area:
+                            _masks.append(_p)
+                    break
+        out = []
+        for comp in _masks:
+            comp = comp.astype(np.float32)
             ctr = self._centroid(comp)                       # world (overview) or px (top)
             F = self._harmonics_at(comp, ctr)
             desc = np.abs(F).ravel()
             # OPEN-SET resolve: a trained class (head decides), a self-labelled class (prototype claims
             # it), or None = NOVEL form.  prob for open classes = prototype proximity (no softmax exists).
-            name, ndist = self.resolve(desc)
+            # MATERIALDICKE -- immer gemessen, nicht mehr an die (abgeschaltete) Wache gekoppelt.
+            # Sie ist ein EIGENER Wahrnehmungskanal neben Farbe und Form: gemessen trennt sie
+            # gleiche Formen verschiedener Breite mit dem 6- bis 40-fachen ihrer eigenen Streuung
+            # (Y10 7,07 +-0,07 | Y14 8,25 +-0,16 | Y20 10,00 +-0,05).  Gebraucht wird sie fuer die
+            # Auswahl nach EIGENSCHAFTEN (Farbe + Form + Groesse) statt nach Objektnamen --
+            # damit ein neues Objekt adressierbar ist, OHNE dass eine eigene Klasse entstehen muss.
+            # AUFLOESUNGSUNABHAENGIG: die Distanztransformation liefert PIXEL, und die skalieren mit
+            # der Bildbreite (gemessen: dieselbe Szene 8,06-8,74 px bei 360er Rendern, 5,66-7,00 bei
+            # 240er).  Bandgrenzen in Pixeln waeren damit stillschweigend an eine Aufloesung
+            # gebunden gewesen.  px_scale() ist genau dafuer da (1.0 bei PX_REF=240).
+            _dt = ndimage.distance_transform_edt(comp > 0)
+            _dicke = (float(np.percentile(_dt[comp > 0], 90)) / max(self.px_scale(), 1e-6)
+                      if comp.any() else None)
+            name, ndist = self.resolve(desc, dicke=_dicke)
             if name is None:
                 k, prob = -1, 0.0
             elif name in SHAPES:
@@ -898,7 +1069,7 @@ class ShapeClassifierModule(ArmModule):
             out.append({"shape": name, "id": k, "prob": prob,   # shape=None + id=-1 = a NOVEL form (open set)
                         "pos": (ctr if self.H is not None else None), "grasp_xy": grasp, "grasp_yaw": 0.0,
                         "yaw": self._yaw_from(F), "yaw4": self._yaw4_from(F), "area": float(comp.sum()),
-                        "chroma": chroma, "cspread": cspread,
+                        "chroma": chroma, "cspread": cspread, "dicke": _dicke,
                         "px": np.array([xs.mean(), ys.mean()]),
                         "span": span,                          # Material-Halbspanne (m), s. oben
                         "grasp_cands": gcands,                 # perception-grounded grasp-point candidates
