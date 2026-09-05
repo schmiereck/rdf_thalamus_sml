@@ -32,6 +32,11 @@ CORE = 8000            # the FIRST samples (teacher-driven demos) are PROTECTED 
 IMIT_CAP = 12000       # SELF-IMITATION buffer (step 3): the (state, action) pairs the POLICY ITSELF
 #                        drove on episodes the agent SELF-JUDGED a success -- reinforcement of what
 #                        worked FOR IT, blended with the DAgger teacher labels at fit time.
+# GUETEBEWUSSTE VERDRAENGUNG (2026-09-01, s. imitate()).  ACT23_IMIT_EVICT_QUAL=0 stellt die
+# alte, rein altersbasierte Verdraengung her.  EVICT_FRAC = welcher Anteil (aeltester zuerst)
+# ueberhaupt verdraengt werden darf; die juengere Haelfte ist tabu, damit Frische erhalten bleibt.
+EVICT_QUAL = __import__("os").environ.get("ACT23_IMIT_EVICT_QUAL", "1") != "0"
+EVICT_FRAC = float(__import__("os").environ.get("ACT23_IMIT_EVICT_FRAC", "0.5"))
 IMIT_WEIGHT = int(__import__("os").environ.get("ACT23_SELFIMIT_W", "2"))   # how many times a self-
 #                        imitation pair is repeated vs a DAgger sample (own validated successes count
 #                        more; the teacher is training wheels, the baby's own working moves lead)
@@ -191,12 +196,37 @@ class RuntimePolicyModule(ArmModule):
             qs.append(float(qual))                            # how GOOD this episode was (see train)
             added += 1
         from collections import Counter
-        while len(self._Xi) > IMIT_CAP:                       # evict the OLDEST sample of the FULLEST key
+        while len(self._Xi) > IMIT_CAP:
+            # VERDRAENGUNG: bisher "der AELTESTE Eintrag des VOLLSTEN Schluessels" -- die Guete wurde
+            # NICHT gefragt.  GEMESSEN 2026-09-01: der Puffer laeuft dauerhaft am Anschlag (12000,
+            # jeder Schluessel bei exakt IMIT_CAP/8), also verdraengt JEDER neue Eintrag einen alten,
+            # und ein Eintrag mit Gewicht 0,2 warf einen mit 0,9 hinaus.  Damit war JEDES Hinzufuegen
+            # von Lernstoff ein NULLSUMMENSPIEL -- der Grund, warum ACT23_IMIT_FAIL wirkungslos blieb.
+            #
+            # NEU: die Schluessel-Balance BLEIBT (sie ist gemessen noetig -- reines FIFO liess haeufige
+            # Erfolge die seltenen ausspuelen, U 60%->10%).  Nur INNERHALB des vollsten Schluessels
+            # entscheidet jetzt die Guete -- aber erst in der AELTEREN Haelfte.
+            #
+            # WARUM NICHT REIN NACH GUETE: dann blieben uralte gute Demonstrationen ewig liegen,
+            # waehrend die Policy weiterlernt und sie veralten (dafuer gibt es die Frische-Wache).
+            # Die Frischehaelfte ist deshalb TABU; gedraengt wird nur unter den Alten, und dort
+            # zuerst der schwaechste.  Alter UND Guete, nicht das eine statt des anderen.
             top = Counter(self._Xk).most_common(1)[0][0]
-            i = self._Xk.index(top)
+            idx = [j for j, k in enumerate(self._Xk) if k == top]   # Einfuegereihenfolge = alt zuerst
+            if EVICT_QUAL and len(idx) > 1:
+                alt_teil = idx[:max(1, int(len(idx) * EVICT_FRAC))]
+                i = min(alt_teil, key=lambda j: qs[j])
+            else:
+                i = idx[0]
             del self._Xi[i]; del self._Yi[i]; del self._Xk[i]; del qs[i]
         self._Xq = qs
         return added
+
+    def imit_qual(self) -> float:
+        """Mittlere GUETE des Selbst-Puffers -- die Groesse, auf die die guetebewusste Verdraengung
+        wirkt.  Ohne diese Anzeige waere im Lauf nicht zu sehen, ob sie ueberhaupt greift."""
+        q = self._quals()
+        return float(q.mean()) if len(q) else 0.0
 
     def imit_mix(self) -> dict:
         """Per-key sample counts of the self-imitation buffer (for the scoreboard)."""
