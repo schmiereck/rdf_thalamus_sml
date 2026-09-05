@@ -1322,6 +1322,66 @@ def run_self_learning_steering(headless=False):
         panel._eig_werte = _eig_werte()
         panel._eig_fn = _eig_setzen
 
+    def _auto_eig_umschreiben():
+        """Die ADRESSIERUNG des gewaehlten Koerpers in ein Eigenschafts-Tripel umschreiben.
+
+        EINE Fassung fuer BEIDE Auto-Schleifen -- die kopflose (ACT23_AUTO_N) und die der GUI.
+        DER FEHLER, DER DAZU GEFUEHRT HAT: der erste Einbau stand nur in der kopflosen Schleife,
+        im GUI-Lauf war ACT23_AUTO_EIG damit WIRKUNGSLOS (vom Nutzer gemeldet 2026-09-05: "die
+        Knoepfe bleiben alle auf beliebig stehen").  Meine 10-Episoden-Pruefung lief ausgerechnet
+        in der kopflosen Schleife und sah deshalb sauber aus.  Die GUI-Auto-Schleife hat GENAU
+        DIESEN Fehler schon einmal getragen -- NOVEL_EVERY/SCENE_EVERY waren dort 332 Episoden
+        lang ohne Wirkung (s. Kommentar in der GUI-Schleife).  Zweimal derselbe Riss an derselben
+        Naht: deshalb jetzt EINE Fassung statt zweier Kopien.
+
+        NICHT die Auswahl wird angefasst, nur die Benennung: die Neugier bestimmt weiterhin,
+        WELCHES Objekt geuebt wird.  Das Tripel kommt aus der Detektion, die auf dem gewaehlten
+        Koerper sitzt -- es beschreibt also garantiert etwas Sichtbares.  Welche der drei Achsen
+        genannt werden, wuerfelt mit (mindestens eine), damit auch UNVOLLSTAENDIGE Angaben geuebt
+        werden ("das duenne Ding" statt "das duenne violette Kreuz").
+        """
+        if not AUTO_EIG or _uebung["body"] is not None:   # namenlose Uebung nicht umetikettieren
+            return None
+        _b = state.selected()[1]
+        _sm = sim.d.mocap_pos.copy()
+        _ds = [d for d in shape_clf.perceive_all(sim)
+               if d.get("pos") is not None and float(d.get("area", 0)) >= 200.0]
+        sim.d.mocap_pos[:] = _sm; mujoco.mj_forward(sim.m, sim.d)
+        _p = sim.obj_pos(_b)[:2]
+        _nah = min(_ds, key=lambda d: float(np.linalg.norm(
+            np.asarray(d["pos"], float) - _p)), default=None)
+        if _nah is None or float(np.linalg.norm(np.asarray(_nah["pos"], float) - _p)) >= 0.04:
+            return None                                  # nichts Sichtbares auf dem Koerper
+        _f = colours.classify(_nah["chroma"])[0] if _nah.get("chroma") is not None else None
+        _fo, _g = _nah.get("shape"), groessen_band(_nah.get("dicke"))
+        # EINDEUTIGKEIT ERZWINGEN.  Gemessen: eine Angabe wie "mittel" allein passt auf DREI
+        # Objekte (alle heutigen Koerper liegen in diesem Band), und der Aufloeser nimmt dann das
+        # flaechengroesste -- in einer Auto-Episode das falsche, 152 mm daneben.  Ein Kommando,
+        # das sein Objekt nicht identifiziert, ist keine Uebung, sondern Rauschen.  Also Achsen
+        # nachlegen, bis genau EIN Treffer bleibt; unvollstaendige Angaben bleiben dort, wo sie
+        # AUSREICHEN -- geuebt wird die kuerzeste Adresse, die trifft.
+        _mk = [bool(crng.integers(2)) for _ in range(3)]
+        if not any(_mk):
+            _mk[int(crng.integers(3))] = True
+        _werte = (_f, _fo, _g)
+        _sv = sim.d.mocap_pos.copy()      # die Suche PARKT die Marker (_park_markers); ohne
+        for _versuch in range(4):         # Rueckgabe liefert goal_fn ein GEPARKTES Ziel
+            _tri = tuple(w if m else None for w, m in zip(_werte, _mk))
+            _, _, _tr2 = finde_nach_eigenschaften(sim, shape_clf, colours, *_tri)
+            if len(_tr2) <= 1:
+                break
+            _fehlt = [i for i in range(3) if not _mk[i] and _werte[i] is not None]
+            if not _fehlt:
+                break                     # alle Achsen genannt und trotzdem mehrdeutig
+            _mk[_fehlt[int(crng.integers(len(_fehlt)))]] = True
+        sim.d.mocap_pos[:] = _sv          # gemessen: sonst 627-968 mm Endabstand
+        mujoco.mj_forward(sim.m, sim.d)
+        state.sel = state.add_eigenschaft(_b, *_tri)
+        if panel is not None:
+            panel._eig_werte = _eig_werte()    # waehrend des Laufs geborene Klassen nachziehen
+            panel.zeige_eigenschaft(*_tri)     # die Felder sagen, was kommandiert ist
+        return _tri
+
     colour_of_body = dict(_loaded.get("colour_of_body", {})) if _loaded is not None else {}
     # SELF-HEAL pre-0a539ac collision damage in persisted states: birth names were len+1, so a
     # name could be re-issued -> DUPLICATE entries in the list / entries without a class (index/
@@ -4373,55 +4433,7 @@ def run_self_learning_steering(headless=False):
                             sim.d.qvel[sim.m.jnt_dofadr[sim._jid(_j)]] = 0.0
                     mujoco.mj_forward(sim.m, sim.d); sim.step(40)
                     world.rng.bit_generator.state = _rng0
-                if AUTO_EIG:
-                    # ADRESSIERUNG UMSTELLEN, NICHT DIE AUSWAHL.  Erster Versuch war ein Eingriff in
-                    # die Auswahl -- der lief nie, weil ACT23_AUTO_CURIOUS standardmaessig AN ist und
-                    # die Neugier vorher entscheidet (gemessen: 8 Neugier-Zeilen, 0 Eigenschafts-
-                    # Episoden).  Richtig ist: die Neugier bestimmt weiterhin, WELCHES Objekt geuebt
-                    # wird; nur BENANNT wird es ueber seine Eigenschaften statt ueber den Namen.
-                    # Das Tripel kommt aus der Detektion, die auf dem gewaehlten Koerper sitzt --
-                    # es beschreibt also garantiert etwas Sichtbares.  Welche der drei Achsen genannt
-                    # werden, wuerfelt mit (mindestens eine), damit auch UNVOLLSTAENDIGE Angaben
-                    # geuebt werden -- "das duenne Ding" statt "das duenne violette Kreuz".
-                    _b = state.selected()[1]
-                    _sm = sim.d.mocap_pos.copy()
-                    _ds = [d for d in shape_clf.perceive_all(sim)
-                           if d.get("pos") is not None and float(d.get("area", 0)) >= 200.0]
-                    sim.d.mocap_pos[:] = _sm; mujoco.mj_forward(sim.m, sim.d)
-                    _p = sim.obj_pos(_b)[:2]
-                    _nah = min(_ds, key=lambda d: float(np.linalg.norm(
-                        np.asarray(d["pos"], float) - _p)), default=None)
-                    if _nah is not None and float(np.linalg.norm(
-                            np.asarray(_nah["pos"], float) - _p)) < 0.04:
-                        _f = colours.classify(_nah["chroma"])[0] if _nah.get("chroma") is not None else None
-                        _fo, _g = _nah.get("shape"), groessen_band(_nah.get("dicke"))
-                        # EINDEUTIGKEIT ERZWINGEN.  Gemessen: eine Angabe wie "mittel" allein
-                        # passt auf DREI Objekte (alle heutigen Koerper liegen in diesem Band), und
-                        # der Aufloeser nimmt dann das flaechengroesste -- in Auto 0 das falsche,
-                        # 152 mm daneben.  Ein Kommando, das sein Objekt nicht identifiziert, ist
-                        # keine Uebung, sondern Rauschen.  Also: Achsen nachlegen, bis genau EIN
-                        # Treffer bleibt.  Die unvollstaendigen Angaben bleiben erhalten, wo sie
-                        # AUSREICHEN -- geuebt wird die kuerzeste Adresse, die trifft.
-                        _mk = [bool(crng.integers(2)) for _ in range(3)]
-                        if not any(_mk):
-                            _mk[int(crng.integers(3))] = True
-                        _werte = (_f, _fo, _g)
-                        _sv = sim.d.mocap_pos.copy()   # die Suche PARKT die Marker (_park_markers);
-                        for _versuch in range(4):      # ohne Rueckgabe liefert goal_fn ein geparktes
-                            _tri = tuple(w if m else None for w, m in zip(_werte, _mk))
-                            _, _, _tr2 = finde_nach_eigenschaften(sim, shape_clf, colours, *_tri)
-                            if len(_tr2) <= 1:
-                                break
-                            _fehlt = [i for i in range(3) if not _mk[i] and _werte[i] is not None]
-                            if not _fehlt:
-                                break                      # alle Achsen genannt und trotzdem mehrdeutig
-                            _mk[_fehlt[int(crng.integers(len(_fehlt)))]] = True
-                        sim.d.mocap_pos[:] = _sv       # Ziel -- gemessen: sonst 627-968 mm Abstand
-                        mujoco.mj_forward(sim.m, sim.d)
-                        state.sel = state.add_eigenschaft(_b, *_tri)
-                        if panel is not None:
-                            panel._eig_werte = _eig_werte()   # waehrend des Laufs geborene Klassen
-                            panel.zeige_eigenschaft(*_tri)    # die Felder sagen, was kommandiert ist
+                _auto_eig_umschreiben()
                 print(f"  [Auto {ep}]{f' W{_rep}' if _reps > 1 else ''} {state.label()} ...", flush=True)
                 try:
                     ok, err = run_one()
@@ -4503,6 +4515,7 @@ def run_self_learning_steering(headless=False):
                 state.place_selected_random(crng)
             else:
                 print(f"    {pick}", flush=True)
+            _auto_eig_umschreiben()                            # ADRESSIERUNG ueber Eigenschaften
             panel._refresh()                                   # "Auto: aus" stoppt nach der Episode
         state.go = False
         tag = "Auto" if state.auto else "Befehl"
