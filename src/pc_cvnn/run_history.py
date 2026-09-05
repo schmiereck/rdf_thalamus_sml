@@ -257,7 +257,12 @@ class RunViz:
                 offset += (recs[-1]["episode"] + 1)
         for a in self.ax:
             a.set_xlim(0, max(xmax * 1.01, 1))
-            lg = a.legend(fontsize=6.6, loc="upper left", framealpha=0.25, labelcolor="#c8c8d4", ncol=2)
+            # legend() OHNE beschriftete Kurven warnt ("No artists with labels found").  Das trat
+            # auf, sobald ein Log ohne auswertbare Episoden in die Auswahl geriet -- etwa ein
+            # abgestuerzter Lauf.  Erst fragen, dann zeichnen.
+            lg = (a.legend(fontsize=6.6, loc="upper left", framealpha=0.25,
+                           labelcolor="#c8c8d4", ncol=2)
+                  if a.get_legend_handles_labels()[0] else None)
             if lg:
                 lg.get_frame().set_facecolor("#1e1e28"); lg.get_frame().set_edgecolor("#33333f")
         for a in self.ax[-2:]:
