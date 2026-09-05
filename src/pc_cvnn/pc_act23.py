@@ -404,6 +404,73 @@ def main_diag():
               flush=True)
 
 
+# ---------------------------------------------------------------------------------------------
+# AUSWAHL NACH EIGENSCHAFTEN statt nach Objektnamen (Nutzeridee 2026-09-03/04).
+#
+# WARUM: bisher waehlt die GUI einen KOERPERNAMEN, und damit ein Objekt nur adressierbar ist,
+# muss zuvor eine eigene Formklasse entstanden sein ("Geburt") und einen Knopf bekommen haben.
+# Genau dort ist jeder Versuch dieser Sitzung gescheitert -- vier Eingriffe am Anspruchstor,
+# alle gemessen wirkungslos oder schaedlich (s. [[act23-faktorisierung]]).  Der Nutzer hat
+# vorgeschlagen, den Umweg ganz zu lassen: ein Objekt IST eine Kombination aus Farbe, Form und
+# Groesse, und genau so soll es benannt werden.
+#
+# MESSTECHNISCH GEDECKT: die drei Eigenschaften liegen je Detektion bereits vor
+# (colours.classify(chroma) | det["shape"] | det["dicke"]), und ueber die acht heutigen Koerper
+# sind die Tripel EINDEUTIG -- 8 verschiedene Tripel fuer 8 Koerper.
+# EHRLICH DAZU: die Eindeutigkeit kommt heute fast ganz aus der FARBE (7 Klassen fuer 8 Koerper,
+# die einzige Kollision farbe-4 loest die Form auf).  Die Dicke trennt unter den bestehenden
+# Koerpern NICHTS (8,06-8,74 px) -- alle Balken sind 14 mm breit.  Sie zahlt sich erst aus, wenn
+# Objekte Farbe UND Form teilen; bei den Y-Varianten trennte sie mit dem 6- bis 40-fachen der
+# Streuung.
+# Bandgrenzen GEMESSEN in auflaesungsunabhaengigen Einheiten (px_scale-normiert, Bezug 240):
+#   Y10 5,00 +-0,00 | L 5,39 +-0,33 | U 5,83 +-0,09 | X 5,83 +-0,14 | Y14 5,83 +-0,08
+#   T 6,00 +-0,08 | red 6,03 +-0,15 | Y20 7,07 +-0,03
+# EHRLICH: alle HEUTIGEN Koerper liegen zwischen 5,39 und 6,03 -- die Groesse trennt unter ihnen
+# NICHTS (alle Balken sind 14 mm breit).  Sie trennt erst absichtlich verschiedene Varianten:
+# Y10 und Y20 fallen klar heraus.  Die Achse ist also vorbereitet, nicht heute schon nuetzlich.
+GROESSEN_BAENDER = [("duenn", 0.0, 5.2), ("mittel", 5.2, 6.5), ("dick", 6.5, 99.0)]
+
+
+def groessen_band(dicke):
+    """Materialdicke (px_scale-normiert, Bezug 240) -> Bandname.  Grenzen s. GROESSEN_BAENDER.
+    None, wenn keine Dicke vorliegt."""
+    if dicke is None:
+        return None
+    for nm, lo, hi in GROESSEN_BAENDER:
+        if lo <= float(dicke) < hi:
+            return nm
+    return None
+
+
+def finde_nach_eigenschaften(sim, shape_clf, colours, farbe=None, form=None, groesse=None,
+                             min_area=200.0):
+    """Sucht die Detektion, die auf das Tripel passt.  Jede Angabe darf None sein = 'beliebig'.
+
+    Gibt (pos, det, treffer) zurueck: die Weltposition, die Detektion und ALLE passenden
+    Detektionen (damit der Aufrufer Mehrdeutigkeit erkennen kann, statt sie zu verschlucken).
+    Ohne Treffer (None, None, []).  KEINE privilegierte Information -- nur was die Kamera liefert.
+    """
+    treffer = []
+    for det in shape_clf.perceive_all(sim):
+        if det.get("pos") is None or float(det.get("area", 0.0)) < min_area:
+            continue
+        f = None
+        if colours is not None and det.get("chroma") is not None:
+            f = colours.classify(det["chroma"])[0]
+        g = groessen_band(det.get("dicke"))
+        if farbe is not None and f != farbe:
+            continue
+        if form is not None and str(det.get("shape")) != str(form):
+            continue
+        if groesse is not None and g != groesse:
+            continue
+        treffer.append(det)
+    if not treffer:
+        return None, None, []
+    best = max(treffer, key=lambda d: float(d.get("area", 0.0)))
+    return np.asarray(best["pos"], float), best, treffer
+
+
 class CommandState23:
     """Unified command state for the act23 GUI.  ONE coherent object list (no colour/form mode), plus a
     grasp-policy toggle (teacher WRIST_ALIGN <-> SELF-learned world-model wrist).  Exposes the cmd/force/goal
@@ -434,6 +501,7 @@ class CommandState23:
         # commandable button) -- the class-level lists stay the pristine trained set.
         self.OBJECTS = list(CommandState23.OBJECTS)
         self.SHAPE_KEY = dict(CommandState23.SHAPE_KEY)
+        self.EIGENSCHAFT = {}      # Koerper -> (Farbklasse, Formklasse, Groessenband); s. add_eigenschaft
 
     def add_object(self, label, body, shape_key):
         """Register a SELF-DISCOVERED object: commandable like L/U, localised by its self-labelled open
@@ -441,6 +509,28 @@ class CommandState23:
         track) runs purely on the class name."""
         self.OBJECTS = self.OBJECTS + [(label, body, "shape")]
         self.SHAPE_KEY[body] = shape_key
+
+    def add_eigenschaft(self, body, farbe=None, form=None, groesse=None):
+        """Ein Objekt ueber EIGENSCHAFTEN kommandierbar machen -- ohne dass eine Formklasse
+        entstanden sein muss.
+
+        WARUM (Nutzeridee 2026-09-04): `add_object` verlangt einen `shape_key`, also eine geborene
+        und bestaetigte Formklasse.  Genau daran ist in dieser Sitzung jeder Versuch gescheitert
+        (vier Eingriffe am Anspruchstor, alle gemessen wirkungslos, s. [[act23-faktorisierung]]).
+        Ein Objekt IST aber eine Kombination aus Farbe, Form und Groesse -- und die drei liegen je
+        Detektion schon vor.  Wer so adressiert, braucht die Geburt nicht.
+        Jede Angabe darf None sein = 'beliebig'.  Der Koerper dient nur der Buchfuehrung und der
+        Bewertung; die LOKALISIERUNG laeuft rein ueber die Eigenschaften (s. perceive, Zweig
+        'eigenschaft')."""
+        self.EIGENSCHAFT[body] = (farbe, form, groesse)
+        teile = [t for t in (farbe, form, groesse) if t is not None]
+        label = " + ".join(str(t) for t in teile) or "beliebig"
+        vorhanden = [i for i, (_l, b, m) in enumerate(self.OBJECTS) if b == body and m == "eigenschaft"]
+        if vorhanden:
+            self.OBJECTS[vorhanden[0]] = (label, body, "eigenschaft")
+            return vorhanden[0]
+        self.OBJECTS = self.OBJECTS + [(label, body, "eigenschaft")]
+        return len(self.OBJECTS) - 1
 
     def selected(self):
         return self.OBJECTS[self.sel]
@@ -488,6 +578,9 @@ class CommandState23:
         return f"{self.selected()[0]} | {act} | Greifer: {pol} | Choreo: {ch} | Ziel {self.target_idx + 1}{zl}"
 
 
+EIG_ONLY = os.environ.get("ACT23_EIG_ONLY", "0") != "0"   # alte Objektzeile ausblenden
+
+
 class CommandPanel23:
     """Same look as pc_act21's CommandPanel (arm camera + fovea + surprise + buttons) but with ONE unified
     object row (no colour/form mode) and a grasp-policy toggle."""
@@ -517,12 +610,36 @@ class CommandPanel23:
         self.live = self.fig.text(0.225, 0.285, "", ha="center", color="#9fb4c8", fontsize=8.5, family="monospace")
         # unified OBJECT row (one button per concrete object)
         self._obj_btns = {}
-        for i, (lbl, nm, _m) in enumerate(state.OBJECTS):
+        # ACT23_EIG_ONLY=1 blendet die alte Objektzeile aus -- dann sind die drei Waehlfelder die
+        # einzige Bedienung.  Die LISTE bleibt intern bestehen (state.sel indiziert sie, und Auto,
+        # Neugier und Bewertung haengen daran); ausgeblendet wird nur die Bedienung.
+        for i, (lbl, nm, _m) in enumerate([] if EIG_ONLY else state.OBJECTS):
             ax = self.fig.add_axes([0.035 + 0.115 * i, 0.150, 0.108, 0.055])
             col = state.OBJ_COL[nm]
             b = Button(ax, lbl, color=col, hovercolor=col); b.label.set_fontsize(7.5)
             b.on_clicked(lambda _e, k=i: self._set_obj(k)); self._obj_btns[i] = b
-        self.fig.text(0.018, 0.178, "Objekt", color="#9fb4c8", fontsize=8, rotation=90, va="center")
+        if not EIG_ONLY:
+            self.fig.text(0.018, 0.178, "Objekt", color="#9fb4c8", fontsize=8,
+                          rotation=90, va="center")
+        # AUSWAHL NACH EIGENSCHAFTEN (Nutzeridee 2026-09-04): drei Felder statt eines Objektnamens.
+        # Jedes Feld schaltet durch seine bekannten Werte, "beliebig" laesst die Achse offen.
+        # Die Werte und die Zuweisung kommen von aussen (_eig_werte / _eig_fn), damit der
+        # Konstruktor nichts ueber Farben und Formklassen wissen muss -- so wie _introduce_fn.
+        self._eig = [None, None, None]          # (Farbklasse, Formklasse, Groessenband)
+        self._eig_werte = ([], [], [])
+        self._eig_fn = None
+        self._eig_btns = []
+        for i, titel in enumerate(("Farbe", "Form", "Groesse")):
+            ax = self.fig.add_axes([0.035 + 0.152 * i, 0.108, 0.145, 0.036])
+            b = Button(ax, f"{titel}: beliebig", color="#2b3b4a", hovercolor="#3a5060")
+            b.label.set_fontsize(7)
+            b.on_clicked(lambda _e, k=i: self._eig_weiter(k))
+            self._eig_btns.append(b)
+        axEig = self.fig.add_axes([0.495, 0.108, 0.105, 0.036])
+        self.bEig = Button(axEig, "waehlen", color="#3a5a44", hovercolor="#4a7256")
+        self.bEig.label.set_fontsize(7); self.bEig.on_clicked(self._eig_anwenden)
+        self.eig_status = self.fig.text(0.61, 0.126, "", color="#9fb4c8", fontsize=7,
+                                        va="center", family="monospace")
         # grasp-policy toggle (right of the object row -- slot 6 belongs to a discovered form)
         axPol = self.fig.add_axes([0.78, 0.150, 0.155, 0.055])
         self.bPol = Button(axPol, "", color="#3a5a44", hovercolor="#4a7256"); self.bPol.on_clicked(self._toggle_policy)
@@ -570,6 +687,27 @@ class CommandPanel23:
         axX = self.fig.add_axes([0.77, 0.04, 0.18, 0.07])
         self.bX = Button(axX, "Beenden", color="#8a3030", hovercolor="#a94040"); self.bX.on_clicked(self._exit)
         self.fig.canvas.mpl_connect("close_event", lambda _e: setattr(self.state, "exit", True))
+        self._refresh()
+
+    def _eig_weiter(self, k):
+        """Ein Feld einen Wert weiterschalten.  None (= 'beliebig') ist immer der erste Eintrag."""
+        werte = [None] + list(self._eig_werte[k])
+        try:
+            i = werte.index(self._eig[k])
+        except ValueError:
+            i = 0
+        self._eig[k] = werte[(i + 1) % len(werte)]
+        titel = ("Farbe", "Form", "Groesse")[k]
+        self._eig_btns[k].label.set_text(f"{titel}: {self._eig[k] or 'beliebig'}")
+        self.fig.canvas.draw_idle()
+
+    def _eig_anwenden(self, _e=None):
+        """Das Tripel als Kommando setzen.  Meldet ZURUECK, was gefunden wurde -- auch
+        Mehrdeutigkeit und Fehlschlag, statt sie zu verschlucken."""
+        if self._eig_fn is None:
+            return
+        txt = self._eig_fn(*self._eig)
+        self.eig_status.set_text(txt or "")
         self._refresh()
 
     def _set_obj(self, k): self.state.sel = k; self._refresh()
@@ -629,12 +767,26 @@ class CommandPanel23:
     def add_discovered(self, idx):
         """Button for a SELF-DISCOVERED object (state.OBJECTS[idx]), appended to the object row."""
         from matplotlib.widgets import Button
+        if EIG_ONLY:            # die Zeile ist ausgeblendet -- sonst tauchen bei der Geburt
+            self._refresh()     # einer Formklasse doch wieder Namensknoepfe auf ("Neue Form 7")
+            return
         lbl, nm, _m = self.state.OBJECTS[idx]
         ax = self.fig.add_axes([0.035 + 0.115 * idx, 0.150, 0.108, 0.055])
         col = self.state.OBJ_COL.get(nm, "#888888")
         b = Button(ax, lbl, color=col, hovercolor=col); b.label.set_fontsize(7.5)
         b.on_clicked(lambda _e, k=idx: self._set_obj(k)); self._obj_btns[idx] = b
         self._refresh()
+
+    def zeige_eigenschaft(self, farbe=None, form=None, groesse=None):
+        """Die drei Felder auf ein von AUSSEN gesetztes Tripel stellen (Auto-Lauf).
+
+        Ohne das standen die Felder auf "beliebig", waehrend der Lauf laengst ueber Eigenschaften
+        kommandierte -- die Anzeige log ueber den tatsaechlichen Befehl (Nutzerbefund 2026-09-05).
+        """
+        self._eig = [farbe, form, groesse]
+        for k, titel in enumerate(("Farbe", "Form", "Groesse")):
+            self._eig_btns[k].label.set_text(f"{titel}: {self._eig[k] or 'beliebig'}")
+        self.fig.canvas.draw_idle()
 
     def _toggle(self, _e):
         self.state.action = "push" if self.state.action == "grasp" else "grasp"
@@ -801,6 +953,29 @@ def run_self_learning_steering(headless=False):
             return f"Funktionstest: {type(e).__name__}: {e}"
         return None
 
+    # SCHUTZ GEGEN DEN STILLEN KALTSTART (2026-08-28): wer ACT23_STATE_PATH ausdruecklich setzt,
+    # MEINT eine bestimmte Zustandsdatei.  Existiert sie nicht, startete der Lauf bisher wortlos bei
+    # null -- dem Nutzer ist genau das passiert: die Kopie war nicht angelegt, der GUI-Lauf trainierte
+    # eine Stunde lang ein leeres Netz und fuhr erratisch, und im Banner sah alles richtig aus.
+    # Der Vorgabepfad ist NICHT betroffen (ein erster Lauf ohne Datei ist dort voellig normal); es
+    # greift nur, wenn die Variable GESETZT ist.  ACT23_FRESH=1 sagt "absichtlich bei null anfangen".
+    # PERSIST_STATE mitpruefen: laeuft der Zustand ohnehin nicht (headless-Selbsttest), waere ein
+    # Abbruch ein Fehlalarm -- dort ist "keine Datei" der Normalfall.
+    # ZWEITES LOCH, 2026-08-31: `os.path.exists` ist auch fuer ein VERZEICHNIS wahr.  Ein
+    # verungluecktes ACT23_STATE_PATH (Pfad ohne Dateinamen) kam durch den Riegel, das Laden warf
+    # PermissionError, und der Lauf trainierte still frisch -- derselbe teure Fehlstart wie zuvor,
+    # nur eine Stufe spaeter.  Jetzt wird auf DATEI geprueft, nicht auf blosse Existenz.
+    if (PERSIST_STATE and os.environ.get("ACT23_STATE_PATH") and not os.path.isfile(STATE_PATH)
+            and os.environ.get("ACT23_FRESH", "0") != "1"):
+        raise SystemExit(f"""
+  [Persistenz] ABBRUCH: ACT23_STATE_PATH zeigt auf eine Datei, die es nicht gibt:
+      {STATE_PATH}
+  Ein Lauf wuerde hier STILL bei null anfangen (untrainiertes Netz, erratische Bewegungen).
+  Gemeint war vermutlich eine Kopie des gelernten Standes:
+      Copy-Item <gelernter Stand> {STATE_PATH} -Force
+  Absichtlich bei null anfangen: ACT23_FRESH=1 setzen.
+""")
+
     _loaded = None
     if PERSIST_STATE and os.environ.get("ACT23_FRESH", "0") != "1" and os.path.exists(STATE_PATH):
         reason = None
@@ -826,6 +1001,23 @@ def run_self_learning_steering(headless=False):
     else:
         bm = BodyModelModule(rng=np.random.default_rng(5)); bm.babble(sim, 4000)
     state = CommandState23(sim)
+    # EIGENSCHAFTS-KOMMANDO ohne GUI (und zugleich die Kommandozeilen-Entsprechung der spaeteren
+    # Auswahlfelder): ACT23_EIG_BODY nennt den Koerper fuer die Buchfuehrung/Bewertung, die drei
+    # uebrigen Variablen das Tripel.  Leer = "beliebig".  Die LOKALISIERUNG laeuft rein ueber die
+    # Eigenschaften -- der Koerpername geht NICHT in die Wahrnehmung ein.
+    # ACT23_AUTO_EIG=1: die Auto-Schleife wuerfelt EIGENSCHAFTS-Tripel aus sichtbaren
+    # Detektionen statt Listeneintraege.  ACT23_EIG_ONLY=1 blendet zusaetzlich die alte
+    # Objektzeile aus, sodass die drei Waehlfelder die einzige Bedienung sind.
+    AUTO_EIG = os.environ.get("ACT23_AUTO_EIG", "0") != "0"
+    _eig_body = os.environ.get("ACT23_EIG_BODY", "")
+    if _eig_body:
+        _k = state.add_eigenschaft(_eig_body,
+                                   os.environ.get("ACT23_EIG_FARBE") or None,
+                                   os.environ.get("ACT23_EIG_FORM") or None,
+                                   os.environ.get("ACT23_EIG_GROESSE") or None)
+        state.sel = _k
+        print(f"  [Eigenschaft] '{state.OBJECTS[_k][0]}' als Kommando {_k} angelegt "
+              f"(Buchfuehrung: {_eig_body})", flush=True)
     state.policy = os.environ.get("ACT23_POLICY", "self")
     state.choreo = os.environ.get("ACT23_CHOREO", "netz")   # DEFAULT netz seit 2026-08-02 (war fsm):
     #   der Nutzer schaltet beim GUI-Start ohnehin jedes Mal von Hand auf Netz um.  ACT23_CHOREO=fsm
@@ -1101,6 +1293,35 @@ def run_self_learning_steering(headless=False):
     # OPTIONAL blob keys (old saves load fine without them -- no schema bump, the user's running
     # lifelong state survives).
     colours = (_loaded.get("colours") if _loaded is not None else None) or ColourOpenSetModule()
+    # AUSWAHL NACH EIGENSCHAFTEN verdrahten.  Die Werte kommen aus dem, was der Agent SELBST
+    # benannt hat: die Farbklassen aus dem Farb-Openset, die Formklassen aus den trainierten
+    # plus den selbst gelernten, die Groessenbaender aus der Messung.  Nichts davon ist
+    # vorgegeben -- es ist der Wortschatz, den er sich erworben hat.
+    def _eig_werte():
+        farben = sorted(getattr(colours, "classes", {}) or {})
+        formen = list(getattr(shape_clf, "all_names", lambda: [])())
+        return (farben, formen, [b[0] for b in GROESSEN_BAENDER])
+
+    def _eig_setzen(farbe, form, groesse):
+        """Tripel -> Kommando.  Gibt eine kurze Rueckmeldung fuer die Statuszeile zurueck."""
+        pos, det, tr = finde_nach_eigenschaften(sim, shape_clf, colours, farbe, form, groesse)
+        if pos is None:
+            return "kein Treffer"
+        # Buchfuehrung: welcher Koerper liegt dort?  NUR fuer Bewertung und Szenenverwaltung --
+        # die Lokalisierung selbst hat den Namen nicht gebraucht.
+        _kand = [nm for _l, nm, _m in CommandState23.OBJECTS] + list(state.SHAPE_KEY) + [NOVEL_BODY]
+        _kand = [k for k in dict.fromkeys(_kand) if k]
+        body = min(_kand, key=lambda o: float(np.linalg.norm(sim.obj_pos(o)[:2] - pos)))
+        k = state.add_eigenschaft(body, farbe, form, groesse)
+        state.sel = k
+        panel._eig_werte = _eig_werte()
+        mehr = f", {len(tr)} Treffer (mehrdeutig!)" if len(tr) > 1 else ""
+        return f"-> {body} bei {np.round(pos, 3).tolist()}{mehr}"
+
+    if panel is not None:
+        panel._eig_werte = _eig_werte()
+        panel._eig_fn = _eig_setzen
+
     colour_of_body = dict(_loaded.get("colour_of_body", {})) if _loaded is not None else {}
     # SELF-HEAL pre-0a539ac collision damage in persisted states: birth names were len+1, so a
     # name could be re-issued -> DUPLICATE entries in the list / entries without a class (index/
@@ -1769,8 +1990,8 @@ def run_self_learning_steering(headless=False):
         4: [(0.065, 0.24), (-0.065, 0.221), (0.057, 0.107), (-0.083, 0.091)],
         3: [(0.0, 0.24), (0.095, 0.09), (-0.095, 0.09)],
     }
-    SCENE_N = max(3, min(6, int(os.environ.get("ACT23_SCENE_N", "6"))))
-    SCENE_EVERY = int(os.environ.get("ACT23_SCENE_EVERY", "0"))    # 0 = nie neu wuerfeln (wie bisher)
+    SCENE_N = max(3, min(6, int(os.environ.get("ACT23_SCENE_N", "4"))))     # Vorgabe 2026-08-30
+    SCENE_EVERY = int(os.environ.get("ACT23_SCENE_EVERY", "10"))   # Vorgabe 2026-08-30 (0 = nie)
     SLOTS = SCENE_SLOTS[SCENE_N]
     PARK_XY = [0.5, -0.6]                                          # ausserhalb des Kamerabildes
     scene_slots = {}                                           # body -> slot index (finds the FREE slot)
@@ -1903,6 +2124,22 @@ def run_self_learning_steering(headless=False):
     # "Neue Form 7" kommandierbar); obj_X (Kreuz) ist der frische Ersatz.  Einfache Formen sind knapp --
     # darum die Persistenz-Sperre gleich daneben.
     NOVEL_BODY = os.environ.get("ACT23_NOVEL_BODY", "obj_T")
+    # Nachversuch der Farbbindung, s. unten.  ACT23_BIND_RETRY=0 stellt das alte Verhalten her
+    # (Bindung nur im Moment der Klassengeburt).
+    # VORGABE AUS (2026-08-31, nach dem ersten Test): der Nachversuch band auf EINER EINZIGEN
+    # Sichtung und traf daneben -- obj_X bekam 'farbe-15' (Abstand 0,239) angeheftet.  Grund: obj_X'
+    # GERENDERTE Chroma [0.414,0.456,0.130] faellt mit Abstand 0,042 in 'farbe-4', also in obj_L's
+    # Klasse; die ist vergeben, der Wachhund lehnte sie richtig ab -- und der Nachversuch griff
+    # daneben zur naechstbesten freien.  Eine FALSCHE Bindung ist schlimmer als gar keine, denn der
+    # Form-Split sucht dann nach dem falschen Farbton.
+    # BEVOR das wieder eingeschaltet wird, braucht es eine Bestaetigung ueber mehrere Blicke
+    # (wie NOVEL_CONFIRM) UND eine Hoechstdistanz.  Der eigentliche Befund dahinter: obj_X und obj_L
+    # sind im gerenderten Bild farblich fast gleich -- fuer obj_X gibt es ueber die FARBE keine
+    # Loesung, der farbfreie Split (ACT_SHAPE_SPLIT) ist der richtige Weg.
+    BIND_RETRY = os.environ.get("ACT23_BIND_RETRY", "0") != "0"
+    BIND_MAX_D = float(os.environ.get("ACT23_BIND_MAX_D", "0.12"))   # = colour_openset.TH
+    BIND_CONFIRM_N = int(os.environ.get("ACT23_BIND_CONFIRM", "3"))  # wie NOVEL_CONFIRM
+    _bind_votes = {}
 
     # BINDUNG AN DEN KOMMANDO-KNOPF: nicht bei der GEBURT, sondern nach WIEDERHOLTER Uebereinstimmung.
     # WARUM (gemessen 2026-08-15, Debug-Lauf ueber 30 Episoden mit dem Kreuz obj_X): aus demselben Kreuz
@@ -2220,7 +2457,7 @@ def run_self_learning_steering(headless=False):
     # dabei NICHT umbenannt und bekommt kein Label: der Agent muss ihn selbst entdecken.
     # ACHTUNG, ehrliche Grenze: das ist Neuheit in EINER Dimension (Proportion).  Ob sich daraus
     # ableiten laesst, wie schnell er eine voellig andere Form lernt, ist damit NICHT beantwortet.
-    NOVEL_EVERY = int(os.environ.get("ACT23_NOVEL_EVERY", "0"))     # 0 = aus (bisheriges Verhalten)
+    NOVEL_EVERY = int(os.environ.get("ACT23_NOVEL_EVERY", "6"))     # Vorgabe 2026-08-30 (s. unten)
     NOVEL_HOLD = os.environ.get("ACT23_NOVEL_HOLD", "0") == "1"     # EINE Form festhalten (s. unten)
     # WELCHE Proportionen wirklich neu sind -- GEMESSEN, nicht geraten (2026-08-14).  Der erste
     # Satz war unbrauchbar: der Deskriptor ist ROTATIONSINVARIANT konstruiert, also ist 10x32
@@ -2332,6 +2569,41 @@ def run_self_learning_steering(headless=False):
                     print(f"  [open-set] NEUE FARBE selbst benannt: '{cname}' (auf {near})", flush=True)
                 else:
                     print(f"  [open-set] NEUE FARBE selbst benannt: '{cname}'", flush=True)
+            # NACHVERSUCH DER FARBBINDUNG (2026-08-31).  BEFUND, der dazu gefuehrt hat: die Schleife
+            # oben laeuft ueber `colours.observe(...)`, und die gibt NUR NEU GEBORENE Namen zurueck.
+            # Die Bindung wird also GENAU EINMAL versucht, im Moment der Klassengeburt.  Passt es dort
+            # nicht (naechster Koerper > 40 mm entfernt oder schon vergeben), gibt es NIE einen zweiten
+            # Versuch.  Genau das ist obj_X passiert: seine Farbklasse farbe-50 existiert und passt
+            # (mu [0.353,0.521,0.126] gegen Chroma [0.371,0.543,0.086]), blieb aber ungebunden -- und
+            # ohne Bindung laeuft der Form-Split nie, weshalb obj_X nur 80,7% statt 97-98% erkannt
+            # wurde.  Ein NEUER Koerper liefe in dieselbe Falle, deshalb vor jedem Neuheits-Versuch.
+            #
+            # Bedingungen bewusst so streng wie bei der Erstbindung, plus eine zusaetzliche:
+            #   * der Koerper ist noch ungebunden               (wie oben)
+            #   * er liegt naeher als 40 mm an der Sichtung     (wie oben)
+            #   * die Klasse ist noch an KEINEN anderen Koerper gebunden -- sonst teilten sich zwei
+            #     Koerper eine Farbklasse, und der Form-Split holte beim einen den anderen.
+            if BIND_RETRY:
+                _cn, _cd = colours.classify(d["chroma"])
+                # DREI WACHHUNDE, jeder aus einem beobachteten Fehlschlag:
+                #  (1) die Klasse darf an KEINEN anderen Koerper gebunden sein -- sonst teilten sich
+                #      zwei Koerper eine Farbe und der Form-Split holte beim einen den anderen.
+                #  (2) HOECHSTDISTANZ: der erste Entwurf band obj_X an 'farbe-15' mit Abstand 0,239,
+                #      weil er die beste FREIE Klasse nahm statt der PASSENDEN.  Passt keine freie
+                #      Klasse gut, wird NICHT gebunden -- eine falsche Bindung ist schlimmer als keine.
+                #  (3) BESTAETIGUNG ueber mehrere Blicke, wie NOVEL_CONFIRM bei den Formen.  Der erste
+                #      Entwurf band auf EINER Sichtung; ein einziges schlecht belichtetes Bild reichte.
+                if (_cn is not None and _cd <= BIND_MAX_D
+                        and _cn not in set(colour_of_body.values())):
+                    _near = min(bodies, key=lambda o: float(np.linalg.norm(sim.obj_pos(o)[:2] - d["pos"])))
+                    if (float(np.linalg.norm(sim.obj_pos(_near)[:2] - np.asarray(d["pos"]))) < 0.04
+                            and _near not in colour_of_body):
+                        _k = (_near, _cn)
+                        _bind_votes[_k] = _bind_votes.get(_k, 0) + 1
+                        if _bind_votes[_k] >= BIND_CONFIRM_N:
+                            colour_of_body[_near] = _cn
+                            print(f"  [open-set] Farbe NACHGEBUNDEN: '{_cn}' (auf {_near}, Abstand "
+                                  f"{_cd:.3f}, {_bind_votes[_k]} uebereinstimmende Blicke)", flush=True)
         return born
 
     def introduce_object():
@@ -2504,6 +2776,34 @@ def run_self_learning_steering(headless=False):
 
     def perceive(cmd):
         _l, body, method = state.selected()
+        if method == "eigenschaft":
+            # LOKALISIERUNG UEBER EIGENSCHAFTEN: kein Klassenname, kein Objektname -- nur was die
+            # Kamera je Detektion liefert (Farbklasse, Formklasse, Groessenband).  Damit ist ein
+            # Objekt adressierbar, OHNE dass eine eigene Formklasse geboren wurde.
+            _f, _fo, _g = state.EIGENSCHAFT.get(body, (None, None, None))
+            # MOCAP-MARKER SICHERN UND WIEDERHERSTELLEN: perceive_all ruft _park_markers und raeumt
+            # die magenta Zielscheiben aus dem Bild.  Ohne Wiederherstellung liefert goal_fn ein
+            # GEPARKTES Ziel -- gemessen als Endabstand von 941-952 mm bei fehlerfreier
+            # Lokalisierung (0 mm).  Der shape-Zweig macht es seit jeher genauso; ich hatte es
+            # beim Bau des Eigenschafts-Zweigs uebersehen.
+            _saved = sim.d.mocap_pos.copy()
+            _pos, _det, _tr = finde_nach_eigenschaften(sim, shape_clf, colours, _f, _fo, _g)
+            sim.d.mocap_pos[:] = _saved
+            mujoco.mj_forward(sim.m, sim.d)
+            if _pos is not None:
+                if os.environ.get("ACT23_DEBUG", "0") == "1":
+                    print(f"    [dbg] {body} via EIGENSCHAFTEN ({_f}, {_fo}, {_g}): "
+                          f"{np.round(_pos, 3).tolist()} (wahr "
+                          f"{np.round(sim.obj_pos(body)[:2], 3).tolist()}), "
+                          f"{len(_tr)} Treffer", flush=True)
+                perception.publish_seed(f"eig:{body}", np.asarray(_pos, float),
+                                        np.asarray(_det["px"], float),
+                                        np.asarray(_gp(_det, body), float))
+                return _off(_gp(_det, body)), None, "grasp"
+            if os.environ.get("ACT23_DEBUG", "0") == "1":
+                print(f"    [dbg] {body}: EIGENSCHAFTEN ({_f}, {_fo}, {_g}) treffen nichts "
+                      f"-> privilegierter Rueckfall", flush=True)
+            return _off(sim.obj_pos(body)[:2]), None, "grasp"
         if method == "shape":                                  # L/U: FORM perception (shape classifier)
             saved = sim.d.mocap_pos.copy()                     # select() PARKS the mocap markers -> restore the
             det = shape_clf.select(sim, state.SHAPE_KEY[body])  #   target markers, else goal_fn returns a parked goal
@@ -2831,7 +3131,7 @@ def run_self_learning_steering(headless=False):
         just-placed object (user-observed).  So leg 1 HOLDS the episode's wrist angle while lifting; only
         leg 2, at carry height, ramps it home at a bounded rate."""
         sim.target("joint_5", act16.J5_OPEN)
-        HOME_Z_MIN = float(os.environ.get("ACT23_HOME_Z_MIN", "0.055"))   # Hoehen-Wache in Bein 2
+        HOME_Z_MIN = float(os.environ.get("ACT23_HOME_Z_MIN", "0"))       # Vorgabe 2026-08-30; Hoehen-Wache in Bein 2
         w = float(sim.d.qpos[sim.jqadr["joint_4"]])            # the wrist angle the episode ended with
         HOME_W = HOME["joint_4"]
         for k in range(60):                                    # leg 1: straight up, wrist HELD
@@ -3693,7 +3993,41 @@ def run_self_learning_steering(headless=False):
         # ACT23_IMIT_BAR (25mm).  ACT23_IMIT_GRADED=0 restores the flat imit_tol gate.
         _gimit = os.environ.get("ACT23_IMIT_GRADED", "1") != "0"
         imit_bar = float(os.environ.get("ACT23_IMIT_BAR", "0.025")) if _gimit else imit_tol
-        imit_ok = delivered and s_d is not None and s_d < imit_bar
+        # KNAPPE FEHLSCHLAEGE MIT AUFNEHMEN (2026-09-01).  BEFUND: `delivered` ist ein BINAERES Tor
+        # vor einer bereits GRADUIERTEN Guete.  quality(d)=exp(-(d/0.025)^2) ist glatt --
+        # 24mm -> 0,398, 26mm -> 0,339 -- aber die Behandlung war eine Klippe: 0,398 gegen NULL.
+        # Die 25 mm sind die LIEFERTOLERANZ, also eine Konvention dafuer, was als geliefert ZAEHLT;
+        # sie hatte keinen Grund, auch zu bestimmen, woraus GELERNT wird.  Gemessen an einem
+        # 1053-Ep-Lauf: 198 Episoden ("daneben platziert") fielen so heraus, obwohl sie GETRAGEN
+        # hatten -- Tragedruck 4,61 N gegen 4,86 N bei den Lieferungen, Freigabehoehe und
+        # Oeffnungsabstand identisch.  Sie sind der Schwanz derselben Verteilung, kein eigener Fall.
+        #
+        # DREI WACHEN, damit daraus kein Freibrief wird:
+        #  * nur bei GRADUIERTER Imitation (_gimit).  Ohne sie ist das Gewicht flach 1.0 -- einen
+        #    Fehlschlag mit vollem Gewicht zu imitieren waere offensichtlich falsch.
+        #  * eigene, weitere Schranke ACT23_IMIT_FAIL_BAR.  Ueber 45 mm aendert sie ohnehin nichts
+        #    mehr (gemessen: Gewichtssumme +31,4 bei 45 mm gegen +31,8 ohne jede Schranke).
+        #  * `lifted and not slipped` bleiben unveraendert stehen -- nur wirklich GETRAGENE
+        #    Episoden kommen ueberhaupt in Frage.
+        # ERWARTETE GROESSE, vorab: +8,5% Gewicht im Selbst-Puffer.  Die Gaussglocke daempft die
+        # 198 von selbst; sie sind 19% der EPISODEN, aber nur 8,5% des GEWICHTS.  ACT23_IMIT_FAIL=0
+        # stellt das alte Verhalten her.
+        # VORGABE AUS (2026-09-01, nach dem A/B).  GEMESSEN, je 250 Ep, identischer Startzustand:
+        # Mechanismus feuert (37x "knapp daneben" gegen 0), aber KEIN Endpunkt zeigt Nutzen --
+        # Endabstand 18,0 -> 17,0 mm (p=0,57), Lieferquote 56,8 -> 54,8% (p=0,72) -- und die vorab
+        # benannte REGRESSIONSWACHE ging in die falsche Richtung: Griff-Fehlschlaege 26,8 -> 30,0%
+        # (p=0,49, bei dieser Stichprobe nicht aufloesbar, aber die falsche Richtung).
+        # URSACHE, und sie widerlegt meine eigene Vorabschaetzung von "+8,5% Gewicht": der
+        # Selbst-Puffer ist RANDVOLL (12000, jeder Schluessel bei exakt IMIT_CAP/8), und
+        # `runtime_policy.imitate` verdraengt "the OLDEST sample of the FULLEST key" -- ALTERSBASIERT,
+        # die Guete wird NICHT gefragt.  Es wird also nichts hinzugefuegt, sondern ERSETZT: 21% mehr
+        # Eintraege (129 -> 156) heissen 21% mehr Verdraengung guter Demonstrationen durch schwaechere.
+        # VORAUSSETZUNG fuer diesen Weg UND fuer die phasenweise Gutschrift: guetebewusste
+        # Verdraengung.  Solange sie fehlt, ist jedes Hinzufuegen ein Nullsummenspiel.
+        _ifail = _gimit and os.environ.get("ACT23_IMIT_FAIL", "0") != "0"
+        if _ifail:
+            imit_bar = float(os.environ.get("ACT23_IMIT_FAIL_BAR", "0.045"))
+        imit_ok = (s_d is not None and s_d < imit_bar) and (delivered or _ifail)
         imitated = False
         if (use_net and pol_trace and lifted and imit_ok and not slipped
                 and not EXV_FREEZE
@@ -3709,8 +4043,10 @@ def run_self_learning_steering(headless=False):
             # der Zaehler immer 0, die Zeile erscheint dann gar nicht.
             _vw = (f"; {_imit_verworfen[0]} gehaltene Takte NICHT gelernt (Frische-Wache)"
                    if _imit_verworfen[0] else "")
-            print(f"    [Selbst-Imitation] Lieferung {s_d * 1000:.0f}mm (Gewicht {_q:.2f}) -> +{added} "
-                  f"Demo-Schritte ({runtime.n_imit()} im Selbst-Puffer: {mix})"
+            _wort = "Lieferung" if delivered else "knapp daneben"
+            print(f"    [Selbst-Imitation] {_wort} {s_d * 1000:.0f}mm (Gewicht {_q:.2f}) -> +{added} "
+                  f"Demo-Schritte ({runtime.n_imit()} im Selbst-Puffer, mittlere Guete "
+                  f"{runtime.imit_qual():.3f}: {mix})"
                   f"{'; Teacher-Zeilen verworfen (eigener Erfolg zählt)' if confident else ''}{_vw}",
                   flush=True)
         elif use_net and pol_trace and lifted and delivered:
@@ -4037,6 +4373,55 @@ def run_self_learning_steering(headless=False):
                             sim.d.qvel[sim.m.jnt_dofadr[sim._jid(_j)]] = 0.0
                     mujoco.mj_forward(sim.m, sim.d); sim.step(40)
                     world.rng.bit_generator.state = _rng0
+                if AUTO_EIG:
+                    # ADRESSIERUNG UMSTELLEN, NICHT DIE AUSWAHL.  Erster Versuch war ein Eingriff in
+                    # die Auswahl -- der lief nie, weil ACT23_AUTO_CURIOUS standardmaessig AN ist und
+                    # die Neugier vorher entscheidet (gemessen: 8 Neugier-Zeilen, 0 Eigenschafts-
+                    # Episoden).  Richtig ist: die Neugier bestimmt weiterhin, WELCHES Objekt geuebt
+                    # wird; nur BENANNT wird es ueber seine Eigenschaften statt ueber den Namen.
+                    # Das Tripel kommt aus der Detektion, die auf dem gewaehlten Koerper sitzt --
+                    # es beschreibt also garantiert etwas Sichtbares.  Welche der drei Achsen genannt
+                    # werden, wuerfelt mit (mindestens eine), damit auch UNVOLLSTAENDIGE Angaben
+                    # geuebt werden -- "das duenne Ding" statt "das duenne violette Kreuz".
+                    _b = state.selected()[1]
+                    _sm = sim.d.mocap_pos.copy()
+                    _ds = [d for d in shape_clf.perceive_all(sim)
+                           if d.get("pos") is not None and float(d.get("area", 0)) >= 200.0]
+                    sim.d.mocap_pos[:] = _sm; mujoco.mj_forward(sim.m, sim.d)
+                    _p = sim.obj_pos(_b)[:2]
+                    _nah = min(_ds, key=lambda d: float(np.linalg.norm(
+                        np.asarray(d["pos"], float) - _p)), default=None)
+                    if _nah is not None and float(np.linalg.norm(
+                            np.asarray(_nah["pos"], float) - _p)) < 0.04:
+                        _f = colours.classify(_nah["chroma"])[0] if _nah.get("chroma") is not None else None
+                        _fo, _g = _nah.get("shape"), groessen_band(_nah.get("dicke"))
+                        # EINDEUTIGKEIT ERZWINGEN.  Gemessen: eine Angabe wie "mittel" allein
+                        # passt auf DREI Objekte (alle heutigen Koerper liegen in diesem Band), und
+                        # der Aufloeser nimmt dann das flaechengroesste -- in Auto 0 das falsche,
+                        # 152 mm daneben.  Ein Kommando, das sein Objekt nicht identifiziert, ist
+                        # keine Uebung, sondern Rauschen.  Also: Achsen nachlegen, bis genau EIN
+                        # Treffer bleibt.  Die unvollstaendigen Angaben bleiben erhalten, wo sie
+                        # AUSREICHEN -- geuebt wird die kuerzeste Adresse, die trifft.
+                        _mk = [bool(crng.integers(2)) for _ in range(3)]
+                        if not any(_mk):
+                            _mk[int(crng.integers(3))] = True
+                        _werte = (_f, _fo, _g)
+                        _sv = sim.d.mocap_pos.copy()   # die Suche PARKT die Marker (_park_markers);
+                        for _versuch in range(4):      # ohne Rueckgabe liefert goal_fn ein geparktes
+                            _tri = tuple(w if m else None for w, m in zip(_werte, _mk))
+                            _, _, _tr2 = finde_nach_eigenschaften(sim, shape_clf, colours, *_tri)
+                            if len(_tr2) <= 1:
+                                break
+                            _fehlt = [i for i in range(3) if not _mk[i] and _werte[i] is not None]
+                            if not _fehlt:
+                                break                      # alle Achsen genannt und trotzdem mehrdeutig
+                            _mk[_fehlt[int(crng.integers(len(_fehlt)))]] = True
+                        sim.d.mocap_pos[:] = _sv       # Ziel -- gemessen: sonst 627-968 mm Abstand
+                        mujoco.mj_forward(sim.m, sim.d)
+                        state.sel = state.add_eigenschaft(_b, *_tri)
+                        if panel is not None:
+                            panel._eig_werte = _eig_werte()   # waehrend des Laufs geborene Klassen
+                            panel.zeige_eigenschaft(*_tri)    # die Felder sagen, was kommandiert ist
                 print(f"  [Auto {ep}]{f' W{_rep}' if _reps > 1 else ''} {state.label()} ...", flush=True)
                 try:
                     ok, err = run_one()
@@ -4287,13 +4672,23 @@ class _Tee:
 
 
 def _start_session_log():
-    """Tee stdout+stderr into log/pc_act23_<timestamp>.txt at the repo root (ACT23_LOG=0 off)."""
+    """Tee stdout+stderr into log/pc_act23_<timestamp>_<pid>.txt at the repo root.
+
+    ACT23_LOG=0 schaltet das Mitschreiben ab, ACT23_LOG_DIR lenkt es woanders hin -- beides fuer
+    MESSLAEUFE gedacht, damit sie die run_history-Anzeige des Nutzers nicht zumuellen.
+
+    DIE PID GEHOERT IN DEN NAMEN (2026-08-29): der Name bestand nur aus dem Zeitstempel auf die
+    Sekunde genau.  Zwei parallel gestartete A/B-Arme bekamen denselben Namen und schrieben
+    VERSCHRAENKT in dieselbe Datei -- zwei Laeufe in einem Log, in run_history nicht trennbar.
+    """
     if os.environ.get("ACT23_LOG", "1") != "1":
         return
     import datetime
-    d = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "log"))
+    d = os.environ.get("ACT23_LOG_DIR") or os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "log"))
     os.makedirs(d, exist_ok=True)
-    path = os.path.join(d, f"pc_act23_{datetime.datetime.now():%Y-%m-%d_%H-%M-%S}.txt")
+    path = os.path.join(
+        d, f"pc_act23_{datetime.datetime.now():%Y-%m-%d_%H-%M-%S}_{os.getpid()}.txt")
     fh = open(path, "a", encoding="utf-8", errors="replace")
     sys.stdout = _Tee(sys.stdout, fh)
     sys.stderr = _Tee(sys.stderr, fh)
