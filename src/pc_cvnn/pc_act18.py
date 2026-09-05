@@ -115,7 +115,7 @@ FOVEA_B = float(os.environ.get("ACT_FOVEA_B", "1.0"))         # peripheral expan
 # NET-STEERABLE ZOOM: the fovea can widen its sampling (up to 2x the AREA = sqrt(2)x linear) to get an
 # OVERVIEW when the net is uncertain where the commanded object is, then zoom back in for detail.  The
 # zoom is driven by the net's own localization CONFIDENCE (like the gaze is driven by fovea_gradient).
-ZOOM = os.environ.get("ACT_FOVEA_ZOOM", "0") == "1"            # WIEDER AUS seit 2026-08-11.
+ZOOM = os.environ.get("ACT_FOVEA_ZOOM", "1") == "1"            # WIEDER AN als Vorgabe 2026-08-30.
 #   Ich hatte die Vorgabe am 2026-08-03 auf 1 gestellt -- mit dem Argument, das alte A/B habe
 #   "enable for a LARGER workspace" vermerkt und der Nutzer fahre einen groesseren Bereich.  Das
 #   war eine Ableitung aus einem Kommentar, keine Messung.  Jetzt GEMESSEN, sauberes A/B (beide
