@@ -628,6 +628,8 @@ class CommandPanel23:
         self._eig = [None, None, None]          # (Farbklasse, Formklasse, Groessenband)
         self._eig_werte = ([], [], [])
         self._eig_fn = None
+        self._farb_rgb = None                   # Name -> RGB des selbst gelernten Prototyps
+        self._eig_da = [None, None, None]       # was die Detektion HERGAEBE, auch wenn ungenannt
         self._eig_btns = []
         for i, titel in enumerate(("Farbe", "Form", "Groesse")):
             ax = self.fig.add_axes([0.035 + 0.152 * i, 0.108, 0.145, 0.036])
@@ -689,6 +691,38 @@ class CommandPanel23:
         self.fig.canvas.mpl_connect("close_event", lambda _e: setattr(self.state, "exit", True))
         self._refresh()
 
+    def _eig_beschriften(self, k):
+        """Ein Feld neu beschriften und einfaerben.
+
+        DREI Zustaende, die der Nutzer unterscheiden koennen muss (Befund 2026-09-05: "Form bleibt
+        auf 'beliebig' stehen.  Dort sollte wahrscheinlich auch etwas angezeigt werden."):
+          farbe-5     genannt -- Teil der Adresse
+          (farbe-5)   VORHANDEN, aber bewusst nicht genannt (unvollstaendige Adresse)
+          beliebig    die Detektion gibt auf dieser Achse nichts her
+        Die Farbe wird zusaetzlich als FLAECHE gezeigt: "farbe-5" ist nicht lesbar (Nutzerbefund
+        "Mit 'Farbe 5' kann ich nicht viel anfangen").  Der Farbwert ist der selbst gelernte
+        Prototyp der Klasse (classes[name]["mu"]) -- KEIN von uns vergebener Name wie "rot", denn
+        genau das Etikettieren von aussen sollte diese Linie loswerden.  Die Nummer bleibt am
+        Knopf, damit Knopf und Log dieselbe Sprache sprechen.
+        """
+        titel = ("Farbe", "Form", "Groesse")[k]
+        wert, da = self._eig[k], self._eig_da[k]
+        txt = str(wert) if wert is not None else (f"({da})" if da is not None else "beliebig")
+        b = self._eig_btns[k]
+        b.label.set_text(f"{titel}: {txt}")
+        rgb = self._farb_rgb(wert or da) if (k == 0 and self._farb_rgb is not None) else None
+        if rgb is None:
+            b.color = "#2b3b4a"; b.hovercolor = "#3a5060"; b.label.set_color("w")
+        else:
+            b.color = rgb; b.hovercolor = rgb
+            # Helligkeit entscheidet die Schriftfarbe, sonst verschwindet die Beschriftung auf
+            # hellem Gelb oder auf dunklem Blau.
+            hell = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+            b.label.set_color("#101014" if hell > 0.55 else "w")
+        b.ax.set_facecolor(b.color)
+        # ungenannt = blasser, damit "(farbe-5)" auch ohne Klammern lesbar vom Genannten abfaellt
+        b.label.set_alpha(0.55 if (wert is None and da is not None) else 1.0)
+
     def _eig_weiter(self, k):
         """Ein Feld einen Wert weiterschalten.  None (= 'beliebig') ist immer der erste Eintrag."""
         werte = [None] + list(self._eig_werte[k])
@@ -697,8 +731,7 @@ class CommandPanel23:
         except ValueError:
             i = 0
         self._eig[k] = werte[(i + 1) % len(werte)]
-        titel = ("Farbe", "Form", "Groesse")[k]
-        self._eig_btns[k].label.set_text(f"{titel}: {self._eig[k] or 'beliebig'}")
+        self._eig_beschriften(k)
         self.fig.canvas.draw_idle()
 
     def _eig_anwenden(self, _e=None):
@@ -777,15 +810,16 @@ class CommandPanel23:
         b.on_clicked(lambda _e, k=idx: self._set_obj(k)); self._obj_btns[idx] = b
         self._refresh()
 
-    def zeige_eigenschaft(self, farbe=None, form=None, groesse=None):
+    def zeige_eigenschaft(self, farbe=None, form=None, groesse=None, verfuegbar=None):
         """Die drei Felder auf ein von AUSSEN gesetztes Tripel stellen (Auto-Lauf).
 
         Ohne das standen die Felder auf "beliebig", waehrend der Lauf laengst ueber Eigenschaften
         kommandierte -- die Anzeige log ueber den tatsaechlichen Befehl (Nutzerbefund 2026-09-05).
         """
         self._eig = [farbe, form, groesse]
-        for k, titel in enumerate(("Farbe", "Form", "Groesse")):
-            self._eig_btns[k].label.set_text(f"{titel}: {self._eig[k] or 'beliebig'}")
+        self._eig_da = list(verfuegbar) if verfuegbar is not None else [None, None, None]
+        for k in range(3):
+            self._eig_beschriften(k)
         self.fig.canvas.draw_idle()
 
     def _toggle(self, _e):
@@ -1318,9 +1352,27 @@ def run_self_learning_steering(headless=False):
         mehr = f", {len(tr)} Treffer (mehrdeutig!)" if len(tr) > 1 else ""
         return f"-> {body} bei {np.round(pos, 3).tolist()}{mehr}"
 
+    def _farb_rgb(name):
+        """Der selbst gelernte Prototyp einer Farbklasse als darstellbares RGB.
+
+        classes[name]["mu"] ist eine HELLIGKEITSNORMIERTE Chroma (die drei Anteile summieren sich
+        zu ~1), also als Bildschirmfarbe zu dunkel.  Auf das Maximum normiert bleibt der Farbton
+        unveraendert und wird sichtbar.  Kein Farbwert wird erfunden -- es ist der Mittelwert
+        ueber alle Sichtungen, die der Agent dieser Klasse zugeordnet hat.
+        """
+        cl = (getattr(colours, "classes", {}) or {}).get(name)
+        if cl is None:
+            return None
+        mu = np.clip(np.asarray(cl["mu"], float), 0.0, None)
+        m = float(mu.max())
+        return tuple((mu / m).tolist()) if m > 1e-6 else None
+
     if panel is not None:
         panel._eig_werte = _eig_werte()
         panel._eig_fn = _eig_setzen
+        panel._farb_rgb = _farb_rgb
+        for _k in range(3):
+            panel._eig_beschriften(_k)
 
     def _auto_eig_umschreiben():
         """Die ADRESSIERUNG des gewaehlten Koerpers in ein Eigenschafts-Tripel umschreiben.
@@ -1360,10 +1412,20 @@ def run_self_learning_steering(headless=False):
         # das sein Objekt nicht identifiziert, ist keine Uebung, sondern Rauschen.  Also Achsen
         # nachlegen, bis genau EIN Treffer bleibt; unvollstaendige Angaben bleiben dort, wo sie
         # AUSREICHEN -- geuebt wird die kuerzeste Adresse, die trifft.
-        _mk = [bool(crng.integers(2)) for _ in range(3)]
-        if not any(_mk):
-            _mk[int(crng.integers(3))] = True
+        # DIE GROESSE IST EIN ZUSATZ, KEINE ADRESSE.  Nutzervorgabe 2026-09-05: "Reine
+        # Groessen-Adressen brauchen wir, auch nur zur Uebung, nicht.  Wenn ich etwas von aussen
+        # vorgebe, wuerde ich immer sagen 'der grosse Wuerfel' oder 'der gelbe Wuerfel' oder 'der
+        # Wuerfel'.  Aber nie 'das groesste Objekt'."  Also muss mindestens eine der beiden
+        # VERFOLGBAREN Achsen (Farbe, Form) genannt sein -- das sind zugleich genau die, denen die
+        # Fovea folgen kann (s. eig_servo).  Ist keine von beiden vorhanden, wird gar nicht
+        # umgeschrieben: dann bleibt das Kommando beim Namen, statt eine blinde Adresse zu bauen.
         _werte = (_f, _fo, _g)
+        _verfolgbar = [i for i in (0, 1) if _werte[i] is not None]
+        if not _verfolgbar:
+            return None
+        _mk = [bool(crng.integers(2)) for _ in range(3)]
+        if not any(_mk[i] for i in _verfolgbar):
+            _mk[_verfolgbar[int(crng.integers(len(_verfolgbar)))]] = True
         _sv = sim.d.mocap_pos.copy()      # die Suche PARKT die Marker (_park_markers); ohne
         for _versuch in range(4):         # Rueckgabe liefert goal_fn ein GEPARKTES Ziel
             _tri = tuple(w if m else None for w, m in zip(_werte, _mk))
@@ -1379,7 +1441,7 @@ def run_self_learning_steering(headless=False):
         state.sel = state.add_eigenschaft(_b, *_tri)
         if panel is not None:
             panel._eig_werte = _eig_werte()    # waehrend des Laufs geborene Klassen nachziehen
-            panel.zeige_eigenschaft(*_tri)     # die Felder sagen, was kommandiert ist
+            panel.zeige_eigenschaft(*_tri, verfuegbar=_werte)   # genannt UND was verschwiegen wurde
         return _tri
 
     colour_of_body = dict(_loaded.get("colour_of_body", {})) if _loaded is not None else {}
@@ -3514,7 +3576,32 @@ def run_self_learning_steering(headless=False):
         # SAME tracker keyed on the class (vc.track only as fallback) -- the user's fovea goal: the fovea
         # supports approach+grasp instead of sitting on whatever colour was last commanded.  Only the
         # long object stays servo=False (no class to key on when this comment was written; kept as-is).
-        if method == "shape":
+        # EIGENSCHAFTS-KOMMANDO: die Fovea bekommt DENSELBEN Schluessel, den das Kommando nennt.
+        # REGRESSION, die das noetig gemacht hat (Nutzerbefund 2026-09-05: "Die Fovea fokussiert
+        # nun irgend etwas und der Arm greift irgend etwas.  Das passt nicht mehr zusammen und war
+        # vorher perfekt."):  method="eigenschaft" fiel durch ALLE Zweige hier in den else-Fall --
+        # generischer Tracker, vc._fsv=None -- und zusaetzlich stand unten servo=False.  Der Arm
+        # fuhr also auf die Eigenschafts-Lokalisierung (die stimmt, 0-8 mm), die Fovea folgte
+        # einem davon unabhaengigen Blob: ZWEI Glauben in einer Episode.  Nennt das Tripel eine
+        # Formklasse, ist das exakt der shape-Pfad; nennt es eine Farbklasse, exakt der
+        # Wuerfel-Pfad.  Nichts Neues -- nur nicht mehr daran vorbei.
+        eig_servo = False
+        if method == "eigenschaft":
+            _ef, _efo, _eg = state.EIGENSCHAFT.get(body, (None, None, None))
+            if _efo is not None:
+                track_fn = make_shape_track(body, key=_efo)     # Formklasse -> Form-Tracker
+                eig_servo = True
+            elif _ef is not None:
+                track_fn = make_shape_track(body, ckey=_ef)     # Farbklasse -> farbgefuehrter Tracker
+                eig_servo = True
+            else:
+                # NUR die Groesse genannt: es gibt keinen Schluessel, dem ein Tracker folgen kann.
+                # Dann EHRLICH nur Anzeige und servo=False, statt einen Regelkreis vorzutaeuschen.
+                # Die Wuerfelei erzeugt solche Adressen nicht mehr (s. _auto_eig_umschreiben:
+                # Nutzervorgabe "reine Groessen-Adressen brauchen wir nicht"), von Hand sind sie
+                # weiterhin moeglich.
+                track_fn = make_shape_track(body)
+        elif method == "shape":
             track_fn = make_shape_track(body, key=state.SHAPE_KEY[body])
         elif method == "long":
             track_fn = make_shape_track(body)                  # display-only blob follower (no class to key on)
@@ -3660,7 +3747,8 @@ def run_self_learning_steering(headless=False):
                            post_goal_fn=_ziel_ueber_ports,
                            #   (seval) needs the episode's goal latent even in "Ziel: Koord" mode
                            place_servo_fn=_plan_ueber_ports,
-                           servo=(method in ("color", "shape")), rescatter=False, episode_end_fn=ep_end,
+                           servo=(method in ("color", "shape") or eig_servo),
+                           rescatter=False, episode_end_fn=ep_end,
                            lifelong=True, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
                            arm_reset=False)
         _T["nach_ausfuehrung"] = _time.perf_counter()
