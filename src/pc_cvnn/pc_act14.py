@@ -20,6 +20,8 @@ Run:  python pc_act14.py                 (live overview-camera window + scripted
 
 from __future__ import annotations
 
+import io
+import math
 import os
 import sys
 
@@ -27,6 +29,122 @@ import numpy as np
 import mujoco
 
 ASSET = os.path.join(os.path.dirname(__file__), "assets", "bracket_arm.xml")
+
+# ---------------------------------------------------------------------------------------------
+# UMBAUBARE FINGERGEOMETRIE (Nutzerwunsch 2026-08-28).  Der Greifer ist HARDWARE, kein
+# Erkennungsalgorithmus -- diese Knoepfe aendern die WELT, nicht das Netz.
+#
+# DER BEFUND, DER DAZU GEFUEHRT HAT: das Scharnier sitzt am Fingerfuss und der Schaft ist GERADE,
+# also ist die Klaue ein nach unten offenes V, dessen Halboeffnung exakt dem Gelenkwinkel j5
+# entspricht.  Bei j5=0.18 (Wuerfelgriff) betraegt die lichte Weite 14.7 mm bei z=60 und 24.8 mm
+# bei z=88 -- der 24-mm-Wuerfel passt NUR ganz vorn hinein und beruehrt jede Backe an einer
+# einzigen KANTE statt auf einer Flaeche.  Dazu passt [[act23-langlauf-1109]]: in 60-87% aller
+# Fehlschlaege hat die Klaue nie etwas getragen.
+#
+# ACT14_FINGER_KNICK   Grad, die die letzten Millimeter des Schafts nach INNEN abknicken.
+#                      Bezugsgroesse ist NICHT der 57.3-Grad-Nagel, sondern der Arbeitswinkel des
+#                      Gelenks von ~10 Grad -- 5 Grad halbieren den V-Splay auf dem Endstueck.
+# ACT14_FINGER_KNICK_Z Abstand des Knicks vom Schaftende in mm (Vorgabe 15).
+# ACT14_FINGER_NAGEL   Grad, um die der Nagel ZURUECKGENOMMEN wird.  Leer = gleich dem Knick,
+#                      dann behaelt der Nagel seine absolute Neigung von 57.3 Grad (sonst wandert
+#                      er mit dem Endstueck auf 57.3+Knick).
+#
+# IST DIE VARIABLE NICHT GESETZT, wird die XML unveraendert von der Platte geladen -- der alte
+# Greifer ist dann bitgleich der alte Greifer.  IST SIE GESETZT (auch auf 0), wird der Schaft in
+# ZWEI Klotze geteilt.  Der Wert 0 ist deshalb der KONTROLLARM, der die Teilung allein misst:
+# zwei buendige Klotze erzeugen andere Kontaktpunkte als einer, und dieser Effekt darf nicht dem
+# Knick zugeschrieben werden.
+# VORGABE seit 2026-08-30 (Nutzerentscheidung: der gelernte Zustand act23_state.pkl wurde ueber
+# 1053 Episoden MIT diesem Greifer trainiert, die Vorgabe soll dazu passen).  Nagel 20 Grad =
+# 57,2958 - 37,2958.  ACHTUNG, ehrlich dazugesagt: das saubere act23-A/B vom 2026-08-29 fand
+# KEINEN Nutzen (-2,0 Punkte, p=0,76) -- die Vorgabe steht fuer die Uebereinstimmung mit dem
+# Zustand, NICHT weil sie messbar besser waere.  Sie entfernt den Greifer ausserdem von der
+# ECHTEN Hardware, der die XML nachgebildet ist.  Zurueck zum Original: ACT14_FINGER_KNICK
+# hier wieder auf None setzen (eine Zeile).  Siehe [[act23-nagelneigung]].
+_KNICK_ENV = os.environ.get("ACT14_FINGER_KNICK", "0")
+
+
+def _finger_xml(knick_grad, knick_z_mm, nagel_grad):
+    """Baut die beiden Finger-Bloecke.  Rahmen: Fingerursprung = Scharnier, +z entlang Schaft,
+    +x nach INNEN fuer den linken Finger (der rechte ist daran gespiegelt)."""
+    L, LB = 0.060, knick_z_mm / 1000.0                   # Schaftlaenge, Laenge des Endstuecks
+    ZB = L - LB                                          # Hoehe des Knicks ueber dem Scharnier
+    th = math.radians(knick_grad)
+    c, s_ = math.cos(th), math.sin(th)
+    # Endstueck: Mitte auf der gedrehten Achse ab dem Knickpunkt
+    mx, mz = s_ * LB / 2.0, ZB + c * LB / 2.0
+    # Nagel: sitzt starr auf dem Endstueck, also mitgedreht; Eigenwinkel um `nagel_grad` zurueck
+    nx = s_ * LB + c * 0.009
+    nz = ZB + c * LB - s_ * 0.009
+    ne = 1.0 + th - math.radians(nagel_grad)
+
+    def einer(seite, sp):                                # sp = +1 links, -1 rechts
+        gelenk = ('<joint name="joint_5" type="hinge" axis="0 -1 0" range="0 3.1416"/>' if sp > 0
+                  else '<joint name="joint_5_mimic" type="hinge" axis="0 -1 0" range="-3.1416 0"/>')
+        return f'''                <body name="finger_{seite}" pos="{-0.01 * sp:g} 0.01 0.03">
+                  {gelenk}
+                  <geom name="finger_{seite}" size="0.008 0.005 {ZB / 2:.6f}" pos="0 0 {ZB / 2:.6f}" material="lightgray"/>
+                  <geom name="finger_{seite}_tip" size="0.008 0.005 {LB / 2:.6f}" pos="{sp * mx:.6f} 0 {mz:.6f}" euler="0 {sp * th:.6f} 0" material="lightgray"/>
+                  <geom name="claw_{seite}" type="box" size="0.004 0.006 0.006" pos="{sp * nx:.6f} 0 {nz:.6f}"
+                        euler="0 {sp * ne:.6f} 0" material="lightgray"/>
+                </body>'''
+
+    return einer("left", +1) + chr(10) + einer("right", -1)
+
+
+def _y_arm_xml(breite_mm):
+    """obj_Y mit anderer ARMBREITE.  Nur die Breite aendert sich -- Armlaenge, Winkel (120 Grad),
+    Hoehe und Farbe bleiben, damit die Messung EINE Variable isoliert.
+
+    WOZU (2026-09-02): das Y wurde beim ALLERERSTEN Griffversuch geliefert und blieb flach bei
+    60-73%, waehrend die etablierten Formen im selben Lauf bei 30-48% lagen -- die Greiffaehigkeit
+    hat also SOFORT uebertragen, ohne Lernkurve.  Aber das Y besteht aus denselben 14-mm-Balken wie
+    L/U/T/X.  Uebertragen hat sich damit "eine neue ANORDNUNG vertrauter Teile".  Ob es auch ueber
+    die BAUTEILE traegt, ist offen -- und eine aeltere OOD-Messung sagte Nein (Engpass: die auf
+    Wuerfel getrimmte Greifgeometrie).  Diese Variante prueft genau das, OHNE eine neue Form zu
+    verbrauchen."""
+    import math as _m
+    hb = breite_mm / 2000.0
+    teile = []
+    for w in (90, 210, 330):
+        r = _m.radians(w)
+        px, py = 0.013 * _m.cos(r), 0.013 * _m.sin(r)
+        teile.append(f'      <geom type="box" pos="{px:.5f} {py:.5f} 0" size="{hb:.5f} 0.013 0.012" '
+                     f'euler="0 0 {_m.radians(w - 90):.5f}" rgba="0.85 0.1 0.45 1" '
+                     f'density="700" friction="1.4 0.05 0.001"/>')
+    kopf = '    <body name="obj_Y" pos="0.66 -0.6 0.012">'
+    return (kopf + chr(10) + "      <freejoint/>" + chr(10)
+            + chr(10).join(teile) + chr(10) + "    </body>")
+
+
+def _modell_laden():
+    """Vorgabe: XML unveraendert von der Platte.  Nur wenn ACT14_FINGER_KNICK oder ACT23_Y_ARM_W
+    gesetzt ist, wird die betreffende Geometrie ersetzt."""
+    _yw = os.environ.get("ACT23_Y_ARM_W", "")
+    if _KNICK_ENV is None and not _yw:
+        return mujoco.MjModel.from_xml_path(ASSET)
+    # KOMMA ALS DEZIMALTRENNER ZULASSEN: `$env:X=37.2958` weist in PowerShell eine ZAHL zu, und
+    # beim Umwandeln in die Umgebungsvariable greift die Locale -- unter deutschem Windows kommt
+    # "37,2958" an und float() bricht ab.  Das ist dem Nutzer 2026-08-28 genau so passiert.
+    def _zahl(t, vorgabe):
+        t = str(t).strip().replace(",", ".")
+        return vorgabe if t == "" else float(t)
+
+    knick = _zahl(_KNICK_ENV, 0.0)
+    knick_z = _zahl(os.environ.get("ACT14_FINGER_KNICK_Z", ""), 15.0)   # Vorgabe 15 mm
+    nagel = _zahl(os.environ.get("ACT14_FINGER_NAGEL", ""), 37.2958)  # Vorgabe: Nagel 20 Grad
+    with io.open(ASSET, encoding="utf-8") as f:
+        xml = f.read()
+    if _KNICK_ENV is not None:
+        a = xml.index('                <body name="finger_left"')
+        b = xml.index("</body>", xml.index('name="claw_right"')) + len("</body>")
+        xml = xml[:a] + _finger_xml(knick, knick_z, nagel) + xml[b:]
+    if _yw:
+        a = xml.index('    <body name="obj_Y"')
+        b = xml.index("</body>", a) + len("</body>")
+        xml = xml[:a] + _y_arm_xml(_zahl(_yw, 14.0)) + xml[b:]
+    return mujoco.MjModel.from_xml_string(xml)
+
 ARM_JOINTS = ["joint_0", "joint_1", "joint_2", "joint_3", "joint_4"]   # 5 DOF (gripper = joint_5)
 HOME = {"joint_0": 1.5708, "joint_1": 0.0, "joint_2": 0.0,
         "joint_3": 3.14, "joint_4": 1.5708, "joint_5": 0.76}
@@ -59,7 +177,7 @@ class BracketArmSim:
     """Thin wrapper around the MuJoCo model of the real arm."""
 
     def __init__(self, render_wh=(360, 360)):
-        self.m = mujoco.MjModel.from_xml_path(ASSET)
+        self.m = _modell_laden()
         self.d = mujoco.MjData(self.m)
         self._renderer = mujoco.Renderer(self.m, height=render_wh[0], width=render_wh[1])
         self.grasp_sid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_SITE, "grasp")
@@ -203,11 +321,16 @@ class BracketArmSim:
             # Streifen auf der GREIFFLAECHE misst, was der Finger gegen die UMWELT drueckt, nicht was
             # der eigene Greifer an seinen Kanten tut.
             own = set()
-            for nm in ("claw_left", "claw_right", "finger_left", "finger_right", "gripper_base"):
+            # bei umgebauter Fingergeometrie (ACT14_FINGER_KNICK) gehoert das abgeknickte Endstueck
+            # ZUR GREIFFLAECHE -- es muss also messen UND als Eigenkontakt ausgeschlossen sein.
+            tip = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_GEOM, f"finger_{finger}_tip")
+            for nm in ("claw_left", "claw_right", "finger_left", "finger_right",
+                       "finger_left_tip", "finger_right_tip", "gripper_base"):
                 gi = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_GEOM, nm)
                 if gi >= 0:
                     own.add(gi)
-            setattr(self, key, ({pad, shaft}, bid, inner, own))
+            gids = {pad, shaft} | ({tip} if tip >= 0 else set())
+            setattr(self, key, (gids, bid, inner, own))
         gids, bid, inner, own = getattr(self, key)
         total, f = 0.0, np.zeros(6)
         for c in range(int(self.d.ncon)):

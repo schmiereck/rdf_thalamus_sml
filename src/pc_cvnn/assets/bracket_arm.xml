@@ -157,6 +157,20 @@
       <geom type="box" pos="0 0 0" size="0.021 0.006 0.012" rgba="0.65 0.95 0.15 1" density="700" friction="1.4 0.05 0.001"/>
       <geom type="box" pos="0 0 0" size="0.006 0.021 0.012" rgba="0.65 0.95 0.15 1" density="700" friction="1.4 0.05 0.001"/>
     </body>
+    <!-- Y: DREI Arme zu 120 Grad.  NEU gegenueber allem Bisherigen: jede andere Form (L/U/T/X und die
+         Wuerfel) ist aus ACHSPARALLELEN Kaesten bei 90 Grad gebaut -- das Y bringt als erstes gedrehte
+         Kaesten und 120-Grad-Winkel.  Arme 14mm breit wie bei L/U/T (sicher greifbar), Spannweite 52mm
+         (L 56 | U 60 | T 42 | X 42), und die MITTE ist massiv: kein offener Schlitz wie bei der U.
+         Farbe 0.85/0.1/0.45: normierte Chroma-Distanz 0,313 zum naechsten belegten Ton (obj_red) --
+         weiter getrennt als das engste bestehende Paar (obj_blue<->obj_T, 0,248).  Zielscheiben zaehlen
+         nicht mit, _park_markers raeumt sie vor jeder Wahrnehmung weg.
+         Startet GEPARKT ausserhalb des Tisches: keine Trainingsphase darf ihn je sehen. -->
+    <body name="obj_Y" pos="0.66 -0.6 0.012">
+      <freejoint/>
+      <geom type="box" pos="0.00000 0.01300 0" size="0.007 0.013 0.012" euler="0 0 0.00000" rgba="0.85 0.1 0.45 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos="-0.01126 -0.00650 0" size="0.007 0.013 0.012" euler="0 0 2.09440" rgba="0.85 0.1 0.45 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos="0.01126 -0.00650 0" size="0.007 0.013 0.012" euler="0 0 4.18879" rgba="0.85 0.1 0.45 1" density="700" friction="1.4 0.05 0.001"/>
+    </body>
 
     <!-- target marker: a flat disk on the table (mocap = kinematic, moved per episode),
          no collision so it never disturbs the cubes; also a visible cue for the camera.
