@@ -44,6 +44,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Latent-Etappen](befunde/latent-etappen.md) - eine tot, eine schlafend, der Attraktor schaedlich
 * [Rechnerlast und Lieferquote](befunde/rechnerlast.md) - der alte Verdacht ist widerlegt; enthaelt die Nachweisgrenze: 50 Episoden schwanken um 26 Punkte
 * [Episodendauer](befunde/episodendauer.md) - die Lernphase IST der Welt-Fit; Last kostet 53 s je Episode, Wachstum nichts
+* [Welt-Fit: Warmstart](befunde/welt-fit-warmstart.md) - der Fit ist schon warm und nach EINER Epoche konvergiert; die 600 Epochen kaufen nur Aufnahmekraft
 * [Ablenker-Bindung in der Anfahrt](befunde/ablenker-anfahrt.md) - 6,8 % der Episoden fahren >80 mm daneben und liefern dann 1 von 63, obwohl die Adressierung stimmt
 
 # Entscheidungen

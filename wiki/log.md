@@ -7,6 +7,17 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-07
 
+* **Anlage**: [Welt-Fit: Warmstart](/befunde/welt-fit-warmstart.md) - auf Nutzerfrage zum Hebel
+  aus [Episodendauer](/befunde/episodendauer.md). Antwort: `Policy.fit` setzt die Gewichte nie
+  zurueck, **der Fit ist bereits ein Warmstart**. Die MSE steht nach EINER Epoche
+  (0,0854 -> 0,0844, danach +-0,001 ueber 599 weitere); mu und sigma weichen bei 5 bis 200
+  Epochen **weniger** vom 600er-Fit ab als zwei 600er-Fits mit verschiedenen Seeds voneinander.
+  Einziger gemessener Vorteil der 600 Epochen: rund dreifache Aufnahmekraft fuer
+  widersprechende Erfahrung. Ein Plan "voll alle 4 Episoden, sonst 20" kostet 16,7 statt
+  61,1 s je Episode bei ungeklaertem Abstand in der Aufnahme. Nebenbefund: das Modell folgt
+  widersprechenden Etiketten in **keiner** Einstellung nennenswert - passt zu AUC 0,489.
+  `ebene: pruefstand`, also **kein** Beleg fuer eine Wirkung auf act23.
+
 * **Anlage**: [Rechnerlast und Lieferquote](/befunde/rechnerlast.md) - der lange gehegte Verdacht
   des Nutzers, die Lieferquote haenge an der CPU-Auslastung, ist mit zwei natuerlichen
   Lastfenstern (185 gegen 747 Episoden, p = 0,41, **die beiden Fenster widersprechen einander**)

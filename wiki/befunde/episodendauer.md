@@ -68,8 +68,12 @@ DAgger- und Selbst-Puffer sind mit 24000/12000 fest.
 `world.train(epochs=600)` laeuft **jede** Episode ueber den vollen Puffer von ~10500 Zeilen, um
 **eine** neue Zeile einzuarbeiten. Das ist rund die Haelfte der Gesamtlaufzeit fuer 0,01 % neue
 Daten. Ein warmgestartetes Nachtrainieren mit wenigen Epochen, oder ein voller Fit nur alle n
-Episoden, waere ein reiner Zeitgewinn ohne Eingriff in die Architektur - **nicht gebaut und
-nicht gemessen**. Zu pruefen waere, ob der Fit tatsaechlich vom Nullpunkt startet.
+Episoden, waere ein reiner Zeitgewinn ohne Eingriff in die Architektur - **nicht gebaut**.
+
+**Nachgemessen** (2026-09-07): der Fit startet **nicht** vom Nullpunkt, er ist bereits ein
+Warmstart, und er ist nach einer Epoche konvergiert. Der Hebel besteht also - kostet aber
+Aufnahmekraft fuer widersprechende Erfahrung. Siehe
+[Welt-Fit: Warmstart](/befunde/welt-fit-warmstart.md).
 
 # Verwandt
 

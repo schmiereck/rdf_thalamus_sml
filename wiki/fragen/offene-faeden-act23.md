@@ -77,9 +77,12 @@ Anfahrt >80 mm daneben und sind danach verloren (1 Lieferung aus 63), obwohl die
 Choreographie - ist ungemessen. Siehe
 [Ablenker-Bindung](/befunde/ablenker-anfahrt.md).
 
-**Der Welt-Fit je Episode.** `world.train(600)` laeuft jede Episode ueber ~10500 Zeilen, um eine
-neue einzuarbeiten - rund die Haelfte der Laufzeit. Warmstart oder ein voller Fit nur alle n
-Episoden waere reiner Zeitgewinn, ist aber nicht gebaut und nicht gemessen. Siehe
+**Der Welt-Fit je Episode.** Am Pruefstand geklaert: der Fit ist schon warm, die MSE steht nach
+einer Epoche, mu und sigma bleiben bei 5-200 Epochen innerhalb der Eigenstreuung des 600er-Fits.
+Offen bleibt genau eines - **wie viel Aufnahmekraft man aufgibt** (der 600er-Fit folgt
+widersprechender Erfahrung dreimal staerker) und ob ein Plan "voll alle n Episoden" das
+auffaengt. Das ist eine `act23-ab`-Frage, kein Pruefstand mehr. Siehe
+[Welt-Fit: Warmstart](/befunde/welt-fit-warmstart.md) und
 [Episodendauer](/befunde/episodendauer.md).
 
 **Der rote Wuerfel.** Schlechtestes Objekt im Langlauf (33,6 %), ausgerechnet die einfachste
