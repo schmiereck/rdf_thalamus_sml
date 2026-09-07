@@ -146,6 +146,44 @@ NB_DMAX = float(os.environ.get("ACT23_NB_DMAX", "0.12"))
 NB_DIM = 5
 NB_NEUTRAL = np.array([0.0, NB_DMAX, 1.0, 0.0, 0.0])   # "nie gemessen" -- gueltig-Flag 0
 
+# WELT-FIT JE EPISODE (ACT23_WORLD_FULL_EVERY).  `world.train(600)` laeuft nach JEDER Episode
+# ueber den vollen Puffer (~11000 Zeilen), um EINE neue Zeile einzuarbeiten -- rund die Haelfte
+# der Episodendauer (gemessen 57 s von 77 s Lernphase).  Am Pruefstand (Kopie des 11273-Zeilen-
+# Zustands) gemessen:
+#   * `Policy.fit` setzt die Gewichte NIE zurueck -- der Fit ist bereits ein Warmstart.
+#   * Die MSE steht nach EINER Epoche (0.0854 -> 0.0844); die restlichen 599 wandern um +-0.001.
+#   * mu und sigma weichen bei 5..200 Epochen WENIGER vom 600er-Fit ab als zwei 600er-Fits mit
+#     verschiedenen Seeds voneinander -- und sigma steuert Aktionswahl (mu - lam*sigma) und
+#     Neugier, dort haette ein Schaden zuerst auftreten muessen.
+#   * Was die 600 Epochen ALS EINZIGES kaufen, ist AUFNAHMEKRAFT fuer WIDERSPRECHENDE Erfahrung:
+#     rund dreifach (0.576 -> 0.531 gegen -> 0.556 bei 50 Epochen ueber 8 Episoden).
+# Deshalb ein PLAN statt einer festen Zahl: jede n-te Episode voll, dazwischen kurz.  n=1 ist
+# Vorgabe und bedeutet ZIFFERNGENAU das bisherige Verhalten -- der kurze Zweig wird dann nie
+# betreten und WORLD_EPOCHS_SHORT nie gelesen.
+# WARNUNG: das ist ein PRUEFSTANDS-Ergebnis und sagt einen act23-Lauf nicht vorher (dreimal
+# schiefgegangen, s. wiki/mechanismen/pruefstandsfalle.md).  Wer n>1 zur Vorgabe machen will,
+# braucht ein kopfloses A/B nach wiki/messungen/act23-headless-ab.md.  Belege und Zahlen:
+# wiki/befunde/welt-fit-warmstart.md.
+WORLD_EPOCHS = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS", "600")))
+WORLD_EPOCHS_SHORT = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS_SHORT", "20")))
+WORLD_FULL_EVERY = max(1, int(os.environ.get("ACT23_WORLD_FULL_EVERY", "1")))
+_world_fits = [0]                  # gezaehlte Welt-Fits je Episode; [0] = Liste, damit die
+                                   # verschachtelte run_one() sie ohne `global` fortschreiben kann
+
+
+def welt_fit_epochen():
+    """Epochen fuer den Fit NACH DIESER Episode -- jede n-te voll, dazwischen kurz.
+
+    Zaehlt selbst mit, damit der Plan unabhaengig davon greift, aus welcher der beiden
+    Auto-Schleifen (kopflos / GUI) gefahren wird -- der Riss, an dem hier schon zweimal ein
+    Schalter nur in einer Haelfte gewirkt hat (s. wiki/mechanismen/invarianten.md)."""
+    if WORLD_FULL_EVERY <= 1:
+        return WORLD_EPOCHS                       # Vorgabe: unveraendert, ohne Nebenwirkung
+    voll = (_world_fits[0] % WORLD_FULL_EVERY) == 0
+    _world_fits[0] += 1
+    return WORLD_EPOCHS if voll else WORLD_EPOCHS_SHORT
+
+
 # AUSFUEHRUNGS-VARIANZ (ACT23_EXV=M): dieselbe Szene M-mal fahren, um zu trennen, wieviel des
 # Ausgangs an der WAHL haengt und wieviel an der AUSFUEHRUNG.  Damit die M Wiederholungen wirklich
 # dieselbe Entscheidung treffen, friert die Messung das Lernen ein -- sonst haette Wiederholung 2
@@ -4126,6 +4164,7 @@ def run_self_learning_steering(headless=False):
                 # (world_model.quality) instead of a flat 1.0.  Only when the agent judged it itself --
                 # under ACT23_WORLD_LABEL=welt there is no self-distance and the label stays binary.
                 _qd = s_d if (lbl_src == "Selbst" and s_d is not None) else None
+                _we = WORLD_EPOCHS               # bleibt so, wenn das Lernen eingefroren ist
                 if not EXV_FREEZE:
                     # PUNKT 3, GEPRUEFT UND NICHT NOETIG: diese Paarung ist von den logischen
                     # Raten unberuehrt.  `fe` entsteht in situation_feats VOR run_combined (also
@@ -4136,9 +4175,13 @@ def run_self_learning_steering(headless=False):
                     # wo die echte Gefahr sitzt (das war die Selbst-Imitation, s. _imit_log_frisch).
                     # WER world.rate > 1 SETZT, muss hier zuerst hinsehen.
                     world.observe(fe, a_obs, outcome, dist=_qd, weight=obs_w, group=group_id())
-                    world.train(epochs=600)
+                    _we = welt_fit_epochen()      # Plan s.o.; Vorgabe 600 wie bisher
+                    world.train(epochs=_we)
                 _qs = ("" if (_qd is None or not outcome)
                        else f", Guete {wm_quality(_qd):.2f} bei {_qd*1000:.0f}mm")
+                if _we != WORLD_EPOCHS:
+                    _qs += f", Fit {_we} Epochen"   # der kurze Fit muss im Log ERKENNBAR sein,
+                                                    #   sonst ist er in keiner Auswertung trennbar
                 if obs_w != 1.0:
                     _qs += f", Gewicht {obs_w:.2f}"
                 print(f"    [Kredit] {route} -> Welt-Modell "
