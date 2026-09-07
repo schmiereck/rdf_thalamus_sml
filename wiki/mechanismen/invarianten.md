@@ -45,6 +45,17 @@ sources:
   nicht) - sonst `KeyError` auf dem Live-Zustand.
 * **Ein gespeicherter Zustand in einem frischen Prozess verhaelt sich anders als derselbe Zustand
   mitten in einem laufenden Lauf.** Der uebersehene Konfounder aus der Nagelmessung.
+* **`state.OBJECTS` haelt ADRESSEN, nicht Koerper.** Derselbe Koerper darf mehrfach darin stehen
+  (einmal ueber seinen Namen, einmal ueber ein Eigenschafts-Tripel). Jede daraus abgeleitete
+  **Koerper**liste muss entdoppeln - `act16.OBJS`, `SCENE_N` und die Liste in
+  `randomize_objects`. Sonst zieht `pc_act16.py:307` mehr Koerper als es gibt und der Start
+  bricht mit `ValueError: Cannot take a larger sample than population` ab. Behoben in `3b9e4b2`:
+  entdoppeln an zwei Stellen, Eigenschafts-Adressen gar nicht erst persistieren, beim Laden
+  herausfiltern (Selbstheilung fuer bereits beschaedigte Staende).
+* **Eine Aenderung, die den persistierten Zustand beruehrt, braucht eine Speichern-Neustart-
+  Runde.** Der obige Absturz entsteht **erst beim zweiten Start**. Alle meine Sonden liefen mit
+  `ACT23_NO_PERSIST=1` auf sauberem Zustand und konnten ihn deshalb prinzipiell nicht finden;
+  gemeldet hat ihn der Nutzer.
 
 # Etikettenfluss
 

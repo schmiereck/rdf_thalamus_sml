@@ -16,6 +16,10 @@ lokal. Die im Wiki zitierten Laeufe:
   -> [1109 Episoden ohne Lernfortschritt](/befunde/langlauf-ohne-fortschritt.md)
 * `log/pc_act23_2026-08-28_17-20-45.txt` - Nachfolgelauf, 1053 Episoden, 56,4 %
   -> [Vorgaben 2026-08-30](/entscheidungen/defaults-2026-08-30.md)
+* `log/pc_act23_2026-09-05_22-06-51_5152.txt` - GUI-Langlauf, 932 Episoden, 41 h, mit
+  `ACT23_EIG_ONLY=1 ACT23_AUTO_EIG=1`, zwei `run_history`-Lastfenster (Ep 196-278, Ep 796-897)
+  -> [Rechnerlast](/befunde/rechnerlast.md), [Episodendauer](/befunde/episodendauer.md),
+  [Ablenker-Bindung](/befunde/ablenker-anfahrt.md)
 
 # Auswert- und Messwerkzeuge
 

@@ -42,6 +42,9 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Griff-Glaube und Tastsinn](befunde/griff-glaube-und-tastsinn.md) - es gibt keinen Glaubensfehler, und der Fingerdruck traegt die Schliess-Entscheidung nicht
 * [Formfaktorisierung](befunde/formfaktorisierung.md) - die Groesse dominiert die Form und laesst sich nicht herausnormieren
 * [Latent-Etappen](befunde/latent-etappen.md) - eine tot, eine schlafend, der Attraktor schaedlich
+* [Rechnerlast und Lieferquote](befunde/rechnerlast.md) - der alte Verdacht ist widerlegt; enthaelt die Nachweisgrenze: 50 Episoden schwanken um 26 Punkte
+* [Episodendauer](befunde/episodendauer.md) - die Lernphase IST der Welt-Fit; Last kostet 53 s je Episode, Wachstum nichts
+* [Ablenker-Bindung in der Anfahrt](befunde/ablenker-anfahrt.md) - 6,8 % der Episoden fahren >80 mm daneben und liefern dann 1 von 63, obwohl die Adressierung stimmt
 
 # Entscheidungen
 

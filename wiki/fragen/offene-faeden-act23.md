@@ -71,6 +71,17 @@ statt kuerzer, entgegen der Erwartung). Ungemessen. Und: die Wiedererkennung str
 massiv (17-100 %) - fuer belastbare Aussagen braucht es mehrere Laeufe **je** Seed, nicht mehr
 Seeds.
 
+**Wer gewinnt die Anfahrt, wenn das Ziel korrekt vorliegt?** 6,8 % der Episoden fahren die erste
+Anfahrt >80 mm daneben und sind danach verloren (1 Lieferung aus 63), obwohl die Adressierung auf
+2 mm stimmt. Welches Signal den Nachbarn gewinnen laesst - Latent-Ziel, Tracker oder
+Choreographie - ist ungemessen. Siehe
+[Ablenker-Bindung](/befunde/ablenker-anfahrt.md).
+
+**Der Welt-Fit je Episode.** `world.train(600)` laeuft jede Episode ueber ~10500 Zeilen, um eine
+neue einzuarbeiten - rund die Haelfte der Laufzeit. Warmstart oder ein voller Fit nur alle n
+Episoden waere reiner Zeitgewinn, ist aber nicht gebaut und nicht gemessen. Siehe
+[Episodendauer](/befunde/episodendauer.md).
+
 **Der rote Wuerfel.** Schlechtestes Objekt im Langlauf (33,6 %), ausgerechnet die einfachste
 Form; in einer eingefrorenen 80-Episoden-Messung lag er noch bei 57 %. Unerklaert.
 
@@ -93,3 +104,6 @@ Kruecke, die nach [Projektziel](/ziel.md) abgebaut werden soll. Zwei bekannte Br
 * **Der U-Greifpunkt im offenen Schlitz** - zu 70 % wahr, aber folgenlos (p = 0,81).
 * **Die Nagelneigung** - abflachen 57,3 Grad -> 20 Grad wirkt auf act23-Ebene nicht
   (-2,0 Punkte, p = 0,76).
+* **Rechnerlast als Einfluss auf die Lieferquote** - zwei natuerliche Lastfenster widersprechen
+  einander, die Physik ist unter Volllast bitgleich, im Steuerpfad steht keine Wanduhr. Siehe
+  [Rechnerlast](/befunde/rechnerlast.md).
