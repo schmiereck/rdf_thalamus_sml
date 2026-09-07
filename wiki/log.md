@@ -7,6 +7,12 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-07
 
+* **Ergaenzung**: die Belege, auf die das Wiki zeigt, sind jetzt selbst versioniert -
+  `ARCHITECTURE_2026-07-25.md` (Quelle von [Modullandschaft](/mechanismen/act23-modullandschaft.md)
+  und [Laufzeitregeln](/mechanismen/laufzeit-regeln.md)) sowie `act23_exec_variance.py` und
+  `act23_split_probe.py` (in [Rohbelege](/raw/index.md) als Messwerkzeuge gelistet, bis dahin als
+  einzige der acht nicht im Repo). Ein frischer Klon kann die
+  [Messvorschriften](/messungen/exekutionsvarianz-exv.md) damit nachvollziehen.
 * **Ergaenzung**: Nutzerentscheid zur offenen Frage aus
   [Wissensbasis als Wiki](/entscheidungen/wissensbasis-als-wiki.md) - **der act23-Teil des
   Memory-Bestands wandert ins Wiki**, die aelteren Akte (act5-act22) bleiben liegen; die alten
