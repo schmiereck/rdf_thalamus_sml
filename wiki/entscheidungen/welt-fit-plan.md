@@ -88,12 +88,13 @@ Der offene Punkt aus der Pruefstandsmessung bleibt offen: der volle Fit folgt wi
 Erfahrung rund dreimal staerker, und ob ein Plan das auffaengt, war mit einem Seed nicht zu
 entscheiden. Das ist jetzt messbar - vorher war es das nicht.
 
-# Naechster Schritt
+# Nachtrag: das A/B ist gefahren
 
-Ein kopfloses A/B nach [act23-headless-ab](/messungen/act23-headless-ab.md), `FULL_EVERY=1`
-gegen `4`. Wegen der Nachweisgrenze aus [Rechnerlast](/befunde/rechnerlast.md) - ein
-50-Episoden-Fenster schwankt allein aus Zufall um 26 Punkte - braucht das **viele** Episoden.
-Genau dafuer ist der Schalter da: er macht diese Episoden erst bezahlbar.
+`FULL_EVERY=1` gegen `4`, je 200 Episoden: Lieferquote 52,5 gegen 51,5 % (p = 0,92),
+Selbst-Aneignung ununterscheidbar, Laufzeit 4,74 gegen 2,95 h. Es ist **kein Grund gegen die
+Umstellung** gefunden worden. Die Vorgabe bleibt trotzdem `1`, bis der Nutzer sie aendern will -
+sie betrifft seinen laufenden GUI-Betrieb. Zahlen und Vorbehalte:
+[Sparsamer Welt-Fit, A/B](/befunde/welt-fit-plan-ab.md).
 
 # Verwandt
 

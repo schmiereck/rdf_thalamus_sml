@@ -20,6 +20,10 @@ lokal. Die im Wiki zitierten Laeufe:
   `ACT23_EIG_ONLY=1 ACT23_AUTO_EIG=1`, zwei `run_history`-Lastfenster (Ep 196-278, Ep 796-897)
   -> [Rechnerlast](/befunde/rechnerlast.md), [Episodendauer](/befunde/episodendauer.md),
   [Ablenker-Bindung](/befunde/ablenker-anfahrt.md)
+* `log/pc_act23_2026-09-07_18-*` (zwei Laeufe, PID 7240 und 23292) - das A/B
+  `ACT23_WORLD_FULL_EVERY` 1 gegen 4, je 200 Episoden kopfloser Steuerungslauf, gleichzeitig
+  gefahren, je eine eigene Zustandskopie
+  -> [Sparsamer Welt-Fit, A/B](/befunde/welt-fit-plan-ab.md)
 
 # Auswert- und Messwerkzeuge
 
