@@ -112,7 +112,10 @@ begruendung des Nutzers war richtig; jetzt steht eine Messung mit echtem Lastkon
 > 50 Episoden vergleicht, misst mit hoher Wahrscheinlichkeit nur das.
 
 Das ist die bislang direkteste Nachweisgrenze fuer act23-A/Bs und gehoert vor jeden Vergleich
-dieser Groessenordnung. Sie erklaert rueckblickend mehrere Fehlvorhersagen aus kleinen
+dieser Groessenordnung. **Praezisierung (2026-09-08):** das ist Schwankung ueber die Zeit
+**innerhalb** eines Laufs. Eine Wiederholungsstreuung gibt es nicht - zwei Laeufe mit gleicher
+Einstellung sind bitgleich dieselbe Rechnung, siehe
+[Zwei Laeufe sind dieselbe Rechnung](/befunde/laeufe-sind-reproduzierbar.md). Sie erklaert rueckblickend mehrere Fehlvorhersagen aus kleinen
 Stichproben, siehe [Die Pruefstandsfalle](/mechanismen/pruefstandsfalle.md).
 
 # Verwandt

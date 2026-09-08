@@ -106,16 +106,24 @@ verschiebt den Zufallsstrom).
   der beiden Arme, es gibt also keine `[Glaube]`-Zeilen. Die
   [Ablenker-Bindung](/befunde/ablenker-anfahrt.md) laesst sich aus diesen Laeufen nicht
   beurteilen; wer sie mitmessen will, muss den Schalter setzen.
+* **Beide Arme liefen mit demselben Seed.** Nachtraeglich gemessen: sie sind bis Episode 18
+  **identisch** und trennen sich erst ab 19; danach vergleicht man zwei einzelne Trajektorien mit
+  verschiedenen Szenenfolgen (daher der Objektmix-Unterschied oben). Ein Lauf ist damit **eine**
+  Stichprobe, nicht 200 unabhaengige - Wiederholen desselben Laufs brachte null neue Information.
+  Der bessere Aufbau waere ein gepaarter Sweep ueber mehrere Seeds gewesen. Das Ergebnis bleibt,
+  seine Reichweite ist enger. Siehe
+  [Zwei Laeufe sind dieselbe Rechnung](/befunde/laeufe-sind-reproduzierbar.md).
 * **`FULL_EVERY=4` ist ein Punkt, keine Kurve.** Ob 10 oder 20 ebenso folgenlos waeren, ist
   ungemessen - die Aufnahmekraft sinkt mit n weiter, und der Pruefstand hat sie als den einzigen
   echten Verlust ausgewiesen.
 
 # Folgen
 
-Der Schalter bleibt vorerst auf `1`. Das Ergebnis **traegt** eine Umstellung auf `4` - es ist
-kein Grund dagegen gefunden, und der Zeitgewinn ist der groesste einzelne Hebel fuer kuenftige
-Messungen - aber die Vorgabe aendert das Verhalten der laufenden GUI des Nutzers und ist
-[dessen Entscheidung](/entscheidungen/welt-fit-plan.md).
+Der Nutzer hat die Vorgabe am 2026-09-08 auf `4` gestellt (`76a36be`); es war kein Grund
+dagegen gefunden, und der Zeitgewinn ist der groesste einzelne Hebel fuer kuenftige Messungen.
+Rueckfall in einer Zeile mit `ACT23_WORLD_FULL_EVERY=1` - das ist zugleich die Gegenprobe, falls
+die Rutschquote im Langlauf spuerbar steigt. Siehe
+[ACT23_WORLD_FULL_EVERY](/entscheidungen/welt-fit-plan.md).
 
 # Verwandt
 

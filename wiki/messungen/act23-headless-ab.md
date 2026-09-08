@@ -51,8 +51,18 @@ Formenlauf).
 
 # Fallen
 
-* **Gleicher Seed erzwingt in act23 keine gleiche Objektfolge.** Zwei Arme sehen nicht
-  automatisch dieselben Szenen; das gehoert in die Auswertung (Objektmischung vergleichen).
+* **Gleicher Seed erzwingt in act23 keine gleiche Objektfolge** - das gilt fuer zwei
+  **verschiedene** Konfigurationen: die Arme laufen identisch, bis der Schalter zum ersten Mal
+  eine Entscheidung aendert, und danach voellig auseinander (gemessen: identisch bis Episode 18,
+  ab 19 nur noch 10 % gleiche Szenen). Die Objektmischung gehoert deshalb in jede Auswertung.
+  Bei **gleicher** Konfiguration erzwingt derselbe Seed sehr wohl dieselbe Folge, vollstaendig.
+* **Die Replikate sind die SEEDS, nicht die Wiederholungen.** Denselben Lauf zweimal zu fahren
+  bringt null neue Information - er ist bitgleich. Wer Streuung braucht, variiert `ACT23_SEED`;
+  fuer einen belastbaren Vergleich einen **gepaarten Sweep**: je Seed beide Arme, dann
+  Vorzeichentest ueber die Seeds. Siehe
+  [Zwei Laeufe sind dieselbe Rechnung](/befunde/laeufe-sind-reproduzierbar.md).
+* **`ACT23_SEED` nicht gesetzt heisst 7, obwohl die Kopfzeile `SEED=11` meldet.** Wer einen Lauf
+  aus dem Protokoll nachstellen will, muss `ACT23_SEED=7` setzen, nicht 11.
 * **Ein GUI-Lauf schreibt den Zustand zurueck**, wenn `ACT23_STATE_PATH` nicht gesetzt ist.
   Vor einem Langlauf einen Rueckfallpunkt sichern.
 * Reine Messausgabe (`ACT23_DEBUG`, `ACT23_YAW_AB`, `ACT16_RULEDIAG/GLAUBDIAG/TASTDIAG`)

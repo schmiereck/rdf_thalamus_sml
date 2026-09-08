@@ -7,6 +7,24 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-08
 
+* **Anlage**: [Zwei Laeufe sind dieselbe Rechnung](/befunde/laeufe-sind-reproduzierbar.md) - aus
+  einer Nutzerbeobachtung in `run_history` ("die letzten drei Laeufe sehen extrem aehnlich aus").
+  Sie sind nicht aehnlich: Arm B des Welt-Fit-A/B und der GUI-Lauf vom 08.09. sind ueber alle
+  200 Episoden **identisch** - Szene, Objekt, Ausgang, Millimeter. Innerhalb eines Laufs
+  wiederholt sich dagegen nichts (94,5 % verschiedene Szenen). Ein Lauf ist damit **eine**
+  Stichprobe; die Replikate sind die Seeds.
+* **Ergaenzung/Praezisierung**: [Rechnerlast](/befunde/rechnerlast.md) (die 26 Punkte sind
+  Schwankung INNERHALB eines Laufs, es gibt keine Wiederholungsstreuung),
+  [Kopfloses A/B](/messungen/act23-headless-ab.md) (die Seed-Warnung praeziser gefasst, plus die
+  Regel "die Replikate sind die Seeds") und [Sparsamer Welt-Fit,
+  A/B](/befunde/welt-fit-plan-ab.md) (beide Arme mit gleichem Seed - bis Ep 18 identisch,
+  Reichweite enger als dargestellt).
+* **Befund, nicht behoben**: ohne gesetztes `ACT23_SEED` meldet die Kopfzeile `SEED=11`,
+  gefahren wird aber mit **7** (`_source_defaults()` nimmt den ersten von drei Treffern im
+  Quelltext; die 11 stammt aus zwei Diagnose-Pruefstaenden, die im Steuerungslauf nicht laufen).
+  Reproduktionsfalle fuer jeden Lauf ohne Seed. Eine Reparatur erzwingt eine Wahl und ist
+  deshalb offen.
+
 * **Entscheidung**: `ACT23_WORLD_FULL_EVERY` steht auf Nutzerentscheid jetzt auf **4** - der
   Welt-Fit laeuft nur noch jede vierte Episode voll, dazwischen 20 Epochen. Grundlage ist
   [das A/B](/befunde/welt-fit-plan-ab.md) (je 200 Episoden, p = 0,92, Selbst-Aneignung gleich,
