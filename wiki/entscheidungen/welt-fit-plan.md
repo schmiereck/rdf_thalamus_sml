@@ -1,7 +1,7 @@
 ---
 type: Entscheidung
-title: ACT23_WORLD_FULL_EVERY - der Welt-Fit bekommt einen Plan, Vorgabe unveraendert
-description: Der Fit je Episode ist hinter einen Schalter gelegt: jede n-te Episode voll, dazwischen kurz. Vorgabe n=1 heisst ziffergenau das bisherige Verhalten. Bei n=2 faellt die Lernphase im echten Lauf von 73 auf 17 Sekunden.
+title: ACT23_WORLD_FULL_EVERY - der Welt-Fit bekommt einen Plan, Vorgabe jetzt 4
+description: Der Fit je Episode laeuft nicht mehr nach jeder Episode voll, sondern jede vierte, mit 20 Epochen dazwischen. Nach dem A/B (je 200 Episoden, p = 0,92, Aneignung gleich, 61 Prozent mehr Episoden je Stunde) ist n=4 seit 2026-09-08 die Vorgabe. Rueckfall mit n=1.
 tags: [act23, weltmodell, laufzeit, schalter]
 status: stable
 evidenz: gemessen
@@ -25,13 +25,18 @@ Drei Schalter, alle Umgebungsvariablen:
 
 | Schalter | Vorgabe | Wirkung |
 |---|---|---|
-| `ACT23_WORLD_FULL_EVERY` | `1` | jede n-te Episode voller Fit. `1` = jede, also unveraendert |
+| `ACT23_WORLD_FULL_EVERY` | `4` | jede n-te Episode voller Fit |
 | `ACT23_WORLD_EPOCHS` | `600` | Epochen des vollen Fits |
-| `ACT23_WORLD_EPOCHS_SHORT` | `20` | Epochen dazwischen; bei `FULL_EVERY=1` **nie gelesen** |
+| `ACT23_WORLD_EPOCHS_SHORT` | `20` | Epochen dazwischen |
 
-Bei `FULL_EVERY <= 1` kehrt `welt_fit_epochen()` sofort mit `WORLD_EPOCHS` zurueck und zaehlt
-nicht einmal mit - die Vorgabe ist damit kein "Plan mit n=1", sondern derselbe Codepfad wie
-zuvor.
+**Zwei Stufen, zwei Daten.** Am 2026-09-07 wurde der Schalter mit Vorgabe `1` gebaut, also
+zunaechst wirkungslos - erst danach durfte das A/B entscheiden. Am 2026-09-08 hat der Nutzer die
+Vorgabe auf `4` gestellt, nachdem
+[das A/B](/befunde/welt-fit-plan-ab.md) keinen Nachteil fand.
+
+**Rueckfall in einer Zeile:** `ACT23_WORLD_FULL_EVERY=1`. Dann kehrt `welt_fit_epochen()` sofort
+mit `WORLD_EPOCHS` zurueck, zaehlt nicht einmal mit, und `WORLD_EPOCHS_SHORT` wird nie gelesen -
+zifferngenau der Stand vor `fec6c98`.
 
 # Umfang
 
@@ -88,13 +93,24 @@ Der offene Punkt aus der Pruefstandsmessung bleibt offen: der volle Fit folgt wi
 Erfahrung rund dreimal staerker, und ob ein Plan das auffaengt, war mit einem Seed nicht zu
 entscheiden. Das ist jetzt messbar - vorher war es das nicht.
 
-# Nachtrag: das A/B ist gefahren
+# Nachtrag: das A/B ist gefahren, die Vorgabe steht auf 4
 
 `FULL_EVERY=1` gegen `4`, je 200 Episoden: Lieferquote 52,5 gegen 51,5 % (p = 0,92),
-Selbst-Aneignung ununterscheidbar, Laufzeit 4,74 gegen 2,95 h. Es ist **kein Grund gegen die
-Umstellung** gefunden worden. Die Vorgabe bleibt trotzdem `1`, bis der Nutzer sie aendern will -
-sie betrifft seinen laufenden GUI-Betrieb. Zahlen und Vorbehalte:
+Selbst-Aneignung ununterscheidbar, Laufzeit 4,74 gegen 2,95 h. Kein Grund gegen die Umstellung
+gefunden; der Nutzer hat sie am 2026-09-08 angeordnet. Zahlen und Vorbehalte:
 [Sparsamer Welt-Fit, A/B](/befunde/welt-fit-plan-ab.md).
+
+Geprueft **ohne jede Umgebungsvariable** auf einer Kopie des 11273-Zeilen-Zustands: Lernphase
+73,1 s (voll) gegen 16,4 / 16,5 / 16,3 s (kurz) im Muster voll-kurz-kurz-kurz-voll, und
+`ACT23_WORLD_*` taucht in der Zeile "Abweichungen von der Vorgabe" nicht mehr auf.
+
+**Was sich im Alltag sichtbar aendert:** in drei von vier Kredit-Zeilen steht jetzt
+`, Fit 20 Epochen`. Das ist Absicht - ohne die Markierung waere in keiner spaeteren Auswertung
+trennbar, welche Episode mit welchem Fit lief.
+
+**Was offen bleibt:** "Griff hielt nicht" lag im A/B bei 11,0 gegen 17,0 % (p = 0,11). Nicht
+signifikant, aber der einzige Wert mit Richtung. Steigt die Rutschquote im naechsten Langlauf
+spuerbar, ist das der erste Verdaechtige und `ACT23_WORLD_FULL_EVERY=1` die Gegenprobe.
 
 # Verwandt
 

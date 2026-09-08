@@ -157,16 +157,22 @@ NB_NEUTRAL = np.array([0.0, NB_DMAX, 1.0, 0.0, 0.0])   # "nie gemessen" -- guelt
 #     Neugier, dort haette ein Schaden zuerst auftreten muessen.
 #   * Was die 600 Epochen ALS EINZIGES kaufen, ist AUFNAHMEKRAFT fuer WIDERSPRECHENDE Erfahrung:
 #     rund dreifach (0.576 -> 0.531 gegen -> 0.556 bei 50 Epochen ueber 8 Episoden).
-# Deshalb ein PLAN statt einer festen Zahl: jede n-te Episode voll, dazwischen kurz.  n=1 ist
-# Vorgabe und bedeutet ZIFFERNGENAU das bisherige Verhalten -- der kurze Zweig wird dann nie
-# betreten und WORLD_EPOCHS_SHORT nie gelesen.
-# WARNUNG: das ist ein PRUEFSTANDS-Ergebnis und sagt einen act23-Lauf nicht vorher (dreimal
-# schiefgegangen, s. wiki/mechanismen/pruefstandsfalle.md).  Wer n>1 zur Vorgabe machen will,
-# braucht ein kopfloses A/B nach wiki/messungen/act23-headless-ab.md.  Belege und Zahlen:
-# wiki/befunde/welt-fit-warmstart.md.
+# Deshalb ein PLAN statt einer festen Zahl: jede n-te Episode voll, dazwischen kurz.
+# VORGABE n=4 SEIT DEM A/B (2026-09-07, Nutzerentscheid).  Je 200 Episoden im vollen kopflosen
+# Steuerungslauf, beide Arme gleichzeitig aus demselben Zustand:
+#     Lieferquote      105/200 = 52,5 % (n=1) gegen 103/200 = 51,5 % (n=4), Fisher p = 0,92
+#     Selbst-Aneignung ununterscheidbar; BEIDE Arme gebaeren in 200 Episoden keine neue Klasse
+#     Laufzeit         4,74 h gegen 2,95 h -- 61 % mehr Episoden je Stunde bei 155 gegen 157 Fits
+# Damit ist die Pruefstandsvorhersage ausnahmsweise auf act23-Ebene bestaetigt.  Aufloesung
+# ehrlich: n=200 je Arm schliesst Unterschiede ueber ~10 Punkte aus, kleinere bleiben offen.
+# EINZIGER Wert, der gegen den Plan lehnt: "Griff hielt nicht" 11,0 gegen 17,0 % (p = 0,11) --
+# nicht signifikant, aber das, was ein zweiter Lauf zuerst nachpruefen sollte.
+# ZURUECK auf das alte Verhalten: ACT23_WORLD_FULL_EVERY=1.  Dann kehrt welt_fit_epochen() sofort
+# zurueck, der kurze Zweig wird nie betreten und WORLD_EPOCHS_SHORT nie gelesen -- zifferngenau
+# der Stand vor fec6c98.  Zahlen und Vorbehalte: wiki/befunde/welt-fit-plan-ab.md.
 WORLD_EPOCHS = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS", "600")))
 WORLD_EPOCHS_SHORT = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS_SHORT", "20")))
-WORLD_FULL_EVERY = max(1, int(os.environ.get("ACT23_WORLD_FULL_EVERY", "1")))
+WORLD_FULL_EVERY = max(1, int(os.environ.get("ACT23_WORLD_FULL_EVERY", "4")))
 _world_fits = [0]                  # gezaehlte Welt-Fits je Episode; [0] = Liste, damit die
                                    # verschachtelte run_one() sie ohne `global` fortschreiben kann
 

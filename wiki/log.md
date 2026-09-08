@@ -5,6 +5,16 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-08
+
+* **Entscheidung**: `ACT23_WORLD_FULL_EVERY` steht auf Nutzerentscheid jetzt auf **4** - der
+  Welt-Fit laeuft nur noch jede vierte Episode voll, dazwischen 20 Epochen. Grundlage ist
+  [das A/B](/befunde/welt-fit-plan-ab.md) (je 200 Episoden, p = 0,92, Selbst-Aneignung gleich,
+  61 % mehr Episoden je Stunde). Ohne Umgebungsvariable geprueft: Lernphase 73,1 s voll gegen
+  16,3-16,5 s kurz im Muster voll-kurz-kurz-kurz-voll. Sichtbare Alltagsfolge: drei von vier
+  Kredit-Zeilen tragen jetzt `, Fit 20 Epochen`. Rueckfall in einer Zeile mit
+  `ACT23_WORLD_FULL_EVERY=1`. Seite: [ACT23_WORLD_FULL_EVERY](/entscheidungen/welt-fit-plan.md).
+
 ## 2026-09-07
 
 * **Anlage**: [Sparsamer Welt-Fit, A/B](/befunde/welt-fit-plan-ab.md) - `FULL_EVERY=4` gegen die

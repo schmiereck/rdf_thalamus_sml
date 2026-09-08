@@ -52,7 +52,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 * [Vorgaben 2026-08-30](entscheidungen/defaults-2026-08-30.md) - der 1053-Episoden-Zustand wird Standard, samt ehrlichem Vorbehalt zur Greifergeometrie
 * [Die Wissensbasis wird ein Wiki im Repo](entscheidungen/wissensbasis-als-wiki.md) - warum, und was daran noch offen ist
-* [ACT23_WORLD_FULL_EVERY](entscheidungen/welt-fit-plan.md) - der Welt-Fit bekommt einen Plan; Vorgabe unveraendert, bei n=2 faellt die Lernphase von 73 auf 17 s
+* [ACT23_WORLD_FULL_EVERY](entscheidungen/welt-fit-plan.md) - der Welt-Fit laeuft nur noch jede vierte Episode voll; **Vorgabe seit 2026-09-08**, Rueckfall mit n=1
 
 # Messvorschriften
 
