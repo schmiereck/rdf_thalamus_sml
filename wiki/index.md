@@ -48,6 +48,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Sparsamer Welt-Fit, A/B](befunde/welt-fit-plan-ab.md) - 200 gegen 200 Episoden: Quote und Aneignung gleich, Laufzeit 2,95 statt 4,74 h
 * [Zwei Laeufe sind dieselbe Rechnung](befunde/laeufe-sind-reproduzierbar.md) - gleiche Einstellung heisst bitgleicher Lauf; die Replikate sind die Seeds. Enthaelt die Seed-Falle in der Kopfzeile
 * [Merkmale kommen zu spaet](befunde/merkmale-kommen-zu-spaet.md) - der Nachbar-Block steht auf 6 % der Pufferzeilen; der Engpass ist die Puffer-Zusammensetzung, nicht der Merkmalssatz
+* [Der Tracker rastet auf dem Nachbarn ein](befunde/ablenker-bindung-gemessen.md) - direkt gemessen: fremder Belief 31,2 gegen 4,2 % (p = 0,0086), auf 4 mm genau am FALSCHEN Koerper
 * [Ablenker-Bindung in der Anfahrt](befunde/ablenker-anfahrt.md) - 6,8 % der Episoden fahren >80 mm daneben und liefern dann 1 von 63, obwohl die Adressierung stimmt
 
 # Entscheidungen

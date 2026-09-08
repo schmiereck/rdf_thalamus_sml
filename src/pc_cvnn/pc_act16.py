@@ -116,6 +116,16 @@ RULEDIAG = os.environ.get("ACT16_RULEDIAG", "0") == "1"      # RIEGEL-DIAGNOSE (
 #   Netz allein gleich gut liefert; act23 hat das nie nachgeholt -- dort laufen beide mit.
 #   OHNE DIESE ZAEHLER WAERE DIE MESSUNG BLIND: greift eine Regel ohnehin nie, kann ihr Abschalten
 #   per Konstruktion nichts aendern, und ein unauffaelliges Ergebnis haette nichts bewiesen.
+ABLENKDIAG = os.environ.get("ACT16_ABLENKDIAG", "0") == "1"  # ABLENKER-DIAGNOSE (Vorgabe AUS).
+#   ANLASS (2026-09-07, wiki/befunde/ablenker-anfahrt.md): in 63 von 932 Episoden liegt die ERSTE
+#   Anfahrt ueber 80 mm daneben, und davon wurde 1 geliefert -- rund ein Siebtel aller Fehlschlaege.
+#   Die ADRESSIERUNG ist dabei nachweislich richtig (Median 2 mm, 914/920 eindeutig); in der
+#   Beispielepisode 810 stand die Detektion auf 0 mm, `[Glaube]` meldete aber Wahrnehmung 46,5 mm
+#   und Zustand 69,0 mm.  Der Fehler entsteht also NACH der Adressierung, im laufenden Tracker.
+#   FRAGE, DIE DIESE DIAGNOSE BEANTWORTET: sitzt der Belief `c` waehrend der Anfahrt auf einem
+#   ANDEREN Koerper -- ab welchem Schritt, auf welchem, und findet er zurueck?
+#   PRIVILEGIERT und AUSSCHLIESSLICH messend, wie GLAUBDIAG: die wahren Lagen gehen in keinen
+#   Lernenden, in keinen Zustand und in keine Entscheidung, nur in diese Zaehler.
 GLAUBDIAG = os.environ.get("ACT16_GLAUBDIAG", "0") == "1"    # GLAUBENS-DIAGNOSE (Vorgabe AUS).
 #   ANLASS: die Tastsinn-Diagnose zeigte, dass in GESCHEITERTEN Episoden der Schliesswunsch in 67%
 #   der Schritte ueber der Riegel-Schwelle liegt (in gelieferten: 21%), teils dauerhaft 30-60 mm zu
@@ -400,6 +410,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                                "hoehe": 0.0, "phantom": 0, "phantom_ab": None,
                                "anfahrt": 0, "anfahrt_orts": 0.0,
                                "a1": 0, "a1_orts": 0.0, "a1_offen": True}
+        run_combined._ablenk = {"n": 0, "fremd": 0, "ab": None, "wer": {},   # ABLENKER-DIAGNOSE
+                                "d_eigen": 0.0, "d_fremd": 0.0, "zuletzt_fremd": False}
         run_combined._tast = {"n": 0, "stall_h": None, "stall_p": None,   # TASTSINN-DIAGNOSE
                               "close_h": None, "close_p": None, "p_max_offen": 0.0,
                               "min_h": None, "wunsch": [], "gesenkt": 0}
@@ -624,6 +636,25 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                         _g["a1_orts"] += _do
                 if _j5q < J5_OPEN_TH:
                     _g["a1_offen"] = False                     # ab hier: Klaue geschlossen gewesen
+            if ABLENKDIAG and phase in ("over", "lower", "close"):
+                # Auf WELCHEN Koerper zeigt der Belief `c`?  Nur waehrend der Anfahrt -- danach
+                # traegt die Hand das Objekt und `c` folgt absichtlich der Hand (s. _cobs).
+                _cb = np.asarray(c, float)
+                _kand = [(float(np.linalg.norm(sim.obj_pos(_o)[:2] - _cb)), _o) for _o in OBJS]
+                if _kand:
+                    _dmin, _wer = min(_kand)
+                    _de = float(np.linalg.norm(np.asarray(c_true, float) - _cb))
+                    _ab = run_combined._ablenk
+                    _ab["n"] += 1
+                    _ab["d_eigen"] += _de
+                    _ab["d_fremd"] += _dmin
+                    _fremd = (_wer != cmd)
+                    _ab["zuletzt_fremd"] = _fremd
+                    if _fremd:
+                        _ab["fremd"] += 1
+                        _ab["wer"][_wer] = _ab["wer"].get(_wer, 0) + 1
+                        if _ab["ab"] is None:
+                            _ab["ab"] = _ab["n"]
             if teacher_log_fn is not None:                    # DAgger: the FSM's sub-goal at the
                 teacher_log_fn(state, np.asarray(aim, float).copy(), float(j5))   # (policy-)VISITED state
             route_carry = carry_target_fn is not None and phase == "carry"   # the routed carry follows the
@@ -836,6 +867,18 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                   f" | Hoehe {1000*_g['hoehe']/_m:5.1f} mm"
                   f" | Phantom-Griff {_g['phantom']:4d}"
                   f" (ab {'--' if _g['phantom_ab'] is None else _g['phantom_ab']})"
+                  f" | {'OK' if ok else 'daneben'}", flush=True)
+        if ABLENKDIAG:
+            _b = run_combined._ablenk
+            _bn = max(1, _b["n"])
+            _top = sorted(_b["wer"].items(), key=lambda kv: -kv[1])[:2]
+            print(f"    [Ablenker] Anfahrt {_b['n']:4d} Schritte | Belief auf FREMDEM Koerper"
+                  f" {_b['fremd']:4d} = {100.0 * _b['fremd'] / _bn:5.1f} %"
+                  f" (ab Schritt {'--' if _b['ab'] is None else _b['ab']},"
+                  f" am Ende {'FREMD' if _b['zuletzt_fremd'] else 'eigen'})"
+                  f" | wer: {', '.join(f'{k} {v}' for k, v in _top) if _top else '--'}"
+                  f" | Abstand Belief->eigen {1000 * _b['d_eigen'] / _bn:5.1f} mm,"
+                  f" ->naechster {1000 * _b['d_fremd'] / _bn:5.1f} mm"
                   f" | {'OK' if ok else 'daneben'}", flush=True)
         if TASTDIAG:
             _t = run_combined._tast

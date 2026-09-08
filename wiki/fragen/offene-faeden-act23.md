@@ -75,11 +75,13 @@ statt kuerzer, entgegen der Erwartung). Ungemessen. Und: die Wiedererkennung str
 massiv (17-100 %) - fuer belastbare Aussagen braucht es mehrere Laeufe **je** Seed, nicht mehr
 Seeds.
 
-**Wer gewinnt die Anfahrt, wenn das Ziel korrekt vorliegt?** 6,8 % der Episoden fahren die erste
-Anfahrt >80 mm daneben und sind danach verloren (1 Lieferung aus 63), obwohl die Adressierung auf
-2 mm stimmt. Welches Signal den Nachbarn gewinnen laesst - Latent-Ziel, Tracker oder
-Choreographie - ist ungemessen. Siehe
-[Ablenker-Bindung](/befunde/ablenker-anfahrt.md).
+**Warum rastet der Tracker auf dem Nachbarn ein?** Das WO ist geklaert: nicht Latent-Ziel und
+nicht Choreographie, sondern der Objekt-Belief der Anfahrt, der auf ~4 mm genau am **falschen**
+Koerper steht (31,2 gegen 4,2 %, p = 0,0086, s.
+[Der Tracker rastet auf dem Nachbarn ein](/befunde/ablenker-bindung-gemessen.md)). Offen ist das
+WARUM, und es sind zwei unterscheidbare Kandidaten: Blobverschmelzung zweier naher Koerper oder
+eine Fehlzuordnung beim **Aufsetzen** des Trackers. Die naechste Messung steht in der Seite und
+ist billig.
 
 **Der Welt-Fit je Episode.** Am Pruefstand geklaert: der Fit ist schon warm, die MSE steht nach
 einer Epoche, mu und sigma bleiben bei 5-200 Epochen innerhalb der Eigenstreuung des 600er-Fits.

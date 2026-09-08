@@ -77,6 +77,14 @@ Anfahrfehler kann auch aus einem Regelfehler stammen. Was gemessen ist: **wenn d
 mehr als 80 mm danebenliegt, ist die Episode praktisch verloren** - der Lauf holt das nicht mehr
 auf, obwohl er in Episode 810 sichtbar korrigiert hat.
 
+# Nachtrag 2026-09-08: bestaetigt und lokalisiert
+
+Die hier noch schwache Vermutung ist direkt gemessen worden. Der Anfahr-Belief sitzt in
+gescheiterten Episoden auf einem fremden Koerper (31,2 gegen 4,2 %, Fisher p = 0,0086), und zwar
+auf ~4 mm genau - eine sichere Bindung ans falsche Objekt, keine Ungenauigkeit. Die
+Permutationskontrolle unten wird damit gegenstandslos. Siehe
+[Der Tracker rastet auf dem Nachbarn ein](/befunde/ablenker-bindung-gemessen.md).
+
 # Wo das ansetzt
 
 Das ist rund ein Siebtel aller Fehlschlaege, und es sitzt in einem Pfad, den keine der bisher

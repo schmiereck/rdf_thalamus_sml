@@ -7,6 +7,17 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-08
 
+* **Anlage**: [Der Tracker rastet auf dem Nachbarn ein](/befunde/ablenker-bindung-gemessen.md) -
+  auf Nutzerauftrag der erste Schritt an der Ablenker-Bindung. Neue Diagnose
+  `ACT16_ABLENKDIAG=1` (Vorgabe aus, privilegiert und rein messend wie `GLAUBDIAG`) zaehlt je
+  Episode, auf welchen Koerper der Anfahr-Belief zeigt. Ergebnis ueber 64 Episoden: fremder
+  Belief in 31,2 % der gescheiterten gegen 4,2 % der gelieferten Episoden, **Fisher p = 0,0086**
+  - und der Belief steht dabei rund **4 mm** neben dem FALSCHEN Koerper, ist also eine sichere
+  Bindung, keine Drift. In Episode 48 ab dem ersten Anfahrschritt. Damit ist die schwache
+  Permutationskontrolle des Vorlaeuferbefunds ersetzt. Lauf bei 64 statt 150 Episoden beendet
+  (Speichernot, GUI des Nutzers hatte Vorrang). Offen bleibt das **Warum** - naechster Schritt
+  in der Seite benannt.
+
 * **Anlage**: [Merkmale kommen zu spaet](/befunde/merkmale-kommen-zu-spaet.md) - bei der Suche
   nach naechsten Schritten ausgezaehlt: der Nachbar-Merkmalsblock ist auf **690 von 11563**
   Pufferzeilen gefuellt (6,0 %), der Rest traegt den neutralen "nie gemessen"-Wert. Die in
