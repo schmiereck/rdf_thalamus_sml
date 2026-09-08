@@ -7,6 +7,15 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-08
 
+* **Anlage**: [Merkmale kommen zu spaet](/befunde/merkmale-kommen-zu-spaet.md) - bei der Suche
+  nach naechsten Schritten ausgezaehlt: der Nachbar-Merkmalsblock ist auf **690 von 11563**
+  Pufferzeilen gefuellt (6,0 %), der Rest traegt den neutralen "nie gemessen"-Wert. Die in
+  [Exekutionsvarianz](/befunde/exekutionsvarianz.md) als "nicht pruefbar" vermerkte Frage ist
+  nach 4800 weiteren Episoden immer noch fast nicht pruefbar. Auf den gueltigen Zeilen zeigt der
+  Nachbarabstand ausserdem in die **unerwartete** Richtung (naeher = besser, vermutlich
+  Lagen-Konfundierung). Folgerung fuer die Architektur: ein nachtraeglich eingefuehrtes Merkmal
+  erreicht das Modell nicht - der Engpass ist die Zusammensetzung des Puffers.
+
 * **Anlage**: [Zwei Laeufe sind dieselbe Rechnung](/befunde/laeufe-sind-reproduzierbar.md) - aus
   einer Nutzerbeobachtung in `run_history` ("die letzten drei Laeufe sehen extrem aehnlich aus").
   Sie sind nicht aehnlich: Arm B des Welt-Fit-A/B und der GUI-Lauf vom 08.09. sind ueber alle

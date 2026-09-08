@@ -47,7 +47,11 @@ pi-Periodizitaet der Greifersymmetrie das Quadrieren der Phase, und `cos2(w-yaw)
 **Situationsrepraesentation des Weltmodells.** Zwischen Grundrate 54 % und Obergrenze 82 %
 liegen ~27 Punkte lernbares Signal, die das Modell nicht einsammelt (AUC 0,489 im Lauf). Vier
 naheliegende Rezepte sind bereits null. Was fehlt, ist ein **Merkmal**, nicht ein Verfahren.
-Siehe [Exekutionsvarianz](/befunde/exekutionsvarianz.md).
+Siehe [Exekutionsvarianz](/befunde/exekutionsvarianz.md). **Praezisierung 2026-09-08:** das
+naechstliegende Merkmal ist laengst gebaut - der Nachbar-Block - steht aber nur auf 6 % der
+Pufferzeilen und konnte deshalb nie wirken. Vor jedem neuen Merkmal steht damit die Frage, wie
+ein Merkmal ueberhaupt in einen gewachsenen Lifelong-Puffer kommt. Siehe
+[Merkmale kommen zu spaet](/befunde/merkmale-kommen-zu-spaet.md).
 
 **Das Kredit-Design fuer Fehlgriffe.** Der konkreteste Strang daneben: dem Weltmodell fehlen
 genau die schaedlichen Faelle als Etikett - 36 % der Episoden sind komplett unsichtbar. Zwei

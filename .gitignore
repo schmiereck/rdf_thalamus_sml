@@ -31,3 +31,6 @@ src/pc/act20_surprise.png
 src/pc/act21_metrics.png
 src/pc/act22_learning.png
 src/pc_cvnn/state/
+
+# Obsidian-Arbeitsplatz des Nutzers (UI-Zustand + Plugin-Code) -- nicht versionieren
+wiki/.obsidian/
