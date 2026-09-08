@@ -49,6 +49,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Zwei Laeufe sind dieselbe Rechnung](befunde/laeufe-sind-reproduzierbar.md) - gleiche Einstellung heisst bitgleicher Lauf; die Replikate sind die Seeds. Enthaelt die Seed-Falle in der Kopfzeile
 * [Merkmale kommen zu spaet](befunde/merkmale-kommen-zu-spaet.md) - der Nachbar-Block steht auf 6 % der Pufferzeilen; der Engpass ist die Puffer-Zusammensetzung, nicht der Merkmalssatz
 * [Der Tracker rastet auf dem Nachbarn ein](befunde/ablenker-bindung-gemessen.md) - direkt gemessen: fremder Belief 31,2 gegen 4,2 % (p = 0,0086), auf 4 mm genau am FALSCHEN Koerper
+* [Der Keim erreicht den Tracker nie](befunde/keim-erreicht-tracker-nicht.md) - Schluesselfehler, 120 von 120; bei mehreren Kandidaten 41 % Fehlstart, davon 0 geliefert
 * [Ablenker-Bindung in der Anfahrt](befunde/ablenker-anfahrt.md) - 6,8 % der Episoden fahren >80 mm daneben und liefern dann 1 von 63, obwohl die Adressierung stimmt
 
 # Entscheidungen

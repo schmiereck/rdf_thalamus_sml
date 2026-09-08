@@ -170,6 +170,12 @@ NB_NEUTRAL = np.array([0.0, NB_DMAX, 1.0, 0.0, 0.0])   # "nie gemessen" -- guelt
 # ZURUECK auf das alte Verhalten: ACT23_WORLD_FULL_EVERY=1.  Dann kehrt welt_fit_epochen() sofort
 # zurueck, der kurze Zweig wird nie betreten und WORLD_EPOCHS_SHORT nie gelesen -- zifferngenau
 # der Stand vor fec6c98.  Zahlen und Vorbehalte: wiki/befunde/welt-fit-plan-ab.md.
+# KEIM-DIAGNOSE (ACT23_KEIMDIAG=1, Vorgabe AUS).  Frage aus
+# wiki/befunde/ablenker-bindung-gemessen.md: entsteht die Ablenker-Bindung beim AUFSETZEN des
+# Trackers?  Meldet einmal je Episode, ob der Tracker seinen Keim bekommen hat oder blind mit
+# dem wahrscheinlichsten gleichklassigen Blob gestartet ist -- und auf welchem Koerper er dabei
+# landet.  Die wahren Lagen dienen AUSSCHLIESSLICH der Zaehlung, wie bei ACT16_ABLENKDIAG.
+KEIMDIAG = os.environ.get("ACT23_KEIMDIAG", "0") == "1"
 WORLD_EPOCHS = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS", "600")))
 WORLD_EPOCHS_SHORT = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS_SHORT", "20")))
 WORLD_FULL_EVERY = max(1, int(os.environ.get("ACT23_WORLD_FULL_EVERY", "4")))
@@ -3122,6 +3128,7 @@ def run_self_learning_steering(headless=False):
         def _track():
             if mem["px"] is None and (_sd := perception.seed_for(key)) is not None:
                 mem["xy"], mem["px"] = _sd[0], _sd[1]                              # lazy: perceive() runs
+                mem["_keim"] = True                            # nur fuer die Keim-Diagnose
                 #   INSIDE run_combined, after this tracker was built -> read the seed on the first frame
                 #   (key=None = the long object; its seed now comes from perceive() too, stage 3)
             saved = sim.d.mocap_pos.copy()                     # perceive_all parks the markers -> restore
@@ -3162,6 +3169,17 @@ def run_self_learning_steering(headless=False):
                                                / (2.0 * colour_openset.TH), 0.0, 1.0)))
                     mem["xy"] = np.asarray(best["pos"], float); mem["px"] = np.asarray(best["px"], float)
                     vc._fsv["nd"] += 1
+                    if KEIMDIAG and not mem.get("_keim_gemeldet"):
+                        mem["_keim_gemeldet"] = True
+                        _bp = np.asarray(best["pos"], float)
+                        _tr = [(float(np.linalg.norm(sim.obj_pos(_o)[:2] - _bp)), _o)
+                               for _o in act16.OBJS]
+                        _dm, _wer = min(_tr) if _tr else (float("nan"), "?")
+                        print(f"    [Keim] {body}: Keim {'JA' if mem.get('_keim') else 'NEIN'} "
+                              f"(gesucht '{key}', veroeffentlicht '{getattr(perception, 'seed_key', '?')}')"
+                              f" | {len(cands)} Kandidaten -> Start auf {_wer} ({1000*_dm:.0f} mm)"
+                              f" | eigenes Objekt {1000*float(np.linalg.norm(sim.obj_pos(body)[:2] - _bp)):.0f} mm"
+                              f" | {'RICHTIG' if _wer == body else 'FALSCH'}", flush=True)
             if obs is None and mem["px"] is not None and dets:  # class match failed (lifted/mis-class/long) ->
                 near = min(dets, key=lambda d: float(np.linalg.norm(np.asarray(d["px"]) - mem["px"])))
                 if float(np.linalg.norm(np.asarray(near["px"]) - mem["px"])) < 40.0:   # follow the blob in px

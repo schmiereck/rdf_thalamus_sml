@@ -93,6 +93,12 @@ versagt der Split, und wie oft passiert das. Siehe
   bekommt ein **geparktes Ziel**. Endabstaende 627-968 mm. Der Fehler ist hier **zweimal** an
   verschiedenen Stellen aufgetreten. **Ein Endabstand jenseits des Arbeitsraums ist immer eine
   geparkte Groesse, nie schlechte Ausfuehrung.**
+* **Es sind FUENF Stellen, nicht vier** (2026-09-08). Die fuenfte ist der **Keim-Schluessel**:
+  `perceive()` veroeffentlicht die Erst-Wahrnehmung als `eig:{body}`, `make_shape_track` fragt sie
+  unter der Formklasse ab - sie treffen sich nie, und der Tracker startet blind auf dem
+  wahrscheinlichsten gleichklassigen Blob. Gemessen 120 von 120 Episoden ohne Keim; bei mehreren
+  Kandidaten 41 % Fehlstart, davon 0 geliefert. Siehe
+  [Der Keim erreicht den Tracker nie](/befunde/keim-erreicht-tracker-nicht.md).
 * **Ein neues Adressierungsverfahren muss an VIER Stellen angemeldet werden.** `method` wird nicht
   nur beim Wahrnehmen abgefragt, sondern auch bei der Trackerwahl und beim `servo=`-Argument von
   `run_combined`. `"eigenschaft"` fiel in den else-Zweig und lief mit `servo=False`: **zwei

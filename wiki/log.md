@@ -7,6 +7,16 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-08
 
+* **Anlage**: [Der Keim erreicht den Tracker nie](/befunde/keim-erreicht-tracker-nicht.md) - die
+  Anschlussmessung zur Ablenker-Bindung, und sie findet einen **Schluesselfehler**: der
+  Eigenschafts-Pfad veroeffentlicht die Erst-Wahrnehmung als `eig:{body}`, der Tracker fragt sie
+  unter der Formklasse ab - **120 von 120 Episoden ohne Keim**. Der Tracker startet deshalb auf
+  dem wahrscheinlichsten gleichklassigen Blob; bei mehreren Kandidaten (14,2 % der Episoden) sind
+  das 41,2 % Fehlstarts, und **kein einziger Fehlstart wurde je geliefert** (0/8 gegen 67/112,
+  Fisher p = 0,0011). Herkunft: `0d8c88f` - die "vier Stellen" des Eigenschafts-Kommandos waren
+  fuenf. Neue Diagnose `ACT23_KEIMDIAG=1` (Vorgabe aus, rein messend). Reparaturvorschlag und
+  geschaetzte Wirkung (~3,5 Punkte, Hochrechnung) stehen in der Seite; **nicht gebaut**.
+
 * **Anlage**: [Der Tracker rastet auf dem Nachbarn ein](/befunde/ablenker-bindung-gemessen.md) -
   auf Nutzerauftrag der erste Schritt an der Ablenker-Bindung. Neue Diagnose
   `ACT16_ABLENKDIAG=1` (Vorgabe aus, privilegiert und rein messend wie `GLAUBDIAG`) zaehlt je

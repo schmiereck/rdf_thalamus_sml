@@ -86,6 +86,14 @@ ab, welcher gewinnt, und wie weit steht `c` von beiden.
   Form-/Farbklasse beim Aufsetzen des Trackers. Episode 48 spricht fuer das Zweite: die Bindung
   steht ab Schritt 1 fest, und `obj_green` gewinnt 897 von 901 Schritten.
 
+# Nachtrag 2026-09-08: beantwortet
+
+Ja - die Bindung entsteht beim Aufsetzen. Ursache ist ein Schluesselfehler, durch den der Tracker
+seinen Keim **nie** bekommt (120 von 120 Episoden). Siehe
+[Der Keim erreicht den Tracker nie](/befunde/keim-erreicht-tracker-nicht.md). Der unten skizzierte
+Eingriff "den Tracker an die adressierte Detektion binden" ist damit nicht mehr ein Umbau,
+sondern die Reparatur eines Schluessels.
+
 # Naechster Schritt
 
 Die Frage ist jetzt eng genug fuer eine gezielte Messung: **entsteht die Bindung beim Aufsetzen
