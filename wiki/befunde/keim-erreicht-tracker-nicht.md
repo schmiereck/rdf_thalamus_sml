@@ -100,6 +100,13 @@ Grundquote der sauberen Starts (59,8 %) waeren das rund **4 zusaetzliche Lieferu
 Episoden, also etwa 3,5 Punkte**. Das ist eine **Hochrechnung aus dieser Messung**, kein
 Ergebnis: ob die geretteten Episoden tatsaechlich wie die uebrigen liefern, ist unbekannt.
 
+# Nachtrag 2026-09-09: gebaut und gemessen
+
+Die Reparatur steht hinter `ACT23_KEIM_FIX` (Vorgabe 0) und wirkt: Fehlstarts unter mehrdeutigen
+Szenen 51,5 -> 6,7 % (p = 0,0001, gepaart ueber zwei Seeds). Die unten geschaetzten ~3,5 Punkte
+Lieferquote haben sich **nicht** bestaetigt (gepoolt +2,5 Punkte, p = 0,65). Siehe
+[Keim-Fix, A/B](/befunde/keim-fix-ab.md).
+
 # Die Reparatur, die ich vorschlagen wuerde
 
 `make_shape_track` einen eigenen `seed_key`-Parameter geben, Vorgabe `seed_key=key` - damit

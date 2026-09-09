@@ -5,6 +5,19 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-09
+
+* **Anlage**: [Keim-Fix, A/B](/befunde/keim-fix-ab.md) - der Schluesselfehler aus
+  [Der Keim erreicht den Tracker nie](/befunde/keim-erreicht-tracker-nicht.md) ist hinter
+  `ACT23_KEIM_FIX` (Vorgabe 0) repariert und gemessen. **Gepaarter Seed-Sweep** nach der Lehre
+  aus [Zwei Laeufe sind dieselbe Rechnung](/befunde/laeufe-sind-reproduzierbar.md): 4 Laeufe je
+  120 Episoden, zwei Seeds, ein Schnappschuss. Direkte Zielgroesse (Fehlstart unter mehrdeutigen
+  Szenen) **51,5 -> 6,7 %, Fisher p = 0,0001**, beide Seeds gleichgerichtet; Keim greift 0 ->
+  95/97 %. Lieferquote gepoolt 50,4 -> 52,9 %, **p = 0,65 - die eigene Hochrechnung von 3,5
+  Punkten ist damit nicht bestaetigt**. Zwei benannte Restluecken: der privilegierte Rueckfall
+  veroeffentlicht keinen Keim (3-5 % der Episoden), und die Kennzahl saettigt, wenn zwei Koerper
+  wenige Millimeter auseinanderliegen. Vorgabe bleibt `0`.
+
 ## 2026-09-08
 
 * **Anlage**: [Der Keim erreicht den Tracker nie](/befunde/keim-erreicht-tracker-nicht.md) - die

@@ -176,6 +176,18 @@ NB_NEUTRAL = np.array([0.0, NB_DMAX, 1.0, 0.0, 0.0])   # "nie gemessen" -- guelt
 # dem wahrscheinlichsten gleichklassigen Blob gestartet ist -- und auf welchem Koerper er dabei
 # landet.  Die wahren Lagen dienen AUSSCHLIESSLICH der Zaehlung, wie bei ACT16_ABLENKDIAG.
 KEIMDIAG = os.environ.get("ACT23_KEIMDIAG", "0") == "1"
+# KEIM-REPARATUR (ACT23_KEIM_FIX=1, Vorgabe AUS bis gemessen).  Der Eigenschafts-Pfad
+# veroeffentlicht die Erst-Wahrnehmung unter `eig:{body}` (pc_act23.py:2986), der Tracker fragt
+# sie unter der FORMKLASSE ab (:3129) -- die beiden treffen sich nie, gemessen 120 von 120
+# Episoden ohne Keim.  Ohne Keim startet make_shape_track blind auf dem wahrscheinlichsten
+# gleichklassigen Blob; bei mehreren Kandidaten (14,2 % der Episoden) sind das 41,2 % Fehlstarts,
+# und KEIN Fehlstart wurde je geliefert (0/8 gegen 67/112, Fisher p = 0,0011).
+# Belege: wiki/befunde/keim-erreicht-tracker-nicht.md.
+# WARUM NICHT einfach unter der Formklasse veroeffentlichen: `"cube"` waere mehrdeutig, sobald
+# zwei Koerper dieselbe Formklasse tragen -- und genau das ist der Fall, der schiefgeht.  Nur
+# `eig:{body}` benennt den gemeinten Koerper.
+KEIM_FIX = os.environ.get("ACT23_KEIM_FIX", "0") == "1"
+_WIE_KEY = object()          # Vorgabe-Markierung fuer make_shape_track(seed_key=...): "nimm key"
 WORLD_EPOCHS = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS", "600")))
 WORLD_EPOCHS_SHORT = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS_SHORT", "20")))
 WORLD_FULL_EVERY = max(1, int(os.environ.get("ACT23_WORLD_FULL_EVERY", "4")))
@@ -3092,7 +3104,7 @@ def run_self_learning_steering(headless=False):
         plot_surprise()
         return obs
 
-    def make_shape_track(body, key=None, ckey=None):
+    def make_shape_track(body, key=None, ckey=None, seed_key=_WIE_KEY):
         """FORM-aware live tracker (the user's fovea goal): per tracked frame, segment+classify the scene
         (perceive_all) and return the commanded SHAPE's grasp point + confidence in run_combined's
         (obs, conf) servo protocol -- approach corrections work for L/U exactly like the colour servo.
@@ -3126,7 +3138,8 @@ def run_self_learning_steering(headless=False):
         #   with a net obs / a detector obs, and |net - detector| mm where both exist (shadow metric)
 
         def _track():
-            if mem["px"] is None and (_sd := perception.seed_for(key)) is not None:
+            _kkey = key if (seed_key is _WIE_KEY or not KEIM_FIX) else seed_key
+            if mem["px"] is None and (_sd := perception.seed_for(_kkey)) is not None:
                 mem["xy"], mem["px"] = _sd[0], _sd[1]                              # lazy: perceive() runs
                 mem["_keim"] = True                            # nur fuer die Keim-Diagnose
                 #   INSIDE run_combined, after this tracker was built -> read the seed on the first frame
@@ -3176,7 +3189,7 @@ def run_self_learning_steering(headless=False):
                                for _o in act16.OBJS]
                         _dm, _wer = min(_tr) if _tr else (float("nan"), "?")
                         print(f"    [Keim] {body}: Keim {'JA' if mem.get('_keim') else 'NEIN'} "
-                              f"(gesucht '{key}', veroeffentlicht '{getattr(perception, 'seed_key', '?')}')"
+                              f"(gesucht '{_kkey}', veroeffentlicht '{getattr(perception, 'seed_key', '?')}')"
                               f" | {len(cands)} Kandidaten -> Start auf {_wer} ({1000*_dm:.0f} mm)"
                               f" | eigenes Objekt {1000*float(np.linalg.norm(sim.obj_pos(body)[:2] - _bp)):.0f} mm"
                               f" | {'RICHTIG' if _wer == body else 'FALSCH'}", flush=True)
@@ -3671,11 +3684,12 @@ def run_self_learning_steering(headless=False):
         eig_servo = False
         if method == "eigenschaft":
             _ef, _efo, _eg = state.EIGENSCHAFT.get(body, (None, None, None))
+            _skey = f"eig:{body}"                              # so veroeffentlicht perceive() den Keim
             if _efo is not None:
-                track_fn = make_shape_track(body, key=_efo)     # Formklasse -> Form-Tracker
+                track_fn = make_shape_track(body, key=_efo, seed_key=_skey)   # Formklasse -> Form-Tracker
                 eig_servo = True
             elif _ef is not None:
-                track_fn = make_shape_track(body, ckey=_ef)     # Farbklasse -> farbgefuehrter Tracker
+                track_fn = make_shape_track(body, ckey=_ef, seed_key=_skey)   # Farbklasse -> Farb-Tracker
                 eig_servo = True
             else:
                 # NUR die Groesse genannt: es gibt keinen Schluessel, dem ein Tracker folgen kann.
