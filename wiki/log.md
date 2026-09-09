@@ -7,6 +7,23 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-10
 
+* **Anlage**: [Farb-Rueckhalte-Test](/befunde/farbe-form-rueckhalt.md) - auf Nutzerbeobachtung
+  ("die Objekte haben immer die gleiche Farbe"). Nachgezaehlt stimmt sie und ist enger als
+  vermutet: der Wuerfel gibt es in **drei** Farben, alle anderen Formen in genau einer, und in
+  5 von 6 Farbklassen bestimmt die Farbe die Form eindeutig. Der Rueckhalte-Test (336
+  Umfaerbungen) sagt aber: **die Wahrnehmung kuerzt NICHT ueber die Farbe ab** - bei allen
+  trainierten Formen haelt die Klasse zu 100 %, der Deskriptor ist farbblind wie konstruiert.
+  Freigelegt hat der Test etwas anderes: **obj_X haelt seine Formklasse schon in der EIGENEN
+  Farbe nur in 4 von 8 Lagen** und wird meist als "cube" gelesen - die "wandernde
+  Deskriptor"-Hypothese, erstmals ausserhalb einer Verschmelzungsszene belegt. Folge fuer die
+  Entkopplung: sie wuerde die Formerkennung nicht brechen, sondern diese Schwaeche **aufdecken**.
+* **Widerlegung (eigene)**: [Der Nachbar-Block traegt nichts](/befunde/merkmale-kommen-zu-spaet.md)
+  - Weg 2a gefahren (Fit nur auf den 690 gueltigen Zeilen, Halteteil nach Zeit mit Luecke, 5
+  Seeds): MIT Block AUC 0,603 +- 0,025, OHNE Block 0,599 +- 0,023. **+0,004, also nichts.** Meine
+  Erklaerung "das Merkmal ist bloss verduennt" ist damit fuer diesen Block widerlegt. Die
+  allgemeine Puffer-Frage bleibt offen, ihr Beispiel faellt weg - wer die Puffer-Architektur
+  angeht, braucht ein Merkmal, von dem vorher gezeigt ist, dass es Signal traegt.
+
 * **Entscheidung**: `ACT23_TRACK_KONTINUITAET` steht auf Nutzerentscheid auf **1** - der Tracker
   folgt bei ausgefallener Formklasse dem naechsten Farb-Teil, statt fuer dieses Bild blind zu
   werden. Kein grundsaetzlicher Preis (kein Privileg, rein wahrnehmungsbasiert), Gegenprobe

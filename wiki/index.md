@@ -47,7 +47,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Welt-Fit: Warmstart](befunde/welt-fit-warmstart.md) - der Fit ist schon warm und nach EINER Epoche konvergiert; die 600 Epochen kaufen nur Aufnahmekraft
 * [Sparsamer Welt-Fit, A/B](befunde/welt-fit-plan-ab.md) - 200 gegen 200 Episoden: Quote und Aneignung gleich, Laufzeit 2,95 statt 4,74 h
 * [Zwei Laeufe sind dieselbe Rechnung](befunde/laeufe-sind-reproduzierbar.md) - gleiche Einstellung heisst bitgleicher Lauf; die Replikate sind die Seeds. Enthaelt die Seed-Falle in der Kopfzeile
-* [Merkmale kommen zu spaet](befunde/merkmale-kommen-zu-spaet.md) - der Nachbar-Block steht auf 6 % der Pufferzeilen; der Engpass ist die Puffer-Zusammensetzung, nicht der Merkmalssatz
+* [Der Nachbar-Block traegt nichts](befunde/merkmale-kommen-zu-spaet.md) - steht auf 6 % der Zeilen, bringt aber auch unverduennt +0,004 AUC; meine Verduennungs-Erklaerung ist widerlegt
 * [Der Tracker rastet auf dem Nachbarn ein](befunde/ablenker-bindung-gemessen.md) - direkt gemessen: fremder Belief 31,2 gegen 4,2 % (p = 0,0086), auf 4 mm genau am FALSCHEN Koerper
 * [Der Keim erreicht den Tracker nie](befunde/keim-erreicht-tracker-nicht.md) - Schluesselfehler, 120 von 120; bei mehreren Kandidaten 41 % Fehlstart, davon 0 geliefert
 * [Keim-Fix, A/B](befunde/keim-fix-ab.md) - Fehlstarts 51,5 -> 6,7 % (p = 0,0001, gepaart ueber zwei Seeds); **Vorgabe seit 2026-09-09**, die Quote bleibt unbelegt
@@ -56,6 +56,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Nachbarnaehe im Lauf](befunde/nachbarnaehe-im-lauf.md) - unter 55 mm faellt die Quote um 13,9 Punkte (p < 0,0001, 7/7 Objekte gleich); betrifft 15,6 % der Episoden
 * [Warum der Split die Formklasse verliert](befunde/formsplit-warum.md) - halbe Silhouette (31-58 %), Deskriptor knapp ueber novel_th; der Ausfall ist eine Enthaltung
 * [Kontinuitaet statt Neuklassifikation](befunde/kontinuitaet-statt-neuklassifikation.md) - **Vorgabe seit 2026-09-10**; sauber, aber das Loch ist klein (1-2 % der Schritte), Gegenprobe p = 1,0
+* [Farb-Rueckhalte-Test](befunde/farbe-form-rueckhalt.md) - die Formerkennung kuerzt NICHT ueber die Farbe ab; dafuer wackelt obj_X schon in seiner eigenen Farbe (4/8 Lagen)
 * [Ablenker-Bindung in der Anfahrt](befunde/ablenker-anfahrt.md) - 6,8 % der Episoden fahren >80 mm daneben und liefern dann 1 von 63, obwohl die Adressierung stimmt
 
 # Entscheidungen

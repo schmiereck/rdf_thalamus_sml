@@ -1,7 +1,7 @@
 ---
 type: Befund
-title: Ein spaet eingefuehrtes Merkmal erreicht das Weltmodell nie
-description: Der Nachbar-Merkmalsblock ist auf 6,0 Prozent der 11563 Pufferzeilen ueberhaupt gefuellt - der Rest traegt den neutralen "nie gemessen"-Wert. Zusammen mit der gemessenen Traegheit des Fits heisst das: wer ein Merkmal nachtraeglich einbaut, gibt ihm keine Chance. Der Engpass ist die Zusammensetzung des Puffers, nicht der Merkmalssatz.
+title: Der Nachbar-Block steht auf 6 Prozent der Zeilen - traegt aber auch unverduennt nichts
+description: Der Nachbar-Merkmalsblock ist auf 6,0 Prozent der 11563 Pufferzeilen gefuellt. Die daraus gezogene Folgerung "deshalb wirkt er nicht" ist am 2026-09-10 WIDERLEGT: auf den 690 gueltigen Zeilen allein gefittet bringt er +0,004 AUC, also nichts. Die Verduennung ist real, aber nicht der Grund.
 tags: [act23, weltmodell, merkmale, puffer]
 status: stable
 evidenz: gemessen
@@ -26,6 +26,10 @@ Zusammen mit der gemessenen Traegheit des Fits[^warm] folgt daraus die eigentlic
 **der Engpass des Weltmodells ist nicht, welche Merkmale es hat, sondern womit sein Puffer
 gefuellt ist.** Ein nachtraeglich eingefuehrtes Merkmal kann sich gegen den Altbestand nicht
 durchsetzen.
+
+> **WIDERLEGT fuer diesen Block (2026-09-10).** Auf den 690 gueltigen Zeilen allein gefittet
+> bringt der Nachbar-Block +0,004 AUC - nichts. Er traegt auch unverduennt nicht. Siehe den
+> Nachtrag unten; die allgemeine Puffer-Frage bleibt, ihr Beispiel faellt weg.
 
 # Zahlen
 
@@ -64,6 +68,28 @@ Rezepte sind null, und *"was fehlt, ist ein Merkmal, nicht ein Verfahren"*. Dort
 ausserdem, der Merkmalsblock sei **nicht pruefbar** gewesen (Gueltig-Flag zu 0 %). Er ist es
 immer noch fast nicht - nach ueber 4800 weiteren Episoden erst zu 6 %. Die Frage ist also nicht
 beantwortet worden, sondern **nie gestellt worden koennen**.
+
+# Nachtrag 2026-09-10: die Verduennung erklaert es NICHT
+
+Weg 1 unten ist gefahren - Fit **nur auf den 690 gueltigen Zeilen**, Halteteil nach Zeit mit
+40er-Luecke, 5 Seeds, mit gegen ohne die fuenf Nachbar-Spalten:
+
+    MIT Nachbar-Block    AUC 0,603 +- 0,025   MSE 0,1402
+    OHNE Nachbar-Block   AUC 0,599 +- 0,023   MSE 0,1435
+    Differenz +0,004 -- weit innerhalb der Seed-Streuung.  Grundrate im Test 0,300.
+
+**Der Block traegt also auch UNVERDUENNT nichts.** Die auf dieser Seite aufgestellte Folgerung -
+"ein Merkmal, das auf 6 % der Zeilen steht, hat keine Hebelwirkung" - ist damit als *Erklaerung
+fuer diesen Block* **widerlegt**. Die Verduennung ist real, aber sie ist nicht der Grund.
+
+Was bestehen bleibt: die **allgemeine** Frage, wie ein neues Merkmal ueberhaupt in einen
+gewachsenen Lifelong-Puffer kommt. Was faellt: dieser Block als ihr Beispiel. Wer die
+Puffer-Architektur angeht, braucht ein anderes Motiv - und sollte ein Merkmal waehlen, von dem
+vorher gezeigt ist, dass es Signal traegt.
+
+**Vorbehalt zur Methode:** der Fit lief bewusst OHNE `cross_augment`, um den Block zu isolieren;
+die Zahlen sind deshalb nicht mit denen des Live-Modells vergleichbar, wohl aber die *Differenz*
+zwischen den beiden Armen.
 
 # Folgen - was daraus zu tun waere
 
