@@ -7,6 +7,17 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-09
 
+* **Anlage**: [Verschmelzung: die Abstandskurve](/befunde/verschmelzung-abstandskurve.md) - der
+  seit August offene Faden ist gemessen, mit dem neuen Werkzeug
+  `src/pc_cvnn/act23_fusion_probe.py` (864 Konstellationen). Verschmelzung reicht bis ~75 mm
+  Mittenabstand und beherrscht alles unter 35 mm; der **Farb-Split rettet ab 35 mm zu 100 %**,
+  bei 25 mm nur zu 72 %, bei 15 mm zu 29 %. Die **Formklasse** ueberlebt die Rettung viel
+  schlechter als die Position (42 % bei 35 mm, erst ab 65 mm sicher) - das trifft die Formachse
+  des Eigenschafts-Kommandos. Zwei Einschraenkungen in der Seite: **ein Paar (obj_X/obj_green)
+  verschmilzt bei keinem Abstand**, Verschmelzung ist also paarabhaengig; und die 15-mm-Zeile ist
+  ueberwiegend unphysikalisch, weil sich die Koerper dort durchdringen. Ebene `pruefstand` - wie
+  oft das im Lauf vorkommt, ist damit NICHT gemessen.
+
 * **Ruecknahme**: `ACT23_KEIM_RUECKFALL` steht auf Nutzerentscheid wieder auf **0**. Die
   Messung hatte keinen Nutzen gezeigt (Fehlstart p = 0,47, Quote p = 0,93), und der Keim kaeme
   aus dem Privileg - das in den Blick-Regelkreis zu lassen widerspricht

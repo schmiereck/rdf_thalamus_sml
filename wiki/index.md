@@ -52,6 +52,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Der Keim erreicht den Tracker nie](befunde/keim-erreicht-tracker-nicht.md) - Schluesselfehler, 120 von 120; bei mehreren Kandidaten 41 % Fehlstart, davon 0 geliefert
 * [Keim-Fix, A/B](befunde/keim-fix-ab.md) - Fehlstarts 51,5 -> 6,7 % (p = 0,0001, gepaart ueber zwei Seeds); **Vorgabe seit 2026-09-09**, die Quote bleibt unbelegt
 * [Keim im Rueckfall](befunde/keim-im-rueckfall.md) - Luecke zu (10 -> 0), Nutzen nicht nachweisbar, **wieder abgeschaltet**; die Rueckfall-Faelle sind Verschmelzungen
+* [Verschmelzung: die Abstandskurve](befunde/verschmelzung-abstandskurve.md) - Split traegt ab 35 mm, bei 25 mm nur 72 %; die Formklasse ueberlebt viel schlechter als die Position
 * [Ablenker-Bindung in der Anfahrt](befunde/ablenker-anfahrt.md) - 6,8 % der Episoden fahren >80 mm daneben und liefern dann 1 von 63, obwohl die Adressierung stimmt
 
 # Entscheidungen

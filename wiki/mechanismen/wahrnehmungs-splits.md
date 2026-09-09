@@ -118,3 +118,11 @@ versagt und wie oft, ist **nicht gemessen**.
 
 * [Formklassen-Lebenszyklus](/mechanismen/formklassen-lebenszyklus.md)
 * [Aneignung neuer Formen](/befunde/aneignung-neuer-formen.md)
+
+# Nachtrag 2026-09-09: die Grenze ist vermessen
+
+Der Split traegt die POSITION ab 35 mm Mittenabstand vollstaendig, bei 25 mm nur zu 72 %, bei
+15 mm zu 29 %. Verschmelzung reicht bis rund 75 mm. Die FORMKLASSE ueberlebt die Rettung
+deutlich schlechter als die Position (42 % bei 35 mm). Ein Paar verschmilzt bei keinem Abstand -
+es ist also paarabhaengig, nicht nur abstandsabhaengig. Siehe
+[Verschmelzung: die Abstandskurve](/befunde/verschmelzung-abstandskurve.md).
