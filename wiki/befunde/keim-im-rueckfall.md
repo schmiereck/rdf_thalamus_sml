@@ -1,7 +1,7 @@
 ---
 type: Befund
-title: Der Keim im Rueckfall schliesst die Luecke - bringt aber nichts Messbares
-description: Der privilegierte Rueckfall setzt jetzt auch einen Keim; Episoden ohne Keim fallen von 10 auf 0. Ein Nutzen ist nicht nachweisbar (Fehlstart 2,9 -> 4,2 Prozent p = 0,47, Quote 52,9 -> 53,6 Prozent p = 0,93). Der Grund ist lehrreich: die Rueckfall-Episoden sind Verschmelzungsfaelle, und gegen einen verschmolzenen Blob hilft kein Ortsanker.
+title: Der Keim im Rueckfall schliesst die Luecke - bringt nichts und ist wieder aus
+description: Der privilegierte Rueckfall-Keim schliesst die Luecke vollstaendig (Episoden ohne Keim 10 -> 0), bringt aber nichts Messbares (Fehlstart 2,9 -> 4,2 Prozent p = 0,47, Quote 52,9 -> 53,6 Prozent p = 0,93). Weil er das Privileg in den Blick-Regelkreis traegt und sich nicht bezahlt macht, steht die Vorgabe wieder auf 0. Der Grund fuer die Wirkungslosigkeit ist der Ertrag: die Rueckfall-Episoden sind Verschmelzungsfaelle.
 tags: [act23, wahrnehmung, tracker, negativ]
 status: stable
 evidenz: gemessen
@@ -97,11 +97,19 @@ vergleichen ausserdem zwei auseinandergelaufene Trajektorien, siehe
 
 **Belegt ist damit genau eines: die Luecke ist zu. Ein Nutzen ist es nicht.**
 
-# Folgen
+# Folgen: gebaut, gemessen, wieder abgeschaltet
 
-`ACT23_KEIM_RUECKFALL` steht auf `1` (Nutzerauftrag). Kein Schaden gemessen, kein Nutzen
-gemessen, ein Privileg mehr im Regelkreis. Wer das Privileg nicht will, setzt
-`ACT23_KEIM_RUECKFALL=0` - dann startet der Tracker in diesen 3-5 % wieder blind.
+**`ACT23_KEIM_RUECKFALL` steht auf `0`** (Nutzerentscheid 2026-09-09, nach der Messung). Die
+Abwaegung ist damit vollstaendig protokolliert: kein Schaden gemessen, **kein Nutzen gemessen**,
+aber ein Privileg mehr im Blick-Regelkreis. Wo nichts zu gewinnen ist, wiegt der Verstoss gegen
+[das Projektziel](/ziel.md) schwerer.
+
+Der Schalter bleibt im Code stehen, damit die Messung reproduzierbar bleibt - eingeschaltet
+markiert `perception.seed_priv` den Keim, und die Diagnosezeile druckt
+`Keim JA (PRIVILEGIERT)`.
+
+**Das ist ein Muster, kein Einzelfall:** eine Aenderung, die eine Luecke sauber schliesst, ist
+damit noch nicht begruendet. Die Luecke war real und ist es weiterhin - sie kostet nur nichts.
 
 Der lohnendere Weg fuehrt ueber die Ursache: waeren die Blobs getrennt, fiele der Rueckfall gar
 nicht erst an. Siehe [Wahrnehmungs-Splits](/mechanismen/wahrnehmungs-splits.md) und die noch

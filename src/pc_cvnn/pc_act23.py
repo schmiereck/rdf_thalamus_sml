@@ -198,17 +198,24 @@ KEIMDIAG = os.environ.get("ACT23_KEIMDIAG", "0") == "1"
 # Keim wird wieder unter der Formklasse gesucht -- zifferngenau der Stand vor d85250b.
 KEIM_FIX = os.environ.get("ACT23_KEIM_FIX", "1") == "1"
 _WIE_KEY = object()          # Vorgabe-Markierung fuer make_shape_track(seed_key=...): "nimm key"
-# KEIM AUCH IM PRIVILEGIERTEN RUECKFALL (ACT23_KEIM_RUECKFALL, Vorgabe 1 -- Nutzerwunsch
-# 2026-09-09).  Trifft die Eigenschafts-Adressierung nichts, gibt perceive() die WAHRE Lage als
-# Greifziel zurueck und veroeffentlichte bisher KEINEN Keim -- der Tracker startete dann wieder
-# blind (gemessen 3-5 % der Episoden als `__unset__`, zwei der verbliebenen Fehlstarts,
-# s. wiki/befunde/keim-fix-ab.md).
-# EHRLICHKEITSVORBEHALT: dieser Keim ist PRIVILEGIERT.  Das Greifziel war es in diesem Zweig
-# ohnehin schon, neu ist, dass das Privileg auch den Blick-Regelkreis anfaehrt.  Damit die
-# Diagnose das nicht als saubere Wahrnehmung ausweist, wird der Keim als privilegiert markiert
-# (perception.seed_priv) und in der [Keim]-Zeile so gedruckt.  ACT23_KEIM_RUECKFALL=0 stellt den
-# alten Zustand her (kein Keim, blinder Start).
-KEIM_RUECKFALL = os.environ.get("ACT23_KEIM_RUECKFALL", "1") == "1"
+# KEIM AUCH IM PRIVILEGIERTEN RUECKFALL (ACT23_KEIM_RUECKFALL).  VORGABE 0 -- GEBAUT, GEMESSEN,
+# WIEDER ABGESCHALTET (2026-09-09, Nutzerentscheid).  Trifft die Eigenschafts-Adressierung nichts,
+# gibt perceive() die WAHRE Lage als Greifziel zurueck und veroeffentlicht KEINEN Keim; der
+# Tracker startet dort blind (3-5 % der Episoden, im Protokoll als `__unset__`).
+# MIT dem Schalter schliesst sich diese Luecke vollstaendig -- Episoden ohne Keim 10 -> 0 -- aber
+# GEMESSEN bringt es nichts: Fehlstart 2,9 -> 4,2 % (p = 0,47), Lieferquote 52,9 -> 53,6 %
+# (p = 0,93), je ~120 Episoden ueber zwei Seeds.  Der Grund ist der Ertrag der Messung: die
+# Rueckfall-Episoden sind VERSCHMELZUNGSFAELLE (gewaehlter Blob 21 gegen 23 mm bzw. 19 gegen
+# 23 mm, also fast genau zwischen zwei Koerpern).  Gegen einen verschmolzenen Blob hilft kein
+# Ortsanker -- der Keim zeigt richtig, die Wahrnehmung hat nichts Richtiges anzubieten.
+# WARUM AUS: der Keim kaeme aus sim.obj_pos(), also aus dem PRIVILEG.  Das Greifziel ist es in
+# diesem Zweig ohnehin, aber das Privileg zusaetzlich in den BLICK-Regelkreis zu lassen widerspricht
+# dem Projektziel (wiki/ziel.md) -- und bezahlt hat es sich nicht.  Der Schalter bleibt stehen,
+# weil die Messung reproduzierbar bleiben soll; eingeschaltet markiert perception.seed_priv den
+# Keim, und die [Keim]-Zeile druckt "Keim JA (PRIVILEGIERT)".
+# Der lohnendere Weg fuehrt ueber die Ursache: waeren die Blobs getrennt, fiele der Rueckfall gar
+# nicht erst an.  Belege: wiki/befunde/keim-im-rueckfall.md.
+KEIM_RUECKFALL = os.environ.get("ACT23_KEIM_RUECKFALL", "0") == "1"
 WORLD_EPOCHS = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS", "600")))
 WORLD_EPOCHS_SHORT = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS_SHORT", "20")))
 WORLD_FULL_EVERY = max(1, int(os.environ.get("ACT23_WORLD_FULL_EVERY", "4")))

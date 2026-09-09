@@ -7,6 +7,13 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-09
 
+* **Ruecknahme**: `ACT23_KEIM_RUECKFALL` steht auf Nutzerentscheid wieder auf **0**. Die
+  Messung hatte keinen Nutzen gezeigt (Fehlstart p = 0,47, Quote p = 0,93), und der Keim kaeme
+  aus dem Privileg - das in den Blick-Regelkreis zu lassen widerspricht
+  [dem Projektziel](/ziel.md), ohne sich zu bezahlen. Der Schalter bleibt fuer die
+  Reproduzierbarkeit stehen. Seite fortgeschrieben:
+  [Keim im Rueckfall](/befunde/keim-im-rueckfall.md).
+
 * **Anlage**: [Keim im Rueckfall](/befunde/keim-im-rueckfall.md) - auf Nutzerauftrag setzt der
   privilegierte Rueckfall jetzt auch einen Keim (`ACT23_KEIM_RUECKFALL`, Vorgabe 1). Die Luecke
   ist zu: **Episoden ohne Keim 10 -> 0**. Ein Nutzen ist **nicht nachweisbar** (Fehlstart
