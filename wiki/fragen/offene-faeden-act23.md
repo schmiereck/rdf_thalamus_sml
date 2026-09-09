@@ -65,7 +65,16 @@ werden kann: eine vortrainierte, persistente Dynamik mit Uebergaengen **pro Schr
 je Episode, und ein Tor, das ihn erst unterhalb einer MSE-Schwelle einschaltet. Siehe
 [Latent-Etappen](/befunde/latent-etappen.md).
 
-**Den FORM-Split verbessern.** Die Verschmelzungsfrage ist in beiden Haelften beantwortet
+**Den FORM-Split verbessern - teilweise erledigt.** Der Tracker-seitige Weg (Kontinuitaet statt
+Neuklassifikation) ist gebaut und gemessen: sauber, aber klein (1-2 % der Anfahrschritte, kein
+Lauf war je ganz blind), siehe
+[Kontinuitaet statt Neuklassifikation](/befunde/kontinuitaet-statt-neuklassifikation.md). Offen
+bleiben die beiden anderen Wege aus [der Diagnose](/befunde/formsplit-warum.md): eine
+kontextabhaengige Schwelle fuer Split-Detektionen (der Deskriptor liegt bei 0,94-1,55 x novel_th,
+also knapp daneben) und die Rettung des Fussabdrucks selbst (der Splitteil behaelt nur 31-58 %
+der Pixel). Der zweite waere die Ursache, ist aber der tiefste Eingriff in Uebergangsgeruest.
+
+**Der urspruengliche Faden, unveraendert:** Die Verschmelzungsfrage ist in beiden Haelften beantwortet
 ([Abstandskurve](/befunde/verschmelzung-abstandskurve.md),
 [Nachbarnaehe im Lauf](/befunde/nachbarnaehe-im-lauf.md)) und hat einen scharfen Rest
 hinterlassen: der Split rettet die **Position** ab 35 mm vollstaendig, die **Formklasse** erst ab

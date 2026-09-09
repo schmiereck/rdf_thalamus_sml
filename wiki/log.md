@@ -5,6 +5,20 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-10
+
+* **Anlage**: [Kontinuitaet statt Neuklassifikation](/befunde/kontinuitaet-statt-neuklassifikation.md)
+  - der aus [der Diagnose](/befunde/formsplit-warum.md) empfohlene Weg ist gebaut
+  (`ACT23_TRACK_KONTINUITAET`, Vorgabe 0) und im gepaarten Seed-Sweep gemessen. **Die
+  Sicherheitsfrage ist sauber**: fremder Belief 8,8 -> 9,2 %, p = 1,0000 - die Ablenker-Bindung
+  kommt ueber den klassenfreien Pfad nicht zurueck, die beiden Wachen tragen. **Das Loch ist
+  aber kleiner als meine Begruendung nahelegte**: kein einziger Lauf war je ganz blind (0/120 in
+  allen vier Armen), der Servo hatte auch ohne die Aenderung in 31-32 % der Anfahrschritte eine
+  Beobachtung, und die Kontinuitaet fuellt 1,3-2,2 %. Lieferquote nicht aufgeloest, die Seeds
+  widersprechen einander (-3,3 und +11,7 Punkte, gepoolt p = 0,41). Vorgabe bleibt `0`; anders
+  als beim Rueckfall-Keim gibt es hier aber **keinen grundsaetzlichen Preis** - die Abwaegung
+  steht in der Seite.
+
 ## 2026-09-09
 
 * **Anlage**: [Warum der Split die Formklasse verliert](/befunde/formsplit-warum.md) - Diagnose

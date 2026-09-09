@@ -216,6 +216,25 @@ _WIE_KEY = object()          # Vorgabe-Markierung fuer make_shape_track(seed_key
 # Der lohnendere Weg fuehrt ueber die Ursache: waeren die Blobs getrennt, fiele der Rueckfall gar
 # nicht erst an.  Belege: wiki/befunde/keim-im-rueckfall.md.
 KEIM_RUECKFALL = os.environ.get("ACT23_KEIM_RUECKFALL", "0") == "1"
+# KONTINUITAET STATT NEUKLASSIFIKATION (ACT23_TRACK_KONTINUITAET, Vorgabe 0 bis gemessen).
+# Der Form-Tracker verlangt in JEDEM Bild erneut `d["shape"] == key`.  Bei verschmolzenem Blob
+# faellt die Formklasse aber aus -- gemessen behaelt der Farb-Split nur 31-58 % der Pixel, und
+# der Deskriptor dieser halben Silhouette landet bei 0,94-1,55 x novel_th, also knapp jenseits.
+# resolve() antwortet dann in 55 von 58 Faellen mit "neuartig" (Enthaltung, keine Verwechslung),
+# der Tracker findet null Kandidaten und der Servo ist fuer dieses Bild blind.
+# Belege: wiki/befunde/formsplit-warum.md, wiki/befunde/verschmelzung-abstandskurve.md.
+# DIE IDEE: die IDENTITAET steht laengst fest -- sie kommt aus der Adressierung und seit d85250b
+# aus dem Keim.  Je Bild wird nur die POSITION gebraucht, und die rettet der Farb-Split ab 35 mm
+# vollstaendig.  Faellt die Klasse aus, folgt der Tracker deshalb dem naechstgelegenen Farb-Teil
+# -- OHNE Formforderung -- und die bestehende 5-cm-Sprungschranke bleibt die Sicherung.
+# ZWEI WACHEN, ohne die es die Ablenker-Bindung zurueckholen wuerde:
+#   * nur wenn schon ein Glaube besteht (mem["xy"] is not None).  Beim ERSTEN Blick wird nicht
+#     geraten -- dort entscheidet der Keim, sonst waere es genau der Muenzwurf aus
+#     wiki/befunde/keim-erreicht-tracker-nicht.md.
+#   * die Zuversicht kommt aus der FARBE (wie im ckey-Zweig), nicht aus einer erfundenen
+#     Klassenwahrscheinlichkeit: wir wissen wo, nicht was.  Faellt sie unter act16.SERVO_CONF,
+#     ignoriert der Servo die Beobachtung von selbst.
+KONTINUITAET = os.environ.get("ACT23_TRACK_KONTINUITAET", "0") == "1"
 WORLD_EPOCHS = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS", "600")))
 WORLD_EPOCHS_SHORT = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS_SHORT", "20")))
 WORLD_FULL_EVERY = max(1, int(os.environ.get("ACT23_WORLD_FULL_EVERY", "4")))
@@ -3184,7 +3203,7 @@ def run_self_learning_steering(headless=False):
                 #   (key=None = the long object; its seed now comes from perceive() too, stage 3)
             saved = sim.d.mocap_pos.copy()                     # perceive_all parks the markers -> restore
             dets = shape_clf.perceive_all(sim)
-            obs, conf = None, 0.0
+            obs, conf, kont = None, 0.0, False
             if key is not None:                                # SHAPE-keyed servo cands (L/U, open classes)
                 cands = [d for d in dets if d["shape"] == key and d["pos"] is not None]
                 if not cands and FORM_SPLIT:                   # fused -> form descriptor destroyed; re-read
@@ -3194,6 +3213,16 @@ def run_self_learning_steering(headless=False):
                                  if d["shape"] == key and d["pos"] is not None]
                         if cands:                              # counted SEPARATELY from the colour split so
                             vc._fsv["fsplit"] = vc._fsv.get("fsplit", 0) + 1   # a run can tell them apart
+                if not cands and KONTINUITAET and mem["xy"] is not None:
+                    # KONTINUITAET (s.o.): Klasse ausgefallen, Glaube steht -> dem naechsten
+                    # FARB-Teil folgen statt blind zu werden.  Die Sprungschranke unten sichert.
+                    _ckk = colour_of_body.get(body)
+                    if _ckk:
+                        cands = [d for d in shape_clf.perceive_colour(sim, colours, _ckk)
+                                 if d["pos"] is not None]
+                        if cands:
+                            kont = True
+                            vc._fsv["kont"] = vc._fsv.get("kont", 0) + 1
             elif ckey is not None:                             # COLOUR-CLASS-keyed servo cands (cubes)
                 cands = [d for d in dets if d["pos"] is not None
                          and colours.classify(d["chroma"])[0] == ckey]
@@ -3215,8 +3244,8 @@ def run_self_learning_steering(headless=False):
                     best = min(cands, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"]) - mem["xy"])))
                 if mem["xy"] is None or float(np.linalg.norm(np.asarray(best["pos"]) - mem["xy"])) <= 0.05:
                     obs = _off(_gp(best, body))                # correct toward the GRASP point (+ the learned
-                    conf = (float(best["prob"]) if key is not None   # offset, else the servo would fight it)
-                            else float(np.clip(1.0 - colours.classify(best["chroma"])[1]
+                    conf = (float(best["prob"]) if (key is not None and not kont)  # offset, else the
+                            else float(np.clip(1.0 - colours.classify(best["chroma"])[1]  # servo fights it
                                                / (2.0 * colour_openset.TH), 0.0, 1.0)))
                     mem["xy"] = np.asarray(best["pos"], float); mem["px"] = np.asarray(best["px"], float)
                     vc._fsv["nd"] += 1
@@ -3970,7 +3999,8 @@ def run_self_learning_steering(headless=False):
                   + (f", |Netz-Detektor| mittel {np.mean(_fsv['d']):.1f} mm, "
                      f"max {np.max(_fsv['d']):.0f} mm" if _fsv["d"] else "")
                   + (f", Farb-Split trug {_fsv['split']} Frames" if _fsv.get("split") else "")
-                  + (f", Form-Split trug {_fsv['fsplit']} Frames" if _fsv.get("fsplit") else ""),
+                  + (f", Form-Split trug {_fsv['fsplit']} Frames" if _fsv.get("fsplit") else "")
+                  + (f", Kontinuitaet trug {_fsv['kont']} Frames" if _fsv.get("kont") else ""),
                   flush=True)
         if _dbg and FOVEA_NET and getattr(vc, "_fovea_drift", None):   # net-gaze tracking quality + zoom
             d = vc._fovea_drift; zz = getattr(vc, "_fovea_zoom", []) or [1.0]
