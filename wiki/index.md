@@ -55,7 +55,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Verschmelzung: die Abstandskurve](befunde/verschmelzung-abstandskurve.md) - Split traegt ab 35 mm, bei 25 mm nur 72 %; die Formklasse ueberlebt viel schlechter als die Position
 * [Nachbarnaehe im Lauf](befunde/nachbarnaehe-im-lauf.md) - unter 55 mm faellt die Quote um 13,9 Punkte (p < 0,0001, 7/7 Objekte gleich); betrifft 15,6 % der Episoden
 * [Warum der Split die Formklasse verliert](befunde/formsplit-warum.md) - halbe Silhouette (31-58 %), Deskriptor knapp ueber novel_th; der Ausfall ist eine Enthaltung
-* [Kontinuitaet statt Neuklassifikation](befunde/kontinuitaet-statt-neuklassifikation.md) - gebaut und sauber, aber das Loch ist klein (1-2 % der Schritte); Gegenprobe p = 1,0
+* [Kontinuitaet statt Neuklassifikation](befunde/kontinuitaet-statt-neuklassifikation.md) - **Vorgabe seit 2026-09-10**; sauber, aber das Loch ist klein (1-2 % der Schritte), Gegenprobe p = 1,0
 * [Ablenker-Bindung in der Anfahrt](befunde/ablenker-anfahrt.md) - 6,8 % der Episoden fahren >80 mm daneben und liefern dann 1 von 63, obwohl die Adressierung stimmt
 
 # Entscheidungen

@@ -7,6 +7,12 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-10
 
+* **Entscheidung**: `ACT23_TRACK_KONTINUITAET` steht auf Nutzerentscheid auf **1** - der Tracker
+  folgt bei ausgefallener Formklasse dem naechsten Farb-Teil, statt fuer dieses Bild blind zu
+  werden. Kein grundsaetzlicher Preis (kein Privileg, rein wahrnehmungsbasiert), Gegenprobe
+  sauber (p = 1,0000). **Ausdruecklich kein Quotengewinn** (p = 0,41, Seeds gegenlaeufig).
+  Rueckfall: `ACT23_TRACK_KONTINUITAET=0`.
+
 * **Anlage**: [Kontinuitaet statt Neuklassifikation](/befunde/kontinuitaet-statt-neuklassifikation.md)
   - der aus [der Diagnose](/befunde/formsplit-warum.md) empfohlene Weg ist gebaut
   (`ACT23_TRACK_KONTINUITAET`, Vorgabe 0) und im gepaarten Seed-Sweep gemessen. **Die

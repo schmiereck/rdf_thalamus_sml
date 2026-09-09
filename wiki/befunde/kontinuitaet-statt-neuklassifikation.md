@@ -89,7 +89,7 @@ selten. Viele Episoden haben also einzelne Bilder ohne Formtreffer - nur eben we
 
 # Folgen
 
-`ACT23_TRACK_KONTINUITAET` steht auf `0`. Anders als beim
+**Der Nutzer hat die Vorgabe am 2026-09-10 auf `1` gestellt.** Anders als beim
 [Rueckfall-Keim](/befunde/keim-im-rueckfall.md), der ebenfalls klein war, gibt es hier **keinen
 grundsaetzlichen Preis**: der Pfad ist rein wahrnehmungsbasiert (Farb-Split, Sprungschranke,
 farbbasierte Zuversicht), er fuegt kein Privileg hinzu und widerspricht dem
@@ -99,7 +99,9 @@ feststellen und dann verfolgen", was architektonisch die sauberere Antwort ist.
 **Dafuer:** mehr Information fuer den Servo, kein gemessener Schaden, prinzipientreu.
 **Dagegen:** ein Codepfad mehr fuer 1-2 % der Schritte, ohne belegten Ertrag.
 
-Das ist eine Abwaegung, keine Rechnung - die Entscheidung liegt beim Nutzer.
+Das war eine Abwaegung, keine Rechnung - der Nutzer hat sie zugunsten der Umstellung
+entschieden. **Ausdruecklich nicht mitgekauft:** ein Quotengewinn (gepoolt 52,9 -> 57,1 %,
+p = 0,41, Seeds gegenlaeufig). Rueckfall in einer Zeile: `ACT23_TRACK_KONTINUITAET=0`.
 
 # Verwandt
 

@@ -216,7 +216,7 @@ _WIE_KEY = object()          # Vorgabe-Markierung fuer make_shape_track(seed_key
 # Der lohnendere Weg fuehrt ueber die Ursache: waeren die Blobs getrennt, fiele der Rueckfall gar
 # nicht erst an.  Belege: wiki/befunde/keim-im-rueckfall.md.
 KEIM_RUECKFALL = os.environ.get("ACT23_KEIM_RUECKFALL", "0") == "1"
-# KONTINUITAET STATT NEUKLASSIFIKATION (ACT23_TRACK_KONTINUITAET, Vorgabe 0 bis gemessen).
+# KONTINUITAET STATT NEUKLASSIFIKATION.  VORGABE 1 SEIT DEM A/B (2026-09-10, Nutzerentscheid).
 # Der Form-Tracker verlangt in JEDEM Bild erneut `d["shape"] == key`.  Bei verschmolzenem Blob
 # faellt die Formklasse aber aus -- gemessen behaelt der Farb-Split nur 31-58 % der Pixel, und
 # der Deskriptor dieser halben Silhouette landet bei 0,94-1,55 x novel_th, also knapp jenseits.
@@ -234,7 +234,18 @@ KEIM_RUECKFALL = os.environ.get("ACT23_KEIM_RUECKFALL", "0") == "1"
 #   * die Zuversicht kommt aus der FARBE (wie im ckey-Zweig), nicht aus einer erfundenen
 #     Klassenwahrscheinlichkeit: wir wissen wo, nicht was.  Faellt sie unter act16.SERVO_CONF,
 #     ignoriert der Servo die Beobachtung von selbst.
-KONTINUITAET = os.environ.get("ACT23_TRACK_KONTINUITAET", "0") == "1"
+# GEMESSEN, gepaarter Seed-Sweep, 4 Laeufe je 120 Episoden (wiki/befunde/
+# kontinuitaet-statt-neuklassifikation.md):
+#     Gegenprobe fremder Belief   8,8 -> 9,2 %   Fisher p = 1,0000  (beide Seeds)
+#     Detektor-Obs je Anfahrschritt (Median)  0,312 -> 0,325 bzw. 0,319 -> 0,322
+#     Kontinuitaets-Anteil 1,3 bzw. 2,2 % der Anfahrschritte, in 22-28 % der Episoden
+#     Lieferquote gepoolt 52,9 -> 57,1 %, p = 0,41 -- die Seeds WIDERSPRECHEN einander
+# EHRLICH ZUR GROESSE: kein Lauf war je GANZ blind (0/120 in allen vier Armen), und der Servo
+# hatte auch vorher in 31-32 % der Anfahrschritte eine Beobachtung.  Das hier fuellt 1-2 %.
+# Ein QUOTENGEWINN ist NICHT belegt -- wer die Umstellung so zitiert, zitiert falsch.
+# Wofuer sie steht: Identitaet einmal feststellen und dann verfolgen, statt sie in jedem Bild
+# neu zu erkennen.  ZURUECK: ACT23_TRACK_KONTINUITAET=0.
+KONTINUITAET = os.environ.get("ACT23_TRACK_KONTINUITAET", "1") == "1"
 WORLD_EPOCHS = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS", "600")))
 WORLD_EPOCHS_SHORT = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS_SHORT", "20")))
 WORLD_FULL_EVERY = max(1, int(os.environ.get("ACT23_WORLD_FULL_EVERY", "4")))
