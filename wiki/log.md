@@ -7,6 +7,13 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-09
 
+* **Entscheidung**: `ACT23_KEIM_FIX` steht auf Nutzerentscheid jetzt auf **1** - der Tracker
+  bekommt beim Eigenschafts-Kommando seinen Keim. Grundlage ist
+  [Keim-Fix, A/B](/befunde/keim-fix-ab.md) (Fehlstarts unter mehrdeutigen Szenen 51,5 -> 6,7 %,
+  p = 0,0001, beide Seeds gleichgerichtet). Ohne Umgebungsvariable geprueft: `Keim JA`, und der
+  Schalter erscheint nicht mehr unter den Abweichungen. **Ausdruecklich nicht mitgekauft:** ein
+  Quotengewinn (gepoolt 50,4 -> 52,9 %, p = 0,65). Rueckfall mit `ACT23_KEIM_FIX=0`.
+
 * **Anlage**: [Keim-Fix, A/B](/befunde/keim-fix-ab.md) - der Schluesselfehler aus
   [Der Keim erreicht den Tracker nie](/befunde/keim-erreicht-tracker-nicht.md) ist hinter
   `ACT23_KEIM_FIX` (Vorgabe 0) repariert und gemessen. **Gepaarter Seed-Sweep** nach der Lehre

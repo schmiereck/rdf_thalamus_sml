@@ -97,8 +97,10 @@ versagt der Split, und wie oft passiert das. Siehe
   `perceive()` veroeffentlicht die Erst-Wahrnehmung als `eig:{body}`, `make_shape_track` fragt sie
   unter der Formklasse ab - sie treffen sich nie, und der Tracker startet blind auf dem
   wahrscheinlichsten gleichklassigen Blob. Gemessen 120 von 120 Episoden ohne Keim; bei mehreren
-  Kandidaten 41 % Fehlstart, davon 0 geliefert. Siehe
-  [Der Keim erreicht den Tracker nie](/befunde/keim-erreicht-tracker-nicht.md).
+  Kandidaten 41 % Fehlstart, davon 0 geliefert. **Repariert und Vorgabe seit 2026-09-09**
+  (`ACT23_KEIM_FIX`, `make_shape_track(..., seed_key=f"eig:{body}")`): Fehlstarts 51,5 -> 6,7 %.
+  Siehe [Der Keim erreicht den Tracker nie](/befunde/keim-erreicht-tracker-nicht.md) und
+  [Keim-Fix, A/B](/befunde/keim-fix-ab.md).
 * **Ein neues Adressierungsverfahren muss an VIER Stellen angemeldet werden.** `method` wird nicht
   nur beim Wahrnehmen abgefragt, sondern auch bei der Trackerwahl und beim `servo=`-Argument von
   `run_combined`. `"eigenschaft"` fiel in den else-Zweig und lief mit `servo=False`: **zwei

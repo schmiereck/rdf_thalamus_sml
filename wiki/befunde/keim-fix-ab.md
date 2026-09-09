@@ -88,11 +88,18 @@ mehrdeutig, der Effekt ist also klein gegen die Nachweisgrenze von 26 Punkten je
 
 # Folgen
 
-Der Schalter steht auf `0`. Fuer eine Umstellung spricht: die direkte Zielgroesse verbessert sich
-um den Faktor 8 bei p = 0,0001, es ist die Reparatur eines Schluesselfehlers (also die
-Wiederherstellung des beabsichtigten Verhaltens, kein neues Verfahren), und an keiner
-Nebengroesse ist Schaden messbar. Dagegen spricht nichts Gemessenes - aber auch **kein
-belegter Quotengewinn**. Die Entscheidung liegt beim Nutzer.
+**Der Nutzer hat die Vorgabe am 2026-09-09 auf `1` gestellt** (`ACT23_KEIM_FIX`). Dafuer sprach:
+die direkte Zielgroesse verbessert sich um den Faktor 8 bei p = 0,0001, es ist die
+Wiederherstellung des beabsichtigten Verhaltens und kein neues Verfahren, und an keiner
+Nebengroesse ist Schaden messbar. Dagegen sprach nichts Gemessenes.
+
+**Was dabei NICHT mitgekauft ist:** ein Quotengewinn. Wer diese Umstellung spaeter als
+Quotenmassnahme zitiert, zitiert falsch - gepoolt 50,4 -> 52,9 % bei p = 0,65.
+
+Geprueft ohne jede Umgebungsvariable: `[Keim] ... Keim JA (gesucht 'eig:obj_blue',
+veroeffentlicht 'eig:obj_blue')`, und `ACT23_KEIM_FIX` erscheint nicht mehr in der Zeile
+"Abweichungen von der Vorgabe". **Rueckfall in einer Zeile:** `ACT23_KEIM_FIX=0` - dann faellt
+`_kkey` auf `key` zurueck, zifferngenau der Stand vor `d85250b`.
 
 # Verwandt
 

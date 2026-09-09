@@ -176,7 +176,7 @@ NB_NEUTRAL = np.array([0.0, NB_DMAX, 1.0, 0.0, 0.0])   # "nie gemessen" -- guelt
 # dem wahrscheinlichsten gleichklassigen Blob gestartet ist -- und auf welchem Koerper er dabei
 # landet.  Die wahren Lagen dienen AUSSCHLIESSLICH der Zaehlung, wie bei ACT16_ABLENKDIAG.
 KEIMDIAG = os.environ.get("ACT23_KEIMDIAG", "0") == "1"
-# KEIM-REPARATUR (ACT23_KEIM_FIX=1, Vorgabe AUS bis gemessen).  Der Eigenschafts-Pfad
+# KEIM-REPARATUR.  VORGABE 1 SEIT DEM A/B (2026-09-09, Nutzerentscheid).  Der Eigenschafts-Pfad
 # veroeffentlicht die Erst-Wahrnehmung unter `eig:{body}` (pc_act23.py:2986), der Tracker fragt
 # sie unter der FORMKLASSE ab (:3129) -- die beiden treffen sich nie, gemessen 120 von 120
 # Episoden ohne Keim.  Ohne Keim startet make_shape_track blind auf dem wahrscheinlichsten
@@ -186,7 +186,17 @@ KEIMDIAG = os.environ.get("ACT23_KEIMDIAG", "0") == "1"
 # WARUM NICHT einfach unter der Formklasse veroeffentlichen: `"cube"` waere mehrdeutig, sobald
 # zwei Koerper dieselbe Formklasse tragen -- und genau das ist der Fall, der schiefgeht.  Nur
 # `eig:{body}` benennt den gemeinten Koerper.
-KEIM_FIX = os.environ.get("ACT23_KEIM_FIX", "0") == "1"
+# GEMESSEN als gepaarter Seed-Sweep, 4 Laeufe je 120 Episoden aus einem Schnappschuss
+# (wiki/befunde/keim-fix-ab.md).  Direkte Zielgroesse -- Fehlstart unter MEHRDEUTIGEN Szenen:
+#     Seed  7   aus  7/17 = 41,2 %   an 1/14 =  7,1 %   p = 0,0454
+#     Seed 23   aus 10/16 = 62,5 %   an 1/16 =  6,2 %   p = 0,0021
+#     gepoolt   aus 17/33 = 51,5 %   an 2/30 =  6,7 %   p = 0,00010
+# Keim greift 0 % -> 95/97 %; an keiner Nebengroesse ist Schaden messbar.  Die LIEFERQUOTE ist
+# dagegen NICHT belegt (gepoolt 50,4 -> 52,9 %, p = 0,65) -- wer hier einen Quotengewinn zitiert,
+# zitiert falsch.
+# ZURUECK auf das alte Verhalten: ACT23_KEIM_FIX=0.  Dann faellt _kkey auf `key` zurueck und der
+# Keim wird wieder unter der Formklasse gesucht -- zifferngenau der Stand vor d85250b.
+KEIM_FIX = os.environ.get("ACT23_KEIM_FIX", "1") == "1"
 _WIE_KEY = object()          # Vorgabe-Markierung fuer make_shape_track(seed_key=...): "nimm key"
 WORLD_EPOCHS = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS", "600")))
 WORLD_EPOCHS_SHORT = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS_SHORT", "20")))
