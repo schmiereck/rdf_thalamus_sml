@@ -7,6 +7,18 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-09
 
+* **Anlage**: [Nachbarnaehe im Lauf](/befunde/nachbarnaehe-im-lauf.md) - die zweite Haelfte der
+  Verschmelzungsfrage, ausgezaehlt ueber **1868 Episoden** aus den Protokollen. Der kritische
+  Bereich unter 35 mm ist selten (2,1 %), der wirksame ist breiter: **unter 55 mm sind es 15,6 %
+  der Episoden, und dort faellt die Quote von 54,9 auf 41,1 % (-13,9 Punkte, p < 0,0001)**, bei
+  **7 von 7 Objekten gleichgerichtet** (Vorzeichentest p = 0,0156). Hochgerechnet ~2,2 Punkte der
+  Gesamtquote - ausdruecklich als **Obergrenze**, denn Verschmelzung, Rammen des Nachbarn und
+  schlechtere Greifpunktwahl sind hier nicht getrennt. **Der interessanteste Teil:** die Schwelle
+  im Ausgang (55 mm) folgt der FORMKLASSEN-Rettung (ab 65 mm), nicht der Positions-Rettung (ab
+  35 mm) - zu wissen wo etwas ist genuegt nicht, wenn unklar bleibt was es ist. Falle in der
+  Seite: die protokollierten `[Farb-Split]`-Zeilen taugen NICHT als Haeufigkeitsmass (eine
+  einzige in 1868 Episoden).
+
 * **Anlage**: [Verschmelzung: die Abstandskurve](/befunde/verschmelzung-abstandskurve.md) - der
   seit August offene Faden ist gemessen, mit dem neuen Werkzeug
   `src/pc_cvnn/act23_fusion_probe.py` (864 Konstellationen). Verschmelzung reicht bis ~75 mm

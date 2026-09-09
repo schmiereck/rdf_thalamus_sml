@@ -65,15 +65,14 @@ werden kann: eine vortrainierte, persistente Dynamik mit Uebergaengen **pro Schr
 je Episode, und ein Tor, das ihn erst unterhalb einer MSE-Schwelle einschaltet. Siehe
 [Latent-Etappen](/befunde/latent-etappen.md).
 
-**Verschmelzung: die HAEUFIGKEIT im Lauf.** Die eine Haelfte der Frage ist beantwortet - der
-Split traegt ab 35 mm vollstaendig, bei 25 mm nur zu 72 %, und die Formklasse ueberlebt viel
-schlechter als die Position ([Abstandskurve](/befunde/verschmelzung-abstandskurve.md)). Offen ist
-die andere Haelfte: **wie oft stehen die Koerper im Lauf ueberhaupt so nah?** Das haengt an
-`randomize_objects` und ist mit dem Nachbar-Merkmal im Puffer billig auszaehlbar (dort steht
-`d_nah`, Median 80 mm - aber nur auf 6 % der Zeilen, s.
-[Merkmale kommen zu spaet](/befunde/merkmale-kommen-zu-spaet.md)).
-Zweiter offener Punkt: die Formklasse ueber den Split zu retten ist der schwaechere Pfad -
-ob sich das verbessern laesst, ist ungemessen.
+**Den FORM-Split verbessern.** Die Verschmelzungsfrage ist in beiden Haelften beantwortet
+([Abstandskurve](/befunde/verschmelzung-abstandskurve.md),
+[Nachbarnaehe im Lauf](/befunde/nachbarnaehe-im-lauf.md)) und hat einen scharfen Rest
+hinterlassen: der Split rettet die **Position** ab 35 mm vollstaendig, die **Formklasse** erst ab
+65 mm - und die Lieferquote folgt der Formklasse, nicht der Position (Schwelle im Ausgang bei
+55 mm, -13,9 Punkte in 15,6 % der Episoden). Ob sich die Formklassen-Rettung verbessern laesst,
+ist **ungemessen** und ist damit der konkreteste Rest dieser Linie. Obergrenze des Ertrags:
+~2,2 Punkte, und darin stecken auch Rammen und Greifpunktwahl, nicht nur Verschmelzung.
 
 **Warum die Bindung mit mehr Uebung LAENGER dauert** (namenlose Fenster 3,2 -> 7,3 Episoden
 statt kuerzer, entgegen der Erwartung). Ungemessen. Und: die Wiedererkennung streut ueber Seeds
