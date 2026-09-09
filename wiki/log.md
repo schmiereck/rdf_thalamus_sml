@@ -7,6 +7,16 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-09
 
+* **Anlage**: [Keim im Rueckfall](/befunde/keim-im-rueckfall.md) - auf Nutzerauftrag setzt der
+  privilegierte Rueckfall jetzt auch einen Keim (`ACT23_KEIM_RUECKFALL`, Vorgabe 1). Die Luecke
+  ist zu: **Episoden ohne Keim 10 -> 0**. Ein Nutzen ist **nicht nachweisbar** (Fehlstart
+  2,9 -> 4,2 %, p = 0,47; Quote 52,9 -> 53,6 %, p = 0,93). Der Grund ist der eigentliche Ertrag:
+  die sieben Rueckfall-Episoden sind **Verschmelzungsfaelle** - der gewaehlte Blob sitzt bei
+  21 gegen 23 mm bzw. 19 gegen 23 mm fast genau zwischen zwei Koerpern. Gegen einen
+  verschmolzenen Blob hilft kein Ortsanker. Der Keim ist privilegiert und wird deshalb als
+  `Keim JA (PRIVILEGIERT)` protokolliert. Guenstiger Nebeneffekt: die 5-cm-Sprungschranke greift
+  jetzt schon im ersten Bild.
+
 * **Entscheidung**: `ACT23_KEIM_FIX` steht auf Nutzerentscheid jetzt auf **1** - der Tracker
   bekommt beim Eigenschafts-Kommando seinen Keim. Grundlage ist
   [Keim-Fix, A/B](/befunde/keim-fix-ab.md) (Fehlstarts unter mehrdeutigen Szenen 51,5 -> 6,7 %,

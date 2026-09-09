@@ -198,6 +198,17 @@ KEIMDIAG = os.environ.get("ACT23_KEIMDIAG", "0") == "1"
 # Keim wird wieder unter der Formklasse gesucht -- zifferngenau der Stand vor d85250b.
 KEIM_FIX = os.environ.get("ACT23_KEIM_FIX", "1") == "1"
 _WIE_KEY = object()          # Vorgabe-Markierung fuer make_shape_track(seed_key=...): "nimm key"
+# KEIM AUCH IM PRIVILEGIERTEN RUECKFALL (ACT23_KEIM_RUECKFALL, Vorgabe 1 -- Nutzerwunsch
+# 2026-09-09).  Trifft die Eigenschafts-Adressierung nichts, gibt perceive() die WAHRE Lage als
+# Greifziel zurueck und veroeffentlichte bisher KEINEN Keim -- der Tracker startete dann wieder
+# blind (gemessen 3-5 % der Episoden als `__unset__`, zwei der verbliebenen Fehlstarts,
+# s. wiki/befunde/keim-fix-ab.md).
+# EHRLICHKEITSVORBEHALT: dieser Keim ist PRIVILEGIERT.  Das Greifziel war es in diesem Zweig
+# ohnehin schon, neu ist, dass das Privileg auch den Blick-Regelkreis anfaehrt.  Damit die
+# Diagnose das nicht als saubere Wahrnehmung ausweist, wird der Keim als privilegiert markiert
+# (perception.seed_priv) und in der [Keim]-Zeile so gedruckt.  ACT23_KEIM_RUECKFALL=0 stellt den
+# alten Zustand her (kein Keim, blinder Start).
+KEIM_RUECKFALL = os.environ.get("ACT23_KEIM_RUECKFALL", "1") == "1"
 WORLD_EPOCHS = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS", "600")))
 WORLD_EPOCHS_SHORT = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS_SHORT", "20")))
 WORLD_FULL_EVERY = max(1, int(os.environ.get("ACT23_WORLD_FULL_EVERY", "4")))
@@ -3014,11 +3025,21 @@ def run_self_learning_steering(headless=False):
                 perception.publish_seed(f"eig:{body}", np.asarray(_pos, float),
                                         np.asarray(_det["px"], float),
                                         np.asarray(_gp(_det, body), float))
+                perception.seed_priv = False       # ehrlich wahrgenommen (s. AUDIT im Rueckfall)
                 return _off(_gp(_det, body)), None, "grasp"
             if os.environ.get("ACT23_DEBUG", "0") == "1":
                 print(f"    [dbg] {body}: EIGENSCHAFTEN ({_f}, {_fo}, {_g}) treffen nichts "
                       f"-> privilegierter Rueckfall", flush=True)
-            return _off(sim.obj_pos(body)[:2]), None, "grasp"
+            _pw = sim.obj_pos(body)[:2]
+            if KEIM_RUECKFALL:
+                # Ohne Keim startet der Tracker blind auf dem wahrscheinlichsten gleichklassigen
+                # Blob -- bei mehreren Kandidaten ein Muenzwurf.  Der Keim kommt hier aus der
+                # WAHREN Lage; px bleibt None, weil es dafuer keine ehrliche Bildkoordinate gibt
+                # (der Anzeige-Blobfolger setzt sich seinen px-Anker selbst am ersten Treffer).
+                perception.publish_seed(f"eig:{body}", np.asarray(_pw, float), None,
+                                        np.asarray(_off(_pw), float))
+                perception.seed_priv = True        # AUDIT: dieser Keim ist privilegiert
+            return _off(_pw), None, "grasp"
         if method == "shape":                                  # L/U: FORM perception (shape classifier)
             saved = sim.d.mocap_pos.copy()                     # select() PARKS the mocap markers -> restore the
             det = shape_clf.select(sim, state.SHAPE_KEY[body])  #   target markers, else goal_fn returns a parked goal
@@ -3198,7 +3219,9 @@ def run_self_learning_steering(headless=False):
                         _tr = [(float(np.linalg.norm(sim.obj_pos(_o)[:2] - _bp)), _o)
                                for _o in act16.OBJS]
                         _dm, _wer = min(_tr) if _tr else (float("nan"), "?")
-                        print(f"    [Keim] {body}: Keim {'JA' if mem.get('_keim') else 'NEIN'} "
+                        _kp = mem.get('_keim') and getattr(perception, 'seed_priv', False)
+                        print(f"    [Keim] {body}: Keim "
+                              f"{('JA (PRIVILEGIERT)' if _kp else 'JA') if mem.get('_keim') else 'NEIN'} "
                               f"(gesucht '{_kkey}', veroeffentlicht '{getattr(perception, 'seed_key', '?')}')"
                               f" | {len(cands)} Kandidaten -> Start auf {_wer} ({1000*_dm:.0f} mm)"
                               f" | eigenes Objekt {1000*float(np.linalg.norm(sim.obj_pos(body)[:2] - _bp)):.0f} mm"

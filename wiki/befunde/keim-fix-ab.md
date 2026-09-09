@@ -80,7 +80,9 @@ mehrdeutig, der Effekt ist also klein gegen die Nachweisgrenze von 26 Punkten je
 1. **Ein zweiter, kleinerer Keim-Ausfall.** In ~3-5 % der Episoden steht
    `veroeffentlicht '__unset__'` - es wurde ueberhaupt kein Keim gesetzt. Ursache: trifft die
    Eigenschafts-Adressierung nichts, faellt `perceive()` auf die privilegierte wahre Lage zurueck
-   und **veroeffentlicht dabei keinen Keim** (`pc_act23.py:2992`). Nicht repariert.
+   und **veroeffentlicht dabei keinen Keim** (`pc_act23.py:2992`).
+   **Erledigt am 2026-09-09** (`ACT23_KEIM_RUECKFALL`): Luecke zu, Nutzen nicht nachweisbar - die
+   Faelle sind Verschmelzungen. Siehe [Keim im Rueckfall](/befunde/keim-im-rueckfall.md).
 2. **Die Kennzahl saettigt bei wenigen Millimetern.** Zwei der verbleibenden Fehlstarts sind
    Etikettierungsartefakte: `obj_L: Keim JA | Start auf obj_U (2 mm) | eigenes Objekt 3 mm`. Wenn
    zwei Koerper 1 mm auseinander projizieren, ist "welcher Koerper ist naeher" keine sinnvolle
