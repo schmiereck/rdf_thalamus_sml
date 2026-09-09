@@ -32,6 +32,7 @@ lokal. Die im Wiki zitierten Laeufe:
 * `src/pc_cvnn/act23_wm_regime.py` - Weltmodell-Regime, die vier Nullrezepte
 * `src/pc_cvnn/act23_split_probe.py`, `act23_colour_split_ab.py` - Form- und Farbsplit
 * `src/pc_cvnn/act23_fusion_probe.py` - Verschmelzung ueber den Nachbarabstand (Abstandskurve)
+* `src/pc_cvnn/act23_formsplit_probe.py` - warum der Split die Formklasse verliert (Flaeche und Schwellenabstand)
 * `src/pc_cvnn/act23_attractor_ab.py`, `act23_u_densegrasp_ab.py`, `act23_dose_workers.py`
 * `src/pc_cvnn/run_history.py` - Laufhistorie
 

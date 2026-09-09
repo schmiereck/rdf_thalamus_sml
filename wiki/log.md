@@ -7,6 +7,16 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-09
 
+* **Anlage**: [Warum der Split die Formklasse verliert](/befunde/formsplit-warum.md) - Diagnose
+  vor der Reparatur, mit dem neuen Werkzeug `src/pc_cvnn/act23_formsplit_probe.py`. Beide
+  Verdachte bestaetigt, und der eine verursacht den anderen: der Splitteil behaelt nur
+  **31-58 %** der Pixel, und der Deskriptor dieser halben Silhouette springt von 0,44-0,53 auf
+  **0,94-1,55 x novel_th**, also knapp darueber. **Der Ausfall ist eine ENTHALTUNG, keine
+  Verwechslung** - in 55 von 58 Fehlern antwortet `resolve()` mit "neuartig", nur dreimal mit
+  einer fremden Klasse. Drei Reparaturwege in der Seite, Empfehlung: **Kontinuitaet statt
+  Neuklassifikation** im Tracker (die Identitaet steht seit dem Keim fest, je Bild wird nur die
+  Position gebraucht - und die rettet der Split ab 35 mm vollstaendig). Nichts gebaut.
+
 * **Anlage**: [Nachbarnaehe im Lauf](/befunde/nachbarnaehe-im-lauf.md) - die zweite Haelfte der
   Verschmelzungsfrage, ausgezaehlt ueber **1868 Episoden** aus den Protokollen. Der kritische
   Bereich unter 35 mm ist selten (2,1 %), der wirksame ist breiter: **unter 55 mm sind es 15,6 %
