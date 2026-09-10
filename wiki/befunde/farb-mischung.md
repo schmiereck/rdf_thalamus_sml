@@ -23,7 +23,8 @@ mehreren Farben, Zuordnung zwischen den Episoden gewuerfelt, innerhalb fest. Vor
 klaeren, was `colour_of_body` dann liefert - ich wuerde es je Episode neu aus der Wahrnehmung
 setzen statt aus einer Tabelle."*
 
-`ACT23_FARB_MISCHUNG=1` (Vorgabe 0) tut genau das:
+`ACT23_FARB_MISCHUNG` tut genau das - **Vorgabe 1 seit dem 2026-09-10** (Nutzerentscheid nach
+der Messung; die entkoppelte Welt ist ab jetzt die Standardwelt):
 
 * **Permutation statt neuer Farben.** Die sieben **vorhandenen** Koerperfarben werden unter den
   Koerpern getauscht. Eine neue Farbe wuerde eine neue Farbklasse gebaeren - das waere ein
@@ -107,6 +108,22 @@ Damit werden zwei Fragen aus [den offenen Faeden](/fragen/offene-faeden-act23.md
 stellbar: ob die instabile Formklasse von obj_X (4 von 8 Lagen, s.
 [Rueckhalte-Test](/befunde/farbe-form-rueckhalt.md)) im Lauf tatsaechlich kostet, und ob die
 Selbst-Aneignung neue **Kombinationen** aufgreift statt nur neuer Koerper.
+
+# Folgen: die entkoppelte Welt ist die Standardwelt
+
+Der Nutzer hat die Vorgabe am 2026-09-10 auf `1` gestellt. Das ist eine Entscheidung ueber das
+**Szenario**, nicht ueber eine Verbesserung - und sie folgt [dem Projektziel](/ziel.md): erst in
+einer Welt, in der Farbe und Form unabhaengig sind, ist Generalisierung ueberhaupt messbar.
+
+Geprueft ohne jede Umgebungsvariable auf einer Zustandskopie: die `[Farbe]`-Zeile erscheint je
+Episode, `ACT23_FARB_MISCHUNG` taucht nicht mehr unter den Abweichungen auf, **0 neue
+Farbklassen**, und die vier Episoden liefern 3 von 4.
+
+> **Warnung fuer spaeter:** wer diese Vorgabe zurueckdreht, weil "die Quote gefallen ist", misst
+> das Szenario, nicht einen Fehler. Alle Quotenzahlen ab hier sind mit denen davor **nicht**
+> vergleichbar - es ist eine andere Aufgabe. Der Kommentar am Schalter sagt das ebenfalls.
+
+**Rueckfall in einer Zeile:** `ACT23_FARB_MISCHUNG=0`.
 
 # Verwandt
 

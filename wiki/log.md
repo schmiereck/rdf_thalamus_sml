@@ -7,6 +7,15 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-10
 
+* **Entscheidung**: `ACT23_FARB_MISCHUNG` steht auf Nutzerentscheid auf **1** - **die entkoppelte
+  Welt ist ab jetzt die Standardwelt.** Farbe und Form sind unabhaengig, `colour_of_body` kommt je
+  Episode aus der Wahrnehmung. Das ist eine Entscheidung ueber das **Szenario**, nicht ueber eine
+  Verbesserung. **Alle Quotenzahlen ab hier sind mit denen davor nicht vergleichbar** - es ist
+  eine andere Aufgabe, und wer die Vorgabe zurueckdreht, weil "die Quote gefallen ist", misst das
+  Szenario statt eines Fehlers. Geprueft ohne Umgebungsvariable: `[Farbe]`-Zeile je Episode, 0
+  neue Farbklassen. Rueckfall: `ACT23_FARB_MISCHUNG=0`. Seite:
+  [Farbe und Form entkoppelt](/befunde/farb-mischung.md).
+
 * **Anlage**: [Farbe und Form entkoppelt](/befunde/farb-mischung.md) - auf Nutzerauftrag gebaut
   (`ACT23_FARB_MISCHUNG`, Vorgabe 0): die sieben vorhandenen Koerperfarben werden je Episode
   **permutiert** (keine neuen Farben, sonst gebaeren sie Farbklassen - Kontrolle: 0 neue), und

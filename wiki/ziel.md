@@ -46,6 +46,15 @@ Uebergangsgeruest.
 wann der Greifer schliesst. Details und der geloeste Praezedenzfall stehen in
 [Laufzeitregeln](/mechanismen/laufzeit-regeln.md).
 
+# Die Welt, in der das messbar ist
+
+Bis 2026-09-10 trug jede Form **genau eine** Farbe (nur der Wuerfel drei), und in 5 von 6
+Farbklassen bestimmte die Farbe die Form eindeutig. In dieser Welt kann ein Netz "orange -> L"
+lernen und liegt zu 100 % richtig - Generalisierung ueber Farb/Form-**Kombinationen** war dort
+schlicht nicht pruefbar. Seit dem 2026-09-10 werden die Farben je Episode permutiert
+([Farbe und Form entkoppelt](/befunde/farb-mischung.md)). **Quotenzahlen von vor und nach diesem
+Datum vergleichen zwei verschiedene Aufgaben.**
+
 # Fallen
 
 Der Kern dieses Ziels wird beim Messen leicht verraten: fast alle Kennzahlen im Projekt

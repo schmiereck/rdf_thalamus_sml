@@ -57,7 +57,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Warum der Split die Formklasse verliert](befunde/formsplit-warum.md) - halbe Silhouette (31-58 %), Deskriptor knapp ueber novel_th; der Ausfall ist eine Enthaltung
 * [Kontinuitaet statt Neuklassifikation](befunde/kontinuitaet-statt-neuklassifikation.md) - **Vorgabe seit 2026-09-10**; sauber, aber das Loch ist klein (1-2 % der Schritte), Gegenprobe p = 1,0
 * [Farb-Rueckhalte-Test](befunde/farbe-form-rueckhalt.md) - die Formerkennung kuerzt NICHT ueber die Farbe ab; dafuer wackelt obj_X schon in seiner eigenen Farbe (4/8 Lagen)
-* [Farbe und Form entkoppelt](befunde/farb-mischung.md) - Farben je Episode permutiert, `colour_of_body` aus der Wahrnehmung; die Adressierung haelt (1,2-1,4 mm)
+* [Farbe und Form entkoppelt](befunde/farb-mischung.md) - **Standardwelt seit 2026-09-10**: Farben je Episode permutiert, `colour_of_body` aus der Wahrnehmung; die Adressierung haelt
 * [Ablenker-Bindung in der Anfahrt](befunde/ablenker-anfahrt.md) - 6,8 % der Episoden fahren >80 mm daneben und liefern dann 1 von 63, obwohl die Adressierung stimmt
 
 # Entscheidungen

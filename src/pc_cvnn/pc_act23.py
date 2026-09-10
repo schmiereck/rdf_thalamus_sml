@@ -246,7 +246,7 @@ KEIM_RUECKFALL = os.environ.get("ACT23_KEIM_RUECKFALL", "0") == "1"
 # Wofuer sie steht: Identitaet einmal feststellen und dann verfolgen, statt sie in jedem Bild
 # neu zu erkennen.  ZURUECK: ACT23_TRACK_KONTINUITAET=0.
 KONTINUITAET = os.environ.get("ACT23_TRACK_KONTINUITAET", "1") == "1"
-# FARBE UND FORM ENTKOPPELN (ACT23_FARB_MISCHUNG, Vorgabe 0 bis gemessen).  Nutzerbeobachtung
+# FARBE UND FORM ENTKOPPELN.  VORGABE 1 SEIT 2026-09-10 (Nutzerentscheid).  Nutzerbeobachtung
 # 2026-09-10, nachgezaehlt und bestaetigt: der Wuerfel gibt es in DREI Farben, jede andere Form in
 # GENAU EINER, und in 5 von 6 Farbklassen bestimmt die Farbe die Form eindeutig.  Ein Netz, das
 # "orange -> L" lernt, liegt in dieser Welt zu 100 % richtig -- das trifft wiki/ziel.md (neue
@@ -260,7 +260,19 @@ KONTINUITAET = os.environ.get("ACT23_TRACK_KONTINUITAET", "1") == "1"
 # anderes Experiment.  So bleibt die Palette genau so wahrnehmbar wie heute, nur die Zuordnung
 # Farbe<->Form faellt weg.  INNERHALB einer Episode bleibt die Farbe fest (Nutzervorgabe), damit
 # Keim, Tracker und Split weiterarbeiten.
-FARB_MISCHUNG = os.environ.get("ACT23_FARB_MISCHUNG", "0") == "1"
+# GEMESSEN, gepaarter Seed-Sweep, 4 Laeufe je ~112 Episoden
+# (wiki/befunde/farb-mischung.md).  DIE EIGENTLICHE FRAGE WAR "haelt die Maschinerie", und sie
+# haelt: Adressierung Median 1,0-1,4 mm in allen vier Armen, Eindeutigkeit unveraendert,
+# privilegierter Rueckfall 4-5 -> 6 %.
+# DIE LIEFERQUOTE FAELLT (gepoolt 57,5 -> 47,6 %, p = 0,039) UND DAS IST KEIN DEFEKT: das hier
+# ist ein WELT-Wechsel, kein Eingriff -- die gemischte Welt ist schwerer, weil der Farbpfad die
+# Identitaet nicht mehr mittraegt.  Dazu widersprechen die Seeds einander (-1,3 gegen -18,3
+# Punkte), und der Vergleichsarm lag mit 63,8 % weit ueber dem sonst ueblichen ~52 %.
+# WER DIESE VORGABE RUECKGAENGIG MACHT, WEIL "DIE QUOTE GEFALLEN IST", MISST DAS SZENARIO, NICHT
+# EINEN FEHLER.  Nach wiki/ziel.md ist die Quote hier ohnehin nicht das Kriterium: erst in einer
+# Welt, in der Farbe und Form unabhaengig sind, ist Generalisierung ueberhaupt messbar.
+# ZURUECK auf die gekoppelte Welt: ACT23_FARB_MISCHUNG=0.
+FARB_MISCHUNG = os.environ.get("ACT23_FARB_MISCHUNG", "1") == "1"
 WORLD_EPOCHS = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS", "600")))
 WORLD_EPOCHS_SHORT = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS_SHORT", "20")))
 WORLD_FULL_EVERY = max(1, int(os.environ.get("ACT23_WORLD_FULL_EVERY", "4")))
