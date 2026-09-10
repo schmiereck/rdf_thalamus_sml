@@ -7,6 +7,19 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-10
 
+* **Anlage**: [Farbe und Form entkoppelt](/befunde/farb-mischung.md) - auf Nutzerauftrag gebaut
+  (`ACT23_FARB_MISCHUNG`, Vorgabe 0): die sieben vorhandenen Koerperfarben werden je Episode
+  **permutiert** (keine neuen Farben, sonst gebaeren sie Farbklassen - Kontrolle: 0 neue), und
+  **`colour_of_body` kommt je Episode aus der Wahrnehmung** statt aus der persistierten Tabelle,
+  mit den drei Wachen der Erstbindung. **Die Adressierung haelt** - Median 1,0-1,4 mm in allen
+  vier Armen, Eindeutigkeit unveraendert, privilegierter Rueckfall 4-5 -> 6 %. Die Lieferquote
+  faellt gepoolt 57,5 -> 47,6 % (p = 0,039), aber die Seeds widersprechen einander (-1,3 gegen
+  -18,3 Punkte) und der Vergleichsarm m23_aus lag mit 63,8 % ohnehin weit ueber dem Ueblichen.
+  **Wichtiger Vorbehalt in der Seite:** das ist ein WELT-Wechsel, kein Eingriff - "besser oder
+  schlechter" ist die falsche Frage, "haelt die Maschinerie" die richtige, und die Antwort ist ja.
+  Nebenwert: unzuordenbare Sichtungen 26 -> 45 in einem Arm, passend zu "vertraute Formen in
+  ungewohnten Farben sind neu".
+
 * **Anlage**: [Farb-Rueckhalte-Test](/befunde/farbe-form-rueckhalt.md) - auf Nutzerbeobachtung
   ("die Objekte haben immer die gleiche Farbe"). Nachgezaehlt stimmt sie und ist enger als
   vermutet: der Wuerfel gibt es in **drei** Farben, alle anderen Formen in genau einer, und in

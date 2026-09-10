@@ -246,6 +246,21 @@ KEIM_RUECKFALL = os.environ.get("ACT23_KEIM_RUECKFALL", "0") == "1"
 # Wofuer sie steht: Identitaet einmal feststellen und dann verfolgen, statt sie in jedem Bild
 # neu zu erkennen.  ZURUECK: ACT23_TRACK_KONTINUITAET=0.
 KONTINUITAET = os.environ.get("ACT23_TRACK_KONTINUITAET", "1") == "1"
+# FARBE UND FORM ENTKOPPELN (ACT23_FARB_MISCHUNG, Vorgabe 0 bis gemessen).  Nutzerbeobachtung
+# 2026-09-10, nachgezaehlt und bestaetigt: der Wuerfel gibt es in DREI Farben, jede andere Form in
+# GENAU EINER, und in 5 von 6 Farbklassen bestimmt die Farbe die Form eindeutig.  Ein Netz, das
+# "orange -> L" lernt, liegt in dieser Welt zu 100 % richtig -- das trifft wiki/ziel.md (neue
+# Farben, Formen UND KOMBINATIONEN selbst lernen) an der Wurzel.
+# WAS DER RUECKHALTE-TEST DAZU SAGT (wiki/befunde/farbe-form-rueckhalt.md): die WAHRNEHMUNG kuerzt
+# nicht ab -- umgefaerbt haelt die Formklasse bei allen trainierten Formen zu 100 %, der
+# Deskriptor rechnet auf der Belegungsmaske.  Die Entkopplung bricht also nichts; sie DECKT AUF,
+# was der Farbpfad heute traegt (obj_X haelt seine Klasse schon solo nur in 4 von 8 Lagen).
+# WIE: die sieben VORHANDENEN Koerperfarben werden je Episode unter den Koerpern PERMUTIERT.
+# Bewusst keine neuen Farben -- eine neue Farbe gebiert eine neue Farbklasse, und das waere ein
+# anderes Experiment.  So bleibt die Palette genau so wahrnehmbar wie heute, nur die Zuordnung
+# Farbe<->Form faellt weg.  INNERHALB einer Episode bleibt die Farbe fest (Nutzervorgabe), damit
+# Keim, Tracker und Split weiterarbeiten.
+FARB_MISCHUNG = os.environ.get("ACT23_FARB_MISCHUNG", "0") == "1"
 WORLD_EPOCHS = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS", "600")))
 WORLD_EPOCHS_SHORT = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS_SHORT", "20")))
 WORLD_FULL_EVERY = max(1, int(os.environ.get("ACT23_WORLD_FULL_EVERY", "4")))
@@ -1578,6 +1593,86 @@ def run_self_learning_steering(headless=False):
         del colour_of_body[b]                                  #   never match again -> drop, re-binds
     if _stale:                                                 #   itself at the next discovery glance
         print(f"  [Persistenz] verwaiste Farb-Bindungen entfernt: {_stale}", flush=True)
+
+    # ---------------- FARB-MISCHUNG (s. FARB_MISCHUNG oben) ------------------------------------
+    _FARB_KOERPER = ["obj_red", "obj_green", "obj_blue", "obj_L", "obj_U", "obj_T", "obj_X"]
+
+    def _geoms_of(body):
+        _b = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, body)
+        _a0 = sim.m.body_geomadr[_b]
+        return list(range(_a0, _a0 + sim.m.body_geomnum[_b]))
+
+    _FARB_PALETTE = {b: sim.m.geom_rgba[_geoms_of(b)[0]].copy() for b in _FARB_KOERPER}
+
+    def _faerbe_neu():
+        """Die sieben vorhandenen Koerperfarben unter den Koerpern PERMUTIEREN.
+
+        Keine neuen Farben: eine neue Farbe gebiert eine neue Farbklasse, das waere ein anderes
+        Experiment.  Eine Permutation laesst die Palette genau so wahrnehmbar wie heute und
+        loest allein die Zuordnung Farbe<->Form."""
+        _ziel = list(_FARB_PALETTE.values())
+        _perm = list(crng.permutation(len(_ziel)))
+        for _b, _i in zip(_FARB_KOERPER, _perm):
+            for _g in _geoms_of(_b):
+                sim.m.geom_rgba[_g] = _ziel[_i]
+
+    def _farbbindung_neu():
+        """colour_of_body je Episode NEU aus der WAHRNEHMUNG setzen statt aus einer Tabelle.
+
+        Nutzervorgabe 2026-09-10.  Mit wechselnden Farben ist "die Farbklasse dieses Koerpers"
+        keine dauerhafte Groesse mehr -- die persistierte Tabelle waere ab der ersten Umfaerbung
+        schlicht falsch, und daran haengen Farb-Split, Rettungspfade, ckey-Tracker, der
+        Fovea-Identitaetskanal und das Selbst-Urteil.
+
+        DERSELBE Zuordnungsschritt wie bei der Erstbindung (pc_act23.py:2826): Detektion ->
+        naechster Koerper, Schranke 40 mm.  Er ist wie dort buchhalterisch privilegiert; NEU ist
+        nur, dass er je Episode statt einmal laeuft.  Was der AGENT sieht, aendert sich dadurch
+        nicht: die Klasse kommt aus der gerenderten Chroma, nicht aus der RGBA (die Lehre aus
+        der obj_Y-Aneignung), und ein Koerper OHNE gute Zuordnung bleibt ungebunden statt geraten.
+        """
+        _sv = sim.d.mocap_pos.copy()
+        _ds = shape_clf.perceive_all(sim)
+        sim.d.mocap_pos[:] = _sv
+        mujoco.mj_forward(sim.m, sim.d)
+        _neu, _belegt = {}, set()
+        for _d in sorted(_ds, key=lambda x: -float(x.get("area", 0))):
+            if _d.get("pos") is None or _d.get("chroma") is None:
+                continue
+            if shape_clf.area_hi is not None and _d["area"] > shape_clf.area_hi:
+                continue                                   # verschmolzener Blob -> Mischchroma, nicht binden
+            _c, _cd = colours.classify(_d["chroma"])
+            if _c is None or _c in _belegt:
+                continue                                   # zwei Koerper duerfen nicht dieselbe Klasse teilen
+            _nah = min(_FARB_KOERPER,
+                       key=lambda o: float(np.linalg.norm(sim.obj_pos(o)[:2] - _d["pos"])))
+            if _nah in _neu:
+                continue
+            if float(np.linalg.norm(sim.obj_pos(_nah)[:2] - np.asarray(_d["pos"]))) < 0.04:
+                _neu[_nah] = _c
+                _belegt.add(_c)
+        colour_of_body.clear()
+        colour_of_body.update(_neu)
+        return _neu
+
+    def _farbe_wuerfeln():
+        """Je Episode umfaerben und neu binden -- EINE Fassung fuer BEIDE Auto-Schleifen.
+
+        act23 hat zwei Auto-Schleifen mit eigenem Code; ein Schalter nur in einer sieht in der
+        kopflosen Kontrolle sauber aus und tut in der GUI nichts (zweimal passiert, s.
+        wiki/mechanismen/invarianten.md).  Deshalb hier, und von beiden gerufen.
+
+        REIHENFOLGE: das muss VOR curious_pick() und _auto_eig_umschreiben() laufen -- beide
+        nehmen wahr, und eine nach dem Umfaerben gewuerfelte Eigenschafts-Adresse muss die NEUE
+        Farbklasse tragen, sonst adressiert das Kommando eine Farbe, die es nicht mehr gibt.
+        """
+        if not FARB_MISCHUNG:
+            return None
+        _faerbe_neu()
+        _b = _farbbindung_neu()
+        if os.environ.get("ACT23_DEBUG", "0") == "1":
+            print("    [Farbe] neu gemischt: "
+                  + ", ".join(f"{k}={v}" for k, v in sorted(_b.items())), flush=True)
+        return _b
 
     # ------------------------------------------------------------------------------------------
     # ArmAgent: der VERKEHR SOLL DURCH DIE PORTS (Nutzerplan 2026-08-23, Punkt 2)
@@ -4626,6 +4721,7 @@ def run_self_learning_steering(headless=False):
                 spawn_novel_shape()                            # neue FORM einfuehren (ohne Label)
             if SCENE_EVERY > 0 and ep > 0 and ep % SCENE_EVERY == 0:
                 randomize_objects()          # neue Szene + ROTATION, welche Objekte stehen (s. SCENE_N)
+            _farbe_wuerfeln()                                  # VOR der Wahrnehmung, s. Docstring
             if force_list:
                 want = force_list[ep % len(force_list)]
                 ks = [k for k, (l, _n, _m) in enumerate(state.OBJECTS) if want.lower() in l.lower()]
@@ -4779,6 +4875,7 @@ def run_self_learning_steering(headless=False):
                 spawn_novel_shape()                            # neue FORM einfuehren (ohne Label)
             if SCENE_EVERY > 0 and ep > 0 and ep % SCENE_EVERY == 0:
                 randomize_objects()                            # neue Szene + Rotation (s. SCENE_N)
+            _farbe_wuerfeln()                                  # VOR der Wahrnehmung, s. Docstring
             pick = curious_pick() if AUTO_CURIOUS else None    #   (model uncertainty + goal novelty); random
             if pick is None:                                   #   fallback if perception/model isn't ready
                 state.sel = int(crng.integers(len(state.OBJECTS)))
