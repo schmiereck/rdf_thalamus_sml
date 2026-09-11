@@ -286,6 +286,20 @@ FARB_MISCHUNG = os.environ.get("ACT23_FARB_MISCHUNG", "1") == "1"
 # BEWUSST ENG: geschuetzt wird nur die FORMACHSE eines Tripels, das wirklich in state.EIGENSCHAFT
 # steht -- nicht jede je gesehene Klasse.  Sonst waere der Schutz wertlos (nichts verhungerte mehr)
 # und der Klassenbestand liefe in den MAX_OPEN-Deckel.
+# GEMESSEN UND WIRKUNGSLOS (2026-09-11, wiki/befunde/eig-schuetzt-null.md): zwei Arme zu je 400
+# Episoden, Schalter 0 gegen 1, sind BITGLEICH -- keine einzige Entscheidung aendert sich.
+# URSACHE, ein Konstruktionsfehler dieses Entwurfs: state.EIGENSCHAFT ist ein Verzeichnis
+# Koerper -> Tripel, und add_eigenschaft ueberschreibt den Eintrag, sobald derselbe Koerper neu
+# gewuerfelt wird (bei sieben Koerpern alle ~7 Episoden).  Der Schutz liest damit einen
+# SCHNAPPSCHUSS, keine Historie -- und er haelt genau so lange, wie das Tripel aktuell ist, also
+# waehrend die Klasse ohnehin zu jung zum Sterben ist (STARVE_N = 25).
+#     Ep 54  [Auto 54] farbe-3 + neu-384   -> geschuetzt
+#     Ep ~61 Koerper neu gewuerfelt        -> Tripel ueberschrieben, Schutz weg
+#     Ep ~66 verhungert nach 26 Ep
+# WER EINEN ZWEITEN ANLAUF NIMMT, braucht ein GEDAECHTNIS statt eines Schnappschusses --
+# acq[c]["cmd"] fuehrt das bereits.  Aber erst pruefen, ob der Aufraeumer ueberhaupt das Problem
+# ist: gemessen werden die sterbenden Klassen schlicht NICHT BENUTZT (5 Kommandos auf 5 junge
+# Klassen gegen 107 auf die vier etablierten), und laenger leben macht sie nicht nuetzlicher.
 EIG_SCHUETZT = os.environ.get("ACT23_EIG_SCHUETZT", "0") == "1"
 WORLD_EPOCHS = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS", "600")))
 WORLD_EPOCHS_SHORT = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS_SHORT", "20")))

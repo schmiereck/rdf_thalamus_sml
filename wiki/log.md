@@ -7,6 +7,20 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-11
 
+* **Anlage, ehrliches Negativ**: [Der Eigenschafts-Schutz wirkt nicht](/befunde/eig-schuetzt-null.md)
+  - der Langlauf mit `ACT23_EIG_SCHUETZT=1` gegen einen Kontrollarm, je 400 Episoden. Die Arme
+  sind **bitgleich** - nicht "statistisch gleich", sondern jede Zeile identisch. Der Schalter hat
+  nie eine Entscheidung geaendert. **Ursache ist ein Konstruktionsfehler meines Entwurfs:**
+  `state.EIGENSCHAFT` ist ein Verzeichnis Koerper -> Tripel und wird je Koerper ueberschrieben,
+  der Schutz liest also einen Schnappschuss statt einer Historie - und haelt genau so lange, wie
+  die Klasse ohnehin zu jung zum Sterben ist. **Damit ist auch meine Begruendung entkraeftet**
+  ("der Aufraeumer entfernt, was der Agent benutzt"): gemessen ueberleben die adressierten Klassen
+  ohnehin, und die sterbenden werden schlicht nie adressiert - 5 Kommandos auf 5 junge Klassen
+  gegen 107 auf die vier etablierten. Der Zaehler-Fix aus Schritt 1 hat sich trotzdem bezahlt
+  gemacht: erst durch ihn ist "stirbt trotz Benutzung" von "stirbt mangels Benutzung"
+  unterscheidbar. Nebenbefund, ungeklaert: trotz verdoppelter Neuheitsrate (`NOVEL_EVERY=3`) nur
+  5 Geburten auf 400 Episoden - die Geburtenrate haengt kaum an diesem Schalter.
+
 * **Anlage**: [Der blinde Fleck der Aneignung](/befunde/aneignung-blinder-fleck.md) - die zwei
   kleinen Schritte vor der latenten Augmentierung. Es sind **zwei Stellen mit demselben Fehler**:
   der Aneignungs-Zaehler (`pc_act23.py:4547`) verfaelscht die MESSUNG, der Verhungerungsschutz

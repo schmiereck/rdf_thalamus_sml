@@ -66,7 +66,18 @@ nicht jede je gesehene Klasse. Sonst verhungerte nichts mehr und der Bestand lie
 laufenden Laufs. Das ist richtig so: ein Tripel aus einem alten Lauf sagt nichts darueber, was
 **jetzt** benutzt wird.
 
-# Warum Schritt 2 noch nicht gemessen ist
+# Nachtrag 2026-09-11: Schritt 2 ist gemessen und WIRKUNGSLOS
+
+Zwei Arme zu je 400 Episoden sind **bitgleich** - der Schutz greift nie, weil er einen
+Schnappschuss von `state.EIGENSCHAFT` liest statt einer Historie. Damit ist auch die Behauptung
+oben ("die Aufraeum-Mechanik entfernt genau die Klassen, die der Agent gerade benutzt")
+**entkraeftet**: die adressierten Klassen ueberleben ohnehin, die sterbenden werden nie
+adressiert. Siehe [Der Eigenschafts-Schutz wirkt nicht](/befunde/eig-schuetzt-null.md).
+
+Der Zaehler-Fix (Schritt 1) bleibt gueltig und war die Voraussetzung dafuer, das ueberhaupt zu
+sehen.
+
+# Warum Schritt 2 zunaechst nicht messbar schien
 
 Der Schutz wirkt nur, wenn eine Klasse **geboren** wird und **dann** als Formachse adressiert
 wird. Im Langlauf gab es 13 Geburten auf 906 Episoden - **1,4 %**. Ein A/B ueber 120 Episoden je
