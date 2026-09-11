@@ -273,6 +273,20 @@ KONTINUITAET = os.environ.get("ACT23_TRACK_KONTINUITAET", "1") == "1"
 # Welt, in der Farbe und Form unabhaengig sind, ist Generalisierung ueberhaupt messbar.
 # ZURUECK auf die gekoppelte Welt: ACT23_FARB_MISCHUNG=0.
 FARB_MISCHUNG = os.environ.get("ACT23_FARB_MISCHUNG", "1") == "1"
+# KOMMANDIERT IST KOMMANDIERT (ACT23_EIG_SCHUETZT, Vorgabe 0 bis gemessen).  Der Schutz vorm
+# Verhungern liest `protect=set(state.SHAPE_KEY.values())` -- also NUR Klassen mit einem KNOPF.
+# Eine Klasse, die ueber das EIGENSCHAFTS-Kommando adressiert wird, ist ungeschuetzt und stirbt
+# nach STARVE_N Blicken, egal wie oft sie kommandiert wurde.  Gemessen im Langlauf vom 10.09.:
+# 'neu-373' wurde FUENFMAL adressiert ([Auto 409] neu-373 + mittel, [Auto 511] farbe-4 +
+# neu-373, ...) und verhungerte trotzdem; sechs der dreizehn geborenen Klassen erreichten
+# 50-75 % Wiedererkennung und starben ebenfalls.
+# Das ist dieselbe Luecke wie beim Aneignungs-Zaehler, nur wirkt sie nicht auf die MESSUNG,
+# sondern auf das VERHALTEN: die Aufraeum-Mechanik entfernt genau die Klassen, die der Agent
+# gerade benutzt.  Belege: wiki/befunde/langlauf-entkoppelt.md.
+# BEWUSST ENG: geschuetzt wird nur die FORMACHSE eines Tripels, das wirklich in state.EIGENSCHAFT
+# steht -- nicht jede je gesehene Klasse.  Sonst waere der Schutz wertlos (nichts verhungerte mehr)
+# und der Klassenbestand liefe in den MAX_OPEN-Deckel.
+EIG_SCHUETZT = os.environ.get("ACT23_EIG_SCHUETZT", "0") == "1"
 WORLD_EPOCHS = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS", "600")))
 WORLD_EPOCHS_SHORT = max(1, int(os.environ.get("ACT23_WORLD_EPOCHS_SHORT", "20")))
 WORLD_FULL_EVERY = max(1, int(os.environ.get("ACT23_WORLD_FULL_EVERY", "4")))
@@ -2804,7 +2818,12 @@ def run_self_learning_steering(headless=False):
             q = 100 * sum(h) / len(h) if h else 0.0
             qk = 100 * a["claim"] / a["blick"]
             if a["born"] is None:                              # vor diesem Lauf geboren
-                alt.append(f"{c} {q:.0f}%")
+                # KOMMANDO-ZAHL AUCH HIER ZEIGEN.  Sie stand bisher nur in den Zeilen JUNGER
+                # Klassen; fuer die bestehenden war nicht sichtbar, ob sie ueberhaupt benutzt
+                # werden -- und genau daran haengt, ob "verhungert mangels Benutzung" ueberhaupt
+                # eine Erklaerung sein kann.  Ohne diese Zahl ist der Fix am Zaehler (beide
+                # Adressierungswege, s. run_one) nicht nachpruefbar.
+                alt.append(f"{c} {q:.0f}%" + (f" ({a['cmd']}x kdo)" if a["cmd"] else ""))
                 continue
             age = acq_ep["n"] - a["born"]
             if age > maxage:
@@ -2892,8 +2911,12 @@ def run_self_learning_steering(headless=False):
         if shape_clf.novel_th is None:
             return []
         saved = sim.d.mocap_pos.copy()                         # observe_scene parks the markers -> restore
+        _prot = set(state.SHAPE_KEY.values())                  # bound commands never starve
+        if EIG_SCHUETZT:                                       # ... und was ueber EIGENSCHAFTEN
+            _prot |= {t[1] for t in state.EIGENSCHAFT.values()  #     kommandierbar ist, auch nicht
+                      if t[1] is not None}                      #     (s. EIG_SCHUETZT oben)
         born = shape_clf.observe_scene(sim, bounds=(-0.115, 0.115, 0.075, 0.235),   # only inside the
-                                       protect=set(state.SHAPE_KEY.values()))       # bound commands never starve
+                                       protect=_prot)
         sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)   # calibrated workspace (5mm inside
         #   REACH_XY; anything beyond lies where a knocked/mis-dropped object renders clipped or
         #   distorted and would read consistently-"novel" for a boring reason)
@@ -4542,9 +4565,19 @@ def run_self_learning_steering(headless=False):
             print(f"    [Stufe 2] Choreo-Schatten ({'Netz' if use_net else 'FSM'}-Lauf): "
                   f"|Netz-Teacher| {div:.0f} mm ({runtime.n()} DAgger + {runtime.n_imit()} Selbst, "
                   f"nachtrainiert){_pt}", flush=True)
-        # ANEIGNUNG: die Episode einer selbst benannten Klasse zuschreiben, falls sie kommandiert war
+        # ANEIGNUNG: die Episode einer selbst benannten Klasse zuschreiben, falls sie kommandiert war.
+        # BEIDE ADRESSIERUNGSWEGE ZAEHLEN (2026-09-11).  Bis hierher stand nur state.SHAPE_KEY --
+        # also der KNOPF-Pfad.  Das Eigenschafts-Kommando laeuft aber ueber state.EIGENSCHAFT und
+        # blieb unsichtbar: im Langlauf vom 10.09. stand 'neu-373' in ALLEN 363 Aneignungszeilen
+        # mit "kommandiert 0x" und wurde im selben Protokoll fuenfmal adressiert ([Auto 409]
+        # neu-373 + mittel, [Auto 511] farbe-4 + neu-373, ...).  Damit war die Aussage "keine
+        # Klasse wird je kommandiert" fuer jeden Lauf mit Eigenschafts-Kommando wertlos -- und die
+        # Frage "haelt Kommandieren eine Klasse am Leben" gar nicht erst stellbar.
+        # Belege: wiki/befunde/langlauf-entkoppelt.md.
         acq_ep["n"] += 1
         _ck = state.SHAPE_KEY.get(body)
+        if _ck is None and method == "eigenschaft":            # Formachse des Tripels (Farbe/Form/Groesse)
+            _ck = state.EIGENSCHAFT.get(body, (None, None, None))[1]
         if _ck in acq:
             acq[_ck]["cmd"] += 1
             acq[_ck]["ok"] += int(bool(res.get("ok", False)))

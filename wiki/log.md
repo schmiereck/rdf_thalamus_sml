@@ -7,6 +7,18 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-11
 
+* **Anlage**: [Der blinde Fleck der Aneignung](/befunde/aneignung-blinder-fleck.md) - die zwei
+  kleinen Schritte vor der latenten Augmentierung. Es sind **zwei Stellen mit demselben Fehler**:
+  der Aneignungs-Zaehler (`pc_act23.py:4547`) verfaelscht die MESSUNG, der Verhungerungsschutz
+  (`:2896`) veraendert das VERHALTEN - `_starve_and_cap` loescht nach 25 Blicken jede
+  ungeschuetzte Klasse, und ueber Eigenschaften kommandierte gelten als ungeschuetzt. **Die
+  Aufraeum-Mechanik entfernt damit genau die Klassen, die der Agent benutzt.** Der Zaehler-Fix
+  ist unbedingt (eine Reparatur, kein Wahlrecht) und im Rauchtest verifiziert: `neu-285 57 %
+  (5x kdo)`, wo vorher `0x` stand; dafuer wurde die Zahl fuer bestehende Klassen ueberhaupt erst
+  sichtbar gemacht. Der Schutz liegt hinter `ACT23_EIG_SCHUETZT` (Vorgabe 0) und ist **noch nicht
+  messbar**: 13 Geburten auf 906 Episoden = 1,4 %, ein 120-Ep-A/B saehe zwei - keine auswertbare
+  Stichprobe. Das steht so in der Seite.
+
 * **Korrektur (eigene, am selben Tag)**:
   [906 Episoden in der entkoppelten Welt](/befunde/langlauf-entkoppelt.md) nachgeschaerft. Die
   erste Fassung sagte "kein Lernproblem, sondern eine Vergabe-Engstelle" - zu grob. Nachgemessen:
