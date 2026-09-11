@@ -14,7 +14,16 @@ generated: { by: claude/opus-5, at: 2026-09-07T00:00:00Z }
 Beide stammen aus [1109 Episoden ohne Lernfortschritt](/befunde/langlauf-ohne-fortschritt.md)
 und sind nicht Vermutung, sondern Messung.
 
-**1. Klassenkonsolidierung.** 17 von 17 bzw. 14 von 14 selbst geborenen Klassen verhungern,
+**1. Klassenkonsolidierung - die Engstelle ist jetzt benannt.** Im
+[906-Episoden-Langlauf der entkoppelten Welt](/befunde/langlauf-entkoppelt.md) wurden 13 Klassen
+geboren, und **alle 13** melden denselben Grund fuers Verhungern: *"kein Knopf zu vergeben - der
+Probe-Koerper ist schon gebunden"*. Eine neu geborene Klasse ist damit strukturell nicht
+kommandierbar, kann nie geuebt werden und stirbt. Das ist **kein Lernproblem, sondern eine
+Vergabe-Engstelle** - der Weg von "geboren" zu "benutzbar" existiert nur fuer den einen
+reservierten Probe-Koerper. Und die alte Ausrede greift nicht mehr: es gab 97 Farb/Form-
+Kombinationen zu sehen, nicht 7.
+
+**1b. Der urspruengliche Befund dazu:** 17 von 17 bzw. 14 von 14 selbst geborenen Klassen verhungern,
 keine wird je kommandiert, die unzuordenbaren Sichtungen wachsen linear. Der Engpass sitzt bei
 der **Geburt** (Klasse aus drei Sichtungen einer einzigen Lage), nicht am Anspruch danach - zwei
 Fassungen einer Wache am Anspruch haben gemessen nichts geloest, siehe

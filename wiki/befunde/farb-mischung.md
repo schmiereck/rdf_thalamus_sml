@@ -59,6 +59,14 @@ der Messung; die entkoppelte Welt ist ab jetzt die Standardwelt):
       Seed 23   63,8 -> 45,5 %   Fisher p = 0,0076
       gepoolt   57,5 -> 47,6 %   Fisher p = 0,0386
 
+# Nachtrag 2026-09-11: der Quotenbefund ist entkraeftet
+
+Ein GUI-Langlauf ueber **906 Episoden** in der entkoppelten Welt liefert **53,1 %** - das alte
+Niveau. Der hier gemessene Einbruch auf 47,6 % war der Ausreisser-Arm, nicht die Welt. Die
+Vorbehalte unten ("die Seeds widersprechen einander", "m23_aus lag mit 63,8 % weit ueber dem
+Ueblichen") haben sich als richtig erwiesen. **Die Entkopplung kostet keine Quote.** Siehe
+[906 Episoden in der entkoppelten Welt](/befunde/langlauf-entkoppelt.md).
+
 # Bewertung
 
 **Die Adressierung haelt - das war die eigentliche Frage.** Median 1,0-1,4 mm in allen vier

@@ -25,6 +25,10 @@ lokal. Die im Wiki zitierten Laeufe:
   zum Welt-Fit-Plan, je 200 Episoden kopfloser Steuerungslauf, gleichzeitig gefahren, je eine
   eigene Zustandskopie -> [Sparsamer Welt-Fit, A/B](/befunde/welt-fit-plan-ab.md)
 
+* `log/pc_act23_2026-09-10_09-10-01_8996.txt` - erster Langlauf in der ENTKOPPELTEN Welt, 906
+  Episoden, 26,8 h, Commit 515393d -> [906 Episoden in der entkoppelten
+  Welt](/befunde/langlauf-entkoppelt.md)
+
 # Auswert- und Messwerkzeuge
 
 * `src/pc_cvnn/act23_exv_report.py` - Auswertung der Wiederholungsmessung

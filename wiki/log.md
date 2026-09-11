@@ -5,6 +5,23 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-11
+
+* **Anlage**: [906 Episoden in der entkoppelten Welt](/befunde/langlauf-entkoppelt.md) - erster
+  Langlauf des Nutzers mit `ACT23_FARB_MISCHUNG=1`, 26,8 h. **Die Quote haelt: 53,1 %**, also das
+  alte Niveau - der im [A/B](/befunde/farb-mischung.md) gemessene Einbruch auf 47,6 % tritt NICHT
+  ein, die dortige Warnung ("die Seeds widersprechen einander, der Vergleichsarm lag zu hoch")
+  war richtig. Adressierung ueber 906 Episoden stabil (1,4 mm, 98,9 % eindeutig). **Eine reine
+  FORM-Adresse liefert so gut wie eine Farb-Adresse** (49,8 gegen 53,0 %, p = 0,46) - eine
+  Aussage, die es vor der Entkopplung nicht geben konnte. **97 Farb/Form-Kombinationen statt 7.**
+  Und trotzdem: 13 Klassen geboren, **keine setzt sich fest**, Bestand am Ende identisch mit dem
+  Anfang, unzuordenbare Sichtungen linear 16 -> 227. Alle 13 Geburten melden "kein Knopf zu
+  vergeben" - **eine Vergabe-Engstelle, kein Wahrnehmungsproblem.** Nebenbefund: drei neue
+  FARBklassen geboren (erwartet waren null), eine davon an obj_U gebunden - bei den Farben
+  funktioniert, was bei den Formen stockt.
+* **Relativierung**: [Farbe und Form entkoppelt](/befunde/farb-mischung.md) - der dortige
+  Quotenbefund (57,5 -> 47,6 %) ist durch den Langlauf entkraeftet.
+
 ## 2026-09-10
 
 * **Entscheidung**: `ACT23_FARB_MISCHUNG` steht auf Nutzerentscheid auf **1** - **die entkoppelte
