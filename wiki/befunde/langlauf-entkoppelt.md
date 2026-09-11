@@ -84,14 +84,51 @@ die unzuordenbaren Sichtungen wachsen linear auf 227. Das ist zifferngenau dasse
 daran liegen, dass es nichts Neues zu sehen gab.** Es gab 97 Kombinationen zu sehen.
 
 Alle 13 Geburten tragen dieselbe Begruendung: *"kein Knopf zu vergeben - der Probe-Koerper ist
-schon gebunden"*. Eine neu geborene Klasse ist damit strukturell nicht kommandierbar, kann nie
-geuebt werden und verhungert. Das ist kein Lernproblem, sondern eine **Engstelle in der
-Vergabe** - der Weg von "Klasse geboren" zu "Klasse benutzbar" existiert nur fuer den einen
-reservierten Probe-Koerper.
+schon gebunden"*. `_register_open_class` steigt aus, sobald `NOVEL_BODY` gebunden ist, und
+`_try_bind` prueft ausschliesslich Klassen, die auf **diesem einen** Koerper sitzen - die ganze
+Vergabemaschinerie haengt an einem reservierten Probe-Koerper, und der ist seit Langem vergeben.
+
+**Aber die Klassen sind nicht unbrauchbar, und das ist der Punkt:**
+
+    Klasse    Alter  max wiedererkannt   Zaehler sagt   verhungert nach
+    neu-369     25        75 %           kommandiert 0x      26 Ep
+    neu-373     60        71 %           kommandiert 0x     229 Ep
+    neu-376     40        67 %           kommandiert 0x      41 Ep
+    neu-371     24        50 %           kommandiert 0x      25 Ep
+    neu-374     24        50 %           kommandiert 0x      25 Ep
+    neu-375     24        50 %           kommandiert 0x      25 Ep
+
+Sechs der dreizehn erreichen 50-75 % Wiedererkennung - sie **funktionieren** und verhungern
+trotzdem.
 
 **Kein Lernfortschritt ueber den Lauf** (55,6 -> 50,6 %, p = 0,14, eher leicht fallend). Vierte
 unabhaengige Bestaetigung von [1109 Episoden ohne
 Fortschritt](/befunde/langlauf-ohne-fortschritt.md), diesmal in der neuen Welt.
+
+# Der Zaehler hat einen blinden Fleck - und das entwertet eine alte Aussage
+
+`neu-373` steht in **allen 363** Aneignungszeilen mit `kommandiert 0x`. Dasselbe Protokoll zeigt
+aber fuenf Kommandos darauf:
+
+    [Auto 409] neu-373 + mittel      [Auto 511] farbe-4 + neu-373
+    [Auto 517] farbe-2 + neu-373     [Auto 610] farbe-5 + neu-373
+    [Auto 614] neu-373 + mittel
+
+Ursache am Code: der Zaehler liest `state.SHAPE_KEY.get(body)` (`pc_act23.py:4547`) - also **nur
+den Knopf-Pfad**. Das [Eigenschafts-Kommando](/mechanismen/eigenschafts-kommando.md) laeuft ueber
+`state.EIGENSCHAFT` und wird nicht mitgezaehlt. Eine Klasse, die ausschliesslich ueber
+Eigenschaften adressiert wird, gilt dem Zaehler als **nie kommandiert**.
+
+Damit ist "keine je kommandiert" aus [Selbst-Aneignung
+stockt](/befunde/selbstaneignung-stockt.md) fuer jeden Lauf **mit** Eigenschafts-Kommando nicht
+mehr belastbar. Die dortigen Pruefzeilen stammen aus der Zeit davor und bleiben gueltig - wer die
+Aussage heute nachmisst, misst am blinden Fleck vorbei.
+
+**Ein Hinweis, keine Messung:** `neu-373` ist die einzige Klasse mit mehreren Kommandos und die
+einzige, die 229 statt ~25 Episoden lebte; die naechstlaengsten (41, 26, 26 Ep) hatten keine. Ob
+Kommandieren am Leben haelt, ist damit **nicht** gezeigt - n = 1, und die Richtung koennte
+umgekehrt sein (eine gut wiedererkannte Klasse wird eher adressiert). Pruefbar, sobald der
+Zaehler beide Pfade sieht.
 
 # Ein unerwarteter Nebenbefund
 
@@ -118,8 +155,17 @@ funktioniert, was bei den FORMEN stockt.
 # Was daraus folgt
 
 Der schaerfste offene Punkt hat sich verschoben: nicht mehr "der Agent sieht zu wenig Neues",
-sondern **"was er als neu erkennt, kann er nicht in Benutzung nehmen"**. Die 13 Geburten sind
-Aneignungsversuche, die an einer Vergabe-Engstelle sterben, nicht an der Wahrnehmung.
+sondern **"was er als neu erkennt, kann er nicht in Benutzung nehmen"**. Sechs der dreizehn
+Geburten sterben bei 50-75 % Wiedererkennung - mitten im Funktionieren.
+
+Zwei kleine Schritte folgen daraus, und beide sollten **vor** einem groesseren Umbau kommen:
+
+1. **Den Zaehler beide Pfade sehen lassen** (`SHAPE_KEY` **und** `EIGENSCHAFT`). Solange er nur
+   den Knopf sieht, misst jede kuenftige Aneignungsaussage am blinden Fleck vorbei - und die
+   Frage "haelt Kommandieren eine Klasse am Leben" ist gar nicht erst stellbar.
+2. **Die Vergabe vom Probe-Koerper loesen.** Eine Klasse, die auf *irgendeinem* Koerper
+   wiederholt bestaetigt wird, koennte kommandierbar werden; ueber das Eigenschafts-Kommando
+   braucht sie dafuer nicht einmal einen Knopf.
 
 # Verwandt
 

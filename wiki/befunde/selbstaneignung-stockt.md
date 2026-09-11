@@ -59,6 +59,18 @@ Ebenfalls kein Defekt, sondern Saettigung: in einer spaeteren Probe waren alle 7
 gebunden - es gab schlicht nichts mehr anzueignen. Wer "verhungern" misst, muss also pruefen, ob
 ueberhaupt noch freie Koerper da sind.
 
+# Vorbehalt 2026-09-11: der Zaehler sieht nur den Knopf-Pfad
+
+Die Aussage "keine wird je kommandiert" stuetzt sich auf den Zaehler in `pc_act23.py:4547`, und
+der liest **nur** `state.SHAPE_KEY` - das
+[Eigenschafts-Kommando](/mechanismen/eigenschafts-kommando.md) zaehlt er nicht mit. Im Langlauf
+vom 10.09. stand `neu-373` in allen 363 Zeilen mit `kommandiert 0x` und wurde nachweislich
+fuenfmal adressiert, siehe
+[906 Episoden in der entkoppelten Welt](/befunde/langlauf-entkoppelt.md).
+
+Fuer die hier zitierten Laeufe (August, vor dem Eigenschafts-Kommando) bleibt die Aussage
+gueltig. **Wer sie heute nachmisst, misst am blinden Fleck vorbei.**
+
 # Fallen
 
 * Eine Formklasse **friert bei 80 Exemplaren ein** (85 % veraltet). Ein erster Fix dafuer loeste

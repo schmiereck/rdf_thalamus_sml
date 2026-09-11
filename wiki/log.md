@@ -7,6 +7,17 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-11
 
+* **Korrektur (eigene, am selben Tag)**:
+  [906 Episoden in der entkoppelten Welt](/befunde/langlauf-entkoppelt.md) nachgeschaerft. Die
+  erste Fassung sagte "kein Lernproblem, sondern eine Vergabe-Engstelle" - zu grob. Nachgemessen:
+  **sechs der dreizehn verhungerten Klassen erreichen 50-75 % Wiedererkennung**, sie funktionieren
+  also und sterben trotzdem nach ~25 Episoden. Und: **der Aneignungs-Zaehler hat einen blinden
+  Fleck** - er liest `state.SHAPE_KEY` (`pc_act23.py:4547`) und sieht das Eigenschafts-Kommando
+  nicht. `neu-373` steht in allen 363 Zeilen mit `kommandiert 0x` und wurde fuenfmal adressiert.
+  [Selbst-Aneignung stockt](/befunde/selbstaneignung-stockt.md) traegt deshalb jetzt einen
+  Vorbehalt: fuer die dortigen August-Laeufe gilt die Aussage, wer sie heute nachmisst, misst am
+  blinden Fleck vorbei.
+
 * **Anlage**: [906 Episoden in der entkoppelten Welt](/befunde/langlauf-entkoppelt.md) - erster
   Langlauf des Nutzers mit `ACT23_FARB_MISCHUNG=1`, 26,8 h. **Die Quote haelt: 53,1 %**, also das
   alte Niveau - der im [A/B](/befunde/farb-mischung.md) gemessene Einbruch auf 47,6 % tritt NICHT
