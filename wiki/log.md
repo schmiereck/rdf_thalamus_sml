@@ -7,6 +7,24 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-12
 
+* **Anlage**: [Groessen-Invarianz, fuenfter Anlauf](/befunde/groessen-invarianz-fuenfter-anlauf.md)
+  - der Hebel aus [Form-Rueckhalte-Test](/befunde/form-rueckhalt.md), neues Werkzeug
+  `act23_groessen_invarianz.py`. Die vier bisherigen Fassungen normieren **Amplituden** oder
+  skalieren Radien **global**; die Ringe liegen aber weiter an festen Weltradien, also misst
+  Ring i bei einem groesseren Objekt eine andere Stelle der Form. Der fuenfte Ansatz haengt die
+  Ringe an die **Eigenausdehnung**. Kennzahl K = groesster Groessen- / kleinster Form-Abstand,
+  drei Seeds:
+  `heute 3,68 | dicke 3,93 | dc 4,25 | fuellung 3,62` gegen `rms 2,37 | sqrtA 2,55 | rmax 2,08`.
+  **Die vier alten Fassungen bewegen im selben Aufbau nichts** (ihr Misserfolg ist hier
+  repliziert), **die relativen Ringe halbieren die Kennzahl** - und zwar in die richtige
+  Richtung: der Form-Abstand *steigt*, der Groessen-Abstand faellt. **Das Ziel unter 1,0 ist
+  trotzdem nicht erreicht.** Zwei wichtige Vorbehalte in der Seite: der Aufbau ist haerter als
+  der urspruengliche (deshalb wurden die vier alten Fassungen nachgerechnet - sonst waere "2,37
+  gegen 2,13" ein scheinbarer Rueckschritt), und ein geaenderter Deskriptor **entwertet den
+  gesamten gelernten Klassenbestand** (die 80 Exemplare je Klasse sind mit festen Ringen
+  gerechnet, die Masken nicht gespeichert). Empfehlung: nicht einbauen, sondern zuerst den
+  Form-Rueckhalte-Test auf einem frisch angelernten Bestand fahren.
+
 * **Anlage**: [Form-Rueckhalte-Test](/befunde/form-rueckhalt.md) - Weg 3 aus
   [Geburtenrate und Saettigung](/befunde/geburtenrate-und-saettigung.md), neues Werkzeug
   `act23_form_rueckhalt.py`. Statt Geburten zu zaehlen wird gefragt, ob eine nie gesehene Form in
