@@ -61,6 +61,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [906 Episoden in der entkoppelten Welt](befunde/langlauf-entkoppelt.md) - Quote haelt (53,1 %), Form-Adressen tragen, 97 Kombinationen - und trotzdem keine einzige neue Formklasse
 * [Der blinde Fleck der Aneignung](befunde/aneignung-blinder-fleck.md) - Zaehler und Verhungerungsschutz sehen nur den Knopf; der Zaehler-Fix ist gebaut und verifiziert
 * [Der Eigenschafts-Schutz wirkt nicht](befunde/eig-schuetzt-null.md) - zwei 400-Ep-Arme BITGLEICH; der Schutz liest einen Schnappschuss statt einer Historie
+* [Geburtenrate und Saettigung](befunde/geburtenrate-und-saettigung.md) - der Neuheits-Erzeuger laeuft gar nicht, und die Formklassen SIND bereits Grobkategorien
 * [Ablenker-Bindung in der Anfahrt](befunde/ablenker-anfahrt.md) - 6,8 % der Episoden fahren >80 mm daneben und liefern dann 1 von 63, obwohl die Adressierung stimmt
 
 # Entscheidungen

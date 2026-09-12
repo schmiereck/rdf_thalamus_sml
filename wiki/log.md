@@ -5,6 +5,24 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-12
+
+* **Anlage**: [Geburtenrate und Saettigung](/befunde/geburtenrate-und-saettigung.md) - auf zwei
+  Nutzerfragen. **(a) Der Neuheits-Erzeuger laeuft seit Langem nicht:** `spawn_novel_shape` kehrt
+  in der ersten Zeile zurueck, weil `NOVEL_BODY` (Vorgabe `obj_T`) laengst in `SHAPE_KEY` steht -
+  im 906-Episoden-Langlauf kommt `[Neuheit]` **null Mal** vor. Das erklaert auch, warum
+  `NOVEL_EVERY=3` im [Schutz-A/B](/befunde/eig-schuetzt-null.md) nichts bewirkte.
+  **(b) Die Saettigungshypothese des Nutzers ist bestaetigt, schaerfer als formuliert:** die
+  Formklassen SIND bereits Grobkategorien - `cube` fasst drei Koerper zusammen, und `neu-9`
+  (obj_T, 21x7) und `neu-285` (obj_X, 21x6) liegen mit 0,66 x novel_th **naeher beieinander als
+  die Streuung innerhalb einer einzelnen Klasse** (neu-13: 1,14). Zwei Klassen, eine Kategorie.
+  **(c) Die Haelfte des Neuheitsvorrats ist gar nicht neu:** die langen duennen Varianten
+  (30x4, 32x5) werden als `neu-9` erkannt - korrekte Verallgemeinerung, keine Fehlfunktion.
+  **Folge fuer die Messweise:** "mehr Geburten" ist kein gutes Ziel; in einer Welt mit vier
+  Grobformen ist eine hohe Geburtenrate ein Zeichen von Uebersegmentierung. Die richtige Frage
+  ist, ob ein NEUES Objekt in die passende bestehende Kategorie faellt - ein Form-Rueckhalte-Test
+  nach dem Muster des [Farb-Tests](/befunde/farbe-form-rueckhalt.md), und der kostet keinen Lauf.
+
 ## 2026-09-11
 
 * **Anlage, ehrliches Negativ**: [Der Eigenschafts-Schutz wirkt nicht](/befunde/eig-schuetzt-null.md)
