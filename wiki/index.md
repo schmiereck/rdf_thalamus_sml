@@ -67,6 +67,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Relative Ringe bestehen den Rueckhalte-Test](befunde/relrings-rueckhalt.md) - uebergrosse Formen 18 -> 69 % richtig erkannt, ohne Preis bei den bekannten
 * [Relative Ringe im Lauf](befunde/relrings-im-lauf.md) - **entkraeftet den vorigen**: kein Aneignungsgewinn, und die Lokalisierung leidet (grobe Fehler 2,1 -> 9,8 %)
 * [Sechster Anlauf: der Zielkonflikt](befunde/relrings-split-zielkonflikt.md) - Trennung behebt nichts; Groessen-Invarianz macht Klassen breiter und Adressen mehrdeutig
+* [Die Groessenachse mass die falsche Groesse](befunde/groessenachse-spanne.md) - Spanne statt Dicke, plus Identitaetspruefung: grobe Fehler 10,8 -> 3,1 %, aber nur ZUSAMMEN
 * [Ablenker-Bindung in der Anfahrt](befunde/ablenker-anfahrt.md) - 6,8 % der Episoden fahren >80 mm daneben und liefern dann 1 von 63, obwohl die Adressierung stimmt
 
 # Entscheidungen

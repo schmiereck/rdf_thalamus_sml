@@ -7,6 +7,21 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-14
 
+* **Anlage**: [Die Groessenachse mass die falsche Groesse](/befunde/groessenachse-spanne.md) -
+  der siebte Anlauf. **Der Auftrag verschob sich:** bestellt war "das Groessenband feiner",
+  gemessen ist die Achse aber nicht zu grob, sondern die **falsche**. Sie nutzte die
+  MATERIALDICKE - und alle sieben Koerper liegen dort zwischen 5,61 und 6,08, also im selben Band
+  "mittel"; Trennung 0,3-0,7 Streuungen. Die **Spanne** (Ausdehnung, in `perceive_all` laengst
+  gerechnet, nie als Adressachse herausgefuehrt) trennt alle fuenf Formen mit 2,2-4,8 Streuungen.
+  Dazu ein zweiter Fund beim Lesen: die Wuerfelei prueft beim Achsen-Nachlegen nur die **Anzahl**
+  der Treffer, nicht die **Identitaet** - daher 316 von 318 "eindeutigen" Adressen bei 8,8 %
+  groben Fehlern. **Faktorielles A/B (4 Arme je 150 Ep) zeigt eine Wechselwirkung:** `span` allein
+  p = 0,58, `ident` allein **bitgleich zur Vorgabe** (nie gegriffen), **beide zusammen 10,8 ->
+  3,1 %, p = 0,0086**. Grund: der Identitaetscheck kann nur nachlegen, wenn es eine trennende
+  Achse gibt - mit der Dicke-Achse landen 75 von 89 Adressen im Band "mittel". *Schloss und
+  Schluessel; wer sie einzeln misst, misst zweimal null.* **Preis, real:** der privilegierte
+  Rueckfall verdoppelt sich (4,7 -> 10,0 % der Episoden). Beide Vorgaben bleiben 0.
+
 * **Anlage + Selbstkorrektur**:
   [Sechster Anlauf: der Zielkonflikt](/befunde/relrings-split-zielkonflikt.md) - Klassifikation
   und Ausrichtung getrennt (`ACT_SHAPE_RELRINGS=2`: Klasse relativ, Yaw fest; der Greifpunkt

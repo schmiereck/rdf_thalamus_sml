@@ -605,10 +605,51 @@ def main_diag():
 # Y10 und Y20 fallen klar heraus.  Die Achse ist also vorbereitet, nicht heute schon nuetzlich.
 GROESSEN_BAENDER = [("duenn", 0.0, 5.2), ("mittel", 5.2, 6.5), ("dick", 6.5, 99.0)]
 
+# SIEBTER ANLAUF ZUR GROESSENACHSE (ACT23_GROESSE_SPANNE, Vorgabe 0 bis gemessen).
+# ANLASS: wiki/befunde/relrings-split-zielkonflikt.md -- groessen-invariante Klassen tragen mehr
+# Koerper, und das Eigenschafts-Tripel trifft dann oefter den falschen.  Die Groesse soll die
+# verlorene Trennschaerfe zurueckholen ("die Faktorisierung gehoert NEBEN den Deskriptor").
+# BEFUND, der die Aufgabe verschiebt: die heutige Achse ist nicht zu GROB, sie ist die FALSCHE.
+# Gemessen ueber 7 Koerper x 10 Lagen:
+#     Dicke  (heute)   obj_L 5,61 | obj_X 5,70 | obj_U 5,83 | obj_T 5,91 | cube 6,04
+#                      -> alle sieben im Band "mittel" (5,2-6,5), Trennung 0,3-0,7 Streuungen
+#     Spanne           cube 20,0 | obj_X 24,4 | obj_T 28,3 | obj_L 34,5 | obj_U 37,4 mm
+#                      -> Trennung 2,2 bis 4,8 Streuungen
+# Die DICKE misst die Materialbreite -- und alle Balken sind 14 mm breit, deshalb trennt sie
+# nichts.  Die SPANNE (95.-Perzentil des Abstands vom Schwerpunkt) misst die Ausdehnung und
+# trennt alle fuenf Formen.  Sie wird in perceive_all bereits gerechnet (Feld "span"), war aber
+# nie als Adressachse herausgefuehrt.
+# Die Baender liegen auf einem gleichmaessigen 5-mm-Raster, nicht auf den gemessenen Koerpern:
+# koerpergenaue Grenzen waeren auf diese sieben ueberfittet und trennten nichts Neues.
+GROESSE_SPANNE = os.environ.get("ACT23_GROESSE_SPANNE", "0") == "1"
+# EINDEUTIG IST NICHT RICHTIG (ACT23_EIG_IDENT, Vorgabe 0 bis gemessen).  Die Wuerfelei in
+# _auto_eig_umschreiben legt Achsen nach, bis `finde_nach_eigenschaften` genau EINEN Treffer
+# meldet -- sie prueft aber nur die ANZAHL, nicht die IDENTITAET.  Trifft das Tripel genau eine
+# Detektion, und ist das die FALSCHE, gilt die Adresse als eindeutig und ist trotzdem falsch.
+# Genau das ist gemessen: im Split-Lauf meldeten 316 von 318 Adressen "genau ein Treffer", und
+# 8,8 % lagen ueber 20 mm daneben (wiki/befunde/relrings-split-zielkonflikt.md).
+# MIT dem Schalter muss der eine Treffer DERSELBE sein wie die Detektion auf dem gemeinten
+# Koerper -- sonst werden weiter Achsen nachgelegt, und notfalls gar nicht umgeschrieben.
+EIG_IDENT = os.environ.get("ACT23_EIG_IDENT", "0") == "1"
+SPANNEN_BAENDER = [("winzig", 0.0, 17.5), ("klein", 17.5, 22.5), ("mittelklein", 22.5, 26.5),
+                   ("mittel", 26.5, 31.5), ("gross", 31.5, 36.0), ("riesig", 36.0, 999.0)]
 
-def groessen_band(dicke):
-    """Materialdicke (px_scale-normiert, Bezug 240) -> Bandname.  Grenzen s. GROESSEN_BAENDER.
-    None, wenn keine Dicke vorliegt."""
+
+def groessen_band(dicke, span=None):
+    """Groessenband einer Detektion -> Bandname, oder None ohne Messwert.
+
+    Zwei Achsen, s. GROESSE_SPANNE oben:
+      Vorgabe             Materialdicke (px_scale-normiert, Bezug 240), Grenzen GROESSEN_BAENDER
+      GROESSE_SPANNE=1    Ausdehnung in mm (Feld "span" aus perceive_all), Grenzen SPANNEN_BAENDER
+    `span` kommt in METERN (so liefert es perceive_all) und wird hier auf mm gebracht."""
+    if GROESSE_SPANNE:
+        if span is None:
+            return None
+        _mm = 1000.0 * float(span)
+        for nm, lo, hi in SPANNEN_BAENDER:
+            if lo <= _mm < hi:
+                return nm
+        return None
     if dicke is None:
         return None
     for nm, lo, hi in GROESSEN_BAENDER:
@@ -632,7 +673,7 @@ def finde_nach_eigenschaften(sim, shape_clf, colours, farbe=None, form=None, gro
         f = None
         if colours is not None and det.get("chroma") is not None:
             f = colours.classify(det["chroma"])[0]
-        g = groessen_band(det.get("dicke"))
+        g = groessen_band(det.get("dicke"), det.get("span"))
         if farbe is not None and f != farbe:
             continue
         if form is not None and str(det.get("shape")) != str(form):
@@ -1580,7 +1621,7 @@ def run_self_learning_steering(headless=False):
         if _nah is None or float(np.linalg.norm(np.asarray(_nah["pos"], float) - _p)) >= 0.04:
             return None                                  # nichts Sichtbares auf dem Koerper
         _f = colours.classify(_nah["chroma"])[0] if _nah.get("chroma") is not None else None
-        _fo, _g = _nah.get("shape"), groessen_band(_nah.get("dicke"))
+        _fo, _g = _nah.get("shape"), groessen_band(_nah.get("dicke"), _nah.get("span"))
         # EINDEUTIGKEIT ERZWINGEN.  Gemessen: eine Angabe wie "mittel" allein passt auf DREI
         # Objekte (alle heutigen Koerper liegen in diesem Band), und der Aufloeser nimmt dann das
         # flaechengroesste -- in einer Auto-Episode das falsche, 152 mm daneben.  Ein Kommando,
@@ -1604,8 +1645,14 @@ def run_self_learning_steering(headless=False):
         _sv = sim.d.mocap_pos.copy()      # die Suche PARKT die Marker (_park_markers); ohne
         for _versuch in range(4):         # Rueckgabe liefert goal_fn ein GEPARKTES Ziel
             _tri = tuple(w if m else None for w, m in zip(_werte, _mk))
-            _, _, _tr2 = finde_nach_eigenschaften(sim, shape_clf, colours, *_tri)
-            if len(_tr2) <= 1:
+            _pos2, _, _tr2 = finde_nach_eigenschaften(sim, shape_clf, colours, *_tri)
+            # IDENTITAET, nicht nur Anzahl (s. EIG_IDENT oben): der eine Treffer muss auf dem
+            # gemeinten Koerper sitzen.  Ohne das gilt eine Adresse als eindeutig, die genau ein
+            # FREMDES Objekt trifft -- gemessen 316 von 318 "eindeutig" bei 8,8 % groben Fehlern.
+            _trifft = True
+            if EIG_IDENT and _pos2 is not None:
+                _trifft = float(np.linalg.norm(np.asarray(_pos2, float) - _p)) < 0.02
+            if len(_tr2) <= 1 and _trifft:
                 break
             _fehlt = [i for i in range(3) if not _mk[i] and _werte[i] is not None]
             if not _fehlt:
