@@ -40,6 +40,7 @@ lokal. Die im Wiki zitierten Laeufe:
 * `src/pc_cvnn/act23_farbe_form_probe.py` - Farb-Rueckhalte-Test durch Umfaerben (kuerzt die Form ueber die Farbe ab?)
 * `src/pc_cvnn/act23_form_rueckhalt.py` - Form-Rueckhalte-Test: faellt eine neue Form in die passende bestehende Kategorie?
 * `src/pc_cvnn/act23_groessen_invarianz.py` - Groessen-Invarianz: sieben Deskriptor-Varianten an einer Kennzahl
+* `src/pc_cvnn/act23_relrings_ab.py` - feste gegen relative Ringe am Form-Rueckhalte-Test, mit frischem Anlernen
 * `src/pc_cvnn/act23_attractor_ab.py`, `act23_u_densegrasp_ab.py`, `act23_dose_workers.py`
 * `src/pc_cvnn/run_history.py` - Laufhistorie
 

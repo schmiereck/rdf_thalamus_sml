@@ -5,6 +5,21 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-13
+
+* **Anlage**: [Relative Ringe bestehen den Rueckhalte-Test](/befunde/relrings-rueckhalt.md) - die
+  Pruefstandszahl aus [dem fuenften Anlauf](/befunde/groessen-invarianz-fuenfter-anlauf.md) ist am
+  direkten Mass geprueft. Zwei **frisch angelernte** Klassifikatoren je Seed (der alte Bestand ist
+  mit festen Ringen gerechnet und nicht vergleichbar), getestet an den drei trainierten Formen in
+  0,7x bis 2,0x. **Bei den uebergrossen Faellen (>=1,4x): 18,1 % richtig mit festen Ringen, 68,8 %
+  mit relativen**, ueber zwei Seeds stabil. Trainingsgenauigkeit bleibt 1,000, `novel_th`
+  kalibriert sich gleich, bei 1,0x sind beide gleich gut - **kein Preis bei den bekannten
+  Formen.** Ehrlich dazu: Verwechslungen steigen von exakt 0 auf 0,6-1,2 % (der feste Deskriptor
+  irrt nie, er **enthaelt sich**; der relative trifft fast immer und irrt gelegentlich), und auch
+  relativ bleiben 31 % der uebergrossen Faelle unerkannt - **verbessert, nicht hergestellt.** Neuer
+  Schalter `ACT_SHAPE_RELRINGS` (Vorgabe 0). **Die Pruefstandsfalle ist diesmal nicht
+  zugeschnappt** - was in diesem Projekt die Ausnahme ist.
+
 ## 2026-09-12
 
 * **Anlage**: [Groessen-Invarianz, fuenfter Anlauf](/befunde/groessen-invarianz-fuenfter-anlauf.md)

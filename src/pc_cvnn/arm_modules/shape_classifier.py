@@ -130,6 +130,20 @@ OPEN_CAP = 80                                                           # max st
 # i.e. was never reinforced by real repeated sightings) is a phantom and is pruned; a real object's
 # class keeps getting claimed (age resets) and accumulates exemplars, so it survives.  Bound-command
 # classes are additionally PROTECTED (passed in).  A hard CAP bounds the total (prune the most-starved).
+# RELATIVE RINGE (ACT_SHAPE_RELRINGS=1, Vorgabe AUS).  Die Ringe von _harmonics_at liegen an
+# FESTEN Weltradien (RW = 4..46 mm); Ring i misst bei einem doppelt so grossen Objekt eine voellig
+# andere Stelle der Form -- das ist die gemessene Ursache dafuer, dass der Deskriptor jenseits des
+# 1,3-fachen bekannten Masses alles als "neuartig" liest (wiki/befunde/form-rueckhalt.md).
+# MIT dem Schalter haengen die Ringe an der EIGENAUSDEHNUNG des Objekts (95.-Perzentil des
+# Abstands vom Schwerpunkt), Ring i sitzt also immer bei derselben RELATIVEN Position.
+# Am Pruefstand halbiert das die Kennzahl "Groessen-Abstand / Form-Abstand" von 3,68 auf 2,08
+# (wiki/befunde/groessen-invarianz-fuenfter-anlauf.md) -- vier fruehere Normierungen bewegten dort
+# nichts.  ACHTUNG: ein damit gerechneter Deskriptor ist mit gespeicherten Exemplaren NICHT
+# vergleichbar; wer umschaltet, muss train() neu fahren und das Open-Set neu aufbauen.
+RELRINGS = os.environ.get("ACT_SHAPE_RELRINGS", "0") == "1"
+RELR_LO = float(os.environ.get("ACT_SHAPE_RELR_LO", "0.15"))   # innerster Ring, Bruchteil der Ausdehnung
+RELR_HI = float(os.environ.get("ACT_SHAPE_RELR_HI", "1.35"))   # aeusserster Ring
+
 STARVE_N = int(os.environ.get("ACT_OPEN_STARVE", "25"))
 # FARBFREIER SPLIT verschmolzener Blobs, s. perceive_all.  ACT_SHAPE_SPLIT=0 stellt den alten
 # Zustand her (nur der farbbasierte Form-Split, der ohne Farbklasse nicht laufen kann).
@@ -334,8 +348,17 @@ class ShapeClassifierModule(ArmModule):
         th = np.arange(self.NA) / self.NA * 2 * np.pi
         ring = np.column_stack([np.cos(th), np.sin(th)])
         if self.H is not None:
-            F = np.empty((len(self.RW), self.NH), complex)
-            for i, r in enumerate(self.RW):
+            radien = self.RW
+            if RELRINGS:                                     # s. RELRINGS oben: Ringe an der
+                ys, xs = np.nonzero(mask > 0)                #   EIGENAUSDEHNUNG statt an festen
+                if len(xs) >= 8:                             #   Weltradien
+                    Wp = self._px_to_world(np.column_stack([xs, ys]))
+                    dd = np.linalg.norm(Wp - np.asarray(ctr, float), axis=1)
+                    R = float(np.percentile(dd, 95))
+                    if np.isfinite(R) and R > 1e-6:
+                        radien = np.linspace(RELR_LO, RELR_HI, len(self.RW)) * R
+            F = np.empty((len(radien), self.NH), complex)
+            for i, r in enumerate(radien):
                 rp = self._world_to_px(ctr + r * ring)
                 py = np.clip(rp[:, 1].astype(int), 0, H - 1); px = np.clip(rp[:, 0].astype(int), 0, Wd - 1)
                 F[i] = np.fft.fft(mask[py, px])[:self.NH]
