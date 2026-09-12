@@ -7,6 +7,25 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-12
 
+* **Anlage**: [Form-Rueckhalte-Test](/befunde/form-rueckhalt.md) - Weg 3 aus
+  [Geburtenrate und Saettigung](/befunde/geburtenrate-und-saettigung.md), neues Werkzeug
+  `act23_form_rueckhalt.py`. Statt Geburten zu zaehlen wird gefragt, ob eine nie gesehene Form in
+  die **passende bestehende** Kategorie faellt. Bilanz ueber 72 Sichtungen: **36,1 % richtig,
+  54,2 % neu (uebersegmentiert), 9,7 % falsch.** Aufgeschluesselt eine scharfe Asymmetrie -
+  laengliche Formen 69,4 % richtig und **null** Verwechslungen, quadratische 2,8 %. Die
+  Groessen-Kontrolle erklaert es: **beide** Kategorien brechen bei rund dem **1,3-fachen** des
+  bekannten Masses, unabhaengig von der Form; der Wuerfel ist mit 12 mm nur der kleinste Koerper
+  und hatte deshalb keine Luft nach oben. **Der Deskriptor verallgemeinert ueber die PROPORTION**
+  (2,9:1 bis 8,5:1 alle als derselbe Balken - genau die Grobkategorie aus der Nutzerfrage)
+  **und nicht ueber die GROESSE.** Das bestaetigt
+  [Formfaktorisierung](/befunde/formfaktorisierung.md) und beziffert erstmals, was daran haengt:
+  die Haelfte aller Verallgemeinerungsfaelle.
+* **Klarstellung (Nutzerfrage)**: die Formklassen entstehen **nicht** aus der Fovea, sondern aus
+  dem vollen Kamerabild - `perceive_all` -> `_render_u8` (240x240, Arm ausgeblendet) ->
+  Saettigungsmaske -> CC-Segmentierung -> komplexe Winkelharmonische auf Polarringen (`RW`
+  4-46 mm in Weltmassen). Die Fovea (16x16 Zellen) liefert den BLICK, nicht die Form. Das ist
+  genau das Uebergangsgeruest, das [das Projektziel](/ziel.md) abbauen will.
+
 * **Anlage**: [Geburtenrate und Saettigung](/befunde/geburtenrate-und-saettigung.md) - auf zwei
   Nutzerfragen. **(a) Der Neuheits-Erzeuger laeuft seit Langem nicht:** `spawn_novel_shape` kehrt
   in der ersten Zeile zurueck, weil `NOVEL_BODY` (Vorgabe `obj_T`) laengst in `SHAPE_KEY` steht -
