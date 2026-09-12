@@ -94,8 +94,10 @@ sind ~5 % der Episoden gegen ~5 % vorher... genauer: 15 von 150 gegen 7 von 150,
 4,7 %. Fuer ein Projekt, das [Privilegien abbauen](/ziel.md) will, ist das ein echter Nachteil und
 kein Rundungsfehler.
 
-Ob er sich mit einem groeberen Raster (etwa 7 mm statt 5) vermeiden laesst, ohne die Trennkraft zu
-verlieren, ist **ungemessen**.
+> **BEANTWORTET (2026-09-14): nein.** Ein 7-mm-Raster haelt den Adressierungsgewinn (2,6 %), aber
+> der Rueckfall steigt auf 20 statt 15. Ursache ist nicht die Weite, sondern ein zusaetzliches
+> oberstes Band, in das nur verschmolzene Blobs fallen und aus dem keine Adresse zurueckfindet.
+> Siehe [Das groebere 7-mm-Raster](/befunde/spannen-raster-7mm.md).
 
 # Fallen
 
@@ -113,3 +115,4 @@ verlieren, ist **ungemessen**.
 * [Sechster Anlauf: der Zielkonflikt](/befunde/relrings-split-zielkonflikt.md) - der Anlass
 * [Eigenschafts-Kommando](/mechanismen/eigenschafts-kommando.md) - "Eindeutigkeit ist nicht Richtigkeit"
 * [Formfaktorisierung](/befunde/formfaktorisierung.md) - "die Faktorisierung gehoert NEBEN den Deskriptor"
+* [Das groebere 7-mm-Raster](/befunde/spannen-raster-7mm.md) - die hier offene Frage, beantwortet

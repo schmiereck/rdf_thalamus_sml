@@ -7,6 +7,24 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-14
 
+* **Anlage**: [Das groebere 7-mm-Raster senkt den Rueckfall nicht](/befunde/spannen-raster-7mm.md)
+  - die offene Frage des siebten Anlaufs, beantwortet mit **nein**. Drei Arme je 150 Episoden
+  (Vorgabe / gemessene Liste / 7-mm-Raster). Der Adressierungsgewinn bleibt (**2,6 gegen 3,1 %**
+  grobe Fehler, beide weit unter den 10,8 % der Vorgabe, p = 0,0038), aber der privilegierte
+  Rueckfall wird nicht kleiner, sondern **groesser: 20 statt 15, gegen 7 in der Vorgabe**
+  (p = 0,0142). **Die Ursache ist nicht die Rasterweite, sondern die Bandzahl:** das gleichmaessige
+  Raster haengt ein siebtes Band `gewaltig` (ab 52,5 mm) an. Kein einzelner Koerper wird so gross
+  - der groesste, obj_U, misst 37,4 mm -, also landet dort nur ein **verschmolzener Blob**. Wird
+  `gewaltig` einmal in ein Eigenschafts-Tripel geschrieben, passt es im naechsten Bild nie wieder:
+  6 der 20 Rueckfaelle gehen darauf zurueck, ohne sie waeren es 14 und damit wie beim feinen Arm.
+  **Ein offenes oberstes Band ist keine Nachlaessigkeit, sondern haelt den Ausreisser im
+  adressierbaren Bereich** - das Aufraeumen zum gleichmaessigen Raster hat es entfernt.
+  Nebenbefund: `r7_aus` und `r7_fein` wiederholen `g7_aus` und `g7_beide` **zifferngenau**
+  (58,7/66,0 %, 18/167 und 5/159, 7 und 15 Rueckfaelle) - der siebte Anlauf war kein Ausreisser.
+  Eigene Falle dokumentiert: ein zweiter Auswerter, der gleiche `[dbg]`-Zeilen entdoppelte, kam
+  auf 8/148 statt 18/167 - plausibel aussehend und mit der gemessenen Seite nicht vergleichbar.
+  `ACT23_SPANNE_RASTER` bleibt auf `0`.
+
 * **Anlage**: [Die Groessenachse mass die falsche Groesse](/befunde/groessenachse-spanne.md) -
   der siebte Anlauf. **Der Auftrag verschob sich:** bestellt war "das Groessenband feiner",
   gemessen ist die Achse aber nicht zu grob, sondern die **falsche**. Sie nutzte die

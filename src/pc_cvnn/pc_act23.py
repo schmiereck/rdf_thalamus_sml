@@ -631,8 +631,43 @@ GROESSE_SPANNE = os.environ.get("ACT23_GROESSE_SPANNE", "0") == "1"
 # MIT dem Schalter muss der eine Treffer DERSELBE sein wie die Detektion auf dem gemeinten
 # Koerper -- sonst werden weiter Achsen nachgelegt, und notfalls gar nicht umgeschrieben.
 EIG_IDENT = os.environ.get("ACT23_EIG_IDENT", "0") == "1"
-SPANNEN_BAENDER = [("winzig", 0.0, 17.5), ("klein", 17.5, 22.5), ("mittelklein", 22.5, 26.5),
-                   ("mittel", 26.5, 31.5), ("gross", 31.5, 36.0), ("riesig", 36.0, 999.0)]
+# RASTERWEITE (ACT23_SPANNE_RASTER, Vorgabe 5.0 mm).  Feinere Baender trennen schaerfer, lassen
+# aber haeufiger GAR KEINE Adresse passen -- und dann greift der privilegierte Rueckfall.
+# Gemessen im siebten Anlauf: mit 5 mm verdoppelt sich der Rueckfall von 4,7 auf 10,0 % der
+# Episoden (wiki/befunde/groessenachse-spanne.md).  Der Raster ist deshalb einstellbar.
+# 7 mm GEMESSEN und verworfen (wiki/befunde/spannen-raster-7mm.md): die Trennkraft bleibt wie
+# vorab gerechnet (grobe Adressierungsfehler 2,6 gegen 3,1 %), aber der Rueckfall steigt auf 20
+# statt 15.  Ursache ist NICHT die Weite, sondern die Bandzahl: das gleichmaessige Raster haengt
+# ein siebtes Band "gewaltig" an (ab 52,5 mm).  So gross wird kein einzelner Koerper -- obj_U, der
+# groesste, misst 37,4 mm --, dort landet also nur ein VERSCHMOLZENER Blob.  Einmal ins Tripel
+# geschrieben, passt "gewaltig" im naechsten Bild nie wieder; 6 der 20 Rueckfaelle gehen darauf
+# zurueck.  Das offene oberste Band der gemessenen Liste ("riesig" ab 36,0, ohne Obergrenze) ist
+# deshalb keine Nachlaessigkeit -- es haelt den Ausreisser im adressierbaren Bereich.
+# Vorgabe 0 = die im siebten Anlauf GEMESSENE Liste unveraendert lassen.  Sie ist leicht
+# ungleichmaessig (22,5-26,5 sind 4 mm, 31,5-36,0 sind 4,5), und genau so wurde sie gemessen --
+# ein "aufgeraeumtes" 5-mm-Raster waere ein ANDERER Stand und truege die Messung nicht mehr.
+SPANNE_RASTER = float(os.environ.get("ACT23_SPANNE_RASTER", "0"))
+SPANNE_START = float(os.environ.get("ACT23_SPANNE_START", "17.5"))
+
+
+def _spannen_baender(weite=None, start=None):
+    """Gleichmaessiges Raster ab `start`, Schrittweite `weite` -- bewusst NICHT koerpergenau:
+    Grenzen auf die sieben heutigen Koerper gelegt waeren auf sie ueberfittet und truegen
+    nichts fuer eine achte Form."""
+    w = float(weite if weite is not None else SPANNE_RASTER)
+    s0 = float(start if start is not None else SPANNE_START)
+    nm = ["winzig", "klein", "mittelklein", "mittel", "gross", "riesig", "gewaltig"]
+    out = [(nm[0], 0.0, s0)]
+    for i in range(1, len(nm) - 1):
+        out.append((nm[i], s0 + (i - 1) * w, s0 + i * w))
+    out.append((nm[-1], s0 + (len(nm) - 2) * w, 999.0))
+    return out
+
+
+SPANNEN_BAENDER = (_spannen_baender() if SPANNE_RASTER > 0 else
+                   # die gemessene Liste (wiki/befunde/groessenachse-spanne.md)
+                   [("winzig", 0.0, 17.5), ("klein", 17.5, 22.5), ("mittelklein", 22.5, 26.5),
+                    ("mittel", 26.5, 31.5), ("gross", 31.5, 36.0), ("riesig", 36.0, 999.0)])
 
 
 def groessen_band(dicke, span=None):
