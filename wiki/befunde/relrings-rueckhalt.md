@@ -13,6 +13,12 @@ sources:
     title: Relrings-A/B mit frischem Anlernen
 ---
 
+> **ENTKRAEFTET IM LAUF (2026-09-13).** Zwei frische Laeufe zu je 300 Episoden zeigen: die
+> Geburtenrate bleibt identisch (5 zu 5), das Ueberleben wird nicht besser, und die
+> **Adressierung leidet messbar** (grobe Fehler 2,1 -> 9,8 %, p = 0,0001). Der Gewinn unten ist
+> echt, betrifft aber nur die KLASSIFIKATION - am selben Deskriptor haengt die Lokalisierung, und
+> die verliert mehr. Siehe [Relative Ringe im Lauf](/befunde/relrings-im-lauf.md).
+
 # Die Frage
 
 Aus [Groessen-Invarianz, fuenfter Anlauf](/befunde/groessen-invarianz-fuenfter-anlauf.md): die

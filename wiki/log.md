@@ -7,6 +7,21 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-13
 
+* **Anlage, ehrliches Negativ**: [Relative Ringe im Lauf](/befunde/relrings-im-lauf.md) - zwei
+  FRISCHE Laeufe je 300 Episoden (der gespeicherte Bestand ist mit festen Ringen gerechnet, ein
+  Vergleich gegen ihn waere unfair gewesen). **Die Pruefstandsverbesserung schlaegt nicht durch:**
+  Geburtenrate identisch (5 zu 5, p = 1,00), Ueberleben 3 gegen 2, **Adressierung messbar
+  schlechter** - grobe Fehler >20 mm von 2,1 auf 9,8 % (p = 0,0001), privilegierter Rueckfall
+  25 -> 52, Lieferquote 20,3 -> 11,7 %. **Grund:** am selben Deskriptor haengt nicht nur die
+  Klasse, sondern auch Greifpunkt und Yaw (`_harmonics_at` -> `_yaw_from`); die Lokalisierung
+  verliert mehr, als die Klassifikation gewinnt. **Vierter Fall der
+  [Pruefstandsfalle](/mechanismen/pruefstandsfalle.md)** - und diesmal war die Vorstufe bereits
+  ein direktes Mass. Praezisere Lehre daraus: *ein direktes Mass ist nicht automatisch das
+  richtige Mass; `ebene` sagt, WO gemessen wurde, nicht ob ALLES BETROFFENE mitgemessen wurde.*
+  [relrings-rueckhalt.md](/befunde/relrings-rueckhalt.md) traegt die Entkraeftung im Kopf.
+  Der Schalter bleibt auf 0; ein sechster Anlauf muesste Klassifikation und Lokalisierung
+  trennen (feste Ringe fuer Greifpunkt/Yaw, relative nur fuer `resolve()`).
+
 * **Anlage**: [Relative Ringe bestehen den Rueckhalte-Test](/befunde/relrings-rueckhalt.md) - die
   Pruefstandszahl aus [dem fuenften Anlauf](/befunde/groessen-invarianz-fuenfter-anlauf.md) ist am
   direkten Mass geprueft. Zwei **frisch angelernte** Klassifikatoren je Seed (der alte Bestand ist

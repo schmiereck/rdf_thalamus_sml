@@ -65,6 +65,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Form-Rueckhalte-Test](befunde/form-rueckhalt.md) - verallgemeinert wird ueber die Proportion, nicht ueber die Groesse; ab Faktor 1,3 ist alles "neuartig"
 * [Groessen-Invarianz, fuenfter Anlauf](befunde/groessen-invarianz-fuenfter-anlauf.md) - Ringe an der Eigenausdehnung halbieren die Kennzahl; Ziel trotzdem nicht erreicht
 * [Relative Ringe bestehen den Rueckhalte-Test](befunde/relrings-rueckhalt.md) - uebergrosse Formen 18 -> 69 % richtig erkannt, ohne Preis bei den bekannten
+* [Relative Ringe im Lauf](befunde/relrings-im-lauf.md) - **entkraeftet den vorigen**: kein Aneignungsgewinn, und die Lokalisierung leidet (grobe Fehler 2,1 -> 9,8 %)
 * [Ablenker-Bindung in der Anfahrt](befunde/ablenker-anfahrt.md) - 6,8 % der Episoden fahren >80 mm daneben und liefern dann 1 von 63, obwohl die Adressierung stimmt
 
 # Entscheidungen
