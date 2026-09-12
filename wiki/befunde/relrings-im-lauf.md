@@ -58,6 +58,12 @@ Koerper und muss alle selbst entdecken - genau die Aneignungssituation, um die e
 
     privilegierter Rueckfall   fest 25   relativ 52
 
+> **URSACHE KORRIGIERT (2026-09-14).** Die unten gegebene Erklaerung - der Yaw haenge am selben
+> Deskriptor - ist **widerlegt**: der sechste Anlauf trennt Klasse und Yaw und behebt den
+> Adressierungsschaden NICHT (8,8 statt 9,8 %). Der Quotenverlust ging tatsaechlich auf die
+> Ausrichtung zurueck, die Adressierung dagegen auf die Klassenbreite. Siehe
+> [Sechster Anlauf: der Zielkonflikt](/befunde/relrings-split-zielkonflikt.md).
+
 # Warum die Lokalisierung leidet
 
 Das ist der Kern und er war nicht vorhergesehen. Der Deskriptor liefert nicht nur die

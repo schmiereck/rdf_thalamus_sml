@@ -5,6 +5,24 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-14
+
+* **Anlage + Selbstkorrektur**:
+  [Sechster Anlauf: der Zielkonflikt](/befunde/relrings-split-zielkonflikt.md) - Klassifikation
+  und Ausrichtung getrennt (`ACT_SHAPE_RELRINGS=2`: Klasse relativ, Yaw fest; der Greifpunkt
+  haengt ohnehin nicht an den Harmonischen). Am Pruefstand bleibt die Klassifikations-Verbesserung
+  **exakt** erhalten (25,9 -> 88,9 %). Im Lauf aber: **grobe Adressierungsfehler 2,1 -> 8,8 %
+  (p = 0,0003)** gegen 9,8 % bei Fassung 1 - **der Split behebt nichts, meine Ursachenzuschreibung
+  war falsch.** Die Quote ist diesmal unauffaellig (20,3 gegen 18,7 %, p = 0,68), der
+  Quotenverlust der Fassung 1 ging also wirklich auf den Yaw. **Die wirkliche Ursache der
+  Adressierungsfehler ist ein ZIELKONFLIKT:** Groessen-Invarianz macht Klassen breiter - im
+  Split-Arm tragen drei Klassen mehrere Koerper statt zwei, darunter `cube` (3 Koerper) und
+  `neu-3` (obj_T, obj_U, obj_blue) - und ein Eigenschafts-Tripel trifft dann oefter den falschen.
+  21 der 28 groben Fehler haben eine Formachse. **Und 316 von 318 Adressen melden trotzdem "genau
+  ein Treffer"** - woertlich "Eindeutigkeit ist nicht Richtigkeit", erstmals als Folge einer
+  *Verbesserung*. Lehre: die Groesse war nicht nur ein Mangel des Deskriptors, sondern das, was
+  obj_T von obj_U trennt. relrings-im-lauf.md traegt die Korrektur im Kopf.
+
 ## 2026-09-13
 
 * **Anlage, ehrliches Negativ**: [Relative Ringe im Lauf](/befunde/relrings-im-lauf.md) - zwei

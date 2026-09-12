@@ -141,6 +141,19 @@ OPEN_CAP = 80                                                           # max st
 # nichts.  ACHTUNG: ein damit gerechneter Deskriptor ist mit gespeicherten Exemplaren NICHT
 # vergleichbar; wer umschaltet, muss train() neu fahren und das Open-Set neu aufbauen.
 RELRINGS = os.environ.get("ACT_SHAPE_RELRINGS", "0") == "1"
+# SECHSTER ANLAUF (ACT_SHAPE_RELRINGS=2): KLASSIFIKATION UND LOKALISIERUNG TRENNEN.
+# Fassung 1 (RELRINGS=1) rechnete ALLES auf relativen Ringen und ist im Lauf gescheitert
+# (wiki/befunde/relrings-im-lauf.md): die Klassifikation gewann (uebergrosse Formen 18 -> 69 %),
+# aber die Lokalisierung verlor mehr -- grobe Adressierungsfehler 2,1 -> 9,8 % (p = 0,0001),
+# privilegierter Rueckfall 25 -> 52.  Ursache: am selben F haengt auch die AUSRICHTUNG
+# (_yaw_from / _yaw4_from), und relative Ringe verschieben deren Abtastung mit der Objektgroesse.
+# WICHTIG: der GREIFPUNKT haengt NICHT an F -- er kommt direkt aus der Maske
+# (naechstes Material zum Schwerpunkt / Distanztransformation).  Zu trennen ist also nur der Yaw.
+# RELRINGS=2 rechnet deshalb ZWEI Harmonische je Detektion:
+#     relative Ringe  -> desc  -> resolve/classify        (die Groessen-Invarianz)
+#     feste Ringe     -> yaw   -> Ausrichtung             (die alte, gemessen gute Lage)
+# Kostet einen zweiten FFT-Durchlauf je Detektion; gemessen ist perceive_all nicht der teure Teil.
+RELRINGS_SPLIT = os.environ.get("ACT_SHAPE_RELRINGS", "0") == "2"
 RELR_LO = float(os.environ.get("ACT_SHAPE_RELR_LO", "0.15"))   # innerster Ring, Bruchteil der Ausdehnung
 RELR_HI = float(os.environ.get("ACT_SHAPE_RELR_HI", "1.35"))   # aeusserster Ring
 
@@ -340,7 +353,7 @@ class ShapeClassifierModule(ArmModule):
             return self._px_to_world(np.column_stack([xs, ys])).mean(0)
         return np.array([xs.mean(), ys.mean()])
 
-    def _harmonics_at(self, mask, ctr):
+    def _harmonics_at(self, mask, ctr, relativ=None):
         """Complex angular harmonics F[ring,k] of `mask`, sampled on polar rings around `ctr`.  Overview:
         rings in WORLD metres around the world centroid, projected to px by H (rotation is clean there).
         Top: rings in px around the px centroid.  Sampling ONLY this `mask` ignores neighbouring objects."""
@@ -349,7 +362,8 @@ class ShapeClassifierModule(ArmModule):
         ring = np.column_stack([np.cos(th), np.sin(th)])
         if self.H is not None:
             radien = self.RW
-            if RELRINGS:                                     # s. RELRINGS oben: Ringe an der
+            _rel = (RELRINGS or RELRINGS_SPLIT) if relativ is None else relativ
+            if _rel:                                         # s. RELRINGS oben: Ringe an der
                 ys, xs = np.nonzero(mask > 0)                #   EIGENAUSDEHNUNG statt an festen
                 if len(xs) >= 8:                             #   Weltradien
                     Wp = self._px_to_world(np.column_stack([xs, ys]))
@@ -1020,6 +1034,10 @@ class ShapeClassifierModule(ArmModule):
             ctr = self._centroid(comp)                       # world (overview) or px (top)
             F = self._harmonics_at(comp, ctr)
             desc = np.abs(F).ravel()
+            # SECHSTER ANLAUF (s. RELRINGS_SPLIT oben): die Klasse aus RELATIVEN Ringen, die
+            # AUSRICHTUNG aus den FESTEN.  F oben ist im Split-Modus bereits relativ (fuer desc);
+            # F_lage wird hier zusaetzlich fest gerechnet und NUR fuer yaw/yaw4 benutzt.
+            F_lage = self._harmonics_at(comp, ctr, relativ=False) if RELRINGS_SPLIT else F
             # OPEN-SET resolve: a trained class (head decides), a self-labelled class (prototype claims
             # it), or None = NOVEL form.  prob for open classes = prototype proximity (no softmax exists).
             # MATERIALDICKE -- immer gemessen, nicht mehr an die (abgeschaltete) Wache gekoppelt.
@@ -1091,7 +1109,8 @@ class ShapeClassifierModule(ArmModule):
             cspread = float(np.sqrt(((_pc - _pc.mean(0)) ** 2).sum(1).mean()))
             out.append({"shape": name, "id": k, "prob": prob,   # shape=None + id=-1 = a NOVEL form (open set)
                         "pos": (ctr if self.H is not None else None), "grasp_xy": grasp, "grasp_yaw": 0.0,
-                        "yaw": self._yaw_from(F), "yaw4": self._yaw4_from(F), "area": float(comp.sum()),
+                        "yaw": self._yaw_from(F_lage), "yaw4": self._yaw4_from(F_lage),
+                        "area": float(comp.sum()),
                         "chroma": chroma, "cspread": cspread, "dicke": _dicke,
                         "px": np.array([xs.mean(), ys.mean()]),
                         "span": span,                          # Material-Halbspanne (m), s. oben
@@ -1161,8 +1180,10 @@ class ShapeClassifierModule(ArmModule):
                 # neighbour (measured, obj_T: recognised as its own class 56% alone but only 8.8% when
                 # fused), so classify the harmonics of THIS colour's material only.  Same rings/resolve
                 # as perceive_all -- the colour split just supplies a clean footprint.
-                F = self._harmonics_at(comp.astype(np.float32), ctr)
+                _cf = comp.astype(np.float32)
+                F = self._harmonics_at(_cf, ctr)
                 desc = np.abs(F).ravel()
+                F_lage = self._harmonics_at(_cf, ctr, relativ=False) if RELRINGS_SPLIT else F
                 name, ndist = self.resolve(desc)
                 if name in SHAPES:
                     logits = self.classify(desc); k = int(logits.argmax())
@@ -1170,7 +1191,7 @@ class ShapeClassifierModule(ArmModule):
                 elif name is not None:
                     k = len(SHAPES) + self.open_names.index(name)
                     prob = float(np.clip(1.0 - ndist / (2.0 * self.novel_th), 0.05, 1.0))
-                yaw, yaw4 = self._yaw_from(F), self._yaw4_from(F)
+                yaw, yaw4 = self._yaw_from(F_lage), self._yaw4_from(F_lage)
             out.append({"shape": name, "id": k, "prob": prob,
                         "pos": ctr, "grasp_xy": grasp, "grasp_dense": grasp, "grasp_yaw": 0.0,
                         "yaw": yaw, "yaw4": yaw4, "area": float(comp.sum()),

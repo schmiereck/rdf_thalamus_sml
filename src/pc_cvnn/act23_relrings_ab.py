@@ -43,14 +43,18 @@ FAKTOREN = [0.7, 0.85, 1.0, 1.2, 1.4, 1.7, 2.0]
 ALLE = ["obj_red", "obj_green", "obj_blue", "obj_L", "obj_U", "obj_T", "obj_X"]
 
 
-def lauf(relrings):
-    """Einen Klassifikator frisch anlernen und den Rueckhalte-Test fahren."""
-    os.environ["ACT_SHAPE_RELRINGS"] = "1" if relrings else "0"
+def lauf(modus):
+    """Einen Klassifikator frisch anlernen und den Rueckhalte-Test fahren.
+
+    modus: "0" feste Ringe | "1" alles relativ | "2" GETRENNT -- Klasse relativ, Yaw fest
+    (der sechste Anlauf, s. wiki/befunde/relrings-im-lauf.md)."""
+    os.environ["ACT_SHAPE_RELRINGS"] = str(modus)
     for m in [k for k in list(sys.modules) if "shape_classifier" in k]:
         del sys.modules[m]                                   # Modul neu laden -> Schalter greift
     from pc_cvnn.arm_modules.shape_classifier import (ShapeClassifierModule, SHAPES,
-                                                      SHAPE_BODY, RELRINGS)
-    assert RELRINGS == relrings, "Schalter nicht angekommen"
+                                                      SHAPE_BODY, RELRINGS, RELRINGS_SPLIT)
+    assert RELRINGS == (modus == "1"), "Schalter nicht angekommen"
+    assert RELRINGS_SPLIT == (modus == "2"), "Split-Schalter nicht angekommen"
     sim = BracketArmSim(render_wh=(240, 240))
     sim.set_reach_site("contact")
     sc = ShapeClassifierModule(rng=np.random.default_rng(SEED))
@@ -90,29 +94,30 @@ def lauf(relrings):
 def main():
     print(f"Trainingsschritte je Arm: {STEPS}, {N} Lagen je Form/Groesse, Seed {SEED}\n")
     erg = {}
-    for tag, rel in (("fest", False), ("relativ", True)):
+    for tag, rel in (("fest", "0"), ("relativ", "1"), ("getrennt", "2")):
         acc, th, bil, SHAPES = lauf(rel)
         erg[tag] = bil
         print(f"  {tag:8s} Trainingsgenauigkeit {acc:.3f}, novel_th {th:.3f}")
 
-    print(f"\n{'Form':6s} {'Faktor':>7s} | {'fest: ri/neu/fa':>18s} | {'relativ: ri/neu/fa':>20s}")
-    ges = {"fest": [0, 0, 0], "relativ": [0, 0, 0]}
+    print("")
+    print(f"{'Form':6s} {'Faktor':>7s} | {'fest':>12s} | {'relativ':>12s} | {'getrennt':>12s}")
+    ges = {"fest": [0, 0, 0], "relativ": [0, 0, 0], "getrennt": [0, 0, 0]}
     for form in SHAPES:
         for f in FAKTOREN:
             a = erg["fest"][(form, f)]; b = erg["relativ"][(form, f)]
+            c = erg["getrennt"][(form, f)]
             for i in range(3):
-                ges["fest"][i] += a[i]; ges["relativ"][i] += b[i]
-            mark = "  <-" if (b[0] - a[0]) >= 2 else ""
-            print(f"{form:6s} {f:6.2f}x | {a[0]:5d}/{a[1]:3d}/{a[2]:3d}      "
-                  f"| {b[0]:5d}/{b[1]:3d}/{b[2]:3d}{mark}")
+                ges["fest"][i] += a[i]; ges["relativ"][i] += b[i]; ges["getrennt"][i] += c[i]
+            print(f"{form:6s} {f:6.2f}x | {a[0]:3d}/{a[1]:2d}/{a[2]:2d}    "
+                  f"| {b[0]:3d}/{b[1]:2d}/{b[2]:2d}    | {c[0]:3d}/{c[1]:2d}/{c[2]:2d}")
     print()
-    for tag in ("fest", "relativ"):
+    for tag in ("fest", "relativ", "getrennt"):
         r, ne, fa = ges[tag]; n = r + ne + fa
         print(f"  {tag:8s} richtig {r:4d} = {100*r/n:5.1f} %   neu {ne:4d} = {100*ne/n:5.1f} %"
               f"   falsch {fa:4d} = {100*fa/n:5.1f} %")
     # nur die UEBERGROSSEN (>= 1,4x) -- dort sass die gemessene Schwaeche
     print("\n  nur die uebergrossen Faelle (>= 1,4x):")
-    for tag in ("fest", "relativ"):
+    for tag in ("fest", "relativ", "getrennt"):
         r = ne = fa = 0
         for form in SHAPES:
             for f in FAKTOREN:
