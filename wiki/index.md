@@ -74,6 +74,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Beim Trennen entscheidet die Farbquelle](befunde/eig-split-farbquelle.md) - Split auf der Tripel-Farbe macht den Fehler DREIMAL groesser, auf der gebundenen Farbe faellt er auf ein Viertel
 * [Der Form-Split im Eigenschafts-Pfad schadet](befunde/eig-split-im-lauf.md) - das Abstands-Indiz siebt Verwechslungen statt Verschmelzungen; und die Farbbindung fehlt per Bauart genau bei verschmolzenen Blobs
 * [Die pixelweise Farbbindung](befunde/farbbindung-pixelweise.md) - bindet 34 von 34 erreichbaren Koerpern, die der Komponenten-Durchgang auslaesst, und aendert an der Zielgroesse NICHTS (p = 1,00)
+* [Die Verschmelzung an der Quelle](befunde/verschmelzung-chroma-split.md) - unsupervised Chroma-Schnitt in `perceive_all`: grobe Adressfehler 3,1 -> 0,6 %, Rueckfall 10,0 -> 5,0 %, aber Quote 66,0 -> 55,7 %; nichts uebersteht Bonferroni
 * [Ablenker-Bindung in der Anfahrt](befunde/ablenker-anfahrt.md) - 6,8 % der Episoden fahren >80 mm daneben und liefern dann 1 von 63, obwohl die Adressierung stimmt
 
 # Entscheidungen

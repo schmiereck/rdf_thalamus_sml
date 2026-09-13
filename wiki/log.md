@@ -7,6 +7,34 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-14
 
+* **Anlage**: [Die Verschmelzung an der Quelle](/befunde/verschmelzung-chroma-split.md) - nach drei
+  gescheiterten Reparaturen an VERBRAUCHERN der Wahrnehmung diesmal an der Segmentierung selbst.
+  **Zwei Vermutungen unterwegs widerlegt:** (a) der vorhandene farbfreie Erosions-Split laesst den
+  Elternblob in der Liste, und `max(area)` waehlt ihn - gemessen nur 4,5 % der Faelle; der
+  eigentliche Fall ist, dass in 29 % GAR KEIN Teil beim Koerper liegt. (b) Pixelweise nach den
+  GELERNTEN Farbklassen zu trennen erreicht 99,5 % und wurde trotzdem verworfen: eine neue Farbe
+  muss trennbar sein, BEVOR sie eine Klasse hat, sonst haengt die Wahrnehmung eines neuen Objekts
+  daran, dass es schon bekannt ist. **Gebaut ist ein unsupervised Chroma-Schnitt** (Lloyd auf der
+  Chromatizitaet, Annahmeschranke = `TH` des Farb-Offenmengen-Moduls, also keine neue Zahl), mit
+  drei Eigenschaften, jede aus einem der Fehlschlaege gelernt: er **ersetzt** den Elternblob statt
+  daneben zu stehen, er **fasst nicht an, was eins bleibt** (exakter Schwerpunkt erhalten), und er
+  **rekursiert** (Tiefe 3: Trefferquote 84,5 -> 100 %). **Eine zweite Schranke war noetig und ist
+  der interessante Teil:** ein EINZELNER Koerper zerfaellt chromatisch ebenfalls (Deckflaeche gegen
+  Seitenflaechen), das kostete bei weit getrennten Koerpern 0,86 -> 3,85 mm und 3 Detektionen fuer
+  2 Koerper. Das Unterscheidungsmerkmal ist **raeumlich, nicht farblich** - zwei Koerper haben weit
+  getrennte Schwerpunkte, eine Schattierung teilt denselben Koerper in Schichten, deren
+  Schwerpunkte fast zusammenfallen. **Lauf (3 Arme je 150 Ep): grobe Adressfehler 3,1 -> 0,6 %
+  (p = 0,044), privilegierter Rueckfall 10,0 -> 5,0 % (p = 0,069) -- der erste Eingriff, der beide
+  ZUGLEICH senkt** (alle bisherigen tauschten). **Aber die Quote faellt 66,0 -> 55,7 % (p = 0,042),
+  und mit Bonferroni 0,025 uebersteht keine der drei Zahlen die Schranke.** Mechanismus-Beleg ohne
+  Test: die Adressen im Band `riesig` fallen 21 -> 17 -> 10, die im Band `winzig` steigen 2 -> 3 ->
+  10 - die uebergrossen Detektionen verschwinden wirklich. **Eigener Aufbaufehler benannt:** beide
+  Chroma-Arme liefen auf einem Zustand, dessen Formklassen aus UNGETEILTEN Komponenten gelernt
+  sind; beim Relrings-A/B wurde genau das vermieden (beide Arme `ACT23_FRESH=1`). Der
+  Quotenverlust kann deshalb ein Artefakt des veralteten Exemplarbestands sein.
+  `evidenz: einzelmessung`. `ACT_SHAPE_CHROMA_SPLIT` bleibt auf 0; der naechste Schritt ist
+  derselbe Vergleich frisch bei null, nicht ein weiterer Schalter.
+
 * **Anlage / Widerlegung**: [Die pixelweise Farbbindung](/befunde/farbbindung-pixelweise.md) -
   Weg 2 (Nutzerauftrag), gebaut und gemessen. **Die woertliche Fassung war unmoeglich:** die
   Bindung aus der letzten sauberen Episode zu uebernehmen scheitert daran, dass `_faerbe_neu` je

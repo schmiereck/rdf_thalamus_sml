@@ -163,6 +163,16 @@ STARVE_N = int(os.environ.get("ACT_OPEN_STARVE", "25"))
 SPLIT_FUSED = os.environ.get("ACT_SHAPE_SPLIT", "1") != "0"
 SPLIT_ERODE_MAX = int(os.environ.get("ACT_SHAPE_SPLIT_ERODE", "10"))
 SPLIT_ALWAYS = os.environ.get("ACT_SHAPE_SPLIT_ALWAYS", "0") != "0"
+# CHROMA-SPLIT an der Quelle (ACT_SHAPE_CHROMA_SPLIT, Vorgabe 0 bis gemessen).
+# s. _chroma_teile.  CHROMA_DECKUNG: welchen Anteil der Komponente die Teile zusammen
+# ausschoepfen muessen, damit der Schnitt als "zwei Objekte" gilt und nicht als Farbsaum.
+CHROMA_SPLIT = os.environ.get("ACT_SHAPE_CHROMA_SPLIT", "0") != "0"
+CHROMA_ITER = int(os.environ.get("ACT_SHAPE_CHROMA_ITER", "6"))
+CHROMA_DECKUNG = float(os.environ.get("ACT_SHAPE_CHROMA_DECKUNG", "0.80"))
+CHROMA_TIEFE = int(os.environ.get("ACT_SHAPE_CHROMA_TIEFE", "3"))
+# Schwerpunktabstand der Teile, relativ zum groesseren Teilradius -- trennt "zwei
+# Koerper nebeneinander" von "Deckflaeche gegen Seitenflaeche desselben Koerpers".
+CHROMA_TRENNUNG = float(os.environ.get("ACT_SHAPE_CHROMA_TRENNUNG", "1.0"))
 STARVE_MIN_EX = int(os.environ.get("ACT_OPEN_STARVE_EX", "6"))
 # DIE GROESSEN-AUSNAHME FAELLT BEI HOHEM ALTER.  Sie schuetzt junge, ECHTE Klassen davor, wegen einer
 # Durststrecke geloescht zu werden -- ab einem gewissen Alter schuetzt sie aber nur noch Leichen.
@@ -1003,6 +1013,18 @@ class ShapeClassifierModule(ArmModule):
             _c = (labels == lab)
             if _c.sum() < min_area:
                 continue                                     # drop specks / glints
+            if CHROMA_SPLIT:
+                # DIE VERSCHMELZUNG AN DER QUELLE: zerfaellt die Komponente pixelweise nach Chroma
+                # in zwei tragende Teile, ist sie zwei Objekte -- dann ERSETZT sie ihre Teile,
+                # statt neben ihnen stehen zu bleiben.  Das ist der Unterschied zum Erosions-Split
+                # unten: der laesst den Elternblob in der Liste, und weil die Auswahl in
+                # finde_nach_eigenschaften nach groesster Flaeche geht, gewinnt dann der
+                # verschmolzene Blob.  Bleibt die Komponente EINE, wird sie nicht angefasst und
+                # behaelt ihren exakten Schwerpunkt.
+                _t = self._chroma_teile(img, _c, min_area)
+                if _t:
+                    _masks.extend(_t)
+                    continue
             _masks.append(_c)
             if not SPLIT_FUSED or _c.sum() < 1.6 * min_area:
                 continue                                     # zu klein, um zwei Objekte zu halten
@@ -1210,6 +1232,99 @@ class ShapeClassifierModule(ArmModule):
                         "dicke": _dicke, "span": _span,        # s. oben: Groesse des GETRENNTEN Teils
                         "split": True})                        # marks a colour-split detection (diagnostics)
         return out
+
+    def _chroma_teile(self, img, comp, min_area, tiefe=None):
+        """Eine Komponente PIXELWEISE nach Chroma zerlegen -- unsupervised, OHNE Farbklassen.
+
+        DIE VERSCHMELZUNG SELBST (wiki/befunde/adressfehler-sind-verschmelzung.md): zwei Koerper
+        naeher als ~40 mm ergeben EINE Komponente, und alles Weitere -- Deskriptor, Schwerpunkt,
+        Chroma, Spanne -- wird auf der Vereinigung gerechnet.  Der vorhandene Erosions-Split
+        (SPLIT_FUSED) rettet das in dichten Szenen gemessen nur zu 71 %; pixelweise nach Farbe
+        sind es 99,5 %.
+
+        OHNE KLASSEN, mit Absicht: eine neue Farbe muss trennbar sein, BEVOR sie eine Klasse hat --
+        sonst haengt die Wahrnehmung eines neuen Objekts daran, dass es schon bekannt ist.  Zwei
+        Mittel werden per Lloyd-Iteration auf der Chromatizitaet gesucht; angenommen wird der
+        Schnitt nur, wenn die beiden Mittel weiter auseinanderliegen als die Schwelle des
+        Farb-Offenmengen-Moduls (TH) -- also genau dann, wenn sie ALS ZWEI KLASSEN gelten wuerden.
+        Das ist keine neue Zahl, sondern die schon kalibrierte.
+
+        Gibt [] zurueck, wenn die Komponente EINE bleibt -- dann faesst der Aufrufer sie nicht an
+        und behaelt den exakten Komponenten-Schwerpunkt (gemessen 0,8 gegen 5,5 mm fuer den
+        Pixelschnitt).  Nur wo wirklich zwei Objekte stecken, wird ersetzt."""
+        from scipy import ndimage
+        from .colour_openset import TH as _CTH
+        ys, xs = np.nonzero(comp)
+        if len(xs) < 2 * min_area:
+            return []
+        rgb = img[ys, xs].astype(float)
+        ssum = rgb.sum(1, keepdims=True)
+        ch = np.divide(rgb, ssum, out=np.zeros_like(rgb), where=ssum > 1e-6)
+        # Start auf der Hauptachse der Chroma-Wolke: die beiden Extreme sind die weitesten
+        # Kandidaten, die es gibt -- findet Lloyd von dort keine zwei Haufen, gibt es keine.
+        z = ch - ch.mean(0)
+        try:
+            _, _, vt = np.linalg.svd(z, full_matrices=False)
+        except np.linalg.LinAlgError:
+            return []
+        t = z @ vt[0]
+        mu = np.stack([ch[int(t.argmin())], ch[int(t.argmax())]])
+        for _ in range(CHROMA_ITER):
+            d = np.linalg.norm(ch[:, None, :] - mu[None, :, :], axis=2)
+            lab = d.argmin(1)
+            if lab.min() == lab.max():
+                return []                                  # alles in einem Haufen
+            mu = np.stack([ch[lab == k].mean(0) for k in (0, 1)])
+        if float(np.linalg.norm(mu[0] - mu[1])) <= _CTH:
+            return []                                      # EINE Farbe -> EIN Objekt
+        teile = []
+        for k in (0, 1):
+            sub = np.zeros(comp.shape, bool)
+            sub[ys[lab == k], xs[lab == k]] = True
+            sl, sn = ndimage.label(sub)                     # gleichfarbige Nachbarn bleiben getrennt
+            for i in range(1, sn + 1):
+                p = sl == i
+                if p.sum() >= min_area:
+                    teile.append(p)
+        # Nur ersetzen, wenn wirklich zwei tragende Teile herauskommen und sie die Komponente
+        # im Wesentlichen ausschoepfen -- sonst war es ein Saum, kein zweites Objekt.
+        if len(teile) < 2 or sum(p.sum() for p in teile) < CHROMA_DECKUNG * comp.sum():
+            return []
+        # ZWEITE SCHRANKE, und sie ist die wichtigere: ein EINZELNER Koerper zerfaellt chromatisch
+        # ebenfalls -- Deckflaeche und Seitenflaechen sind verschieden beleuchtet, und der
+        # Abstand der beiden Mittel ueberschreitet TH dann auch.  Gemessen kostete das ohne diese
+        # Schranke bei WEIT getrennten Koerpern 0,86 -> 3,85 mm und erzeugte 3 Detektionen fuer
+        # 2 Koerper.  Genau daran ist der Eig-Split gescheitert
+        # (wiki/befunde/eig-split-im-lauf.md) -- ein Schnitt, der auch dort schneidet, wo nichts
+        # zu schneiden ist, kostet in JEDER Episode und nuetzt nur in wenigen.
+        #
+        # Das Unterscheidungsmerkmal ist raeumlich, nicht farblich: zwei NEBENEINANDER liegende
+        # Koerper haben weit auseinanderliegende Schwerpunkte; eine Schattierung teilt denselben
+        # Koerper in Schichten, deren Schwerpunkte fast zusammenfallen.  Massstabsrelativ
+        # formuliert, damit keine Laenge in Pixeln festgeschrieben wird.
+        _z, _r = [], []
+        for p in teile:
+            _py, _px = np.nonzero(p)
+            _c0 = np.array([_px.mean(), _py.mean()])
+            _z.append(_c0)
+            _r.append(float(np.percentile(np.hypot(_px - _c0[0], _py - _c0[1]), 95)))
+        _weit = max(float(np.linalg.norm(_z[i] - _z[j]))
+                    > CHROMA_TRENNUNG * max(_r[i], _r[j])
+                    for i in range(len(teile)) for j in range(i + 1, len(teile)))
+        if not _weit:
+            return []                                      # Schichten desselben Koerpers
+        # REKURSION: der Schnitt ist binaer, ein Blob aus DREI Koerpern bliebe sonst halb
+        # verschmolzen.  Gemessen hebt das die Trefferquote in dichten Szenen von 84,5 auf ueber
+        # 95 %.  Tiefe begrenzt, damit ein schattierter Einzelkoerper nicht zerbroeselt --
+        # min_area und die Deckungsschranke halten ohnehin dagegen.
+        _t = CHROMA_TIEFE if tiefe is None else tiefe
+        if _t <= 1:
+            return teile
+        aus = []
+        for p in teile:
+            u = self._chroma_teile(img, p, min_area, _t - 1)
+            aus.extend(u if u else [p])
+        return aus
 
     def colour_parts_all(self, sim, colours, min_px=40):
         """ALLE Farbklassen in EINEM Rendern pixelweise trennen -- fuer die FARBBINDUNG.
