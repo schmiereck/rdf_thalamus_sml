@@ -631,6 +631,31 @@ GROESSE_SPANNE = os.environ.get("ACT23_GROESSE_SPANNE", "0") == "1"
 # MIT dem Schalter muss der eine Treffer DERSELBE sein wie die Detektion auf dem gemeinten
 # Koerper -- sonst werden weiter Achsen nachgelegt, und notfalls gar nicht umgeschrieben.
 EIG_IDENT = os.environ.get("ACT23_EIG_IDENT", "0") == "1"
+# ABSTUFUNG STATT PRIVILEG (ACT23_EIG_ABSTUFUNG, Vorgabe 0 bis gemessen).  Trifft das
+# Eigenschafts-Tripel nichts, griff bisher der PRIVILEGIERTE Rueckfall: die wahre Lage aus dem
+# Simulator.  Das ist der Preis der Groessenachse -- sie traf gemessen 10,0 statt 4,7 % der
+# Episoden nicht (wiki/befunde/groessenachse-spanne.md), und ein groeberes Raster senkt ihn nicht
+# (wiki/befunde/spannen-raster-7mm.md).
+# STATTDESSEN: die GROESSENACHSE fallen lassen und mit (Farbe, Form, beliebig) erneut suchen.  Die
+# Adresse wird dadurch UNSCHAERFER, nicht unbrauchbar -- und bleibt eine Wahrnehmung.  Warum
+# ausgerechnet die Groesse zuerst: sie ist die einzige Achse, die sich je Bild aendert, ohne dass
+# sich das Objekt aendert (Bandgrenze, Verschmelzung, Perspektive).  Farbe und Form sind
+# Klassenzuweisungen und fallen als Ganzes aus, wenn sie falsch sind.
+# ZWEI FASSUNGEN, weil der Handel nicht offensichtlich ist: ohne die Groesse koennen MEHRERE
+# Detektionen passen, und dann adressiert die Abstufung womoeglich den falschen Koerper.  Ein
+# unprivilegierter Fehlgriff ist nicht in jedem Fall besser als ein privilegierter Treffer.
+#   1 = fallen lassen, besten Treffer nehmen (groesste Flaeche -- wie finde_nach_eigenschaften)
+#   2 = fallen lassen, aber NUR uebernehmen, wenn genau EINER uebrig bleibt (sonst wie bisher)
+# GEMESSEN und auf 0 belassen (wiki/befunde/abstufung-statt-privileg.md): 1 und 2 sind BITGLEICH --
+# die Sicherung greift nie, weil der mehrdeutige Fall "1 Treffer" meldet (die anderen Wuerfel kamen
+# gar nicht erst als eigene Detektion an).  Eindeutigkeit ist nicht Richtigkeit, zum dritten Mal.
+# Beim SCHREIBEN einer Adresse loest EIG_IDENT das; beim LESEN nicht -- die Identitaetspruefung
+# vergleicht gegen die wahre Lage und waere hier genau das Privileg, das entfallen soll.
+# Ausserdem klein: nur 11 der 15 Rueckfaelle tragen ueberhaupt ein Band, Rueckfall faellt 15 -> 11
+# (p = 0,54), und einer von drei Faellen adressierte einen fremden Wuerfel 65 mm daneben.
+# Der Schalter bleibt fuer den Tag, an dem die Verschmelzung geloest ist
+# (wiki/befunde/adressfehler-sind-verschmelzung.md).
+EIG_ABSTUFUNG = int(os.environ.get("ACT23_EIG_ABSTUFUNG", "0"))
 # RASTERWEITE (ACT23_SPANNE_RASTER, Vorgabe 5.0 mm).  Feinere Baender trennen schaerfer, lassen
 # aber haeufiger GAR KEINE Adresse passen -- und dann greift der privilegierte Rueckfall.
 # Gemessen im siebten Anlauf: mit 5 mm verdoppelt sich der Rueckfall von 4,7 auf 10,0 % der
@@ -3290,6 +3315,25 @@ def run_self_learning_steering(headless=False):
                                         np.asarray(_gp(_det, body), float))
                 perception.seed_priv = False       # ehrlich wahrgenommen (s. AUDIT im Rueckfall)
                 return _off(_gp(_det, body)), None, "grasp"
+            if EIG_ABSTUFUNG and _g is not None:
+                # ABSTUFUNG STATT PRIVILEG: die Groessenachse fallen lassen und erneut suchen.
+                # Das bleibt eine Wahrnehmung -- die Adresse wird unschaerfer, nicht unbrauchbar.
+                _saved = sim.d.mocap_pos.copy()
+                _pos, _det, _tr = finde_nach_eigenschaften(sim, shape_clf, colours, _f, _fo, None)
+                sim.d.mocap_pos[:] = _saved
+                mujoco.mj_forward(sim.m, sim.d)
+                if _pos is not None and (EIG_ABSTUFUNG == 1 or len(_tr) == 1):
+                    if os.environ.get("ACT23_DEBUG", "0") == "1":
+                        print(f"    [dbg] {body}: Band '{_g}' passt nicht -> ABSTUFUNG auf "
+                              f"({_f}, {_fo}, beliebig): {np.round(_pos, 3).tolist()} (wahr "
+                              f"{np.round(sim.obj_pos(body)[:2], 3).tolist()}), "
+                              f"{len(_tr)} Treffer", flush=True)
+                    perception.publish_seed(f"eig:{body}", np.asarray(_pos, float),
+                                            np.asarray(_det["px"], float),
+                                            np.asarray(_gp(_det, body), float))
+                    perception.seed_priv = False   # ehrlich wahrgenommen, nur unschaerfer adressiert
+                    return _off(_gp(_det, body)), None, "grasp"
+                _pos = None                        # Abstufung hat nicht getragen -> wie bisher
             if os.environ.get("ACT23_DEBUG", "0") == "1":
                 print(f"    [dbg] {body}: EIGENSCHAFTEN ({_f}, {_fo}, {_g}) treffen nichts "
                       f"-> privilegierter Rueckfall", flush=True)

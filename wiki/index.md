@@ -69,6 +69,8 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Sechster Anlauf: der Zielkonflikt](befunde/relrings-split-zielkonflikt.md) - Trennung behebt nichts; Groessen-Invarianz macht Klassen breiter und Adressen mehrdeutig
 * [Die Groessenachse mass die falsche Groesse](befunde/groessenachse-spanne.md) - Spanne statt Dicke, plus Identitaetspruefung: grobe Fehler 10,8 -> 3,1 %, aber nur ZUSAMMEN
 * [Das groebere 7-mm-Raster senkt den Rueckfall nicht](befunde/spannen-raster-7mm.md) - es verdreifacht ihn, wegen des zusaetzlichen OBERSTEN Bandes; Wiederholungsarm reproduziert den siebten Anlauf zifferngenau
+* [Abstufung statt Privileg](befunde/abstufung-statt-privileg.md) - Groessenachse fallen lassen statt zu privilegieren: gebaut, aber selten wirksam und OHNE unprivilegierte Sicherung
+* [Jeder grobe Adressfehler sitzt im obersten Band](befunde/adressfehler-sind-verschmelzung.md) - 26 von 26 in "riesig", 0 von 266 sonst: die Adressierung hat ein VERSCHMELZUNGS-Problem, kein Groessenproblem
 * [Ablenker-Bindung in der Anfahrt](befunde/ablenker-anfahrt.md) - 6,8 % der Episoden fahren >80 mm daneben und liefern dann 1 von 63, obwohl die Adressierung stimmt
 
 # Entscheidungen

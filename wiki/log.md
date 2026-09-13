@@ -7,6 +7,36 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-14
 
+* **Anlage**: [Jeder grobe Adressfehler sitzt im obersten Band](/befunde/adressfehler-sind-verschmelzung.md)
+  - beim Auswerten abgefallen, nicht gesucht, und der wichtigere der beiden Befunde des Tages.
+  **26 von 26 groben Adressierungsfehlern liegen im Band `riesig`** (Spanne ab 36 mm); in den
+  uebrigen **266 Adressen ueber alle anderen Baender: null** (p = 3,4e-21, und in jedem Arm einzeln
+  auch). `riesig` ist faktisch das Band der VERSCHMOLZENEN Blobs - der groesste einzelne Koerper,
+  obj_U, misst 37,4 mm. Getragen wird der Fehler von einer einzigen Klasse: `neu-13`, auf einem
+  verschmolzenen Blob geboren (17/23 grobe Fehler in einem Arm). **Damit ist der Restfehler des
+  siebten Anlaufs lokalisiert und er ist keine Frage der Achse:** die Spanne hat den Fehler nicht
+  behoben, sondern ihn an einen Ort gelegt, an dem man ihn sehen kann. Das erklaert rueckwirkend
+  auch, warum der Identitaetscheck erst ZUSAMMEN mit der Spanne wirkte. Naechster Schritt, billiger
+  als jede weitere Arbeit an der Groessenachse: der **Form-Split existiert bereits** auf dem
+  FORM-Pfad (verschmolzener Blob -> Form auf dem farb-getrennten Teil, gemessen 8,8 -> 81 %) und
+  **fehlt dem Eigenschafts-Pfad**. Kein neuer Mechanismus, ein vorhandener an zweiter Stelle.
+
+* **Anlage**: [Abstufung statt Privileg](/befunde/abstufung-statt-privileg.md) - der Nutzerauftrag,
+  gebaut und gemessen: bei "kein Treffer" die Groessenachse fallen lassen statt auf die wahre Lage
+  aus dem Simulator zu greifen. Drei Arme je 150 Episoden (`ACT23_EIG_ABSTUFUNG` 0/1/2), Vorgabearm
+  reproduziert `g7_beide` zifferngenau - der Einbau hat den Vorgabepfad nicht angefasst.
+  **Ehrliches Negativ.** Die Abstufung greift selten (3 von 6 Gelegenheiten; nur 11 der 15
+  Rueckfaelle tragen ueberhaupt ein Band, der Rest scheitert an Farb- oder Formklassen), senkt den
+  Rueckfall nur 15 -> 11 (p = 0,54), und einer der drei Faelle adressierte einen **fremden Wuerfel
+  65 mm daneben**. **Die vorgesehene Sicherung existiert nicht:** Fassung 1 und 2 sind bitgleich,
+  weil der mehrdeutige Fall `1 Treffer` meldet - die anderen zwei Wuerfel kamen gar nicht erst als
+  eigene Detektion an. *Eindeutigkeit ist nicht Richtigkeit* zum dritten Mal, mit der neuen
+  Folgerung: **beim SCHREIBEN einer Adresse loest die Identitaetspruefung das, beim LESEN nicht** -
+  sie vergleicht gegen die wahre Lage und waere im Wahrnehmungspfad genau das Privileg, das die
+  Abstufung abschaffen soll. Die grossen Zahlen des Arms (grobe Fehler 3,1 -> 13,1 %, Quote
+  66,0 -> 54,7 %) sind **Abdrift, nicht Wirkung**: nur 2 der 23 groben Fehler sind Abstufungen, der
+  Lauf ist nach dem ersten Eingriff bei Ep 14 ein anderer Lauf. `ACT23_EIG_ABSTUFUNG` bleibt auf 0.
+
 * **Anlage**: [Das groebere 7-mm-Raster senkt den Rueckfall nicht](/befunde/spannen-raster-7mm.md)
   - die offene Frage des siebten Anlaufs, beantwortet mit **nein**. Drei Arme je 150 Episoden
   (Vorgabe / gemessene Liste / 7-mm-Raster). Der Adressierungsgewinn bleibt (**2,6 gegen 3,1 %**
