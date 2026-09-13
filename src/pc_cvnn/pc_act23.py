@@ -706,6 +706,36 @@ EIG_SPLIT = int(os.environ.get("ACT23_EIG_SPLIT", "0"))
 # dort nicht schadet.  Keine absolute Laenge, damit der Schnitt nicht an die heutigen
 # sieben Koerper gebunden ist.
 EIG_SPLIT_FAKTOR = float(os.environ.get("ACT23_EIG_SPLIT_FAKTOR", "0.8"))
+# FARBBINDUNG AUCH FUER VERSCHMOLZENE KOERPER (ACT23_BINDUNG_SPLIT, Vorgabe 0 bis gemessen).
+# GRUND (gemessen, wiki/befunde/eig-split-im-lauf.md): _farbbindung_neu ueberspringt Blobs ueber
+# area_hi, weil deren Mittel-Chroma eine Mischung ist.  Damit fehlt colour_of_body genau in den
+# Episoden mit Verschmelzung -- und das sind die Episoden, in denen die darauf aufbauenden
+# Rettungswege (Form-Split, Eig-Split, ckey-Tracker) gebraucht wuerden.  Eine Catch-22: die
+# Rettung ist per Bauart dort nicht verfuegbar, wo sie gebaut wurde.  Gemessen kostete das im
+# Immer-Split-Arm 30,3 % grobe Adressierungsfehler auf den ungesplitteten Adressen gegen 3,1 %
+# auf den gesplitteten.
+#
+# NICHT GEBAUT: die Bindung aus der letzten sauberen Episode nachhalten.  Das war der erste
+# Vorschlag und es kann unter FARB_MISCHUNG nicht funktionieren -- _faerbe_neu permutiert JEDE
+# Episode alle sieben Farben, eine uebernommene Klasse ist also nicht bloss veraltet, sondern
+# systematisch falsch.  Es waere ausserdem wieder die Tabelle, die _farbbindung_neu bewusst
+# abgeloest hat.
+#
+# STATTDESSEN, aus derselben Wahrnehmung derselben Episode: die Mischung loest sich PIXELWEISE
+# auf.  Jedes Pixel gehoert zu genau einer Farbklasse, auch wenn die Komponente zwei Koerper
+# enthaelt.  colour_parts_all trennt alle Klassen in EINEM Rendern; der Zuordnungsschritt bleibt
+# unveraendert (Teil -> naechster Koerper, Schranke 40 mm, eine Klasse je Koerper).
+# Der Komponenten-Durchgang laeuft ZUERST und behaelt das letzte Wort: wo die Chroma sauber ist,
+# ist das Komponentenmittel genauer als der Pixelschnitt (gemessen 0,8 gegen 5,5 mm).
+# GEMESSEN und auf 0 belassen (wiki/befunde/farbbindung-pixelweise.md): der Durchgang bindet
+# JEDEN erreichbaren Koerper, den der erste auslaesst (34 von 34 und 53 von 53) -- und die
+# Zielgroesse bewegt sich nicht (grobe Adressierungsfehler 3,1 -> 3,8 %, p = 1,00).  Der
+# Eig-Split wird dadurch AUCH NICHT brauchbar (6,1 %): die fehlende Bindung war beschrieben,
+# aber nicht der Engpass.  Der Schalter bleibt, weil er die einzige Fassung ist, die
+# verschmolzene Koerper ueberhaupt bindet.
+# ACHTUNG BEIM LESEN DER MELDUNG: `len(_offen)` zaehlt die drei je Episode GEPARKTEN Koerper
+# mit, die ausserhalb des Bildes liegen und nie bindbar sind -- "34 von 127" heisst 34 von 34.
+BINDUNG_SPLIT = os.environ.get("ACT23_BINDUNG_SPLIT", "0") == "1"
 # RASTERWEITE (ACT23_SPANNE_RASTER, Vorgabe 5.0 mm).  Feinere Baender trennen schaerfer, lassen
 # aber haeufiger GAR KEINE Adresse passen -- und dann greift der privilegierte Rueckfall.
 # Gemessen im siebten Anlauf: mit 5 mm verdoppelt sich der Rueckfall von 4,7 auf 10,0 % der
@@ -1895,6 +1925,32 @@ def run_self_learning_steering(headless=False):
             if float(np.linalg.norm(sim.obj_pos(_nah)[:2] - np.asarray(_d["pos"]))) < 0.04:
                 _neu[_nah] = _c
                 _belegt.add(_c)
+        if BINDUNG_SPLIT:
+            # ZWEITER DURCHGANG fuer die Koerper, die der erste ausgelassen hat -- fast immer,
+            # weil sie in einem verschmolzenen Blob steckten (s. BINDUNG_SPLIT oben).  Gleiche
+            # Regeln: eine Klasse je Koerper, Schranke 40 mm, lieber ungebunden als geraten.
+            _offen = [o for o in _FARB_KOERPER if o not in _neu]
+            if _offen:
+                _sv2 = sim.d.mocap_pos.copy()
+                _teile = shape_clf.colour_parts_all(sim, colours)
+                sim.d.mocap_pos[:] = _sv2
+                mujoco.mj_forward(sim.m, sim.d)
+                _dazu = 0
+                for _t in _teile:
+                    if _t["cname"] in _belegt:
+                        continue
+                    _nah2 = min(_offen, key=lambda o: float(
+                        np.linalg.norm(sim.obj_pos(o)[:2] - _t["pos"])))
+                    if _nah2 in _neu:
+                        continue
+                    if float(np.linalg.norm(sim.obj_pos(_nah2)[:2]
+                                            - np.asarray(_t["pos"]))) < 0.04:
+                        _neu[_nah2] = _t["cname"]
+                        _belegt.add(_t["cname"])
+                        _dazu += 1
+                if _dazu and os.environ.get("ACT23_DEBUG", "0") == "1":
+                    print(f"    [Bindung-Split] {_dazu} von {len(_offen)} offenen Koerpern "
+                          f"pixelweise gebunden", flush=True)
         colour_of_body.clear()
         colour_of_body.update(_neu)
         return _neu

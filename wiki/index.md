@@ -73,6 +73,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Jeder grobe Adressfehler sitzt im obersten Band](befunde/adressfehler-sind-verschmelzung.md) - 26 von 26 in "riesig", 0 von 266 sonst: die Adressierung hat ein VERSCHMELZUNGS-Problem, kein Groessenproblem
 * [Beim Trennen entscheidet die Farbquelle](befunde/eig-split-farbquelle.md) - Split auf der Tripel-Farbe macht den Fehler DREIMAL groesser, auf der gebundenen Farbe faellt er auf ein Viertel
 * [Der Form-Split im Eigenschafts-Pfad schadet](befunde/eig-split-im-lauf.md) - das Abstands-Indiz siebt Verwechslungen statt Verschmelzungen; und die Farbbindung fehlt per Bauart genau bei verschmolzenen Blobs
+* [Die pixelweise Farbbindung](befunde/farbbindung-pixelweise.md) - bindet 34 von 34 erreichbaren Koerpern, die der Komponenten-Durchgang auslaesst, und aendert an der Zielgroesse NICHTS (p = 1,00)
 * [Ablenker-Bindung in der Anfahrt](befunde/ablenker-anfahrt.md) - 6,8 % der Episoden fahren >80 mm daneben und liefern dann 1 von 63, obwohl die Adressierung stimmt
 
 # Entscheidungen

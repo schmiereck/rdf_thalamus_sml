@@ -7,6 +7,29 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-14
 
+* **Anlage / Widerlegung**: [Die pixelweise Farbbindung](/befunde/farbbindung-pixelweise.md) -
+  Weg 2 (Nutzerauftrag), gebaut und gemessen. **Die woertliche Fassung war unmoeglich:** die
+  Bindung aus der letzten sauberen Episode zu uebernehmen scheitert daran, dass `_faerbe_neu` je
+  Episode alle sieben Farben permutiert - eine uebernommene Klasse ist nicht veraltet, sondern
+  systematisch falsch, und es waere wieder die abgeloeste Tabelle. Gebaut wurde die erste Haelfte
+  des Wegs mit derselben Episode als Quelle: die Mischchroma ist eine Eigenschaft des
+  KOMPONENTENMITTELS, pixelweise gibt es sie nicht. Neue Methode `colour_parts_all` trennt alle
+  Farbklassen in EINEM Rendern; `perceive_colour` bleibt unangetastet. **Der Mechanismus ist
+  einwandfrei: 34 von 34 und 53 von 53 erreichbaren Koerpern gebunden** (die gemeldeten "34 von
+  127" taeuschen - `_offen` zaehlt die drei je Episode geparkten Koerper mit, die nie bindbar sind).
+  Pruefstand: Deckung 63 -> 97 %, und die neuen Bindungen sind brauchbarer als die vorhandenen
+  (76 gegen 63 %). **Und es aendert nichts:** grobe Adressierungsfehler 3,1 -> 3,8 % (p = 1,00),
+  Rueckfall 15 -> 19 (p = 0,59). **Damit ist meine eigene Catch-22-Deutung aus dem vorigen Lauf
+  widerlegt** - die Bindung fehlte tatsaechlich bei verschmolzenen Blobs, war aber nicht der Grund,
+  warum der Eig-Split scheiterte: mit vollstaendiger Bindung liegt er weiter bei 6,1 % groben
+  Fehlern. Die Erklaerung bleibt die aus dem vorigen Lauf: der Split kostet Feinheit in JEDER
+  Episode und nuetzt nur in den wenigen verschmolzenen. **Methodisch neu und billig:** der
+  halbierte Median (3,2 -> 1,4 mm) sieht nach Gewinn aus, liegt aber genauso in den 119 Episoden,
+  in denen der Mechanismus gar nicht gefeuert hat - *wenn ein Gewinn auch dort auftritt, wo der
+  Eingriff nicht gegriffen hat, ist er keiner.* `ACT23_BINDUNG_SPLIT` bleibt auf 0, der Schalter
+  bleibt: er ist die einzige Fassung, die verschmolzene Koerper ueberhaupt bindet. Ausdruecklich
+  geschlossen: den Eig-Split ueber eine bessere Farbquelle retten (drei Anlaeufe, drei Negative).
+
 * **Anlage**: [Der Form-Split im Eigenschafts-Pfad schadet](/befunde/eig-split-im-lauf.md) - der
   Nutzerauftrag, gebaut und gemessen. Drei Arme je 150 Episoden (`ACT23_EIG_SPLIT` 0/1/2),
   Vorgabearm reproduziert zum vierten Mal zifferngenau. **Ehrliches Negativ, beide Fassungen

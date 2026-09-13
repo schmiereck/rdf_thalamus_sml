@@ -107,6 +107,10 @@ und uebergewichtet damit Verschmelzungen stark."*
   statt der Verschmelzungen. **Das ist kein Kalibrierproblem, sondern ein Konstruktionsproblem.**
 * **Die Catch-22 ist der wertvollste Teil.** Sie gilt fuer JEDEN Rettungsweg, der ueber die
   gebundene Farbklasse geht - auch fuer den Form-Pfad, dort nur bisher unbemerkt.
+  > **TEILWEISE WIDERLEGT (2026-09-14).** Die Catch-22 ist real und wurde inzwischen
+  > geschlossen (pixelweise Bindung, 34 von 34 erreichbaren Koerpern). Der Eig-Split wird
+  > dadurch **nicht** brauchbar (6,1 % grobe Fehler). Sie war also beschrieben, aber nicht
+  > der Engpass. Siehe [Die pixelweise Farbbindung](/befunde/farbbindung-pixelweise.md).
 
 # Was ein naechster Anlauf brauchte
 
@@ -115,9 +119,11 @@ Ungebaut, ungemessen, in der Reihenfolge ihrer Billigkeit:
 
 1. **Die Flaeche statt des Abstands.** Ein verschmolzener Blob ist deutlich groesser als das, was
    eine Farbklasse darin ausmacht - bei einer Verwechslung ist er es nicht.
-2. **Die Bindung nachholen**, statt verschmolzene Blobs zu ueberspringen: wer in einer Episode
-   verschmolzen war, bleibt an die Klasse gebunden, die er in der letzten sauberen Episode trug.
-   Das loest die Catch-22 direkt.
+2. ~~**Die Bindung nachholen**, statt verschmolzene Blobs zu ueberspringen.~~ **GEBAUT UND
+   GEMESSEN** ([Die pixelweise Farbbindung](/befunde/farbbindung-pixelweise.md)): die Catch-22 ist
+   geschlossen, die Zielgroesse bewegt sich nicht. Die Fassung "aus der letzten sauberen Episode"
+   ist ausserdem unmoeglich - `_faerbe_neu` permutiert je Episode alle Farben, eine uebernommene
+   Klasse ist systematisch falsch. Gebaut wurde die pixelweise Bindung aus DERSELBEN Episode.
 3. **Mehrere Teile auswerten statt `max(area)`** - bei zwei Kandidaten derselben Farbe ist die
    Wahl zwischen ihnen das eigentliche Problem, und die Flaeche ist dafuer das falsche Mass.
 
@@ -139,5 +145,6 @@ Ungebaut, ungemessen, in der Reihenfolge ihrer Billigkeit:
 
 * [Beim Trennen entscheidet die Farbquelle](/befunde/eig-split-farbquelle.md) - die Kalibrierung, deren Nebenbefund hier entkraeftet wird
 * [Jeder grobe Adressfehler sitzt im obersten Band](/befunde/adressfehler-sind-verschmelzung.md) - der Anlass
+* [Die pixelweise Farbbindung](/befunde/farbbindung-pixelweise.md) - schliesst die Catch-22, ohne dass es hilft
 * [Die Pruefstandsfalle](/mechanismen/pruefstandsfalle.md) - der fuenfte Fall, erstmals mit Vorwarnung
 * [Wahrnehmungs-Splits](/mechanismen/wahrnehmungs-splits.md) - der Mechanismus auf dem Form-Pfad

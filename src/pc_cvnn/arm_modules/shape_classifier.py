@@ -1211,6 +1211,55 @@ class ShapeClassifierModule(ArmModule):
                         "split": True})                        # marks a colour-split detection (diagnostics)
         return out
 
+    def colour_parts_all(self, sim, colours, min_px=40):
+        """ALLE Farbklassen in EINEM Rendern pixelweise trennen -- fuer die FARBBINDUNG.
+
+        WARUM (wiki/befunde/eig-split-im-lauf.md): die Bindung ueberspringt verschmolzene Blobs,
+        weil deren Mittel-Chroma eine Mischung ist.  Damit fehlt die Bindung genau in den
+        Episoden, in denen die auf ihr aufbauenden Rettungswege gebraucht wuerden -- eine
+        Catch-22.  Pixelweise loest sich die Mischung auf: jedes Pixel gehoert zu genau einer
+        Klasse, auch wenn die Komponente zwei Koerper enthaelt.
+
+        Dasselbe Verfahren wie perceive_colour, aber fuer alle Klassen auf einmal und OHNE
+        Formdeskriptor -- die Bindung braucht nur Lage und Groesse.  Ein Rendern statt einem je
+        Klasse; perceive_colour selbst bleibt unangetastet (der Form-Pfad haengt daran).
+
+        Gibt [{"cname", "pos", "area"}] zurueck, absteigend nach Flaeche."""
+        from scipy import ndimage
+        from .colour_openset import TH as _CTH
+        if self.H is None or colours is None:
+            return []
+        names = [n for n in colours.names if n in colours.classes]
+        if not names:
+            return []
+        self._park_markers(sim)
+        img = self._render_u8(sim)
+        ys, xs = np.nonzero(self._mask(img) > 0)
+        if len(xs) == 0:
+            return []
+        MU = np.array([colours.classes[n]["mu"] for n in names])
+        rgb = img[ys, xs].astype(float)
+        ssum = rgb.sum(1, keepdims=True)
+        ch = np.divide(rgb, ssum, out=np.zeros_like(rgb), where=ssum > 1e-6)
+        d = np.linalg.norm(ch[:, None, :] - MU[None, :, :], axis=2)
+        arg, mind = d.argmin(1), d.min(1)
+        out = []
+        for i, cname in enumerate(names):
+            keep = (arg == i) & (mind <= _CTH)             # eindeutig DIESE Klasse
+            if int(keep.sum()) < min_px:
+                continue
+            sub = np.zeros(img.shape[:2], bool)
+            sub[ys[keep], xs[keep]] = True                 # zwei Koerper GLEICHER Farbe bleiben
+            labels, n = ndimage.label(sub)                 #   dabei getrennte Komponenten
+            for lab in range(1, n + 1):
+                comp = labels == lab
+                if comp.sum() < min_px:
+                    continue                               # Splitter / Farbsaum an der Nahtstelle
+                cys, cxs = np.nonzero(comp)
+                W = self._px_to_world(np.column_stack([cxs, cys]))
+                out.append({"cname": cname, "pos": W.mean(0), "area": float(comp.sum())})
+        return sorted(out, key=lambda x: -x["area"])
+
     def desc_embed(self, desc):
         """Compact OPEN-WORLD shape embedding from the raw |F| descriptor: standardise by the training
         stats (fmu/fsd), then average over the rings per harmonic -> NH dims.  Unlike a class one-hot this
