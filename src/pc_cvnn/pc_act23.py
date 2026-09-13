@@ -688,6 +688,18 @@ EIG_ABSTUFUNG = int(os.environ.get("ACT23_EIG_ABSTUFUNG", "0"))
 # in Median UND Ausreisser besser als der heutige Pfad (8,5 -> 5,8 mm, ueber 20 mm
 # 11,9 -> 1,5 %).  Fassung 1 bleibt, weil der Pruefstand die Lagenverteilung des Laufs
 # nicht trifft -- er ueberwiegt nahe Nachbarn.  Welche Fassung traegt, entscheidet das A/B.
+# GEMESSEN und auf 0 belassen (wiki/befunde/eig-split-im-lauf.md): beide Fassungen sind im Lauf
+# SCHLECHTER (grobe Adressierungsfehler 3,1 -> 9,9 bzw. 8,7 %).  Fassung 1 hat einen
+# Konstruktionsfehler: das Indiz prueft einen ABSTAND, und weit weg liegt das farbreine
+# Material aus zwei Gruenden -- Verschmelzung ODER ein falsch gewaehltes Objekt derselben
+# Farbklasse.  Das falsche Objekt liegt WEITER weg (215 gegen 20-30 mm), der Schwellwert siebt
+# also bevorzugt die Verwechslungen heraus.  Alle fuenf Splits erzeugten einen groben Fehler,
+# jeweils genau so gross wie die Verschiebung des Splits.
+# Fassung 2 ist gutartig, kostet aber Feinheit (Median 5,8 statt 1,4 mm) und greift nicht, wo
+# sie gebraucht wird: sie braucht colour_of_body, und _farbbindung_neu ueberspringt
+# verschmolzene Blobs per Bauart -- die Rettung fehlt genau in den Episoden, fuer die sie
+# gebaut wurde.  Ein naechster Anlauf braucht einen Ausloeser ueber die FLAECHE statt den
+# Abstand, oder eine Farbbindung, die aus der letzten sauberen Episode nachgehalten wird.
 EIG_SPLIT = int(os.environ.get("ACT23_EIG_SPLIT", "0"))
 # Schnitt fuer Fassung 1.  Gemessen: 0,8 faengt 72 % der Verschmelzungen bei 10 %
 # Fehlalarm auf getrennten Blobs -- und ein Fehlalarm ist billig, weil der Split auch

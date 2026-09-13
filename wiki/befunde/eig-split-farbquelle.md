@@ -63,6 +63,13 @@ Mass an die heutigen sieben Koerper gebunden wird:
 Gewaehlt: **0,8**. Mein erster, geratener Wert war 0,7 auf einer falschen Groessenordnung - die
 Messung hat ihn ersetzt.
 
+> **NEBENBEFUND ENTKRAEFTET IM LAUF (2026-09-14).** Der Abschnitt unten sagt, immer zu
+> trennen sei besser. Im Lauf kehrt sich beides um: Median 3,2 -> 6,0 mm, grobe Fehler
+> 3,1 -> 8,7 %. Der Grund steht unter *Fallen* auf dieser Seite und hat trotzdem nicht
+> geschuetzt. **Die Farbquelle (gebunden statt Tripel) bleibt gueltig** - sie wurde im Lauf
+> gar nicht gegeneinander geprueft, sondern durchgehend gebunden verwendet.
+> Siehe [Der Form-Split im Eigenschafts-Pfad](/befunde/eig-split-im-lauf.md).
+
 # Der Schnitt koennte ueberfluessig sein
 
 Ueber ALLE 480 Sichtungen, verschmolzen und getrennt zusammen:
@@ -97,4 +104,5 @@ entscheidet das A/B - **nicht diese Seite**.
 * [Jeder grobe Adressfehler sitzt im obersten Band](/befunde/adressfehler-sind-verschmelzung.md) - der Anlass
 * [Wahrnehmungs-Splits](/mechanismen/wahrnehmungs-splits.md) - der bestehende Mechanismus
 * [Verschmelzungs-Abstandskurve](/befunde/verschmelzung-abstandskurve.md)
+* [Der Form-Split im Eigenschafts-Pfad](/befunde/eig-split-im-lauf.md) - der Lauf, der den Nebenbefund entkraeftet
 * [Die Pruefstandsfalle](/mechanismen/pruefstandsfalle.md)

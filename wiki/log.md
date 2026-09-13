@@ -7,6 +7,34 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-14
 
+* **Anlage**: [Der Form-Split im Eigenschafts-Pfad schadet](/befunde/eig-split-im-lauf.md) - der
+  Nutzerauftrag, gebaut und gemessen. Drei Arme je 150 Episoden (`ACT23_EIG_SPLIT` 0/1/2),
+  Vorgabearm reproduziert zum vierten Mal zifferngenau. **Ehrliches Negativ, beide Fassungen
+  schlechter:** grobe Adressierungsfehler 3,1 -> 9,9 % (Indiz, p = 0,022) bzw. 8,7 % (immer,
+  p = 0,056). **Der Kern ist ein Konstruktionsfehler, kein Kalibrierfehler:** bei der Indiz-Fassung
+  erzeugten **alle fuenf** Splits einen groben Fehler, und der Adressfehler ist jedes Mal genau die
+  Verschiebung des Splits (93/54/217 mm) - vorher war die Adresse richtig. Das Indiz prueft einen
+  ABSTAND, und weit weg liegt das farbreine Material aus zwei Gruenden: Verschmelzung *oder* ein
+  falsch gewaehltes Objekt derselben Farbklasse - wobei das falsche Objekt **weiter** weg liegt
+  (215 gegen 20-30 mm). **Ein Abstands-Schwellwert siebt also bevorzugt die Verwechslungen heraus,
+  nicht die Verschmelzungen.** Ep 119 ist der Lehrfall: obj_X und obj_L teilen sich `farbe-4`, die
+  gestufte Form-/Groessenfilterung faengt es nicht ab, weil die Formklasse des verschmolzenen Blobs
+  auf keinem der beiden Teile passt. Die Immer-Fassung ist dagegen gutartig (Splits 3,1 % grob),
+  kostet aber Feinheit (Median 5,8 statt 1,4 mm) - und ihre schlechten Adressen sind die **ohne**
+  Split (30,3 % grob). **Daraus die Catch-22, der wertvollste Teil:** der Split braucht
+  `colour_of_body`, und `_farbbindung_neu` ueberspringt verschmolzene Blobs per Bauart - **die
+  Rettung ist genau in den Episoden nicht verfuegbar, fuer die sie gebaut wurde.** Das gilt fuer
+  jeden Rettungsweg ueber die gebundene Farbklasse, auch fuer den Form-Pfad. Dazu die **fuenfte
+  Pruefstandsfalle, erstmals mit Vorwarnung**: die Kalibrierseite sagte "immer trennen ist besser"
+  (8,5 -> 5,8 mm, 11,9 -> 1,5 %), im Lauf kehrt sich beides um, und der Grund (Lagenverteilung der
+  Sonde) stand vorher unter *Fallen* auf derselben Seite. **Eine benannte Einschraenkung ersetzt
+  keine Messung.** `ACT23_EIG_SPLIT` bleibt auf 0.
+
+* **Ergaenzung**: [Beim Trennen entscheidet die Farbquelle](/befunde/eig-split-farbquelle.md) -
+  Nebenbefund "immer trennen ist besser" als im Lauf entkraeftet gekennzeichnet. Die Hauptaussage
+  (gebundene Farbe statt Tripel-Farbe) bleibt gueltig: sie wurde im Lauf nicht gegeneinander
+  geprueft, sondern durchgehend gebunden verwendet.
+
 * **Anlage**: [Beim Trennen entscheidet die Farbquelle](/befunde/eig-split-farbquelle.md) -
   Kalibrierung vor dem Einbau des Form-Splits in den Eigenschafts-Pfad (Nutzerauftrag). Gesucht war
   nur der Schnitt fuer das Verschmelzungs-Indiz; gefunden wurde, dass meine erste Fassung die Sache

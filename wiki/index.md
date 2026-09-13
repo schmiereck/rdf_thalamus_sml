@@ -72,6 +72,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Abstufung statt Privileg](befunde/abstufung-statt-privileg.md) - Groessenachse fallen lassen statt zu privilegieren: gebaut, aber selten wirksam und OHNE unprivilegierte Sicherung
 * [Jeder grobe Adressfehler sitzt im obersten Band](befunde/adressfehler-sind-verschmelzung.md) - 26 von 26 in "riesig", 0 von 266 sonst: die Adressierung hat ein VERSCHMELZUNGS-Problem, kein Groessenproblem
 * [Beim Trennen entscheidet die Farbquelle](befunde/eig-split-farbquelle.md) - Split auf der Tripel-Farbe macht den Fehler DREIMAL groesser, auf der gebundenen Farbe faellt er auf ein Viertel
+* [Der Form-Split im Eigenschafts-Pfad schadet](befunde/eig-split-im-lauf.md) - das Abstands-Indiz siebt Verwechslungen statt Verschmelzungen; und die Farbbindung fehlt per Bauart genau bei verschmolzenen Blobs
 * [Ablenker-Bindung in der Anfahrt](befunde/ablenker-anfahrt.md) - 6,8 % der Episoden fahren >80 mm daneben und liefern dann 1 von 63, obwohl die Adressierung stimmt
 
 # Entscheidungen
