@@ -7,6 +7,23 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-14
 
+* **Anlage**: [Beim Trennen entscheidet die Farbquelle](/befunde/eig-split-farbquelle.md) -
+  Kalibrierung vor dem Einbau des Form-Splits in den Eigenschafts-Pfad (Nutzerauftrag). Gesucht war
+  nur der Schnitt fuer das Verschmelzungs-Indiz; gefunden wurde, dass meine erste Fassung die Sache
+  **verschlimmert** haette. Ueber 480 Lagen, nur die verschmolzenen Faelle (n = 148): nichts tun
+  18,2 mm Median und 38,5 % ueber 20 mm; Split auf der **Tripel-Farbe** 33,2 mm und **98,4 %** -
+  schlechter als gar nichts; Split auf der **gebundenen** Farbe (`colour_of_body`) 6,7 mm und
+  1,4 %. Grund: die Farbachse des Tripels hat die Wuerfelei AUS der Verschmelzung geschrieben, sie
+  ist die Mischchroma-Klasse (im Lauf an den hohen Nummern `farbe-50/59/64` erkennbar) und trennt
+  genau das falsche Material heraus. `_farbbindung_neu` ueberspringt verschmolzene Blobs bei der
+  Bindung und ist deshalb per Bauart sauber - **der Form-Pfad hat das immer schon richtig gemacht.**
+  Schnitt fuer das Indiz auf **0,8** gemessen (72 % erkannt bei 10 % Fehlalarm); mein geratener Wert
+  0,7 lag auf einer falschen Groessenordnung. Nebenbefund: ueber ALLE 480 Lagen ist *immer* zu
+  trennen besser als der heutige Pfad (8,5 -> 5,8 mm Median, ueber 20 mm 11,9 -> 1,5 %) - deshalb
+  sind beide Fassungen gebaut (`ACT23_EIG_SPLIT` 1 = mit Indiz, 2 = immer). `ebene: pruefstand`,
+  die Lagenverteilung der Sonde ueberwiegt nahe Nachbarn; welche Fassung traegt, entscheidet das
+  laufende A/B, nicht diese Seite.
+
 * **Anlage**: [Jeder grobe Adressfehler sitzt im obersten Band](/befunde/adressfehler-sind-verschmelzung.md)
   - beim Auswerten abgefallen, nicht gesucht, und der wichtigere der beiden Befunde des Tages.
   **26 von 26 groben Adressierungsfehlern liegen im Band `riesig`** (Spanne ab 36 mm); in den

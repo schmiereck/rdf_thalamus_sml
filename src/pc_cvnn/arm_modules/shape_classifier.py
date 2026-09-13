@@ -1174,6 +1174,15 @@ class ShapeClassifierModule(ArmModule):
             grasp = W[int(np.argmin(np.linalg.norm(W - ctr, axis=1)))]
             crgb = img[cys, cxs].astype(float).mean(0)
             csum = float(crgb.sum())
+            # GROESSE DES GETRENNTEN TEILS -- genau wie in perceive_all gerechnet, nur auf `comp`
+            # statt auf der ganzen (verschmolzenen) Komponente.  Ohne diese beiden Felder traegt
+            # eine Split-Detektion KEINE Groesse, und groessen_band() liefert auf ihr None: die
+            # Groessenachse eines Eigenschafts-Tripels koennte auf dem getrennten Teil nie passen.
+            # Rein additiv -- resolve() bekommt die Dicke bewusst NICHT (der Form-Pfad ruft es seit
+            # jeher ohne auf, und das soll dieser Einbau nicht veraendern).
+            _dt = ndimage.distance_transform_edt(comp > 0)
+            _dicke = float(np.percentile(_dt[comp > 0], 90)) / max(self.px_scale(), 1e-6)
+            _span = float(np.percentile(np.linalg.norm(W - ctr, axis=1), 95))
             name, k, prob, yaw, yaw4, desc = None, -1, 0.0, 0.0, 0.0, None
             if with_form:
                 # FORM on the SEPARATED part: the whole fused component's descriptor is destroyed by the
@@ -1198,6 +1207,7 @@ class ShapeClassifierModule(ArmModule):
                         "chroma": crgb / csum if csum > 1e-6 else crgb,
                         "px": np.array([cxs.mean(), cys.mean()]),
                         "grasp_cands": [], "wpx": None, "desc": desc,
+                        "dicke": _dicke, "span": _span,        # s. oben: Groesse des GETRENNTEN Teils
                         "split": True})                        # marks a colour-split detection (diagnostics)
         return out
 

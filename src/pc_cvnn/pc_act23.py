@@ -656,6 +656,44 @@ EIG_IDENT = os.environ.get("ACT23_EIG_IDENT", "0") == "1"
 # Der Schalter bleibt fuer den Tag, an dem die Verschmelzung geloest ist
 # (wiki/befunde/adressfehler-sind-verschmelzung.md).
 EIG_ABSTUFUNG = int(os.environ.get("ACT23_EIG_ABSTUFUNG", "0"))
+# FORM-SPLIT AUF DEM EIGENSCHAFTS-PFAD (ACT23_EIG_SPLIT, Vorgabe 0 bis gemessen).
+# GRUND (gemessen, wiki/befunde/adressfehler-sind-verschmelzung.md): 26 von 26 groben
+# Adressierungsfehlern liegen im obersten Groessenband, 0 von 266 in allen anderen zusammen.
+# Das oberste Band ist faktisch das Band der VERSCHMOLZENEN Blobs -- der groesste einzelne
+# Koerper, obj_U, misst 37,4 mm.  Die Adressierung hat also kein Groessen-, sondern ein
+# Verschmelzungsproblem.
+# Die Rettung dafuer EXISTIERT schon, aber nur auf dem FORM-Pfad (FORM_SPLIT, s. perceive/shape):
+# perceive_colour trennt die Belegung auf PIXEL-Ebene nach Farbklasse und klassifiziert die Form
+# auf dem farbreinen Teil.  Der Eigenschafts-Pfad ist juenger und hat sie nie bekommen.
+#
+# WARUM DER AUSLOESER EIN ANDERER SEIN MUSS: auf dem Form-Pfad meldet select() bei Verschmelzung
+# None -- der Split springt bei MISSERFOLG ein.  Auf dem Eigenschafts-Pfad gibt es keinen
+# Misserfolg: der verschmolzene Blob hat eine Farbe, eine (auf Verschmelzung geborene) Formklasse
+# und ein Band, die Adresse "gelingt" also und liegt 20-30 mm daneben.  Es braucht ein Indiz.
+#
+# DAS INDIZ, MASSSTABSRELATIV STATT MIT FESTER SCHRANKE: liegt das farbreine Material weiter vom
+# Schwerpunkt des Blobs entfernt, als das Teil selbst gross ist, dann IST der Blob nicht dieses
+# Objekt -- er enthaelt es nur.  Gemessen ueber 480 Lagen: der Quotient liegt bei getrennten Blobs
+# im Median bei 0,30, bei verschmolzenen bei 1,12.
+#
+# WORAUF ES ANKOMMT, und es war nicht vorhergesehen: auf WELCHER Farbklasse getrennt wird.
+# Die Farbachse des TRIPELS hat die Wuerfelei aus der Verschmelzung geschrieben -- sie ist die
+# Mischchroma-Klasse, und ein Split darauf holt das falsche Material heraus (Median 33,2 mm, ueber
+# 20 mm in 98,4 % der Faelle -- schlechter als gar nichts zu tun).  Gebraucht wird die GEBUNDENE
+# Klasse aus colour_of_body, die verschmolzene Blobs bei der Bindung ueberspringt: damit 6,7 mm und
+# 1,4 %.  Genau diese Quelle nutzt auch der Form-Pfad.  Siehe wiki/befunde/eig-split-farbquelle.md.
+#   1 = nur bei Verschmelzungs-Indiz trennen (Quotient, s. oben)
+#   2 = IMMER trennen, sobald der Koerper eine gebundene Farbklasse hat
+# Gemessen ueber 480 Lagen (wiki/befunde/eig-split-farbquelle.md): immer zu trennen ist
+# in Median UND Ausreisser besser als der heutige Pfad (8,5 -> 5,8 mm, ueber 20 mm
+# 11,9 -> 1,5 %).  Fassung 1 bleibt, weil der Pruefstand die Lagenverteilung des Laufs
+# nicht trifft -- er ueberwiegt nahe Nachbarn.  Welche Fassung traegt, entscheidet das A/B.
+EIG_SPLIT = int(os.environ.get("ACT23_EIG_SPLIT", "0"))
+# Schnitt fuer Fassung 1.  Gemessen: 0,8 faengt 72 % der Verschmelzungen bei 10 %
+# Fehlalarm auf getrennten Blobs -- und ein Fehlalarm ist billig, weil der Split auch
+# dort nicht schadet.  Keine absolute Laenge, damit der Schnitt nicht an die heutigen
+# sieben Koerper gebunden ist.
+EIG_SPLIT_FAKTOR = float(os.environ.get("ACT23_EIG_SPLIT_FAKTOR", "0.8"))
 # RASTERWEITE (ACT23_SPANNE_RASTER, Vorgabe 5.0 mm).  Feinere Baender trennen schaerfer, lassen
 # aber haeufiger GAR KEINE Adresse passen -- und dann greift der privilegierte Rueckfall.
 # Gemessen im siebten Anlauf: mit 5 mm verdoppelt sich der Rueckfall von 4,7 auf 10,0 % der
@@ -745,6 +783,54 @@ def finde_nach_eigenschaften(sim, shape_clf, colours, farbe=None, form=None, gro
         return None, None, []
     best = max(treffer, key=lambda d: float(d.get("area", 0.0)))
     return np.asarray(best["pos"], float), best, treffer
+
+
+def eig_split_teil(sim, shape_clf, colours, ckey, form, groesse, det_blob):
+    """Verschmolzenen Blob auf dem EIGENSCHAFTS-Pfad trennen -- dieselbe Rettung, die der
+    FORM-Pfad seit dem Form-Split hat (s. EIG_SPLIT oben).
+
+    `ckey` ist die GEBUNDENE Farbklasse des Koerpers (colour_of_body), NICHT die Farbachse des
+    Tripels.  Das ist der Kern des Einbaus und gemessen der Unterschied zwischen Rettung und
+    Verschlimmerung (wiki/befunde/eig-split-farbquelle.md):
+
+        verschmolzener Blob, nichts tun     Median 18,2 mm   ueber 20 mm  38,5 %
+        Split auf der TRIPEL-Farbe          Median 33,2 mm   ueber 20 mm  98,4 %
+        Split auf der GEBUNDENEN Farbe      Median  6,7 mm   ueber 20 mm   1,4 %
+
+    Der Grund: die Farbachse des Tripels wurde von der Wuerfelei AUS DER VERSCHMELZUNG
+    geschrieben -- sie ist die Mischchroma-Klasse und trennt genau das falsche Material heraus.
+    colour_of_body dagegen ueberspringt verschmolzene Blobs bei der Bindung (s. _farbbindung_neu:
+    `area > area_hi` -> nicht binden), ist also per Bauart eine saubere Zuordnung.  Sie ist
+    buchhalterisch koerper-indiziert wie SHAPE_KEY und EIGENSCHAFT, nicht privilegiert: die Klasse
+    kommt aus der gerenderten Chroma.
+
+    Gibt die Detektion des farbreinen TEILS zurueck, sonst None.  KEINE privilegierte Information.
+    """
+    if ckey is None or det_blob is None:
+        return None
+    teile = shape_clf.perceive_colour(sim, colours, ckey, with_form=True)
+    if not teile:
+        return None
+    # GESTUFT filtern: erst das ganze Tripel, dann ohne Groesse, dann nur die Farbe.  Form- und
+    # Groessenachse des Tripels stammen vom VERSCHMOLZENEN Blob und treffen auf dem getrennten
+    # Teil oft nicht mehr zu -- dann ist die Lage das, was gebraucht wird, nicht die Klasse.
+    for _f, _g in ((form, groesse), (form, None), (None, None)):
+        _k = [d for d in teile
+              if (_f is None or str(d.get("shape")) == str(_f))
+              and (_g is None or groessen_band(d.get("dicke"), d.get("span")) == _g)]
+        if _k:
+            break
+    if not _k:
+        return None
+    best = max(_k, key=lambda d: float(d.get("area", 0.0)))
+    if EIG_SPLIT >= 2:
+        return best                                    # Fassung 2: immer trennen, kein Indiz
+    _sp = float(best.get("span") or 0.0)
+    if _sp <= 0.0:
+        return None
+    _d = float(np.linalg.norm(np.asarray(best["pos"], float)
+                              - np.asarray(det_blob["pos"], float)))
+    return best if _d > EIG_SPLIT_FAKTOR * _sp else None
 
 
 class CommandState23:
@@ -3304,6 +3390,24 @@ def run_self_learning_steering(headless=False):
             _pos, _det, _tr = finde_nach_eigenschaften(sim, shape_clf, colours, _f, _fo, _g)
             sim.d.mocap_pos[:] = _saved
             mujoco.mj_forward(sim.m, sim.d)
+            if _pos is not None and EIG_SPLIT:
+                # VERSCHMOLZENER BLOB: die Adresse ist gelungen und trifft trotzdem den
+                # Schwerpunkt ZWEIER Koerper.  Auf dem farbreinen Teil nachsehen (s. EIG_SPLIT).
+                _saved = sim.d.mocap_pos.copy()
+                _teil = eig_split_teil(sim, shape_clf, colours,
+                                       colour_of_body.get(body), _fo, _g, _det)
+                sim.d.mocap_pos[:] = _saved
+                mujoco.mj_forward(sim.m, sim.d)
+                if _teil is not None:
+                    if os.environ.get("ACT23_DEBUG", "0") == "1":
+                        print(f"    [Eig-Split] {body}: Blob verschmolzen "
+                              f"(Band '{groessen_band(_det.get('dicke'), _det.get('span'))}', "
+                              f"{_det.get('area', 0):.0f}px) -> farbreiner Teil "
+                              f"{_teil.get('area', 0):.0f}px, "
+                              f"{1000 * float(np.linalg.norm(np.asarray(_teil['pos'], float) - _pos)):.0f} mm "
+                              f"verschoben", flush=True)
+                    _det = _teil
+                    _pos = np.asarray(_teil["pos"], float)
             if _pos is not None:
                 if os.environ.get("ACT23_DEBUG", "0") == "1":
                     print(f"    [dbg] {body} via EIGENSCHAFTEN ({_f}, {_fo}, {_g}): "
