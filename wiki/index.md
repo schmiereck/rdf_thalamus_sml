@@ -96,7 +96,8 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 # Offene Fragen
 
 * [Offene Faeden in act23](fragen/offene-faeden-act23.md) - geordnet nach belegter Wichtigkeit, mit den ausdruecklich geschlossenen Faeden am Ende
-* [Latente Augmentierung](fragen/latente-augmentierung.md) - Nutzeridee, durchdacht und gestuetzt, aber nicht gebaut; die Voraussetzungsmessung steht davor
+* [Latente Augmentierung](fragen/latente-augmentierung.md) - Nutzeridee, durchdacht und gestuetzt, noch nicht gebaut; die Voraussetzungsmessung ist gemacht
+* [Die Daempfungsfunktion](befunde/daempfungsfunktion.md) - **sie haengt nicht am Betrag, sondern am Nachbarabstand** und ist die Verschmelzungsschwelle: `delta < Nachbarabstand - 40 mm`
 
 # Chronik der Entwicklung
 

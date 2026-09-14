@@ -4,7 +4,7 @@ title: Latente Augmentierung - aus einem Griff viele vorgestellte Lagen
 description: Nutzeridee, durchdacht und messtechnisch gestuetzt, aber nicht gebaut. RoPE macht die Verschiebung zu einer exakten Phasendrehung, das Fundament existiert. Enthaelt drei Einwaende, die Gegenmessung des Nutzers und die Voraussetzungsmessung, die vor dem Bauen steht.
 tags: [act23, latent, augmentierung, idee]
 status: stable
-evidenz: vermutung
+evidenz: vermutung   # die IDEE; die Voraussetzung ist gemessen, s. Status
 ebene: code
 generated: { by: claude/opus-5, at: 2026-08-31T19:27:00Z }
 verified: { by: human:thomas, at: 2026-08-31T19:27:00Z }
@@ -39,7 +39,13 @@ nutzbaren Stichproben je physischer Episode, ohne neue Episoden.
 (no new weights); the inner product of two codes depends only on the relative displacement."*
 Position steckt in der **Phase** (`z_k = A · exp(i·p·theta_k)`).
 
-**Eine Verschiebung ist im Latent also EXAKT eine Phasendrehung, per Konstruktion** - die vom
+**Eine Verschiebung ist im Latent also EXAKT eine Phasendrehung, per Konstruktion**
+> **EINGESCHRAENKT (2026-09-14, gemessen).** Das gilt fuer den RoPE-Code. Die Augmentierung
+> wuerde aber `encode_world` benutzen, und das ist eine **Gitter-Interpolation** ueber das
+> trainierte Zielmodul: die lineare Rueckrechnung traegt einen konstanten Relativfehler von
+> rund **13 %** (0,24 mm bei delta=2 mm, 5,46 mm bei 40 mm). Tragfaehig, aber nicht exakt.
+> Siehe [Die Daempfungsfunktion](/befunde/daempfungsfunktion.md).
+ - die vom
 Nutzer genannte Voraussetzung ("wir muessten den Latent Space verstehen") ist fuer die
 Ortskanaele bereits erfuellt. `ACT_GOAL_ROPE=1` ist seit dem 30.08. Vorgabe. Weiter vorhanden:
 `LatentDynamicsModule`, `latent_goal` mit Latent-Inverse-Babble von 0,8 mm, `dream_seen` im
@@ -126,11 +132,20 @@ also nicht symmetrisch zu behandeln.**
 
 # Status
 
-Idee durchdacht, **nichts gebaut, nichts gemessen**. Vor dem Bauen steht die
-Voraussetzungsmessung.
+Idee durchdacht, **nichts gebaut**. Die Voraussetzungsmessung ist am 2026-09-14 gemacht:
+[Die Daempfungsfunktion](/befunde/daempfungsfunktion.md). Ihr Ergebnis in einem Satz:
+
+> **Die Daempfung haengt nicht am Betrag der Verschiebung, sondern am Nachbarabstand - und sie ist
+> die Verschmelzungsschwelle.** Frei stehend traegt die Aequivarianz bis mindestens 40 mm mit unter
+> 1 % Restfehler; in Nachbarnaehe bricht der Schwanz (p90 bis 17 mm), sobald die Verschiebung den
+> Koerper in Verschmelzungsnaehe traegt. Brauchbare Regel: `delta < Nachbarabstand - 40 mm`.
+
+Einwand 1 oben ist damit bestaetigt und verschaerft: der Kontext ist nicht *auch* eine Achse, er
+ist die **einzige**. Ein Gewicht, das mit |delta| faellt, wuerde das Falsche daempfen.
 
 # Verwandt
 
 * [Selbst-Aneignung stockt](/befunde/selbstaneignung-stockt.md)
 * [Imitationspuffer](/befunde/imitationspuffer.md)
+* [Die Daempfungsfunktion](/befunde/daempfungsfunktion.md) - die Voraussetzungsmessung, gemacht
 * [Offene Faeden](/fragen/offene-faeden-act23.md)

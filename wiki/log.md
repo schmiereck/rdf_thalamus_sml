@@ -7,6 +7,32 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-14
 
+* **Anlage**: [Die Daempfungsfunktion](/befunde/daempfungsfunktion.md) +
+  `src/pc_cvnn/act23_daempfung.py` - die Voraussetzungsmessung der [latenten
+  Augmentierung](/fragen/latente-augmentierung.md), seit dem 31.08. offen, jetzt gemacht: 80 echte
+  Laufszenen, rund 2400 gepruefte Verschiebungen. **Das Ergebnis kehrt die Annahme um.** Frei
+  stehend (Nachbar > 90 mm) ist die Aequivarianz praktisch exakt - 0,33 mm Restfehler bei 40 mm
+  Verschiebung, p90 0,76 mm, also **unter einem Prozent von delta**. Eine Daempfung nach dem BETRAG,
+  die Intuition hinter "mit abnehmender Intensitaet", waere dort fast ueberfluessig. **In
+  Nachbarnaehe bricht nicht der Median, sondern der Schwanz:** der Median bleibt bei 0,52 mm, der
+  p90 springt auf 17 mm - keine sanfte Verschlechterung, sondern eine Minderheit vollstaendig
+  falscher Vorstellungen. Einwand 1 der Seite ist damit bestaetigt UND verschaerft: der Kontext ist
+  nicht *auch* eine Achse, er ist die **einzige**. **Und die Schwelle ist eine bekannte:** es bricht
+  genau dort, wo die Verschiebung den Koerper in Verschmelzungsnaehe traegt (>90 mm: bis 40 mm
+  sauber | 60-90 mm: bricht bei 30 | <60 mm: bricht bei 10). Brauchbare Regel:
+  **`delta < Nachbarabstand - 40 mm`** - die Daempfungsfunktion IST die Verschmelzungsschwelle, in
+  delta ausgedrueckt, und damit je Stichprobe aus der Szene selbst berechenbar statt zu schaetzen.
+  **Zwei Nebenbefunde fuer den Bau:** (a) die Formeinbettung hat einen **Rauschboden** - schon bei
+  2 mm driftet sie um 13-16 % der Klassentrennung und steigt bis 40 mm nur auf 23-27 %; die
+  Formkanaele unveraendert zu uebernehmen ist also so genau, wie der Deskriptor ueberhaupt ist.
+  (b) **Das Ziel-Latent ist NICHT exakt linear**, sondern auf 12-14 % genau, konstant relativ -
+  das **korrigiert die Idee-Seite**, die "EXAKT eine Phasendrehung, per Konstruktion" sagt: das gilt
+  fuer den RoPE-Code, aber `encode_world` ist eine Gitter-Interpolation ueber das trainierte
+  Zielmodul. Bei 5 mm sind das 0,6 mm und belanglos, bei 40 mm 5,5 mm und damit mehr als die
+  Greiftoleranz. Die Drehung ist NICHT mitgemessen und bleibt eine eigene Messung.
+  `ebene: pruefstand`: gemessen ist die Wahrnehmung einer verschobenen Szene, nicht der Ausgang
+  eines Griffs - und genau das ist die Behauptung, auf der die Augmentierung beruht.
+
 * **Anlage**: [Spanne und Identitaetspruefung im Adress-Nachspiel](/befunde/spanne-ident-wiedervorlage.md)
   + `src/pc_cvnn/act23_adress_wiedervorlage.py`. Nutzerauftrag war, die beiden Schalter mit der
   Wiedervorlage zu pruefen - **die kann das nicht:** sie misst die WAHRNEHMUNG und laedt
