@@ -7,6 +7,23 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-14
 
+* **Anlage / Vorbehalt**: [Die verdreifachte Geburtenrate ist reines Phantom](/befunde/geburtenrate-chroma-phantome.md)
+  - Nutzerfrage "untersuche die Geburtenrate", 150 Szenen nach den Regeln des Laufs
+  (`pc_act16.scatter`, 80 mm Mindestabstand). **Der Chroma-Schnitt erzeugt keinen zusaetzlichen
+  Aneignungsdruck, sondern Phantome:** neue Detektionen 14 -> 82, aber die ECHTEN (die einen
+  ganzen Koerper bedecken) bleiben bei **13 gegen 13**; der ganze Zuwachs sind 54 Bruchstuecke
+  zerteilter Einzelkoerper und 15 Detektionen bei keinem Koerper. Er **zerteilt Einzelkoerper in
+  28 % der Szenen** (gegen 1,3 %). **Wie mir das zweimal entgangen ist:** ich habe beide Male den
+  MEDIAN der Detektionen je Szene genommen (2,0 bei 2 Koerpern, 4,0 bei 4) - der verdeckt eine
+  Zerteilung, die nur jede vierte Szene trifft; das Mittel zeigt sie (4,49). Dazu misst die
+  Wiedervorlage den Abstand zur NAECHSTEN Detektion und kann zusaetzliche per Konstruktion nicht
+  sehen. **Damit steht die Entscheidung vom selben Tag unter Vorbehalt** - der gemessene Nutzen
+  (verfehlte Koerper 20 -> 0) bleibt gueltig, war aber unvollstaendig. `ACT_SHAPE_CHROMA_TRENNUNG`
+  2,2 drittelt die Phantome (82 -> 24) bei unveraendert 13 echten, aber ob der Nutzen dort erhalten
+  bleibt, ist ungemessen. Nebenbefund: auf den Szenen bei EPISODENBEGINN verfehlt auch der feste
+  Schnitt nichts (0 von 600) - der Nutzen stammt aus den Szenen am Episodenende, wo der Arm Objekte
+  zusammengeschoben hat. Nutzen und Schaden treten in verschiedenen Phasen derselben Episode auf.
+
 * **Entscheidung**: [Der Chroma-Schnitt wird Vorgabe](/entscheidungen/chroma-split-vorgabe.md) -
   `ACT_SHAPE_CHROMA_SPLIT` steht auf **1** (Nutzerentscheid), mit TRENNUNG 1,0 und TIEFE 3.
   **Begruendet am Wahrnehmungsmass, nicht an der Lieferquote:** Wiedervorlage der Laufszenen,

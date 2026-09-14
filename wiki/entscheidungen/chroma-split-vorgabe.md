@@ -3,7 +3,7 @@ type: Entscheidung
 title: Der Chroma-Schnitt wird Vorgabe - entschieden am Wahrnehmungsmass, nicht an der Lieferquote
 description: ACT_SHAPE_CHROMA_SPLIT steht seit 2026-09-14 auf 1. Begruendet ist das mit der Wiedervorlage der Laufszenen (verfehlte Detektionen 20 von 1024 auf 0, p = 2e-06), nicht mit einem Quotengewinn - den gibt es nicht und wird es nicht geben, weil Verschmelzung im Lauf ein 2-Prozent-Phaenomen ist. Der bestehende act23_state.pkl hat seine Formklassen unter der ALTEN Segmentierung gelernt; ein Quoteneinbruch in den ersten Episoden waere erwartbar und kein Rueckschritt.
 tags: [act23, wahrnehmung, verschmelzung, entscheidung]
-status: stable
+status: unter-vorbehalt
 evidenz: gemessen
 ebene: act23-ab
 generated: { by: claude/opus-5, at: 2026-09-14T00:00:00Z }
@@ -12,6 +12,15 @@ sources:
     resource: /befunde/chroma-split-frisch.md
     title: Die Messung, auf der die Entscheidung beruht
 ---
+
+> **UNTER VORBEHALT (2026-09-14, noch am selben Tag).** Die Begruendung unten ist
+> unvollstaendig: der Schnitt **zerteilt Einzelkoerper in 28 % der Szenen**, und die dort als
+> "offen" notierte verdreifachte Geburtenrate ist dadurch reines Phantom - echte neue
+> Detektionen 13 gegen 13, Bruchstuecke 54 gegen 0. Siehe
+> [Die verdreifachte Geburtenrate ist reines Phantom](/befunde/geburtenrate-chroma-phantome.md).
+> Der gemessene NUTZEN (verfehlte Koerper 20 -> 0) bleibt gueltig, wurde aber bei
+> `TRENNUNG 1,0` gemessen; eine Schranke von 2,2 dritteln die Phantome, ihr Nutzen ist
+> ungemessen.
 
 # Was entschieden ist
 
@@ -81,4 +90,5 @@ nur das, was der Agent von jetzt an dazulernt, entsteht unter der neuen Segmenti
 * [Die Verschmelzung an der Quelle](/befunde/verschmelzung-chroma-split.md) - Bau und erster Lauf
 * [Jeder grobe Adressfehler sitzt im obersten Band](/befunde/adressfehler-sind-verschmelzung.md)
 * [Invarianten](/mechanismen/invarianten.md) - warum `STATE_SCHEMA` hier nicht hochgezaehlt wird
+* [Die verdreifachte Geburtenrate ist reines Phantom](/befunde/geburtenrate-chroma-phantome.md) - der Vorbehalt
 * [Ziel](/ziel.md) - der Massstab, nach dem hier entschieden wurde

@@ -76,7 +76,8 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Die pixelweise Farbbindung](befunde/farbbindung-pixelweise.md) - bindet 34 von 34 erreichbaren Koerpern, die der Komponenten-Durchgang auslaesst, und aendert an der Zielgroesse NICHTS (p = 1,00)
 * [Die Verschmelzung an der Quelle](befunde/verschmelzung-chroma-split.md) - unsupervised Chroma-Schnitt in `perceive_all`: grobe Adressfehler 3,1 -> 0,6 %, Rueckfall 10,0 -> 5,0 %, aber Quote 66,0 -> 55,7 %; nichts uebersteht Bonferroni
 * [Frisch bei null](befunde/chroma-split-frisch.md) - **die Wiedervorlage der Laufszenen entscheidet:** verfehlte Detektionen 20/1024 -> 0 (p = 2e-06), und Verschmelzung ist im Lauf ein 2-%-Phaenomen, nicht 29 %
-* [Chroma-Schnitt wird Vorgabe](entscheidungen/chroma-split-vorgabe.md) - **`ACT_SHAPE_CHROMA_SPLIT=1` seit 2026-09-14**; entschieden am Wahrnehmungsmass, nicht an der Quote. Warnt: die Klassen im Live-Zustand stammen aus der ALTEN Segmentierung
+* [Chroma-Schnitt wird Vorgabe](entscheidungen/chroma-split-vorgabe.md) - `ACT_SHAPE_CHROMA_SPLIT=1` seit 2026-09-14, **unter Vorbehalt**; entschieden am Wahrnehmungsmass, nicht an der Quote
+* [Die verdreifachte Geburtenrate ist reines Phantom](befunde/geburtenrate-chroma-phantome.md) - der Schnitt zerteilt Einzelkoerper in 28 % der Szenen; echte neue Detektionen 13 gegen 13, Bruchstuecke 54 gegen 0
 * [Ablenker-Bindung in der Anfahrt](befunde/ablenker-anfahrt.md) - 6,8 % der Episoden fahren >80 mm daneben und liefern dann 1 von 63, obwohl die Adressierung stimmt
 
 # Entscheidungen
