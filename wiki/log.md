@@ -7,6 +7,25 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-14
 
+* **Anlage**: [Die Wiedervorlage](/mechanismen/wiedervorlage.md) + `src/pc_cvnn/act23_wiedervorlage.py`
+  - aus der Erkenntnis des Chroma-Nachspiels ein festes Werkzeug gemacht. `pc_act23` protokolliert
+  unter `ACT23_DEBUG=1` je Episode die **wahren Lagen aller Koerper** (`[dbg] after ep`) nach
+  `log/`; damit laesst sich jede je gefahrene Szene nachstellen und mit bekannter Wahrheit
+  befragen - auf der TATSAECHLICHEN Lagenverteilung, beliebig viele Einstellungen auf DENSELBEN
+  Szenen, in Minuten statt Stunden. Beliebige Schalter ueber `WV_VARIANTEN`
+  ("Name:VAR=WERT,...|Name:...", die erste ist der Bezug), gesetzt per Neuladen von
+  `shape_classifier` wie in `act23_relrings_ab.py`, Fisher gegen den Bezug.
+  **Es misst absichtlich beides zugleich:** VERFEHLT (keine Detektion am Koerper -> privilegierter
+  Rueckfall) und ZERTEILT (mehrere Detektionen am selben Koerper -> Phantomklasse), dazu die
+  Neuheits-Aufteilung "auf einem Koerper / Bruchstueck / nirgends". *Ein Gewinn bei VERFEHLT, der
+  ZERTEILT mitzieht, ist keiner* - genau diese Verwechslung hat den Chroma-Schnitt zweimal als
+  Erfolg erscheinen lassen. Die Detektionen je Koerper werden als **Mittel** ausgewiesen, nicht als
+  Median: eine Zerteilung, die nur jede vierte Szene trifft, ist im Median unsichtbar. Gegenprobe
+  bestanden - das Werkzeug reproduziert den Befund vom selben Tag aus einem einzigen Aufruf
+  (`t1.0` verfehlt 0,0 % bei 4,7 % zerteilt, `t2.2` 1,7 % bei 1,1 %). Grenzen auf der Seite: der
+  Yaw steht nicht im Protokoll, die Zeile faellt am Episodenende, der Vorgabe-Glob vermischt 500+
+  Protokolle aus allen Projektphasen. **Es ersetzt keinen Lauf** - es sagt vorher, ob einer lohnt.
+
 * **Ruecknahme**: [Der Chroma-Schnitt wird Vorgabe](/entscheidungen/chroma-split-vorgabe.md) auf
   `status: widerlegt`, `ACT_SHAPE_CHROMA_SPLIT` zurueck auf **0**. Die bestellte Nachmessung
   (Nutzen bei TRENNUNG 2,2) ist gemacht, und zwar erstmals **beide Seiten auf denselben Szenen** -

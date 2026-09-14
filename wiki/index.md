@@ -78,6 +78,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Frisch bei null](befunde/chroma-split-frisch.md) - **die Wiedervorlage der Laufszenen entscheidet:** verfehlte Detektionen 20/1024 -> 0 (p = 2e-06), und Verschmelzung ist im Lauf ein 2-%-Phaenomen, nicht 29 %
 * [Chroma-Schnitt wird Vorgabe](entscheidungen/chroma-split-vorgabe.md) - **zurueckgenommen am selben Tag**; `ACT_SHAPE_CHROMA_SPLIT` steht wieder auf 0
 * [Die verdreifachte Geburtenrate ist reines Phantom](befunde/geburtenrate-chroma-phantome.md) - echte neue Detektionen 13 gegen 13, Bruchstuecke 54 gegen 0; und **Nutzen und Schaden sind gekoppelt** - es gibt keine Schranke, die das eine ohne das andere hat
+* [Die Wiedervorlage](mechanismen/wiedervorlage.md) - **Werkzeug**: Wahrnehmungsaenderungen auf den echten Laufszenen pruefen, in Minuten statt Stunden; misst Nutzen UND Schaden zugleich
 * [Ablenker-Bindung in der Anfahrt](befunde/ablenker-anfahrt.md) - 6,8 % der Episoden fahren >80 mm daneben und liefern dann 1 von 63, obwohl die Adressierung stimmt
 
 # Entscheidungen
