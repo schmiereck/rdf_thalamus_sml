@@ -736,6 +736,27 @@ EIG_SPLIT_FAKTOR = float(os.environ.get("ACT23_EIG_SPLIT_FAKTOR", "0.8"))
 # ACHTUNG BEIM LESEN DER MELDUNG: `len(_offen)` zaehlt die drei je Episode GEPARKTEN Koerper
 # mit, die ausserhalb des Bildes liegen und nie bindbar sind -- "34 von 127" heisst 34 von 34.
 BINDUNG_SPLIT = os.environ.get("ACT23_BINDUNG_SPLIT", "0") == "1"
+# LATENTE AUGMENTIERUNG (ACT23_AUGMENT = Anzahl vorgestellter Lagen je Episode, 0 = aus).
+# Begruendung und Bauregeln stehen bei `augmentiere` weiter unten.
+AUGMENT = int(os.environ.get("ACT23_AUGMENT", "0"))
+# Deckel fuer |delta|.  Gemessen traegt die Aequivarianz frei stehend bis 40 mm, aber bei
+# 20 mm liegt die Formdrift noch bei ~19 % der Klassentrennung und der Lagerest unter
+# 0,5 mm -- darueber steigt beides spuerbar, ohne dass mehr Vielfalt entstuende.
+AUGMENT_MAX = float(os.environ.get("ACT23_AUGMENT_MAX", "0.020"))
+# Verschmelzungsschwelle: naeher als das an einen Nachbarn darf die Vorstellung nicht
+# fuehren (wiki/befunde/verschmelzung-abstandskurve.md, bestaetigt in der Daempfungsmessung).
+AUGMENT_FREI = float(os.environ.get("ACT23_AUGMENT_FREI", "0.040"))
+# HARTE VORAUSSETZUNG: ACT23_NEIGHBOURS=1.  Die Zulaessigkeitsschranke liest den
+# Nachbarabstand aus dem NB-Block des Merkmalsvektors; steht NEIGHBOURS auf 0 (Vorgabe), ist
+# der Block auf JEDER Zeile ungueltig und es wird nie augmentiert -- gemessen 11640 von
+# 12330 Pufferzeilen ohne gueltigen Block (wiki/befunde/merkmale-kommen-zu-spaet.md).
+# NICHT still mitgeschaltet: ein Schalter, der einen zweiten heimlich umlegt, macht jedes
+# A/B mehrdeutig.  Stattdessen eine laute Meldung -- ein Schalter, der unbemerkt nichts tut,
+# hat dieses Projekt schon zweimal einen Lauf gekostet (wiki/mechanismen/invarianten.md).
+if AUGMENT and not NEIGHBOURS:
+    print("  [Augment] ACT23_AUGMENT ist gesetzt, ACT23_NEIGHBOURS aber NICHT -- die "
+          "Augmentierung braucht den Nachbarabstand und bleibt WIRKUNGSLOS. "
+          "Beide Arme eines A/B mit ACT23_NEIGHBOURS=1 fahren.", flush=True)
 # RASTERWEITE (ACT23_SPANNE_RASTER, Vorgabe 5.0 mm).  Feinere Baender trennen schaerfer, lassen
 # aber haeufiger GAR KEINE Adresse passen -- und dann greift der privilegierte Rueckfall.
 # Gemessen im siebten Anlauf: mit 5 mm verdoppelt sich der Rueckfall von 4,7 auf 10,0 % der
@@ -825,6 +846,70 @@ def finde_nach_eigenschaften(sim, shape_clf, colours, farbe=None, form=None, gro
         return None, None, []
     best = max(treffer, key=lambda d: float(d.get("area", 0.0)))
     return np.asarray(best["pos"], float), best, treffer
+
+
+def augmentiere(fe, nh, anzahl, rng, max_delta=None, frei=None):
+    """LATENTE AUGMENTIERUNG: aus EINER Erfahrung mehrere vorgestellte Lagen.
+
+    Nutzeridee (wiki/fragen/latente-augmentierung.md): *"Wenn der Greifer ein Objekt erfolgreich
+    gegriffen hat, koennen wir gleich zig Szenen fuer leicht verschobene Objekte erzeugen."*
+    Gebaut wird sie nach der GEMESSENEN Daempfungsfunktion
+    (wiki/befunde/daempfungsfunktion.md), nicht nach der urspruenglichen Annahme:
+
+      * KEINE Daempfung nach dem Betrag.  Frei stehend ist die Aequivarianz bis 40 mm auf unter
+        1 % genau -- ein Gewicht, das mit |delta| faellt, wuerde das Falsche daempfen.
+      * Die Schranke ist der NACHBARABSTAND: eine Verschiebung traegt genau so lange, wie sie den
+        Koerper nicht in Verschmelzungsnaehe bringt.  Gemessen bricht dort nicht der Median,
+        sondern der Schwanz (p90 bis 17 mm) -- also eine Minderheit VOLLSTAENDIG falscher
+        Vorstellungen, und die sind schlimmer als viele leicht schiefe.
+      * NUR VERSCHIEBUNG.  Die Drehung ist gemessen teurer (20 Grad kosten so viel Formdrift wie
+        40 mm Verschiebung), sie bewegt den Schwerpunkt, und nur einer ihrer beiden Winkelkanaele
+        traegt sie -- mit umgekehrtem Vorzeichen.  Das ist ein eigener Bau.
+
+    WORAUF SICH DIE SCHRANKE STUETZT: der Nachbarabstand steht bereits IM Merkmalsvektor
+    (NB-Block `[gueltig, d_nah, cos phi, sin phi, n_nah]`, ab 6+NH).  Es braucht also keine
+    zusaetzliche Wahrnehmung und keine privilegierte Information -- die Regel liest, was der Agent
+    ohnehin gesehen hat.  Ohne gueltigen NB-Block wird NICHT augmentiert: eine Vorstellung ohne
+    Kenntnis der Nachbarschaft ist genau der Fall, den die Messung als gefaehrlich ausweist.
+
+    WARUM DER NEUE ABSTAND KONSERVATIV GESETZT WIRD: die Richtung phi steht nur im Objektrahmen und
+    der yaw nur mod pi -- die Weltrichtung zum Nachbarn ist also um pi mehrdeutig.  Statt zu raten
+    wird der schlimmste Fall angenommen (die Verschiebung ging genau auf den Nachbarn zu):
+    d_nah_neu = d_nah - |delta|.  Das ist eine untere Schranke, und mit ihr gilt die
+    Zulaessigkeitsbedingung garantiert.
+
+    WAS SICH AENDERT und was nicht:
+        pos        + delta          (die einzige Groesse, die sich aendert)
+        Winkel     unveraendert     (Verschiebung dreht nicht)
+        desc_embed unveraendert     (verschiebungsinvariant; gemessen auf 13 % genau, nicht exakt)
+        NB.d_nah   konservativ verringert, uebriger Block unveraendert
+        FOV, BD    unveraendert     -- Blickpfad und Armstellung gehoeren zur AUSFUEHRUNG, nicht
+                   zur vorgestellten Objektlage; sie zu faelschen waere eine Erfindung.
+
+    Die AKTION bleibt unveraendert, und das ist kein Versehen: `action_vec` traegt den Greifpunkt
+    als OFFSET gegen den wahrgenommenen Bezug, nicht als Weltkoordinate -- unter einer Verschiebung
+    ist sie damit invariant.
+
+    Gibt eine Liste von Merkmalsvektoren zurueck (kann leer sein)."""
+    _mx = AUGMENT_MAX if max_delta is None else float(max_delta)
+    _fr = AUGMENT_FREI if frei is None else float(frei)
+    nb0 = 6 + int(nh)
+    fe = np.asarray(fe, float)
+    if len(fe) < nb0 + 5 or fe[nb0] < 0.5:
+        return []                                    # kein gueltiger Nachbar-Block -> nicht raten
+    spielraum = min(_mx, float(fe[nb0 + 1]) - _fr)
+    if spielraum <= 0.002:                           # unter 2 mm lohnt keine Vorstellung
+        return []
+    aus = []
+    for _ in range(int(anzahl)):
+        r = float(rng.uniform(0.002, spielraum))
+        w = float(rng.uniform(0, 2 * np.pi))
+        g = fe.copy()
+        g[0] += r * np.cos(w)
+        g[1] += r * np.sin(w)
+        g[nb0 + 1] = max(_fr, float(fe[nb0 + 1]) - r)   # schlimmster Fall, s. oben
+        aus.append(g)
+    return aus
 
 
 def eig_split_teil(sim, shape_clf, colours, ckey, form, groesse, det_blob):
@@ -4726,6 +4811,7 @@ def run_self_learning_steering(headless=False):
                 # under ACT23_WORLD_LABEL=welt there is no self-distance and the label stays binary.
                 _qd = s_d if (lbl_src == "Selbst" and s_d is not None) else None
                 _we = WORLD_EPOCHS               # bleibt so, wenn das Lernen eingefroren ist
+                _naug = 0                        # auch bei eingefrorenem Lernen definiert
                 if not EXV_FREEZE:
                     # PUNKT 3, GEPRUEFT UND NICHT NOETIG: diese Paarung ist von den logischen
                     # Raten unberuehrt.  `fe` entsteht in situation_feats VOR run_combined (also
@@ -4736,10 +4822,31 @@ def run_self_learning_steering(headless=False):
                     # wo die echte Gefahr sitzt (das war die Selbst-Imitation, s. _imit_log_frisch).
                     # WER world.rate > 1 SETZT, muss hier zuerst hinsehen.
                     world.observe(fe, a_obs, outcome, dist=_qd, weight=obs_w, group=group_id())
+                    if AUGMENT:
+                        # VORGESTELLTE LAGEN aus derselben Erfahrung (s. `augmentiere`).
+                        # DIESELBE GRUPPE wie das Original -- das ist kein Detail: `_groups`
+                        # entscheidet, welche Zeilen beim Bootstrap und beim Halteteil ZUSAMMEN
+                        # bleiben.  Mit eigener Gruppe landete eine Vorstellung im Testteil, waehrend
+                        # ihr Original trainiert -- die Guete waere dann Selbstbetrug (Messhygiene:
+                        # "Halteteile nie zufaellig ziehen").
+                        # OB EIN FEHLSCHLAG UEBERTRAGEN WERDEN DARF, entscheidet die Kredit-
+                        # Zuordnung bereits: was hier ankommt, ist ursaechlich zugeordnet
+                        # ("Griff hielt nicht (Drucksensor)", "verrutscht"), waehrend "daneben
+                        # platziert" und "nicht gegriffen" gar nicht erst durchkommen (outcome=None).
+                        # Die Forderung der Idee-Seite -- ein Negativ nur so weit uebertragen, wie
+                        # seine Ursache erklaert ist -- ist damit schon erfuellt, bevor hier
+                        # augmentiert wird.
+                        for _fa in augmentiere(fe, shape_clf.NH, AUGMENT, crng):
+                            world.observe(_fa, a_obs, outcome, dist=_qd, weight=obs_w,
+                                          group=group_id())
+                            _naug += 1
                     _we = welt_fit_epochen()      # Plan s.o.; Vorgabe 600 wie bisher
                     world.train(epochs=_we)
                 _qs = ("" if (_qd is None or not outcome)
                        else f", Guete {wm_quality(_qd):.2f} bei {_qd*1000:.0f}mm")
+                if AUGMENT and _naug:
+                    _qs += f", +{_naug} vorgestellt"   # muss im Protokoll erkennbar sein, sonst
+                    #   ist der Anteil vorgestellter Zeilen hinterher nicht auszaehlbar
                 if _we != WORLD_EPOCHS:
                     _qs += f", Fit {_we} Epochen"   # der kurze Fit muss im Log ERKENNBAR sein,
                                                     #   sonst ist er in keiner Auswertung trennbar

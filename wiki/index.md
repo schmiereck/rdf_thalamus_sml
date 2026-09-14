@@ -96,7 +96,8 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 # Offene Fragen
 
 * [Offene Faeden in act23](fragen/offene-faeden-act23.md) - geordnet nach belegter Wichtigkeit, mit den ausdruecklich geschlossenen Faeden am Ende
-* [Latente Augmentierung](fragen/latente-augmentierung.md) - Nutzeridee, durchdacht und gestuetzt, noch nicht gebaut; die Voraussetzungsmessung ist gemacht
+* [Latente Augmentierung](fragen/latente-augmentierung.md) - die Nutzeridee; Voraussetzungsmessung gemacht, Bau erfolgt
+* [Die latente Augmentierung, gebaut](mechanismen/latente-augmentierung-gebaut.md) - `ACT23_AUGMENT`, Regeln aus der Messung; Rauchtest: 4,4 Pufferzeilen je Episode statt einer. **Braucht zwingend `ACT23_NEIGHBOURS=1`**
 * [Die Daempfungsfunktion](befunde/daempfungsfunktion.md) - **sie haengt nicht am Betrag, sondern am Nachbarabstand** und ist die Verschmelzungsschwelle: `delta < Nachbarabstand - 40 mm`; die DREHUNG traegt nur `yaw4` und **mit umgekehrtem Vorzeichen**
 
 # Chronik der Entwicklung

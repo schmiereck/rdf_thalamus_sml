@@ -7,6 +7,31 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-14
 
+* **Anlage**: [Die latente Augmentierung, gebaut](/mechanismen/latente-augmentierung-gebaut.md) -
+  `ACT23_AUGMENT` (Vorgabe 0) erzeugt aus einer bestaetigten Erfahrung N vorgestellte Lagen. **Jede
+  Regel kommt aus der Daempfungsmessung, keine aus der Annahme:** keine Daempfung nach dem Betrag
+  (alle Vorstellungen `weight=1.0`), Schranke ist `delta < d_nah - 40 mm` gedeckelt bei 20 mm, nur
+  Verschiebung. **Die Schranke liest, was der Agent ohnehin gesehen hat** - der Nachbarabstand steht
+  im NB-Block des Merkmalsvektors, kein zusaetzliches Rendern, keine privilegierte Information.
+  Der neue Abstand wird konservativ gesetzt (`d_nah - |delta|`), weil die Richtung zum Nachbarn nur
+  mod pi bekannt ist. **Dieselbe Gruppe wie das Original** - sonst landete eine Vorstellung im
+  Halteteil, waehrend ihr Original trainiert, und die Guete waere Selbstbetrug. Fehlschlaege werden
+  mitaugmentiert, und die Forderung der Idee-Seite ("ein Negativ nur so weit, wie seine Ursache
+  erklaert ist") ist dabei schon erfuellt: die Kredit-Zuordnung laesst nur ursaechlich zugeordnete
+  Ausgaenge durch, "daneben platziert" kommt als `outcome=None` gar nicht an.
+  **Der erste Rauchtest hat den entscheidenden Fehler gefunden:** `ACT23_NEIGHBOURS` steht per
+  Vorgabe auf 0, der NB-Block wird dann nie gefuellt (11640 von 12330 Pufferzeilen ohne gueltigen
+  Block) - die Schranke oeffnet nie, 8 Episoden ergaben 8 Zeilen und 0 Vorstellungen. **Ein A/B
+  haette zwei Stunden gekostet und exakt nichts gemessen.** Der Schalter warnt jetzt laut beim
+  Start; bewusst NICHT still mitgeschaltet, weil ein Schalter, der einen zweiten heimlich umlegt,
+  jedes A/B mehrdeutig macht. Beide Arme brauchen `ACT23_NEIGHBOURS=1`.
+  **Zweiter Rauchtest bestanden:** 8 Episoden -> Weltzeilen 12322 -> 12353, also **+31 statt +7**,
+  rund **4,4 Pufferzeilen je physischer Episode**. Im Puffer geprueft: |delta| 10,9-17,9 mm, d_nah
+  nie unter 40 mm, Label und alle uebrigen 43 Spalten identisch, Gewicht 1,0.
+  **Was NICHT gezeigt ist:** dass ein Griff an der vorgestellten Lage geglueckt WAERE - die
+  Daempfungsmessung zeigt nur, dass die WAHRNEHMUNG der Vorhersage entspricht. Die sinnvolle
+  Zielgroesse eines A/B ist die Generalisierungs-AUC, nicht die Lieferquote.
+
 * **Ergaenzung**: [Die Daempfungsfunktion](/befunde/daempfungsfunktion.md) um die **Drehung**
   erweitert (`DF_MODUS=dreh`), die auf der Idee-Seite als eigene Messung angekuendigt war.
   **Der praktisch wichtigste Fund ist ein Vorzeichen:** `yaw4` traegt die Drehung sauber (2 bis

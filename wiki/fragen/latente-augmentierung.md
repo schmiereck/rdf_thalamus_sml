@@ -132,7 +132,7 @@ also nicht symmetrisch zu behandeln.**
 
 # Status
 
-Idee durchdacht, **nichts gebaut**. Die Voraussetzungsmessung ist am 2026-09-14 gemacht:
+Idee durchdacht, **gebaut am 2026-09-14** ([Die latente Augmentierung, gebaut](/mechanismen/latente-augmentierung-gebaut.md), `ACT23_AUGMENT`, Vorgabe 0). Die Voraussetzungsmessung ist am 2026-09-14 gemacht:
 [Die Daempfungsfunktion](/befunde/daempfungsfunktion.md). Ihr Ergebnis in einem Satz:
 
 > **Die Daempfung haengt nicht am Betrag der Verschiebung, sondern am Nachbarabstand - und sie ist
@@ -148,4 +148,5 @@ ist die **einzige**. Ein Gewicht, das mit |delta| faellt, wuerde das Falsche dae
 * [Selbst-Aneignung stockt](/befunde/selbstaneignung-stockt.md)
 * [Imitationspuffer](/befunde/imitationspuffer.md)
 * [Die Daempfungsfunktion](/befunde/daempfungsfunktion.md) - die Voraussetzungsmessung, gemacht
+* [Die latente Augmentierung, gebaut](/mechanismen/latente-augmentierung-gebaut.md) - der Bau
 * [Offene Faeden](/fragen/offene-faeden-act23.md)
