@@ -175,9 +175,20 @@ SPLIT_ALWAYS = os.environ.get("ACT_SHAPE_SPLIT_ALWAYS", "0") != "0"
 # Verschmelzung ist in den tatsaechlichen Szenen ein 2-%-Phaenomen.  Meine Handsonde mit
 # 5 eng gestellten Koerpern zeigte 29 % -- Faktor 15 daneben.  Einschalten ist damit eine
 # ENTSCHEIDUNG, keine Messfrage; die Lieferquote wird es nie bestaetigen.
-# VORGABE 1 seit 2026-09-14 (Nutzerentscheid nach der Wiedervorlage).  Abschalten mit
-# ACT_SHAPE_CHROMA_SPLIT=0.
-CHROMA_SPLIT = os.environ.get("ACT_SHAPE_CHROMA_SPLIT", "1") != "0"
+# VORGABE ZURUECK AUF 0 (2026-09-14, wiki/befunde/geburtenrate-chroma-phantome.md).
+# NUTZEN UND SCHADEN SIND GEKOPPELT -- auf denselben Szenen (Episodenende, 783 Koerper):
+#   TRENNUNG   verfehlte Koerper   zerteilte Koerper
+#     aus          1,1 %               0,6 %
+#     1,0          0,0 %               4,9 %
+#     1,6          0,9 %               1,9 %
+#     2,2          1,1 %               1,1 %
+#     3,0          1,1 %               1,0 %
+# Der Gewinn verschwindet genau so schnell wie der Schaden: bei 2,2 sind die verfehlten
+# Koerper wieder bei 1,1 %, also auf dem Wert OHNE Schnitt.  Es gibt keine Einstellung, in
+# der der Nutzen bleibt und die Zerteilung weg ist -- der Nutzen IST das aggressive Schneiden.
+# In Stueckzahlen ist jede Einstellung ein Verlustgeschaeft (bei 1,0: neun verfehlte Koerper
+# weniger gegen 33 zerteilte mehr), und eine Zerteilung gebiert eine Phantomklasse.
+CHROMA_SPLIT = os.environ.get("ACT_SHAPE_CHROMA_SPLIT", "0") != "0"
 CHROMA_ITER = int(os.environ.get("ACT_SHAPE_CHROMA_ITER", "6"))
 CHROMA_DECKUNG = float(os.environ.get("ACT_SHAPE_CHROMA_DECKUNG", "0.80"))
 CHROMA_TIEFE = int(os.environ.get("ACT_SHAPE_CHROMA_TIEFE", "3"))

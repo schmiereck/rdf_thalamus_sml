@@ -1,7 +1,7 @@
 ---
 type: Befund
 title: Die verdreifachte Geburtenrate ist reines Phantom - der Chroma-Schnitt zerteilt Einzelkoerper in 28 Prozent der Szenen
-description: Auf den Szenen des Laufs erzeugt der Schnitt 82 statt 14 neue Detektionen je 150 Szenen. Die Zahl der ECHTEN neuen Detektionen - solche, die einen ganzen Koerper bedecken - ist identisch: 13 gegen 13. Der ganze Zuwachs sind Bruchstuecke zerteilter Einzelkoerper und Detektionen, die bei keinem Koerper liegen. Damit ist die Entscheidung, den Schnitt auf Vorgabe zu stellen, auf einer unvollstaendigen Messung getroffen worden.
+description: Auf den Szenen des Laufs erzeugt der Schnitt 82 statt 14 neue Detektionen je 150 Szenen. Die Zahl der ECHTEN neuen Detektionen ist identisch: 13 gegen 13; der ganze Zuwachs sind Bruchstuecke zerteilter Einzelkoerper. Die Nachmessung auf denselben Szenen zeigt dann, dass Nutzen und Schaden GEKOPPELT sind - der Gewinn an verfehlten Koerpern verschwindet genau so schnell wie die Zerteilung, sobald die Schranke steigt. Es gibt keine Einstellung, die das eine ohne das andere hat. Vorgabe zurueck auf 0.
 tags: [act23, selbstlernen, formklassen, wahrnehmung, negativ]
 status: stable
 evidenz: gemessen
@@ -11,6 +11,9 @@ sources:
   - id: probe
     resource: "150 Szenen nach den Regeln des Laufs (pc_act16.scatter: 80 mm Mindestabstand, BASE_CLEAR, REACH_XY), 4 Koerper je Szene, Zustand ad9d768c, ACT_SHAPE_CHROMA_SPLIT 0/1 und TRENNUNG 1,0/1,6/2,2"
     title: Geburtsdruck auf der Lauf-Verteilung
+  - id: nachmessung
+    resource: "200 Szenen am EPISODENENDE aus den Laufprotokollen (log/pc_act23_2026-09-14_07-22-23_*.txt), 783 Koerper, Nutzen und Schaden auf denselben Szenen, TRENNUNG aus/1,0/1,6/2,2/3,0"
+    title: Nutzen und Schaden gekoppelt
 ---
 
 # Die Frage
@@ -72,6 +75,33 @@ Schnitt **nichts** (0 von 600). Der gemessene Nutzen stammt aus den Szenen am EP
 Arm Objekte zusammengeschoben hat; der Generator startet mit 80 mm Mindestabstand. Nutzen und
 Schaden treten also in verschiedenen Phasen derselben Episode auf.
 
+# Die Nachmessung: Nutzen und Schaden sind GEKOPPELT
+
+Beide Seiten auf **denselben** Szenen - den Szenen am Episodenende, wo der Arm Objekte
+zusammengeschoben hat (200 Szenen aus den Laufprotokollen, 783 Koerper):
+
+    TRENNUNG   verfehlte Koerper   zerteilte Koerper   Lok-Median
+      aus          1,1 %  (9)         0,6 %  (5)        2,06 mm
+      1,0          0,0 %  (0)         4,9 % (38)        2,22 mm
+      1,6          0,9 %  (7)         1,9 % (15)        1,86 mm
+      2,2          1,1 %  (9)         1,1 %  (9)        2,06 mm
+      3,0          1,1 %  (9)         1,0 %  (8)        2,06 mm
+
+**Bei 2,2 sind die verfehlten Koerper wieder bei 1,1 % - genau dem Wert ohne Schnitt.** Der
+Gewinn verschwindet exakt so schnell wie der Schaden. Es gibt keine Einstellung, in der der Nutzen
+bleibt und die Zerteilung weg ist.
+
+Der Grund ist im Nachhinein zwingend: **der Nutzen IST das aggressive Schneiden.** Dieselbe
+Schranke, die einen verschmolzenen Blob trennt, trennt auch einen schattierten Einzelkoerper -
+beide zeigen zwei chromatisch verschiedene, raeumlich versetzte Teile. Die raeumliche Schranke
+unterscheidet die Faelle nicht so gut, wie die erste Messung nahelegte; sie verschiebt nur, wie
+viel von beidem passiert.
+
+In Stueckzahlen ist jede Einstellung ein **Verlustgeschaeft**: bei 1,0 stehen neun vermiedenen
+verfehlten Koerpern **33 zusaetzlich zerteilte** gegenueber. Ein verfehlter Koerper kostet einen
+privilegierten Rueckfall; ein zerteilter gebiert eine Phantomklasse. Nach
+[dem Projektziel](/ziel.md) ist der zweite Preis der teurere.
+
 # Folge fuer die Entscheidung
 
 [Der Chroma-Schnitt wurde auf Vorgabe gestellt](/entscheidungen/chroma-split-vorgabe.md) mit der
@@ -79,9 +109,9 @@ Begruendung, die Wahrnehmung werde belegbar besser. Das bleibt wahr fuer das gem
 (verfehlte Koerper) - und es war **unvollstaendig**: die Zerteilung von Einzelkoerpern war nicht
 mitgemessen, obwohl genau sie die dort als "offen" notierte Geburtenrate erklaert.
 
-Die Entscheidung steht damit **unter Vorbehalt**, bis eines von beidem gemessen ist:
-der Nutzen bei einer Schranke, die nicht zerteilt (2,2), oder der Schaden der Phantomklassen im
-Lauf.
+**Nachgemessen (s. Abschnitt oben): der Nutzen bei 2,2 ist null.** Damit ist die Entscheidung
+zurueckgenommen - `ACT_SHAPE_CHROMA_SPLIT` steht wieder auf `0`. Der Schalter und beide Schranken
+bleiben samt dieser Begruendung im Code.
 
 # Fallen
 
@@ -91,7 +121,12 @@ Lauf.
 * **Die Bruchstueck-Zaehlung ist konservativ.** Die Bezugsflaeche je Koerper wird mit derselben
   Einstellung gemessen; wird ein allein stehender Koerper ebenfalls zerteilt, faellt der Bezug
   kleiner aus und Bruchstuecke werden als "ganz" gezaehlt. Die 54 sind also eher zu wenig.
-* **Szenen bei Episodenbeginn**, nicht am Ende. Am Ende ist die Lage anders (s. oben).
+* **Zwei Szenenquellen.** Der Geburtsdruck ist auf Szenen bei EPISODENBEGINN gemessen, die
+  Kopplung von Nutzen und Schaden auf Szenen am EPISODENENDE. Das ist Absicht - der Schaden
+  faellt ueberall an, der Nutzen nur am Ende -, aber die beiden Tabellen sind deshalb nicht
+  Zeile fuer Zeile vergleichbar.
+* **Der Yaw wird neu gewuerfelt** - er steht nicht im Protokoll. Die Verschmelzung haengt
+  ueberwiegend an den Lagen, aber nicht nur.
 
 # Verwandt
 

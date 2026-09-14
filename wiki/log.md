@@ -7,6 +7,23 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-14
 
+* **Ruecknahme**: [Der Chroma-Schnitt wird Vorgabe](/entscheidungen/chroma-split-vorgabe.md) auf
+  `status: widerlegt`, `ACT_SHAPE_CHROMA_SPLIT` zurueck auf **0**. Die bestellte Nachmessung
+  (Nutzen bei TRENNUNG 2,2) ist gemacht, und zwar erstmals **beide Seiten auf denselben Szenen** -
+  200 Szenen am Episodenende aus den Laufprotokollen, 783 Koerper:
+  `aus 1,1 % verfehlt / 0,6 % zerteilt | 1,0 -> 0,0 / 4,9 | 1,6 -> 0,9 / 1,9 | 2,2 -> 1,1 / 1,1 |
+  3,0 -> 1,1 / 1,0`. **Bei 2,2 sind die verfehlten Koerper wieder auf dem Wert OHNE Schnitt.**
+  Der Gewinn verschwindet exakt so schnell wie der Schaden - **es gibt keine Einstellung, in der
+  der Nutzen bleibt und die Zerteilung weg ist**, weil der Nutzen DAS aggressive Schneiden IST:
+  dieselbe Schranke, die einen verschmolzenen Blob trennt, trennt auch einen schattierten
+  Einzelkoerper. In Stueckzahlen ist jede Einstellung ein Verlustgeschaeft (bei 1,0: neun
+  vermiedene verfehlte Koerper gegen 33 zusaetzlich zerteilte), und ein zerteilter Koerper gebiert
+  eine Phantomklasse, waehrend ein verfehlter nur einen privilegierten Rueckfall kostet.
+  Schalter und beide Schranken bleiben samt Begruendung im Code. **Methodisch:** die Szenen waren
+  nicht verloren - `pc_act23` schreibt sein eigenes Protokoll nach `log/`, und dort stehen die
+  `after ep`-Lagen jeder Episode. Das macht die Wiedervorlage zu einem jederzeit verfuegbaren
+  Werkzeug, das keinen Lauf kostet.
+
 * **Anlage / Vorbehalt**: [Die verdreifachte Geburtenrate ist reines Phantom](/befunde/geburtenrate-chroma-phantome.md)
   - Nutzerfrage "untersuche die Geburtenrate", 150 Szenen nach den Regeln des Laufs
   (`pc_act16.scatter`, 80 mm Mindestabstand). **Der Chroma-Schnitt erzeugt keinen zusaetzlichen
