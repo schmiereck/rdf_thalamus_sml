@@ -175,7 +175,9 @@ SPLIT_ALWAYS = os.environ.get("ACT_SHAPE_SPLIT_ALWAYS", "0") != "0"
 # Verschmelzung ist in den tatsaechlichen Szenen ein 2-%-Phaenomen.  Meine Handsonde mit
 # 5 eng gestellten Koerpern zeigte 29 % -- Faktor 15 daneben.  Einschalten ist damit eine
 # ENTSCHEIDUNG, keine Messfrage; die Lieferquote wird es nie bestaetigen.
-CHROMA_SPLIT = os.environ.get("ACT_SHAPE_CHROMA_SPLIT", "0") != "0"
+# VORGABE 1 seit 2026-09-14 (Nutzerentscheid nach der Wiedervorlage).  Abschalten mit
+# ACT_SHAPE_CHROMA_SPLIT=0.
+CHROMA_SPLIT = os.environ.get("ACT_SHAPE_CHROMA_SPLIT", "1") != "0"
 CHROMA_ITER = int(os.environ.get("ACT_SHAPE_CHROMA_ITER", "6"))
 CHROMA_DECKUNG = float(os.environ.get("ACT_SHAPE_CHROMA_DECKUNG", "0.80"))
 CHROMA_TIEFE = int(os.environ.get("ACT_SHAPE_CHROMA_TIEFE", "3"))

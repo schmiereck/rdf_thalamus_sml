@@ -7,6 +7,22 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-14
 
+* **Entscheidung**: [Der Chroma-Schnitt wird Vorgabe](/entscheidungen/chroma-split-vorgabe.md) -
+  `ACT_SHAPE_CHROMA_SPLIT` steht auf **1** (Nutzerentscheid), mit TRENNUNG 1,0 und TIEFE 3.
+  **Begruendet am Wahrnehmungsmass, nicht an der Lieferquote:** Wiedervorlage der Laufszenen,
+  1024 Koerper, verfehlte Detektionen 20 -> 0 (p = 2e-06), Preis 0,5 mm Median und ~4 %
+  Rechenzeit. Eine Quotenbestaetigung gibt es nicht und wird es nicht geben - Verschmelzung ist
+  im Lauf ein 2-%-Phaenomen. Nach [ziel.md](/ziel.md) ist das der richtige Massstab: bewertet
+  wird nach Wahrnehmung und Selbstaneignung. **Warnung fuer den naechsten GUI-Lauf:** der
+  bestehende `act23_state.pkl` hat seine Formklassen unter der ALTEN Segmentierung gelernt
+  (geladen gemessen 66,0 -> 55,7 %, frisch dagegen 13,0 -> 17,0 % zugunsten des Schnitts) - ein
+  Quoteneinbruch in den ersten Episoden ist erwartbar und kein Rueckschritt. `STATE_SCHEMA`
+  bewusst NICHT hochgezaehlt: die Invariante gilt fuer Strukturaenderungen, hier aendert sich die
+  Verteilung der Eingaben, nicht ihre Form - hochzaehlen wuerde den 1053-Episoden-Zustand
+  verwerfen. Rueckholbar mit `ACT_SHAPE_CHROMA_SPLIT=0`. Offen und ungemessen: die verdreifachte
+  Geburtenrate (12 gegen 4 Klassen, 9 gegen 2 verhungert) - ob das der Aneignung nutzt oder
+  schadet.
+
 * **Anlage / Aufloesung**: [Frisch bei null](/befunde/chroma-split-frisch.md) - der Vergleich noch
   einmal mit `ACT23_FRESH=1`, 300 Episoden je Arm, damit jeder Arm seine Formklassen unter seinem
   eigenen Schnitt lernt. **Beide Vorbefunde kehren sich um:** der Quotenverlust reproduziert NICHT
