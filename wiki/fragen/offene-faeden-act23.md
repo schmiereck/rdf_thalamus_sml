@@ -135,6 +135,10 @@ Kruecke, die nach [Projektziel](/ziel.md) abgebaut werden soll. Zwei bekannte Br
 * **Der U-Greifpunkt im offenen Schlitz** - zu 70 % wahr, aber folgenlos (p = 0,81).
 * **Die Nagelneigung** - abflachen 57,3 Grad -> 20 Grad wirkt auf act23-Ebene nicht
   (-2,0 Punkte, p = 0,76).
+* **Die Wirkung des Chroma-Schnitts ueber die Lieferquote nachweisen** - Verschmelzung ist
+  im Lauf ein 2-%-Phaenomen, das ist unterhalb der Nachweisgrenze. Die Wahrnehmung ist
+  direkt gemessen besser (20 von 1024 verfehlten Koerpern auf 0). Siehe
+  [Frisch bei null](/befunde/chroma-split-frisch.md).
 * **Den Eig-Split ueber eine bessere Farbquelle retten** - drei Anlaeufe, drei Negative:
   Tripel-Farbe (verschlimmert), gebundene Farbe mit und ohne Indiz (beide schlechter), und
   die vollstaendige Bindung ueber den Pixelschnitt aendert nichts. Siehe

@@ -7,6 +7,30 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-14
 
+* **Anlage / Aufloesung**: [Frisch bei null](/befunde/chroma-split-frisch.md) - der Vergleich noch
+  einmal mit `ACT23_FRESH=1`, 300 Episoden je Arm, damit jeder Arm seine Formklassen unter seinem
+  eigenen Schnitt lernt. **Beide Vorbefunde kehren sich um:** der Quotenverlust reproduziert NICHT
+  (17,0 gegen 13,0 % zugunsten des Schnitts, und er steigt im letzten Block noch steil: 29 gegen
+  16 %) - der Verlust im vorigen Lauf lag also am veralteten Exemplarbestand. Der
+  Adressierungsgewinn reproduziert aber ebenfalls nicht, er kehrt sich um (3,0 gegen 0,7 %,
+  p = 0,037), und der Rueckfall auch (26 gegen 13, p = 0,046). **Grund: die Arme sind nicht gleich
+  weit** - 12 geborene Klassen gegen 4. Ein frischer Arm, der sich dreimal so viel aneignet,
+  adressiert entsprechend viele junge, unkonsolidierte Klassen; grobe Adressfehler messen dort mit,
+  *wie viel der Agent sich zutraut*. **Damit ist fuer eine geaenderte Wahrnehmung WEDER der
+  geladene NOCH der frische Aufbau sauber** - der eine traegt unpassenden Bestand, der andere
+  erzeugt auseinanderlaufende Lernverlaeufe. **Entschieden hat es eine Messung ohne Lauf:** die
+  Protokolle enthalten je Episode die wahren Lagen aller Koerper, also lassen sich **die Szenen des
+  Laufs nachstellen** und beide Segmentierungen auf denselben Lagen befragen, rein raeumlich.
+  Ergebnis ueber 1024 Koerper: **verfehlte Detektionen 20 gegen 0 (p = 2e-06)**, Preis 0,5 mm
+  Median, Detektionszahl unveraendert (4 fuer 4 Koerper - es zerschneidet keine Einzelkoerper).
+  **Und es erklaert die ganze Serie:** im Lauf ist Verschmelzung ein **2-%**-Phaenomen; meine
+  Handsonde mit 5 eng gestellten Koerpern ueberzeichnete sie um **Faktor 15**. Eine Wirkung auf 2 %
+  der Wahrnehmungen ist bei 150-300 Episoden nicht aufzuloesen - deshalb blieben sieben
+  Armvergleiche nacheinander uneindeutig. Kein Widerspruch zu "alle groben Fehler sind
+  Verschmelzung": das war die Zusammensetzung, dies ist die Haeufigkeit. Einschalten ist jetzt eine
+  **Entscheidung, keine Messfrage**. Nicht mehr zu versuchen: die Wirkung des Schnitts ueber die
+  Lieferquote nachzuweisen.
+
 * **Anlage**: [Die Verschmelzung an der Quelle](/befunde/verschmelzung-chroma-split.md) - nach drei
   gescheiterten Reparaturen an VERBRAUCHERN der Wahrnehmung diesmal an der Segmentierung selbst.
   **Zwei Vermutungen unterwegs widerlegt:** (a) der vorhandene farbfreie Erosions-Split laesst den

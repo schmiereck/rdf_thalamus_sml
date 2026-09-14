@@ -166,6 +166,15 @@ SPLIT_ALWAYS = os.environ.get("ACT_SHAPE_SPLIT_ALWAYS", "0") != "0"
 # CHROMA-SPLIT an der Quelle (ACT_SHAPE_CHROMA_SPLIT, Vorgabe 0 bis gemessen).
 # s. _chroma_teile.  CHROMA_DECKUNG: welchen Anteil der Komponente die Teile zusammen
 # ausschoepfen muessen, damit der Schnitt als "zwei Objekte" gilt und nicht als Farbsaum.
+# GEMESSEN (wiki/befunde/chroma-split-frisch.md).  Auf den SZENEN DES LAUFS nachgestellt --
+# 1024 Koerper, beide Segmentierungen auf denselben Lagen, rein raeumlich gemessen:
+#   verfehlte Detektionen  20 von 1024  ->  0 von 1024   (Fisher p = 2e-06)
+#   Median-Lokalisierung   1,3 mm -> 1,8 mm   Detektionen je Szene unveraendert 4 fuer 4
+# Die WAHRNEHMUNG wird also belegbar besser.  Die Wirkung auf den LAUF ist dagegen bei
+# 150-300 Episoden nicht aufzuloesen, und zwar aus einem Grund, der die ganze Serie erklaert:
+# Verschmelzung ist in den tatsaechlichen Szenen ein 2-%-Phaenomen.  Meine Handsonde mit
+# 5 eng gestellten Koerpern zeigte 29 % -- Faktor 15 daneben.  Einschalten ist damit eine
+# ENTSCHEIDUNG, keine Messfrage; die Lieferquote wird es nie bestaetigen.
 CHROMA_SPLIT = os.environ.get("ACT_SHAPE_CHROMA_SPLIT", "0") != "0"
 CHROMA_ITER = int(os.environ.get("ACT_SHAPE_CHROMA_ITER", "6"))
 CHROMA_DECKUNG = float(os.environ.get("ACT_SHAPE_CHROMA_DECKUNG", "0.80"))

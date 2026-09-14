@@ -126,6 +126,12 @@ nicht getan.
 Entschieden ist das nicht. Die Messung, die es entscheiden wuerde: beide Arme frisch bei null,
 wie im Relrings-A/B.
 
+> **AUFGELOEST (2026-09-14).** Der frische Vergleich bestaetigt den Verdacht: der
+> Quotenverlust reproduziert NICHT, wenn beide Arme ihre Klassen unter ihrem eigenen Schnitt
+> lernen (17,0 gegen 13,0 % zugunsten des Schnitts). Der Adressierungsgewinn reproduziert
+> allerdings ebenfalls nicht - er kehrt sich um. Entschieden wird die Frage erst durch die
+> Wiedervorlage der Laufszenen. Siehe [Frisch bei null](/befunde/chroma-split-frisch.md).
+
 # Bewertung
 
 * **`evidenz: einzelmessung`, nicht `gemessen`.** Drei Kennzahlen bei p = 0,04 bis 0,07, keine
@@ -148,5 +154,6 @@ sondern derselbe Vergleich frisch bei null - erst dann ist der Quotenverlust zu 
 * [Jeder grobe Adressfehler sitzt im obersten Band](/befunde/adressfehler-sind-verschmelzung.md) - der Anlass
 * [Der Form-Split im Eigenschafts-Pfad schadet](/befunde/eig-split-im-lauf.md) - woher die "nicht anfassen, was eins bleibt"-Regel stammt
 * [Relative Ringe im Lauf](/befunde/relrings-im-lauf.md) - der Aufbau, den ich haette kopieren muessen
+* [Frisch bei null](/befunde/chroma-split-frisch.md) - die Wiederholung, die den Aufbaufehler aufloest
 * [Verschmelzungs-Abstandskurve](/befunde/verschmelzung-abstandskurve.md)
 * [Wahrnehmungs-Splits](/mechanismen/wahrnehmungs-splits.md)
