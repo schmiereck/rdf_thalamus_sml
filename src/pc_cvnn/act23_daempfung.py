@@ -72,6 +72,12 @@ STATE = os.environ.get("DF_STATE", "src/pc_cvnn/state/act23_state.pkl")
 SEED = int(os.environ.get("DF_SEED", "5"))
 DELTAS = [float(x) for x in os.environ.get("DF_DELTAS", "2,5,10,20,30,40").split(",")]
 RICHT = int(os.environ.get("DF_RICHT", "3"))
+# DF_MODUS "schieb" (Vorgabe) oder "dreh".  Die beiden sind NICHT symmetrisch zu behandeln:
+# der Formdeskriptor ist drehinvariant gebaut (np.abs(F) wirft die Phase weg), die
+# Winkelkanaele tragen sie dagegen -- eine Drehung sagt also andere Dinge vorher als eine
+# Verschiebung (wiki/fragen/latente-augmentierung.md).
+MODUS = os.environ.get("DF_MODUS", "schieb")
+WINKEL = [float(x) for x in os.environ.get("DF_WINKEL", "5,15,30,45,90").split(",")]
 PARKED_X = 0.4
 MIN_ABSTAND = 0.025                   # naeher waere physisch unmoeglich -> Verschiebung verwerfen
 NB_BAENDER = [(0.0, 0.06), (0.06, 0.09), (0.09, 9.9)]   # nah / mittel / frei
@@ -111,11 +117,99 @@ def zustand_von(sim, sc, koerper, lage):
     if best.get("desc") is None:
         return None
     y2, y4 = float(best.get("yaw", 0.0)), float(best.get("yaw4", 0.0))
-    return dict(pos=np.asarray(best["pos"], float),
+    return dict(pos=np.asarray(best["pos"], float), y2=y2, y4=y4, body=best,
                 phase=np.array([np.cos(2 * y2), np.sin(2 * y2),
                                 np.cos(4 * y4), np.sin(4 * y4)]),
                 emb=np.asarray(sc.desc_embed(best["desc"]), float),
                 dets=dets)
+
+
+def _rest(delta_gemessen, delta_erwartet, modulo):
+    """Winkelrest in GRAD, auf das halbe Modulo gefaltet.
+
+    yaw traegt die k=2-Phase und ist damit nur mod pi bestimmt, yaw4 die k=4-Phase mod pi/2 --
+    ein Rest von 179 Grad bei yaw ist also KEIN Fehler, sondern dieselbe Achse."""
+    d = (delta_gemessen - delta_erwartet) % modulo
+    if d > modulo / 2.0:
+        d -= modulo
+    return abs(np.degrees(d))
+
+
+def drehen(sim, sc, szenen, rng, trenn):
+    """DREHUNG statt Verschiebung.  Vorhergesagt wird:
+         Lage        UNVERAENDERT  (die Drehung geht um die eigene Achse)
+         Form        UNVERAENDERT  (desc_embed ist drehinvariant gebaut)
+         yaw         + theta mod pi          yaw4  + theta mod pi/2
+    Der interessante Schnitt ist hier NICHT der Nachbarabstand, sondern der KOERPER: die
+    k=2-Phase ist auf einem Wuerfel entartet, und der Deskriptor kann bei Drehung anders
+    reagieren als bei Verschiebung."""
+    z = defaultdict(lambda: dict(n=0, lage=[], form=[], y2=[], y4=[], verloren=0,
+                                y2p=[], y2m=[], y4p=[], y4m=[]))
+    for sz in szenen:
+        yaws = {o: float(rng.uniform(0, 2 * np.pi)) for o in sz}
+        auf = [o for o, (x, y) in sz.items() if x < PARKED_X]
+        for koerper in auf:
+            for o, (x, y) in sz.items():
+                sim.set_object(o, [x, y], z=0.012, yaw=yaws[o])
+            mujoco.mj_forward(sim.m, sim.d)
+            p0 = np.asarray(sz[koerper], float)
+            z0 = zustand_von(sim, sc, koerper, p0)
+            if z0 is None:
+                continue
+            for grad in WINKEL:
+                th = np.radians(grad)
+                sim.set_object(koerper, p0.tolist(), z=0.012, yaw=yaws[koerper] + th)
+                mujoco.mj_forward(sim.m, sim.d)
+                z1 = zustand_von(sim, sc, koerper, p0)
+                sim.set_object(koerper, p0.tolist(), z=0.012, yaw=yaws[koerper])
+                mujoco.mj_forward(sim.m, sim.d)
+                e = z[(grad, koerper)]
+                e["n"] += 1
+                if z1 is None:
+                    e["verloren"] += 1
+                    continue
+                e["lage"].append(1000.0 * float(np.linalg.norm(z1["pos"] - z0["pos"])))
+                e["form"].append(float(np.linalg.norm(z1["emb"] - z0["emb"])))
+                # BEIDE VORZEICHEN pruefen, statt eines anzunehmen.  Gemessen laeuft die
+                # wahrgenommene Phase der Koerperdrehung ENTGEGEN (Spiegelung im Kamera-/
+                # Homographie-Pfad); wer +theta vorhersagt, liegt um 2*theta daneben statt um 0.
+                e["y2"].append(min(_rest(z1["y2"] - z0["y2"], th, np.pi),
+                                   _rest(z1["y2"] - z0["y2"], -th, np.pi)))
+                e["y2p"].append(_rest(z1["y2"] - z0["y2"], th, np.pi))
+                e["y2m"].append(_rest(z1["y2"] - z0["y2"], -th, np.pi))
+                e["y4"].append(min(_rest(z1["y4"] - z0["y4"], th, np.pi / 2),
+                                   _rest(z1["y4"] - z0["y4"], -th, np.pi / 2)))
+                e["y4p"].append(_rest(z1["y4"] - z0["y4"], th, np.pi / 2))
+                e["y4m"].append(_rest(z1["y4"] - z0["y4"], -th, np.pi / 2))
+    koerper_alle = sorted({k for _g, k in z})
+    print(f"{'Winkel':>7s} {'Koerper':>11s} {'n':>4s} {'Lagedrift':>11s} {'Formdrift':>20s} "
+          f"{'yaw-Rest':>10s} {'yaw4-Rest':>10s} {'verloren':>9s}")
+    for grad in WINKEL:
+        for k in koerper_alle:
+            e = z.get((grad, k))
+            if not e or not e["lage"]:
+                continue
+            print(f"{grad:7.0f} {k:>11s} {e['n']:4d} {np.median(e['lage']):8.2f} mm "
+                  f"{np.median(e['form']):9.3f} = {100*np.median(e['form'])/trenn:4.0f} % Trennung "
+                  f"{np.median(e['y2']):7.1f} Grad {np.median(e['y4']):7.1f} Grad "
+                  f"{e['verloren']:9d}")
+    print("")
+    print("ueber alle Koerper:")
+    for grad in WINKEL:
+        fo = [v for k in koerper_alle for v in z.get((grad, k), {}).get("form", [])]
+        a2 = [v for k in koerper_alle for v in z.get((grad, k), {}).get("y2", [])]
+        a4 = [v for k in koerper_alle for v in z.get((grad, k), {}).get("y4", [])]
+        la = [v for k in koerper_alle for v in z.get((grad, k), {}).get("lage", [])]
+        if not fo:
+            continue
+        g = lambda s: [v for k in koerper_alle for v in z.get((grad, k), {}).get(s, [])]
+        print(f"  {grad:3.0f} Grad  n={len(fo):4d}  Lage {np.median(la):5.2f} mm  "
+              f"Form {100*np.median(fo)/trenn:4.0f} % Trennung  "
+              f"yaw {np.median(a2):5.1f} Grad (p90 {np.percentile(a2, 90):5.1f})  "
+              f"yaw4 {np.median(a4):5.1f} Grad")
+        print(f"            Vorzeichenprobe:  yaw  +theta {np.median(g('y2p')):5.1f} / "
+              f"-theta {np.median(g('y2m')):5.1f} Grad   |   "
+              f"yaw4  +theta {np.median(g('y4p')):5.1f} / -theta {np.median(g('y4m')):5.1f} Grad")
 
 
 def main():
@@ -152,6 +246,10 @@ def main():
     trenn = float(np.median(paare)) if paare else 1.0
     print(f"Bezugsmass Formdrift: Median-Abstand zwischen VERSCHIEDENEN Koerpern = {trenn:.2f}")
     print(f"  (eine Drift von {trenn:.2f} entspricht also einem ganzen Koerperwechsel)\n")
+
+    if MODUS == "dreh":
+        drehen(sim, sc, szenen, rng, trenn)
+        return
 
     z = defaultdict(lambda: dict(n=0, lage=[], form=[], phase=[], nb=[]))
     verworfen = 0

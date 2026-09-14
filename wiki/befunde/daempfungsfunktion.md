@@ -1,7 +1,7 @@
 ---
 type: Befund
 title: Die Daempfungsfunktion haengt nicht am Betrag der Verschiebung, sondern am Nachbarabstand - und sie ist die Verschmelzungsschwelle
-description: Frei stehend ist die Aequivarianz praktisch exakt: 0,33 mm Restfehler bei 40 mm Verschiebung, p90 unter 0,8 mm. In Nachbarnaehe bricht nicht der Median, sondern der Schwanz - p90 bis 17 mm, und zwar ab dem Punkt, an dem die Verschiebung den Koerper in Verschmelzungsnaehe traegt. Die brauchbare Regel lautet delta < Nachbarabstand minus 40 mm. Dazu zwei Nebenbefunde: die Formeinbettung hat einen Rauschboden von 13 Prozent der Klassentrennung, und das Ziel-Latent ist NICHT exakt linear, sondern auf 12 bis 14 Prozent genau.
+description: VERSCHIEBUNG: frei stehend ist die Aequivarianz praktisch exakt: 0,33 mm Restfehler bei 40 mm Verschiebung, p90 unter 0,8 mm. In Nachbarnaehe bricht nicht der Median, sondern der Schwanz - p90 bis 17 mm, und zwar ab dem Punkt, an dem die Verschiebung den Koerper in Verschmelzungsnaehe traegt. Die brauchbare Regel lautet delta < Nachbarabstand minus 40 mm. Dazu zwei Nebenbefunde: die Formeinbettung hat einen Rauschboden von 13 Prozent der Klassentrennung, und das Ziel-Latent ist NICHT exakt linear, sondern auf 12 bis 14 Prozent genau. DREHUNG: nur yaw4 traegt sie, und zwar mit UMGEKEHRTEM Vorzeichen; yaw ist unbrauchbar, der Schwerpunkt wandert bis 2,5 mm, und der drehinvariante Deskriptor driftet doppelt so stark wie bei einer Verschiebung.
 tags: [act23, latent, augmentierung, wahrnehmung]
 status: stable
 evidenz: gemessen
@@ -11,6 +11,9 @@ sources:
   - id: sonde
     resource: "src/pc_cvnn/act23_daempfung.py -- 80 Szenen aus den Laufprotokollen, 6 Verschiebungen x 3 Richtungen je Koerper, rund 2400 gepruefte Verschiebungen, Zustand ad9d768c"
     title: Daempfungsmessung auf echten Laufszenen
+  - id: dreh
+    resource: "dieselbe Sonde im Modus DF_MODUS=dreh -- 50 Szenen, Winkel 5 bis 45 Grad, rund 180 Drehungen je Winkel"
+    title: Drehmessung
   - id: idee
     resource: /fragen/latente-augmentierung.md
     title: Die Nutzeridee, deren Voraussetzung hier gemessen wird
@@ -108,8 +111,58 @@ Ungebaut und ungemessen, aber jetzt beziffert statt geraten:
   der Lagerest unter 0,5 mm, die Formdrift bei ~19 % und der Ziel-Latent-Fehler bei 2,4 mm.
 * **Keine Daempfung nach Betrag noetig** innerhalb dieser Schranke - ein Gewicht, das mit |delta|
   faellt, wuerde das Falsche daempfen.
-* **Die Drehung ist NICHT mitgemessen.** Der Formdeskriptor ist drehinvariant (`np.abs(F)` wirft
-  die Phase weg), die Winkelkanaele sind es nicht - das bleibt eine eigene Messung.
+* **Die Drehung ist teurer** und braucht eigene Regeln - s. den Abschnitt unten.
+
+# Die Drehung: nur ein Kanal traegt sie, und er laeuft rueckwaerts
+
+Vorhergesagt waere bei einer Drehung um theta: Lage unveraendert, Form unveraendert (der
+Deskriptor ist mit `np.abs(F)` drehinvariant gebaut), `yaw` um theta weiter (mod 180 Grad),
+`yaw4` um theta (mod 90 Grad).
+
+    20 Grad Drehung, je ~30 Faelle       Lagedrift   Formdrift    yaw-Rest   yaw4-Rest
+      obj_L                                2,51 mm    35 % Tr.     8,9 Grad    5,2 Grad
+      obj_T                                1,80 mm    30 %        14,1        6,7
+      obj_U                                1,52 mm    34 %         7,8        1,9
+      obj_blue  (Wuerfel)                  0,36 mm    22 %        18,0        1,9
+      obj_green (Wuerfel)                  0,25 mm    24 %        18,5        4,2
+      obj_red   (Wuerfel)                  0,33 mm    21 %        18,5        2,4
+
+**Das Vorzeichen ist umgekehrt.** Die Vorzeichenprobe ueber alle Koerper:
+
+    theta      yaw4 mit +theta   yaw4 mit -theta
+      5 Grad      10,0 Grad          1,9 Grad
+     10           19,2              2,3
+     20           38,1              3,3
+     45            5,1              5,1     (bei 45 Grad fallen beide zusammen, mod 90)
+
+Mit `+theta` ist der Rest genau `2*theta` - der Kanal laeuft der Koerperdrehung also **entgegen**
+(eine Spiegelung im Kamera-/Homographie-Pfad). **Wer das Vorzeichen raet, faelscht jede
+vorgestellte Drehung um den doppelten Winkel.** Mit `-theta` traegt `yaw4` sauber: 2 bis 5 Grad
+Rest ueber alle Koerper, auch die laenglichen.
+
+**`yaw` (k=2) ist nicht brauchbar.** Auf den drei Wuerfeln ist der Rest gleich theta - die
+k=2-Phase ist auf einem Quadrat entartet, wie es die
+[Formfaktorisierung](/befunde/formfaktorisierung.md) beschreibt. Auf den laenglichen Koerpern ist
+er mit 8 bis 14 Grad bei 20 Grad Drehung immer noch die Haelfte des Winkels.
+
+Zwei weitere Vorhersagen fallen:
+
+* **Die Lage ist NICHT invariant.** Bei den asymmetrischen Koerpern wandert der wahrgenommene
+  Schwerpunkt um bis zu 2,5 mm (obj_L bei 20 Grad), bei den Wuerfeln um 0,3 mm. Eine vorgestellte
+  Drehung muss den Greifbezug mitdrehen, nicht nur den Winkel setzen.
+* **Der "drehinvariante" Deskriptor ist es nicht.** 21 bis 35 % der Klassentrennung bei 20 Grad,
+  gegen einen Rauschboden von 13 bis 16 %. Die Invarianz gilt fuer die Konstruktion, nicht fuer
+  die gerenderte Ansicht aus der schraegen Kamera.
+
+> **Verschiebung und Drehung sind wirklich nicht symmetrisch zu behandeln - aber anders, als die
+> Idee-Seite vermutete.** Dort war der Grund, dass der Deskriptor die Phase wegwirft. Gemessen ist
+> der Grund, dass die Drehung **teurer** ist: sie bewegt den Schwerpunkt, sie treibt den
+> Formdeskriptor doppelt so weit wie eine vergleichbare Verschiebung, und nur einer ihrer beiden
+> Winkelkanaele traegt sie ueberhaupt.
+
+**Fuer den Bau:** Drehungen nur ueber `yaw4` und mit umgekehrtem Vorzeichen; `yaw` aus der
+Vorstellung herauslassen; den Greifbezug mitdrehen; und den Winkelbereich klein halten - bei
+20 Grad ist die Formdrift schon so gross wie bei 40 mm Verschiebung.
 
 # Fallen
 
@@ -128,4 +181,5 @@ Ungebaut und ungemessen, aber jetzt beziffert statt geraten:
 * [Latente Augmentierung](/fragen/latente-augmentierung.md) - die Idee, deren Voraussetzung hier gemessen ist
 * [Verschmelzungs-Abstandskurve](/befunde/verschmelzung-abstandskurve.md) - die Schwelle, die hier wieder auftaucht
 * [Die Wiedervorlage](/mechanismen/wiedervorlage.md) - die Szenenquelle
+* [Formfaktorisierung](/befunde/formfaktorisierung.md) - die Entartung der k=2-Phase auf dem Wuerfel
 * [Exekutionsvarianz](/befunde/exekutionsvarianz.md) - warum ein Erfolg uebertragbar ist und ein Fehlschlag nicht

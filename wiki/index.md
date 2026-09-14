@@ -97,7 +97,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 * [Offene Faeden in act23](fragen/offene-faeden-act23.md) - geordnet nach belegter Wichtigkeit, mit den ausdruecklich geschlossenen Faeden am Ende
 * [Latente Augmentierung](fragen/latente-augmentierung.md) - Nutzeridee, durchdacht und gestuetzt, noch nicht gebaut; die Voraussetzungsmessung ist gemacht
-* [Die Daempfungsfunktion](befunde/daempfungsfunktion.md) - **sie haengt nicht am Betrag, sondern am Nachbarabstand** und ist die Verschmelzungsschwelle: `delta < Nachbarabstand - 40 mm`
+* [Die Daempfungsfunktion](befunde/daempfungsfunktion.md) - **sie haengt nicht am Betrag, sondern am Nachbarabstand** und ist die Verschmelzungsschwelle: `delta < Nachbarabstand - 40 mm`; die DREHUNG traegt nur `yaw4` und **mit umgekehrtem Vorzeichen**
 
 # Chronik der Entwicklung
 

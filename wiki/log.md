@@ -7,6 +7,26 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-14
 
+* **Ergaenzung**: [Die Daempfungsfunktion](/befunde/daempfungsfunktion.md) um die **Drehung**
+  erweitert (`DF_MODUS=dreh`), die auf der Idee-Seite als eigene Messung angekuendigt war.
+  **Der praktisch wichtigste Fund ist ein Vorzeichen:** `yaw4` traegt die Drehung sauber (2 bis
+  5 Grad Rest ueber alle Koerper), aber **mit UMGEKEHRTEM Vorzeichen** - eine Spiegelung im
+  Kamera-/Homographie-Pfad. Die Vorzeichenprobe zeigt es eindeutig: mit `+theta` ist der Rest genau
+  `2*theta` (10,0 / 19,2 / 38,1 Grad bei 5 / 10 / 20 Grad), mit `-theta` sind es 1,9 / 2,3 /
+  3,3 Grad. **Wer das Vorzeichen raet, faelscht jede vorgestellte Drehung um den doppelten
+  Winkel** - und das ist mir beim Bauen der Sonde selbst passiert, weshalb sie jetzt beide
+  Konventionen prueft statt eine anzunehmen. **`yaw` (k=2) ist unbrauchbar:** auf den drei Wuerfeln
+  ist der Rest gleich theta (die k=2-Phase ist auf einem Quadrat entartet), auf den laenglichen
+  Koerpern noch die Haelfte des Winkels. Zwei weitere Vorhersagen fallen: **die Lage ist NICHT
+  invariant** (der wahrgenommene Schwerpunkt wandert bei asymmetrischen Koerpern bis 2,5 mm bei
+  20 Grad, bei Wuerfeln 0,3 mm), und **der "drehinvariante" Deskriptor ist es nicht** (21 bis 35 %
+  der Klassentrennung bei 20 Grad gegen einen Rauschboden von 13 bis 16 %). **Verschiebung und
+  Drehung sind wirklich nicht symmetrisch - aber anders als vermutet:** die Idee-Seite gab als
+  Grund an, dass der Deskriptor die Phase wegwirft; gemessen ist der Grund, dass die Drehung
+  schlicht TEURER ist - 20 Grad kosten so viel Formdrift wie 40 mm Verschiebung. Fuer den Bau:
+  Drehungen nur ueber `yaw4` und mit umgekehrtem Vorzeichen, `yaw` herauslassen, den Greifbezug
+  mitdrehen, Winkelbereich klein halten.
+
 * **Anlage**: [Die Daempfungsfunktion](/befunde/daempfungsfunktion.md) +
   `src/pc_cvnn/act23_daempfung.py` - die Voraussetzungsmessung der [latenten
   Augmentierung](/fragen/latente-augmentierung.md), seit dem 31.08. offen, jetzt gemacht: 80 echte
