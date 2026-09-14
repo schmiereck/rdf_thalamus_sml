@@ -135,6 +135,9 @@ Kruecke, die nach [Projektziel](/ziel.md) abgebaut werden soll. Zwei bekannte Br
 * **Der U-Greifpunkt im offenen Schlitz** - zu 70 % wahr, aber folgenlos (p = 0,81).
 * **Die Nagelneigung** - abflachen 57,3 Grad -> 20 Grad wirkt auf act23-Ebene nicht
   (-2,0 Punkte, p = 0,76).
+* **Aequivariante Augmentierung ueber die Lage** - gebaut, gemessen, wirkungslos: eine
+  vorgestellte Zeile ist von einer exakten Kopie nicht zu unterscheiden (+0,0006 AUC).
+  Siehe [Die Augmentierung wirkt wie eine Zeilenwiederholung](/befunde/augmentierung-wirkt-wie-wiederholung.md).
 * **Die Wirkung des Chroma-Schnitts ueber die Lieferquote nachweisen** - Verschmelzung ist
   im Lauf ein 2-%-Phaenomen, das ist unterhalb der Nachweisgrenze. Die Wahrnehmung ist
   direkt gemessen besser (20 von 1024 verfehlten Koerpern auf 0). Siehe

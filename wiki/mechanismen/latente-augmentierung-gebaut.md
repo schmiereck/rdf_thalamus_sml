@@ -105,6 +105,11 @@ der Block gemessen nichts kostet und nichts bringt (+0,004 AUC).
 Bau festgelegt wurde - ausdruecklich nicht die Lieferquote, die bei dieser Nachweisgrenze nichts
 sagen kann.
 
+> **GEMESSEN UND WIRKUNGSLOS (2026-09-14, noch am selben Tag).** Eine vorgestellte Zeile
+> ist von einer exakten Kopie nicht zu unterscheiden: Beitrag der Vorstellung selbst
+> +0,0006 AUC. Der Bau ist korrekt und unschaedlich, aber er traegt nichts.
+> Siehe [Die Augmentierung wirkt wie eine Zeilenwiederholung](/befunde/augmentierung-wirkt-wie-wiederholung.md).
+
 # Was NICHT gezeigt ist
 
 **Dass ein Griff an der vorgestellten Lage geglueckt WAERE.** Die Daempfungsmessung zeigt, dass die
@@ -120,4 +125,5 @@ Halteteile), nicht die Quote.
 * [Die Daempfungsfunktion](/befunde/daempfungsfunktion.md) - woher jede Zahl im Bau stammt
 * [Latente Augmentierung](/fragen/latente-augmentierung.md) - die Idee
 * [Der Nachbar-Block steht auf 6 Prozent der Zeilen](/befunde/merkmale-kommen-zu-spaet.md) - die Voraussetzung
+* [Die Augmentierung wirkt wie eine Zeilenwiederholung](/befunde/augmentierung-wirkt-wie-wiederholung.md) - die Wirkungsmessung
 * [Invarianten](/mechanismen/invarianten.md) - "ein Schalter, der unbemerkt nichts tut"

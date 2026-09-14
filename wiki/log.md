@@ -7,6 +7,29 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-14
 
+* **Anlage / ehrliches Negativ**: [Die Augmentierung wirkt wie eine Zeilenwiederholung](/befunde/augmentierung-wirkt-wie-wiederholung.md)
+  - statt des bestellten A/B-Laufs offline geprueft, weil die Augmentierung eine reine Funktion
+  einer Pufferzeile ist: Minuten statt Stunden, und schaerfer, weil beide Seiten denselben Puffer
+  sehen. Halteteil von Hand gebaut (nur echte Zeilen), weil `generalisation_auc` die LETZTEN Zeilen
+  testet und eine Vorstellung dort ihr Original im Training haette. **Ergebnis: eine vorgestellte
+  Zeile ist von einer exakten Kopie nicht zu unterscheiden.** Voller Puffer: vorgestellt -0,0502,
+  wiederholt -0,0513 (Differenz **+0,0011**). Im Regime, fuer das gebaut wurde (nur die 690 Zeilen
+  mit gueltigem NB-Block): vorgestellt +0,0154, wiederholt +0,0148 (Differenz **+0,0006**). Das
+  erklaert auch das Vorzeichen: im vollen Puffer sind nur 6,7 % augmentierbar und zaehlen danach
+  fuenffach - der Verlust ist **Umgewichtung**, kein Fehler der Vorstellung. **Zwei eigene
+  Erklaerungen dafuer sind gemessen falsch:** (1) "das Modell ignoriert die Lage" - nein, sie ist
+  der zweitwichtigste Block (+0,1458 AUC-Verlust beim Vertauschen, nach der Aktion mit +0,1920);
+  (2) "es nutzt sie nur grob" - nein, schon 5 mm Verschiebung des Halteteils kosten +0,0226, 20 mm
+  kosten +0,0731. Es bleibt ein Befund ohne bequeme Erklaerung: das Modell behandelt 20 mm als
+  deutlich andere Situation und reagiert trotzdem nicht darauf, ob man ihm diese Situation zeigt
+  oder die alte wiederholt. **Nebenbefund, dritte unabhaengige Bestaetigung:** der Nachbar-Block
+  kostet beim Vertauschen **+0,0000** - das Weltmodell benutzt ihn nicht, und ausgerechnet ihn
+  braucht die Augmentierung als Zulaessigkeitsschranke. **Kein A/B-Lauf:** +0,0006 ist bei 150-300
+  Episoden nicht aufzuloesen, ein Lauf waere genau das Muster, an dem diese Sitzung schon sieben
+  Vergleiche verloren hat. `ACT23_AUGMENT` bleibt auf 0; der Bau bleibt im Code, weil er korrekt
+  und unschaedlich ist. Billiger zu haben waere dieselbe Wirkung ueber `weight` bei `observe` --
+  eine Zahl statt eines Mechanismus.
+
 * **Anlage**: [Die latente Augmentierung, gebaut](/mechanismen/latente-augmentierung-gebaut.md) -
   `ACT23_AUGMENT` (Vorgabe 0) erzeugt aus einer bestaetigten Erfahrung N vorgestellte Lagen. **Jede
   Regel kommt aus der Daempfungsmessung, keine aus der Annahme:** keine Daempfung nach dem Betrag
