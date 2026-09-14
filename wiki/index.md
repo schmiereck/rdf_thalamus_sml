@@ -79,6 +79,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Chroma-Schnitt wird Vorgabe](entscheidungen/chroma-split-vorgabe.md) - **zurueckgenommen am selben Tag**; `ACT_SHAPE_CHROMA_SPLIT` steht wieder auf 0
 * [Die verdreifachte Geburtenrate ist reines Phantom](befunde/geburtenrate-chroma-phantome.md) - echte neue Detektionen 13 gegen 13, Bruchstuecke 54 gegen 0; und **Nutzen und Schaden sind gekoppelt** - es gibt keine Schranke, die das eine ohne das andere hat
 * [Die Wiedervorlage](mechanismen/wiedervorlage.md) - **Werkzeug**: Wahrnehmungsaenderungen auf den echten Laufszenen pruefen, in Minuten statt Stunden; misst Nutzen UND Schaden zugleich
+* [Spanne und Identitaetspruefung im Adress-Nachspiel](befunde/spanne-ident-wiedervorlage.md) - derselbe Handel wie im Lauf an 3000 statt 160 Adressen, plus die Erklaerung: die Schalter wirken NUR, weil die Adresse ihre Szene ueberlebt
 * [Ablenker-Bindung in der Anfahrt](befunde/ablenker-anfahrt.md) - 6,8 % der Episoden fahren >80 mm daneben und liefern dann 1 von 63, obwohl die Adressierung stimmt
 
 # Entscheidungen

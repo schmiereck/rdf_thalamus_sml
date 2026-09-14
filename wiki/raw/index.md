@@ -42,6 +42,7 @@ lokal. Die im Wiki zitierten Laeufe:
 * `src/pc_cvnn/act23_groessen_invarianz.py` - Groessen-Invarianz: sieben Deskriptor-Varianten an einer Kennzahl
 * `src/pc_cvnn/act23_relrings_ab.py` - feste gegen relative Ringe am Form-Rueckhalte-Test, mit frischem Anlernen
 * `src/pc_cvnn/act23_wiedervorlage.py` - **eine Wahrnehmungsaenderung auf den ECHTEN Szenen des Laufs pruefen, ohne Lauf**; misst verfehlte UND zerteilte Koerper zugleich (s. [Wiedervorlage](/mechanismen/wiedervorlage.md))
+* `src/pc_cvnn/act23_adress_wiedervorlage.py` - dasselbe eine Ebene hoeher: die ADRESSIERUNG (grobe Fehler, Rueckfall) auf echten Laufszenen, mit `AW_VERSATZ` fuer den Fall, dass die Adresse ihre Szene ueberlebt
 * `src/pc_cvnn/act23_attractor_ab.py`, `act23_u_densegrasp_ab.py`, `act23_dose_workers.py`
 * `src/pc_cvnn/run_history.py` - Laufhistorie
 

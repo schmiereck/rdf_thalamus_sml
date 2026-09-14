@@ -7,6 +7,28 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-14
 
+* **Anlage**: [Spanne und Identitaetspruefung im Adress-Nachspiel](/befunde/spanne-ident-wiedervorlage.md)
+  + `src/pc_cvnn/act23_adress_wiedervorlage.py`. Nutzerauftrag war, die beiden Schalter mit der
+  Wiedervorlage zu pruefen - **die kann das nicht:** sie misst die WAHRNEHMUNG und laedt
+  `shape_classifier` neu, waehrend beide Schalter in `pc_act23` sitzen und `perceive_all` gar nicht
+  beruehren. Sie haette fuer alle Einstellungen dieselben Zahlen geliefert, und zwar nicht weil die
+  Schalter wirkungslos sind, sondern weil das Instrument blind fuer sie ist. Deshalb dieselbe
+  Methode eine Ebene hoeher: Adresse auf einer echten Laufszene bilden (Nachbildung der Wuerfelei)
+  und aufloesen. **Der Fund, der die Sache erklaert:** in DERSELBEN stehenden Szene bewirken beide
+  Schalter **nichts** (2,3 gegen 2,1 %, p = 0,65). Erst mit `AW_VERSATZ=1` - Adresse auf Szene i
+  gebildet, auf Szene i+1 aufgeloest - erscheint der Handel: grobe Fehler 3,3 -> 1,8 % (p = 0,0001),
+  Rueckfall 27,1 -> 32,7 % (p < 0,0001). **Die Schalter wirken also nicht, weil die Wahrnehmung
+  besser wird, sondern weil eine spezifischere Adresse laenger gueltig bleibt** - das beantwortet
+  eine seit dem siebten Anlauf offene Frage. Beziffert: je 3000 Adressen 47 vermiedene Fehladressen
+  gegen 169 zusaetzliche privilegierte Rueckfaelle, also **rund 3,6 Rueckfaelle je vermiedener
+  Fehladresse**. Derselbe Handel wie im Lauf (10,8 -> 3,1 % bei 4,7 -> 10,0 %), nur an 3000 statt
+  160 Adressen und in Minuten. **Entschieden ist er damit nicht, nur beziffert.** Zwei eigene
+  Fehler dokumentiert: das Neuladen ueber `from pc_cvnn import pc_act23` liefert das ATTRIBUT des
+  Paketobjekts, also die alte Instanz - alle vier Varianten waren zifferngenau gleich, bis auf
+  `importlib.import_module` umgestellt; und in der ersten Versatz-Fassung lief die
+  Identitaetspruefung gegen die ZIEL-Szene, also gegen Information, die die Wuerfelei nicht hat
+  (grob fiel dadurch auf 0,1 % - ein Artefakt des Privilegs). Beide Schalter bleiben auf 0.
+
 * **Anlage**: [Die Wiedervorlage](/mechanismen/wiedervorlage.md) + `src/pc_cvnn/act23_wiedervorlage.py`
   - aus der Erkenntnis des Chroma-Nachspiels ein festes Werkzeug gemacht. `pc_act23` protokolliert
   unter `ACT23_DEBUG=1` je Episode die **wahren Lagen aller Koerper** (`[dbg] after ep`) nach
