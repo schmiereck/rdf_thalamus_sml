@@ -83,8 +83,10 @@ statt die halbe Spiegelung als ganze zu verkaufen.
 # Folgen
 
 Der Faden ist zu. **Positionsgewichtung im Puffer ist erledigt** - Stufe wie Verlauf, in beide
-Richtungen. Was bleibt, ist ein neuer, ungeprueffter Faden aus der Nullkontrolle: die vorhandene
-`fail_w`-Daempfung wirkt, und ihre Hoehe (0,3) ist nie kalibriert worden.
+Richtungen. Der neue Faden aus der Nullkontrolle - die Hoehe der `fail_w`-Daempfung - ist
+inzwischen ebenfalls gezogen: [fail_w kalibriert](/befunde/fail-w-kalibriert.md). Kurz: bei
+Luecke 1500 monoton fallend (weniger ist besser), bei 4000 flach, und der beste Wert 0,0 darf
+nicht eingestellt werden, weil er die Kredit-Route ganz abschaltet.
 
 # Fallen
 
@@ -101,4 +103,5 @@ Richtungen. Was bleibt, ist ein neuer, ungeprueffter Faden aus der Nullkontrolle
 
 * [Alte Pufferzeilen abwerten](/befunde/alte-zeilen-abwerten.md) - die offene Frage, hier beantwortet
 * [Keine Hoehergewichtung bringt etwas](/befunde/gewichtung-bringt-nichts.md) - die Reihe davor
+* [fail_w kalibriert](/befunde/fail-w-kalibriert.md) - der Faden aus der Nullkontrolle, gezogen
 * [Guetebewusste Verdraengung](/befunde/imitationspuffer.md) - der aeltere Anlauf in derselben Richtung

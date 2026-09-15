@@ -7,6 +7,26 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-15
 
+* **Anlage**: [fail_w kalibriert](/befunde/fail-w-kalibriert.md) - die Hoehe der `fail_w`-Daempfung,
+  nie kalibriert, jetzt gemessen: 6 Werte x 2 Luecken x 5 Seeds, gepaart. **Unerwartetes zuerst:
+  alle 946 gedaempften Zeilen sind Fehlschlaege** (davon positiv: 0) - bauartbedingt, weil die
+  Route nur `outcome=False` vergibt, aber nirgends notiert. fail_w zu senken heisst also, unsichere
+  NEGATIVE leiser zu stellen. **Bei Luecke 1500 monoton fallend, ohne Optimum in der Mitte:**
+  0,0 +0,0079 (5/5), 0,1 +0,0031 (5/5), 0,5 -0,0031, 1,0 -0,0092 (je 0/5). Deutung: die unsicher
+  zugeordneten Fehlschlaege sind verrauschte Etiketten, weniger ist besser. **Bei Luecke 4000
+  flach** - ganze Spanne 0,0016, Vorzeichen Muenzwuerfe. **Der beste Wert darf nicht eingestellt
+  werden:** `att_ok = att_full or fail_w > 0.0`, mit 0 wird die Route GANZ abgeschaltet, und der
+  Kommentar dort sagt, wogegen sie gebaut wurde - *"a grasp-PREVENTING wrist was unfalsifiable ...
+  the world model froze on it (L-Form wrist-112 deadlock)"*. **Die Route existiert gegen eine
+  gemessene Blockade, nicht fuer die AUC**, und diese Messung kann die Blockade nicht sehen. Ein
+  Optimum am Rand ist hier also kein Einstellwert, sondern eine Warnung, dass die Kennzahl nicht
+  misst, wofuer die Sache gebaut wurde. **Empfehlung 0,1 statt 0,3**, falls ueberhaupt - es behaelt
+  die Route und die Falsifizierbarkeit; nicht ohne einen Lauf aendern, der auf die Blockade schaut.
+  **Bilanz der vier Gewichtungsfragen:** jeder Gewinn ist Nahfeld (Stufe nah +0,0156 / fern -0,0070,
+  Verlauf +0,0089 / -0,0049, gespeicherte Daempfung +0,0108 / +0,0013, fail_w 0,3->0,0 +0,0079 /
+  +0,0007). Keine Gewichtung verbessert die Verallgemeinerung; die inhaltlichen schaden fern
+  wenigstens nicht, die positionsbasierten schon.
+
 * **Anlage**: [Kein Gewichtungsverlauf hilft bei beiden Luecken](/befunde/sanfter-abfall.md) - die
   offene Frage des Vorbefundes, beantwortet mit **nein**. Vier Abklingzeiten
   (`0,1 + 0,9*exp(-Alter/tau)`), dazu die harte Stufe und eine Umkehrung, gegen Luecke 1500 UND
