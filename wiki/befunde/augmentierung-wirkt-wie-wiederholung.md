@@ -1,7 +1,7 @@
 ---
 type: Befund
 title: Die latente Augmentierung wirkt genau wie eine Zeilenwiederholung - der Beitrag der Vorstellung selbst ist +0,0006 AUC
-description: In beiden geprueften Regimen ist eine vorgestellte Zeile von einer exakten Kopie nicht zu unterscheiden. Im vollen Puffer schaden beide gleich viel (-0,051 gegen -0,052), in dem Regime, fuer das die Augmentierung gebaut ist, nuetzen beide gleich viel (+0,0154 gegen +0,0148). Der Unterschied ist +0,0006 - die aequivariante Variation traegt nichts bei, was das Weltmodell nutzen koennte. Zwei eigene Erklaerungsversuche dafuer sind gemessen falsch.
+description: In beiden geprueften Regimen ist eine vorgestellte Zeile von einer exakten Kopie nicht zu unterscheiden. Im vollen Puffer schaden beide gleich viel (-0,051 gegen -0,052), in dem Regime, fuer das die Augmentierung gebaut ist, nuetzen beide gleich viel (+0,0154 gegen +0,0148). Der Unterschied ist +0,0006 - die aequivariante Variation traegt nichts bei, was das Weltmodell nutzen koennte. Drei eigene Erklaerungsversuche dafuer sind gemessen falsch.
 tags: [act23, latent, augmentierung, weltmodell, negativ]
 status: stable
 evidenz: gemessen
@@ -43,14 +43,25 @@ Zeilen, augmentiert wird nur der Trainingsteil.
 
 **In beiden Regimen ist eine vorgestellte Zeile von einer exakten Kopie nicht zu unterscheiden.**
 
-Das erklaert auch das Vorzeichen: im vollen Puffer sind nur 6,7 % der Zeilen augmentierbar, und sie
-zaehlen danach fuenffach - aus 6,7 % werden 26 % des Trainingssatzes. Der Verlust von 0,05 ist
-diese **Umgewichtung**, nicht ein Fehler der Vorstellung. Im richtigen Regime, wo alle Zeilen
-augmentierbar sind, kehrt sich das Vorzeichen um und der Gewinn von 0,015 ist ebenfalls reine
-Wiederholung.
+~~Das erklaert auch das Vorzeichen: der Verlust von 0,05 ist die **Umgewichtung** der 690
+augmentierbaren Zeilen.~~
 
-> **Die aequivariante Variation traegt nichts bei.** Was sie bewirkt, ist Stichproben-Gewichtung -
-> und die ist ohne jeden Bau zu haben, ueber das `weight`-Argument von `observe`.
+> **DIESE ERKLAERUNG IST WIDERLEGT (2026-09-15).** Dieselbe Fuenffachgewichtung ueber `weight`
+> statt ueber Duplikate kostet nur **-0,003** statt -0,051 - um mehr als eine Groessenordnung
+> weniger. Waere die Umgewichtung die Ursache, muesste sie sich so reproduzieren lassen.
+> Siehe [Keine Hoehergewichtung bringt etwas](/befunde/gewichtung-bringt-nichts.md).
+>
+> **Was die -0,051 verursacht, ist offen.** Duplikat und Gewicht sind hier nicht dasselbe: ein
+> Duplikat aendert Zeilenzahl, Bootstrap-Zug und Stichprobenzahl je Epoche, `weight` nur den
+> Verlustbeitrag. Welcher Unterschied die Zahl traegt, ist ungemessen.
+
+**Der Kernbefund bleibt davon unberuehrt:** *vorgestellt ist von wiederholt nicht zu unterscheiden*
+ist ein direkter Vergleich zweier Varianten unter denselben Bedingungen und haengt an keiner
+Deutung des Vorzeichens.
+
+> **Die aequivariante Variation traegt nichts bei.** Sie wirkt wie eine Zeilenwiederholung - was
+> das seinerseits bewirkt, blieb zunaechst offen und ist inzwischen eingegrenzt: eine reine
+> Umgewichtung ist es NICHT (s. Kasten oben).
 
 # Zwei eigene Erklaerungen, beide gemessen falsch
 
@@ -102,9 +113,10 @@ Offline-Messung ist hier die schaerfere, nicht die schwaechere.
 gemessen unschaedlich, und er waere sofort einsetzbar, falls das Weltmodell einmal ein Merkmal
 bekommt, das auf der Laengenskala der Vorstellung etwas unterscheidet.
 
-**Was statt dessen billiger zu haben waere:** dieselbe Wirkung ueber `weight` bei `observe` - eine
-Zahl statt eines Mechanismus. Ob eine Hoehergewichtung bestimmter Erfahrungen nuetzt, ist eine
-eigene Frage und hier nicht beantwortet.
+~~**Was statt dessen billiger zu haben waere:** dieselbe Wirkung ueber `weight` bei `observe`.~~
+**Geprueft und ebenfalls negativ** (2026-09-15): kein Gewichtungsschema hilft, das beste liegt
+mit +0,004 in der Streuung des Bezugs. Siehe
+[Keine Hoehergewichtung bringt etwas](/befunde/gewichtung-bringt-nichts.md).
 
 # Fallen
 
@@ -122,4 +134,5 @@ eigene Frage und hier nicht beantwortet.
 * [Die latente Augmentierung, gebaut](/mechanismen/latente-augmentierung-gebaut.md) - der Bau
 * [Die Daempfungsfunktion](/befunde/daempfungsfunktion.md) - die Regeln, nach denen er gebaut ist
 * [Der Nachbar-Block steht auf 6 Prozent der Zeilen](/befunde/merkmale-kommen-zu-spaet.md) - hier unabhaengig bestaetigt
+* [Keine Hoehergewichtung bringt etwas](/befunde/gewichtung-bringt-nichts.md) - die Nachpruefung, die eine Deutung hier widerlegt
 * [Latente Augmentierung](/fragen/latente-augmentierung.md) - die Idee

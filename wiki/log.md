@@ -5,6 +5,31 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-15
+
+* **Anlage / Widerlegung**: [Keine Hoehergewichtung bringt etwas](/befunde/gewichtung-bringt-nichts.md)
+  - der Schlusssatz des Augmentierungs-Befundes ("billiger ueber `weight`") geprueft, fuenf
+  Schemata gegen den Bezug, je 3 Seeds, gleicher reiner Halteteil. **Keines hilft:** bestes
+  `juengste 2000 nur` +0,0043 (n=2) bei einer Bezugs-Streuung von 0,007, `neuere schwerer` +0,0012,
+  `NB-Zeilen 5x` -0,0031, `Fehlschlaege 3x` -0,0103, `Erfolge 3x` -0,0137. **Die Kontrolle hat
+  getragen:** beide Klassenrichtungen schaden etwa gleich viel - gemessen wird also nicht "die
+  falsifizierende Klasse zaehlt mehr", sondern nur, dass eine Stoerung des Klassenverhaeltnisses
+  schadet. Nebenbei korrigiert: der Puffer ist mit 5690 Erfolgen gegen 4632 Fehlschlaege weit
+  ausgewogener als das 1053-Ep-Protokoll vermuten liess (550 gegen 288) - es gibt kein
+  Klassenungleichgewicht zu reparieren.
+  **Die wichtigste Zahl ist eine Gegenprobe, und sie widerlegt mich:** dieselbe Fuenffachgewichtung
+  der 690 augmentierbaren Zeilen kostet als DUPLIKAT -0,051, ueber `weight` aber nur **-0,003**.
+  Meine Deutung des Augmentierungs-Verlusts als "Umgewichtung" ist damit falsch und auf der
+  [Vorseite](/befunde/augmentierung-wirkt-wie-wiederholung.md) als widerlegt gekennzeichnet; ihr
+  KERNBEFUND (vorgestellt = wiederholt, +0,0006) bleibt, weil er ein direkter Vergleich ist und an
+  keiner Deutung haengt. **Was die -0,051 verursacht, ist offen** - Duplikat und Gewicht sind hier
+  nicht dasselbe (Zeilenzahl, Bootstrap-Zug und Stichprobenzahl je Epoche gegen blossen
+  Verlustbeitrag), und welcher Unterschied die Zahl traegt, ist ungemessen. Als offene Frage
+  hingeschrieben, nicht als zweite Erklaerung.
+  Methodisch: zwei Durchgaenge wurden wegen Systemspeicher abgeraeumt. Der erste hinterliess
+  NICHTS, weil er erst am Ende druckte; danach auf laufende Ausgabe und eine einzige wiederverwendete
+  Modellkopie umgebaut - der zweite Abbruch kostete dadurch nur den letzten Fit.
+
 ## 2026-09-14
 
 * **Anlage / ehrliches Negativ**: [Die Augmentierung wirkt wie eine Zeilenwiederholung](/befunde/augmentierung-wirkt-wie-wiederholung.md)
