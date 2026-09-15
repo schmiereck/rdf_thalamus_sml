@@ -29,6 +29,11 @@ eigenes Open-Set (`colours`, Namen `farbe-*`); Formen eines im `ShapeClassifier`
 haben gar kein eigenes Open-Set - sie entstehen erst im
 [Eigenschafts-Kommando](/mechanismen/eigenschafts-kommando.md) als Tripel.
 
+> **REPARIERT (2026-09-15).** `ACT23_NOVEL_WEITER` reicht die Probe-Rolle an den naechsten
+> unentdeckten Koerper weiter, statt nach der ersten Entdeckung fuer immer zu schweigen.
+> Gemessen: 3 vergebene Knoepfe gegen 1, und obj_X wird zum ersten Mal selbst entdeckt und
+> 17-mal adressiert. Siehe [Der Erzeuger reicht die Probe-Rolle weiter](/befunde/erzeuger-repariert.md).
+
 # Erste Ursache: der Erzeuger laeuft nicht
 
     pc_act23.py:2886   def spawn_novel_shape():

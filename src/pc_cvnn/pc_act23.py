@@ -3287,6 +3287,39 @@ def run_self_learning_steering(headless=False):
     _novel_shapes = [(0.022, 0.020, 0.012), (0.030, 0.004, 0.012),
                      (0.024, 0.022, 0.012), (0.032, 0.005, 0.012)]
 
+    # DEN PROBE-KOERPER WEITERREICHEN (ACT23_NOVEL_WEITER, Vorgabe 0 bis gemessen).
+    # DIAGNOSE (wiki/befunde/freie-vergabe-erste-tuer.md): der Erzeuger hat einen Riegel mit echtem
+    # Grund -- ist der Probe-Koerper entdeckt, verwaltet ihn randomize_objects, und ein
+    # zusaetzliches Hinstellen fuellte die Szene ueber SCENE_N.  Die Folge ist aber, dass es NIE
+    # eine zweite neue Form gibt: nach der ersten Entdeckung kehrt spawn_novel_shape fuer immer in
+    # der ersten Zeile zurueck.
+    # DIE REPARATUR IST KLEIN, weil der schwierige Teil schon dasteht: die else-Verzweigung unten
+    # behandelt einen Probe-Koerper, der NICHT obj_T ist, bereits richtig ("ein frischer Koerper
+    # braucht die Verformung nicht: seine Neuheit ist er selbst").  Es fehlt allein, dass die Rolle
+    # je weitergegeben wird.
+    # UND SIE LOEST ZUGLEICH DAS DRITTE RAD: ein Koerper braucht die Szene fuer den Knopf und den
+    # Knopf fuer die Szene (act16.OBJS waechst nur bei der Vergabe).  Der Erzeuger ist der einzige
+    # Pfad, der einen Koerper OHNE Knopf in die Szene stellt -- also muss genau er weiterreichen.
+    NOVEL_WEITER = os.environ.get("ACT23_NOVEL_WEITER", "0") == "1"
+
+    def _probe_weiterreichen():
+        """Ist der aktuelle Probe-Koerper entdeckt, die Rolle an den naechsten unentdeckten geben.
+
+        Kandidat ist ein Koerper, der WEDER eine Formklasse traegt NOCH schon kommandierbar ist --
+        sonst wuerde der Erzeuger ein Objekt als "neu" hinstellen, das der Agent laengst anspricht.
+        Ist keiner mehr uebrig, bleibt es beim alten Verhalten (der Erzeuger schweigt); die Welt hat
+        dann wirklich nichts Neues mehr, und das ist eine ehrliche Auskunft, keine Panne."""
+        nonlocal NOVEL_BODY
+        if not NOVEL_WEITER or NOVEL_BODY not in state.SHAPE_KEY:
+            return
+        _vergeben = set(state.SHAPE_KEY) | {nm for _l, nm, _m in state.OBJECTS}
+        _naechste = [o for o in _FARB_KOERPER if o not in _vergeben]
+        if not _naechste:
+            return
+        _alt, NOVEL_BODY = NOVEL_BODY, _naechste[0]
+        print(f"    [Neuheit] Probe-Rolle weitergereicht: {_alt} ist entdeckt -> {NOVEL_BODY} "
+              f"(noch offen: {', '.join(_naechste[1:]) or 'keiner'})", flush=True)
+
     def spawn_novel_shape():
         """Dem Probe-Koerper eine NEUE Proportion geben und ihn frei hinstellen -- ohne Label.
 
@@ -3294,6 +3327,7 @@ def run_self_learning_steering(headless=False):
         normales Objekt, das randomize_objects verwaltet, und ein zusaetzliches Hinstellen wuerde die
         Szene ueber ACT23_SCENE_N hinaus fuellen.  Im Lauf vom 2026-08-21 geschah das 45 Mal, obwohl
         das Kreuz schon "Neue Form 10" war."""
+        _probe_weiterreichen()          # erst weitergeben, dann pruefen (s. oben)
         if NOVEL_BODY in state.SHAPE_KEY:
             return
         # ACT23_NOVEL_HOLD=1 haelt EINE Form ueber den ganzen Lauf fest, statt durchzuwechseln.

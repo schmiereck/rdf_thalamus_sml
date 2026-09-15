@@ -7,6 +7,34 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-15
 
+* **Anlage**: [Der Erzeuger reicht die Probe-Rolle weiter](/befunde/erzeuger-repariert.md) -
+  `ACT23_NOVEL_WEITER` gebaut (Vorgabe 0) und zusammen mit der freien Vergabe gemessen.
+  `spawn_novel_shape` hatte einen Riegel mit echtem Grund (nach der Entdeckung verwaltet
+  `randomize_objects` den Koerper, zusaetzliches Hinstellen fuellte die Szene ueber SCENE_N) - mit
+  der Folge, dass es NIE eine zweite neue Form gab. Die Reparatur ist klein, weil der schwierige
+  Teil schon dastand: die else-Verzweigung behandelt einen Probe-Koerper ungleich obj_T bereits
+  richtig, es fehlte nur die Weitergabe der Rolle. **Und genau der Erzeuger musste es sein** - er
+  ist der einzige Pfad, der einen Koerper OHNE Knopf in die Szene stellt (das dritte Rad aus dem
+  vorigen Befund).
+  **Ergebnis, zwei frische Arme je 140 Episoden:** Knoepfe 1 gegen **3**, adressierte Koerper 6
+  gegen **7**. `[Neuheit] Probe-Rolle weitergereicht: obj_T ist entdeckt -> obj_X`, und
+  `'neu-4' -> 'Neue Form 5' auf obj_X`. **obj_X wird zum ersten Mal in die Szene gestellt, selbst
+  benannt, kommandierbar und 17-mal adressiert** - kein einmaliger Treffer, sondern ein regulaerer
+  Teilnehmer. Geburten 4 zu 4: **der Gewinn sind nicht mehr Geburten, sondern dass eine Geburt den
+  Knopf erreicht.**
+  **Die verhungerte Klasse stirbt erstmals aus dem richtigen Grund:** `neu-2: verhungert nach 27 Ep
+  (nie stabil wiedererkannt)`. Die Null im Vorgabearm ist kein gutes Zeichen - dort wird nach dem
+  ersten Knopf niemand mehr Kandidat, also kann auch niemand als Kandidat sterben; die
+  13-von-13-Meldung aus dem Langlauf war Buchhaltung, keine Auslese. Zum ersten Mal wird der
+  Verhungerungsschutz an der Sache gemessen statt an einer Engstelle davor.
+  **Ehrliche Grenze, in der Meldung selbst:** "noch offen: keiner" - nach obj_X ist der Vorrat
+  leer, die Welt hat sieben Koerper. Der Erzeuger verteilt Rollen, er erfindet keine Objekte.
+  Nebenbei nachgemessen: nur die drei Wuerfel sind einzeln-geometrisch; `obj_T` hat zwei Geoms,
+  `obj_U` drei - die Verformung trifft also stets nur das erste, was der Kommentar am Erzeuger
+  bisher nur fuer obj_X nennt. Quote 7,1 gegen 5,7 % = 10 gegen 8 Lieferungen, sagt nichts.
+  **Drei Schalter, eine Kette:** Erzeuger bringt in die Szene, freie Vergabe gibt den Knopf, der
+  Verhungerungsschutz entscheidet ueber Leben. Einzeln bewegt keiner etwas.
+
 * **Anlage / Korrektur**: [Die freie Vergabe oeffnet die erste Tuer](/befunde/freie-vergabe-erste-tuer.md)
   - `ACT23_FREIE_VERGABE` gebaut (Vorgabe 0) und gemessen. Der Eingriff ist absichtlich KEIN neuer
   Mechanismus: die Bestaetigungsschranke bleibt, entfernt ist nur die Festverdrahtung auf
