@@ -2898,9 +2898,36 @@ def run_self_learning_steering(headless=False):
     # Flaechen-Kriterium kann die beiden Faelle prinzipiell nicht trennen.  Ein einmalig verschmolzener
     # Fleck WIEDERHOLT sich dagegen nicht; das trennt ihn vom echten Objekt, ohne irgendeine Annahme
     # ueber Formen einzufuehren.
+    # FREIE VERGABE (ACT23_FREIE_VERGABE, Vorgabe 0 bis gemessen).
+    # DIAGNOSE (wiki/befunde/vergabe-engstelle-diagnose.md): der Knopf haengt fest an NOVEL_BODY.
+    # Ist der vergeben, kehrt _register_open_class zurueck, BEVOR die Klasse Kandidatin wird -- pro
+    # Zustand kann also genau EINE selbst geborene Klasse kommandierbar werden.  Gemessen an zwei
+    # frischen 300-Episoden-Laeufen: 12 bzw. 4 Geburten, je genau 1 vergebener Knopf, und obj_X
+    # wird kein einziges Mal adressiert.  Das Eigenschafts-Kommando umgeht das NICHT -- im
+    # autonomen Lauf erweitert kein Pfad state.OBJECTS.
+    #
+    # DIE AENDERUNG IST KLEIN UND ABSICHTLICH KEIN NEUER MECHANISMUS: die Bestaetigungsschranke
+    # (BIND_CONFIRM von BIND_WIN Blicken) bleibt genau wie sie ist.  Entfernt wird nur die
+    # Festverdrahtung auf EINEN Koerper -- bestaetigt wird kuenftig gegen den Koerper, auf dem die
+    # Klasse tatsaechlich sitzt.  Die Zuordnung Detektion -> naechster Koerper (40 mm) ist dieselbe
+    # buchhalterische Kruecke wie in _farbbindung_neu, keine neue Privilegierung.
+    FREIE_VERGABE = os.environ.get("ACT23_FREIE_VERGABE", "0") == "1"
     BIND_CONFIRM = int(os.environ.get("ACT23_BIND_CONFIRM", "3"))   # so viele Treffer ...
     BIND_WIN = int(os.environ.get("ACT23_BIND_WIN", "6"))           # ... in den letzten so vielen Blicken
-    _bind_hits: dict = {}                                           # Klassenname -> [0/1, ...] je Blick
+    _bind_hits: dict = {}                                           # Klassenname -> je Blick 0/1
+    #   (Vorgabe) bzw. der KOERPERNAME, auf dem die Klasse sass (ACT23_FREIE_VERGABE) -- s. _try_bind
+
+    def _zaehl(hits):
+        """Treffer im Fenster.  Die Eintraege sind je nach Vergabemodus 0/1 oder Koerpernamen;
+        gezaehlt wird deshalb, wie oft der HAEUFIGSTE nicht-leere Eintrag vorkommt.  Bei 0/1 ist
+        das identisch zu sum(hits), also gilt eine Fassung fuer beide Modi.
+        DER FEHLER, DER DAZU GEFUEHRT HAT: die Mitbewerber-Zeile rechnete weiter sum(h) und ist im
+        ersten Lauf mit freier Vergabe abgestuerzt (TypeError int + NoneType) -- ausgerechnet in
+        dem Moment, in dem der zweite Knopf vergeben wurde."""
+        from collections import Counter
+        _c = Counter(x for x in hits if x)
+        return _c.most_common(1)[0][1] if _c else 0
+
 
     def _register_open_class(cname):
         """Eine eben SELBST BENANNTE Klasse wird KANDIDAT fuer den Kommando-Knopf.  Gebunden wird sie erst
@@ -2909,14 +2936,15 @@ def run_self_learning_steering(headless=False):
         # VOR der Ausgabe: sobald der Probe-Koerper gebunden war, wurde jede weitere Geburt STILL
         # vollzogen.  Im Lauf vom 2026-08-21 entstanden so zwei Klassen (neu-287, neu-288) ohne eine
         # einzige Meldung -- ich habe daraus faelschlich "null Geburten" gelesen.
-        if NOVEL_BODY in state.SHAPE_KEY or NOVEL_BODY not in scene:
+        if not FREIE_VERGABE and (NOVEL_BODY in state.SHAPE_KEY or NOVEL_BODY not in scene):
             print(f"  [open-set] neue Klasse '{cname}' geboren (kein Knopf zu vergeben -- "
                   f"{'der Probe-Koerper ist schon gebunden' if NOVEL_BODY in state.SHAPE_KEY else 'er steht nicht in der Szene'})",
                   flush=True)
             return
         _bind_hits.setdefault(cname, [])
+        _wo = "auf dem neuen Objekt" if not FREIE_VERGABE else "auf DEMSELBEN Koerper"
         print(f"  [open-set] neue Klasse '{cname}' geboren -- Kandidat fuer einen Knopf "
-              f"(braucht {BIND_CONFIRM} von {BIND_WIN} Blicken auf dem neuen Objekt)", flush=True)
+              f"(braucht {BIND_CONFIRM} von {BIND_WIN} Blicken {_wo})", flush=True)
 
     def _try_bind(dets):
         """Je Blick: sitzt eine noch UNGEBUNDENE junge Klasse wieder auf dem neuen Objekt?  Erreicht eine
@@ -2925,26 +2953,58 @@ def run_self_learning_steering(headless=False):
         reine VERKABELUNG (welcher MuJoCo-Koerper der Knopf meint); die wahre Position dient nur dieser
         Zuordnung -- dieselbe Rolle wie in situation_feats --, select/track/Griff laufen danach rein auf
         dem Klassennamen."""
-        if NOVEL_BODY in state.SHAPE_KEY or NOVEL_BODY not in scene or not _bind_hits:
+        if not _bind_hits or (not FREIE_VERGABE
+                              and (NOVEL_BODY in state.SHAPE_KEY or NOVEL_BODY not in scene)):
             return
-        pT = sim.obj_pos(NOVEL_BODY)[:2]
-        auf = {d["shape"] for d in dets if d["pos"] is not None
-               and float(np.linalg.norm(np.asarray(d["pos"]) - pT)) < 0.04}
+        if FREIE_VERGABE:
+            # AUF WELCHEM KOERPER sitzt die Klasse?  Statt gegen den einen Probe-Koerper zu
+            # pruefen, bekommt jeder Blick den Koerper zugeordnet, auf dem die Detektion liegt --
+            # dieselbe 40-mm-Regel wie bisher, nur ohne Festverdrahtung.  `hits` traegt dann
+            # Koerpernamen statt 0/1, und bestaetigt ist eine Klasse, wenn DERSELBE Koerper
+            # BIND_CONFIRM-mal im Fenster auftaucht.  Ein Koerper, der schon eine Formklasse
+            # traegt, kommt nicht in Frage -- sonst ueberschriebe die zweite Klasse die erste.
+            _frei = [o for o in scene if o not in state.SHAPE_KEY]
+            auf = {}
+            for d in dets:
+                if d.get("pos") is None or d.get("shape") is None or not _frei:
+                    continue
+                _p = np.asarray(d["pos"], float)
+                _n = min(_frei, key=lambda o: float(np.linalg.norm(sim.obj_pos(o)[:2] - _p)))
+                if float(np.linalg.norm(sim.obj_pos(_n)[:2] - _p)) < 0.04:
+                    auf.setdefault(d["shape"], _n)
+        else:
+            pT = sim.obj_pos(NOVEL_BODY)[:2]
+            auf = {d["shape"] for d in dets if d["pos"] is not None
+                   and float(np.linalg.norm(np.asarray(d["pos"]) - pT)) < 0.04}
         for cname, hits in list(_bind_hits.items()):
             if cname not in shape_clf.open_names:              # verhungert -> Kandidat faellt weg
                 del _bind_hits[cname]
                 print(f"  [open-set] Kandidat '{cname}' ist verhungert -- kein Knopf", flush=True)
                 continue
-            hits.append(1 if cname in auf else 0)
+            hits.append(auf.get(cname) if FREIE_VERGABE else (1 if cname in auf else 0))
             del hits[:-BIND_WIN]
         if not _bind_hits:
             return
         # BESTER Kandidat, nicht der zuerst gepruefte: konkurrieren zwei Klassen um dasselbe Objekt
         # (genau der Gespenst-Fall), soll die haeufiger bestaetigte gewinnen und nicht die aeltere.
-        cname = max(_bind_hits, key=lambda c: sum(_bind_hits[c]))
-        hits = _bind_hits[cname]
-        if sum(hits) < BIND_CONFIRM:
-            return
+        if FREIE_VERGABE:
+            # Bester Kandidat = die Klasse mit den meisten Blicken auf EINEM Koerper.
+            from collections import Counter
+            _best = {c: Counter(x for x in h if x).most_common(1) for c, h in _bind_hits.items()}
+            _best = {c: v[0] for c, v in _best.items() if v}
+            if not _best:
+                return
+            cname = max(_best, key=lambda c: _best[c][1])
+            _ziel, _n_treffer = _best[cname]
+            if _n_treffer < BIND_CONFIRM or _ziel in state.SHAPE_KEY:
+                return
+            hits = _bind_hits[cname]
+        else:
+            cname = max(_bind_hits, key=lambda c: sum(_bind_hits[c]))
+            hits = _bind_hits[cname]
+            _ziel = NOVEL_BODY
+            if sum(hits) < BIND_CONFIRM:
+                return
         # EINDEUTIGES Etikett, nicht len+1: die Klassen-Konsolidierung VERKUERZT open_names, also kann
         # len+1 auf ein LEBENDES Etikett fallen.  Genau das ist am 2026-08-16 passiert -- das Kreuz bekam
         # "Neue Form 7", das obj_T laengst traegt, und im Log liefen 18 Kommandos unter einem Namen fuer
@@ -2955,18 +3015,23 @@ def run_self_learning_steering(headless=False):
         while f"Neue Form {_n}" in _vergeben:
             _n += 1
         label = f"Neue Form {_n}"
-        state.add_object(label, NOVEL_BODY, cname)
-        act16.OBJS = list(dict.fromkeys(list(act16.OBJS) + [NOVEL_BODY]))   # HINZUFUEGEN, nicht alles
+        state.add_object(label, _ziel, cname)
+        act16.OBJS = list(dict.fromkeys(list(act16.OBJS) + [_ziel]))        # HINZUFUEGEN, nicht alles
         act16.SCENE_N = len(act16.OBJS)                                     #   zurueckholen (s. randomize_objects)
+        _bestaetigt = (sum(1 for x in hits if x == _ziel) if FREIE_VERGABE else sum(hits))
         print(f"  [open-set] NEUE FORM selbst benannt: '{cname}' -> Kommando '{label}' "
-              f"(bestaetigt in {sum(hits)} von {len(hits)} Blicken; "
-              f"Mitbewerber {{{', '.join(f'{c}:{sum(h)}' for c, h in _bind_hits.items() if c != cname)}}})",
+              f"auf {_ziel} (bestaetigt in {_bestaetigt} von {len(hits)} Blicken; "
+              f"Mitbewerber {{{', '.join(f'{c}:{_zaehl(h)}' for c, h in _bind_hits.items() if c != cname)}}})",
               flush=True)
         if panel is not None:
             panel.add_discovered(len(state.OBJECTS) - 1)
             panel.update(sim.render(CAM),
                          f"Neue Form entdeckt und selbst benannt: '{cname}' — jetzt kommandierbar")
-        _bind_hits.clear()                                     # der Knopf ist vergeben
+        if FREIE_VERGABE:
+            del _bind_hits[cname]        # nur DIESE Klasse ist versorgt -- die uebrigen Kandidaten
+            #   bleiben im Rennen, denn es gibt jetzt mehr als einen Knopf zu vergeben
+        else:
+            _bind_hits.clear()                                 # der Knopf ist vergeben
 
     # NEUGIER AUF NAMENLOSE: eine eben geborene Klasse hat DREI Belege und alle vom selben Fleck --
     # gemessen beansprucht sie ihr Objekt anderswo nur zu 47%, mit drei Sichtungen von anderswo zu 91%

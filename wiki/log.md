@@ -7,6 +7,30 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-15
 
+* **Anlage / Korrektur**: [Die freie Vergabe oeffnet die erste Tuer](/befunde/freie-vergabe-erste-tuer.md)
+  - `ACT23_FREIE_VERGABE` gebaut (Vorgabe 0) und gemessen. Der Eingriff ist absichtlich KEIN neuer
+  Mechanismus: die Bestaetigungsschranke bleibt, entfernt ist nur die Festverdrahtung auf
+  `NOVEL_BODY` - bestaetigt wird gegen den Koerper, auf dem die Klasse sitzt.
+  **Der Riegel ist auf:** 2 vergebene Knoepfe gegen 1 (`neu-1` auf obj_T, `neu-3` auf obj_blue mit
+  3 von 3 Blicken), zum ersten Mal einer auf einem anderen als dem Probe-Koerper.
+  **Das Repertoire wird trotzdem nicht breiter:** der zweite Knopf ging an obj_blue, der ohnehin in
+  `state.OBJECTS` steht; die adressierten Koerper sind in beiden Armen dieselben sechs.
+  **Zwei weitere Tueren wurden dabei sichtbar.** (a) Drei Kandidaten verhungern vor der
+  Bestaetigung (Vorgabearm: 0 - dort wird nach dem ersten Knopf niemand mehr Kandidat, also kann
+  auch niemand verhungern). (b) **Korrektur an meiner eigenen Diagnose:** ich hatte geschrieben,
+  obj_X werde nie adressiert, "obwohl er die ganze Zeit sichtbar auf dem Tisch liegt" - **im
+  frischen Lauf steht er gar nicht in der Szene** (die `after ep`-Zeile fuehrt nur fuenf Koerper,
+  obj_X kommt 0 mal im Protokoll vor). Er erscheint nur in Laeufen aus dem gespeicherten Zustand,
+  weil `_try_bind` bei der Vergabe den Koerper in `act16.OBJS` eintraegt. Damit schliesst sich ein
+  drittes Rad: **ein Koerper braucht die Szene fuer den Knopf und den Knopf fuer die Szene**, und
+  als neues Objekt eingefuehrt wird nur der eine Probe-Koerper.
+  **Die Reihenfolge ist damit klar:** erst muss die Welt etwas Neues anbieten (`spawn_novel_shape`,
+  der tote Erzeuger), dann muss eine junge Klasse lange genug leben (Verhungerungsschutz), und erst
+  dann traegt die freie Vergabe. Ich hatte die drei fuer EIN Problem gehalten.
+  Eigener Fehler unterwegs: der erste Anlauf stuerzte ab, weil die Mitbewerber-Zeile weiter
+  `sum(h)` rechnete, waehrend `hits` jetzt Koerpernamen traegt - behoben durch eine gemeinsame
+  Zaehlhilfe `_zaehl` fuer beide Modi. Der Absturz kam ausgerechnet im Moment der zweiten Vergabe.
+
 * **Anlage**: [Die Vergabe-Engstelle, diagnostiziert](/befunde/vergabe-engstelle-diagnose.md) -
   Nutzerauftrag "erst diagnostizieren, nicht bauen". **Die Engstelle liegt eine Ebene tiefer als
   der Langlauf-Befund sagt.** Der Knopf ist fest an `NOVEL_BODY` verdrahtet; ist er vergeben, kehrt

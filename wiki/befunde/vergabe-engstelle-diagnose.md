@@ -1,7 +1,7 @@
 ---
 type: Befund
 title: Die Vergabe-Engstelle ist nicht der belegte Knopf - die Auto-Schleife erweitert ihre Objektliste ueberhaupt nie
-description: Genau EINE Klasse je Lauf kann kommandierbar werden, weil der Knopf fest an den einen reservierten Probe-Koerper verdrahtet ist. Das Eigenschafts-Kommando wurde gebaut, um die Geburt zu umgehen - es umgeht sie aber nicht, weil im autonomen Lauf nur der BEREITS gewaehlte Koerper umetikettiert wird und die Auswahl nur aus state.OBJECTS zieht. Gemessen an zwei frischen 300-Episoden-Laeufen: 12 bzw. 4 Geburten, je genau 1 vergebener Knopf, und obj_X wird in 300 Episoden kein einziges Mal adressiert.
+description: KORRIGIERT am 2026-09-15 (obj_X steht im frischen Lauf gar nicht in der Szene). Genau EINE Klasse je Lauf kann kommandierbar werden, weil der Knopf fest an den einen reservierten Probe-Koerper verdrahtet ist. Das Eigenschafts-Kommando wurde gebaut, um die Geburt zu umgehen - es umgeht sie aber nicht, weil im autonomen Lauf nur der BEREITS gewaehlte Koerper umetikettiert wird und die Auswahl nur aus state.OBJECTS zieht. Gemessen an zwei frischen 300-Episoden-Laeufen: 12 bzw. 4 Geburten, je genau 1 vergebener Knopf, und obj_X wird in 300 Episoden kein einziges Mal adressiert.
 tags: [act23, selbstlernen, formklassen, kommando]
 status: stable
 evidenz: gemessen
@@ -87,9 +87,17 @@ Zwei frische Laeufe (`ACT23_FRESH=1`), je 300 Episoden:
 **Genau ein Knopf je Lauf**, wie vorhergesagt. Und die Liste der adressierten Koerper besteht aus
 den fuenf von Anfang an eingetragenen plus `obj_T`, der den einen Knopf bekam.
 
-**`obj_X` wird in 300 Episoden kein einziges Mal adressiert** - in keinem der beiden Laeufe. Der
-siebte Koerper liegt die ganze Zeit auf dem Tisch, wird wahrgenommen, taucht in Detektionen auf und
-ist fuer das Kommando-Repertoire des Agenten **unsichtbar**.
+~~**`obj_X` wird in 300 Episoden kein einziges Mal adressiert** - der siebte Koerper liegt die ganze
+Zeit auf dem Tisch und ist fuer das Kommando-Repertoire unsichtbar.~~
+
+> **KORRIGIERT (2026-09-15).** Der erste Teil stimmt, die Begruendung nicht: **im frischen Lauf
+> steht obj_X gar nicht in der Szene.** Nachgezaehlt - die `after ep`-Zeile fuehrt nur
+> `obj_red obj_green obj_L obj_U obj_blue`, und `obj_X` kommt im gesamten Protokoll **0 mal** vor.
+> Er taucht nur in Laeufen aus dem gespeicherten Zustand auf, weil er dort historisch einen Knopf
+> bekam und `_try_bind` den Koerper dabei in `act16.OBJS` eintraegt. Damit schliesst sich ein
+> drittes Rad: ein Koerper braucht die Szene fuer den Knopf und den Knopf fuer die Szene, und
+> eingefuehrt wird nur der eine Probe-Koerper.
+> Siehe [Die freie Vergabe oeffnet die erste Tuer](/befunde/freie-vergabe-erste-tuer.md).
 
 # Was daraus folgt
 
@@ -121,4 +129,5 @@ war dazu gemessen wirkungslos. Es kann sein, dass die Engstelle zwei Tueren hat.
 * [Eigenschafts-Kommando](/mechanismen/eigenschafts-kommando.md) - das Werkzeug, das die Geburt umgehen sollte
 * [Der blinde Fleck der Aneignung](/befunde/aneignung-blinder-fleck.md) - die moegliche zweite Tuer
 * [Die Geburtenrate hat zwei Ursachen](/befunde/geburtenrate-und-saettigung.md)
+* [Die freie Vergabe oeffnet die erste Tuer](/befunde/freie-vergabe-erste-tuer.md) - der Einbau, und die Korrektur an dieser Seite
 * [Invarianten](/mechanismen/invarianten.md) - der Riss zwischen GUI-Pfad und Auto-Schleife
