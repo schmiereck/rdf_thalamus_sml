@@ -23,6 +23,12 @@ Vergabe-Engstelle** - der Weg von "geboren" zu "benutzbar" existiert nur fuer de
 reservierten Probe-Koerper. Und die alte Ausrede greift nicht mehr: es gab 97 Farb/Form-
 Kombinationen zu sehen, nicht 7.
 
+> **PRAEZISIERT (2026-09-15).** Die Engstelle ist nicht der belegte Probe-Koerper, sondern
+> dass die AUTO-SCHLEIFE `state.OBJECTS` ueberhaupt nie erweitert - auch das
+> Eigenschafts-Kommando nicht, das sie umgehen sollte. Nur der GUI-Pfad und eine
+> Startvariable koennen einen neuen Koerper einfuehren.
+> Siehe [Die Vergabe-Engstelle, diagnostiziert](/befunde/vergabe-engstelle-diagnose.md).
+
 **1b. Der urspruengliche Befund dazu:** 17 von 17 bzw. 14 von 14 selbst geborenen Klassen verhungern,
 keine wird je kommandiert, die unzuordenbaren Sichtungen wachsen linear. Der Engpass sitzt bei
 der **Geburt** (Klasse aus drei Sichtungen einer einzigen Lage), nicht am Anspruch danach - zwei

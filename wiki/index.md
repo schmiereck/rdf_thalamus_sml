@@ -103,6 +103,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Alte Pufferzeilen abwerten](befunde/alte-zeilen-abwerten.md) - **kauft Naehe, kostet Verallgemeinerung:** +0,0115 bei Luecke 1500, -0,0094 bei Luecke 4000. Ein Positionsgewicht muss gegen ZWEI Luecken geprueft werden
 * [Kein Gewichtungsverlauf hilft bei beiden Luecken](befunde/sanfter-abfall.md) - Positionsgewichtung endgueltig erledigt; Nebenertrag: die vorhandene `fail_w`-Daempfung ist **+0,0108 AUC wert** und war nie beziffert
 * [fail_w kalibriert](befunde/fail-w-kalibriert.md) - alle 946 gedaempften Zeilen sind Fehlschlaege; weniger ist nah besser, fern egal, und der beste Wert 0,0 **darf nicht eingestellt werden** (schaltet die Route gegen eine Weltmodell-Blockade ab)
+* [Die Vergabe-Engstelle, diagnostiziert](befunde/vergabe-engstelle-diagnose.md) - **genau EIN Knopf je Lauf**, und das Eigenschafts-Kommando umgeht ihn nicht: die Auto-Schleife erweitert `state.OBJECTS` nie. obj_X wird in 300 Episoden nie adressiert
 * [Die Daempfungsfunktion](befunde/daempfungsfunktion.md) - **sie haengt nicht am Betrag, sondern am Nachbarabstand** und ist die Verschmelzungsschwelle: `delta < Nachbarabstand - 40 mm`; die DREHUNG traegt nur `yaw4` und **mit umgekehrtem Vorzeichen**
 
 # Chronik der Entwicklung

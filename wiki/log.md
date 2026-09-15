@@ -7,6 +7,30 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-15
 
+* **Anlage**: [Die Vergabe-Engstelle, diagnostiziert](/befunde/vergabe-engstelle-diagnose.md) -
+  Nutzerauftrag "erst diagnostizieren, nicht bauen". **Die Engstelle liegt eine Ebene tiefer als
+  der Langlauf-Befund sagt.** Der Knopf ist fest an `NOVEL_BODY` verdrahtet; ist er vergeben, kehrt
+  `_register_open_class` zurueck, BEVOR die Klasse Kandidatin wird (`_bind_hits` bleibt leer), also
+  kann `_try_bind` sie nie binden - **genau EINE selbst geborene Klasse je Zustand kann
+  kommandierbar werden.** Entscheidend ist aber: **das Eigenschafts-Kommando umgeht das nicht**,
+  obwohl es genau dafuer gebaut wurde. Seine drei Aufrufer sind eine Startvariable, die GUI-Felder
+  (brauchen einen Menschen) und `_auto_eig_umschreiben`, das nur den BEREITS gewaehlten Koerper
+  umetikettiert (`_b = state.selected()[1]`); und `curious_pick` zieht ausschliesslich aus
+  `state.OBJECTS`. **Im autonomen Lauf gibt es keinen Pfad, der die Objektliste erweitert** - das
+  Werkzeug gegen die Geburt ist nur fuer Objekte benutzbar, die die Geburt hinter sich haben.
+  Bezeichnend: `_eig_setzen` (GUI) sucht seinen Koerper aus
+  `OBJECTS + SHAPE_KEY + [NOVEL_BODY]` und KANN einen neuen einfuehren - der Mensch kann es, die
+  Schleife nicht. Dasselbe Muster wie der zweimal dokumentierte Riss zwischen den zwei
+  Auto-Schleifen. **Empirisch bestaetigt** an zwei frischen 300-Episoden-Laeufen: 12 bzw. 4
+  Geburten, je **genau 1 vergebener Knopf**, und die adressierten Koerper sind in beiden Laeufen
+  dieselben sechs (die fuenf Anfangseintraege plus obj_T, der den einen Knopf bekam) - **obj_X wird
+  in 300 Episoden kein einziges Mal adressiert**, obwohl er die ganze Zeit sichtbar auf dem Tisch
+  liegt. **Reparaturrichtung:** nicht mehr Probe-Koerper, sondern die Auto-Schleife muss eine
+  Eigenschafts-Adresse fuer einen noch nicht gelisteten Koerper anlegen koennen - genau das, was
+  `_eig_setzen` fuer den Menschen tut. Offen: ob eine so eingefuehrte Klasse dann auch ueberlebt
+  (der Verhungerungsschutz zaehlt ueber Eigenschaften kommandierte als ungeschuetzt) - die
+  Engstelle koennte zwei Tueren haben.
+
 * **Anlage**: [fail_w kalibriert](/befunde/fail-w-kalibriert.md) - die Hoehe der `fail_w`-Daempfung,
   nie kalibriert, jetzt gemessen: 6 Werte x 2 Luecken x 5 Seeds, gepaart. **Unerwartetes zuerst:
   alle 946 gedaempften Zeilen sind Fehlschlaege** (davon positiv: 0) - bauartbedingt, weil die
