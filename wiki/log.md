@@ -7,6 +7,30 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-15
 
+* **Anlage**: [Kein Gewichtungsverlauf hilft bei beiden Luecken](/befunde/sanfter-abfall.md) - die
+  offene Frage des Vorbefundes, beantwortet mit **nein**. Vier Abklingzeiten
+  (`0,1 + 0,9*exp(-Alter/tau)`), dazu die harte Stufe und eine Umkehrung, gegen Luecke 1500 UND
+  4000, je 5 Seeds gepaart. **Jedes Schema, das nah hilft, schadet fern** (Stufe +0,0156 / -0,0070,
+  tau=1000 +0,0089 / -0,0049, tau=2500 +0,0056 / -0,0042); je flacher, desto mehr verschwindet
+  beides. Nicht die Stufe war das Problem, sondern die Positionsgewichtung selbst. **Damit ist der
+  Faden zu.**
+  **Der Ertrag steckt in der Nullkontrolle, und sie war nicht null:** `tau=20000` ist bei 10322
+  Zeilen praktisch flach und kostet trotzdem -0,0108 (0/5). Grund ist ein Fehler in meinem Aufbau -
+  der Bezug benutzt die GESPEICHERTEN Gewichte, und die sind nicht gleichfoermig (946 Zeilen auf
+  0,3, das ist die `fail_w`-Daempfung unsicher zugeordneter Ausgaenge, 9,2 % des Trainingsteils).
+  Ein flaches Schema ersetzt sie durch gleichfoermige, gemessen wird also "gespeichert gegen
+  gleichfoermig" - und **die vorhandene Daempfung ist +0,0108 AUC wert**, erstmals beziffert, als
+  Nebenprodukt einer Kontrolle fuer etwas anderes. Folge: alle Deltas dieser Reihe enthalten zwei
+  Anteile (eigene Wirkung + Verlust der gespeicherten Gewichte); gegen gleichfoermig gerechnet
+  stuenden die nahen Werte besser da, an der Kernaussage aendert das nichts, weil bei Luecke 4000
+  auch dann alles unter null bleibt. Auch die gespeicherte Daempfung selbst ist ueberwiegend
+  Nahfeld (+0,0108 nah, +0,0013 fern).
+  **Die Gegenprobe ist nur eine halbe Spiegelung:** die Umkehrung (altes Ende schwer) schadet nah
+  wie vorhergesagt und am staerksten von allen (-0,0221), nuetzt fern aber NICHT (-0,0031). Bei
+  Luecke 4000 schadet jede Abweichung leicht. Die Naehe-Deutung erklaert die nahe Seite gut und die
+  ferne gar nicht - so hingeschrieben, statt die halbe Spiegelung als ganze auszugeben.
+  **Neuer Faden:** die Hoehe der `fail_w`-Daempfung (0,3) ist nie kalibriert worden.
+
 * **Anlage**: [Alte Pufferzeilen abwerten](/befunde/alte-zeilen-abwerten.md) - der einzige Faden aus
   dem Gewichtungsbefund, gezogen mit 6 Seeds und vier Schnitten. **Mit Luecke 1500 sah es
   ueberzeugend aus:** alte Zeilen auf Gewicht 0,1, gepaart +0,0075 (ab 1000) und **+0,0115 (ab

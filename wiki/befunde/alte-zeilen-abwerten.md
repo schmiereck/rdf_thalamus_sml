@@ -87,12 +87,14 @@ das die Naehe betont, ununterscheidbar von einem, das die Verallgemeinerung verb
   die Betraege sind es nicht.
 * **Der Bezug faellt mit der Luecke** (0,7361 -> 0,7092), wie erwartet. Verglichen werden deshalb
   nur die gepaarten Differenzen, nicht die Niveaus.
-* **Nicht geprueft**, ob es einen Gewichtungsverlauf gibt, der bei BEIDEN Luecken hilft - etwa ein
-  sanfter Abfall statt einer harten Stufe. Der Befund schliesst das nicht aus, er widerlegt nur
-  die Stufe.
+* ~~**Nicht geprueft**, ob es einen Gewichtungsverlauf gibt, der bei BEIDEN Luecken hilft.~~
+  **GEPRUEFT (2026-09-15): es gibt keinen.** Vier Abklingzeiten, beide Luecken - jedes Schema, das
+  nah hilft, schadet fern. Nicht die Stufe war das Problem, sondern die Positionsgewichtung selbst.
+  Siehe [Kein Gewichtungsverlauf hilft bei beiden Luecken](/befunde/sanfter-abfall.md).
 
 # Verwandt
 
 * [Keine Hoehergewichtung bringt etwas](/befunde/gewichtung-bringt-nichts.md) - wo der Faden herkam
 * [Die Augmentierung wirkt wie eine Zeilenwiederholung](/befunde/augmentierung-wirkt-wie-wiederholung.md)
+* [Kein Gewichtungsverlauf hilft bei beiden Luecken](/befunde/sanfter-abfall.md) - die offene Frage, beantwortet
 * [Messhygiene in CLAUDE.md](/mechanismen/invarianten.md) - "Halteteile nie zufaellig ziehen"
