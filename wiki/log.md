@@ -7,6 +7,23 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-15
 
+* **Anlage**: [Alte Pufferzeilen abwerten](/befunde/alte-zeilen-abwerten.md) - der einzige Faden aus
+  dem Gewichtungsbefund, gezogen mit 6 Seeds und vier Schnitten. **Mit Luecke 1500 sah es
+  ueberzeugend aus:** alte Zeilen auf Gewicht 0,1, gepaart +0,0075 (ab 1000) und **+0,0115 (ab
+  2000), bei 6 von 6 Seeds**, mit sauberer Dosis-Wirkungs-Kurve - Anstieg, Maximum bei 2000,
+  Rueckkehr zur Null bei 8000, wobei `ab 8000` die eingebaute Kontrolle ist. Dazu: **Loeschen
+  ruiniert** (-0,04 bis -0,05, 0/6), die alten Zeilen tragen also echte Information und sind nur
+  ueberrepraesentiert. **Mit Luecke 4000 kehrt sich dasselbe Schema um:** -0,0054 und -0,0094, 0 von
+  4 Seeds. Der Grund steht im Docstring von `generalisation_auc` selbst - die "juengsten"
+  Trainingszeilen sind zugleich die dem Halteteil NAECHSTEN. **Alte Zeilen abzuwerten kauft NAEHE
+  und kostet VERALLGEMEINERUNG**; es ist keine Aussage ueber das Alter der Daten. Fuer den Betrieb
+  bleibt ein Rest (zur Laufzeit sagt das Modell immer *jetzt* vorher), aber das ist lokale
+  Anpassung, nicht Lernen. **Die Lehre, verallgemeinert:** der Luecken-Parameter schuetzt nur, wenn
+  man ihn VARIIERT - bei einer festen Luecke ist ein Schema, das die Naehe betont, nicht von einem
+  zu unterscheiden, das die Verallgemeinerung verbessert. *Ein Schema, das Trainingszeilen nach
+  ihrer POSITION im Puffer gewichtet, muss immer gegen mindestens zwei Luecken geprueft werden.*
+  Ohne diese Kontrolle haette ich den Gewinn aufgeschrieben.
+
 * **Anlage / Widerlegung**: [Keine Hoehergewichtung bringt etwas](/befunde/gewichtung-bringt-nichts.md)
   - der Schlusssatz des Augmentierungs-Befundes ("billiger ueber `weight`") geprueft, fuenf
   Schemata gegen den Bezug, je 3 Seeds, gleicher reiner Halteteil. **Keines hilft:** bestes

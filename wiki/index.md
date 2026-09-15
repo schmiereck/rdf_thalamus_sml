@@ -100,6 +100,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Die latente Augmentierung, gebaut](mechanismen/latente-augmentierung-gebaut.md) - `ACT23_AUGMENT`, Regeln aus der Messung; Rauchtest: 4,4 Pufferzeilen je Episode statt einer. **Braucht zwingend `ACT23_NEIGHBOURS=1`**
 * [Die Augmentierung wirkt wie eine Zeilenwiederholung](befunde/augmentierung-wirkt-wie-wiederholung.md) - **ehrliches Negativ:** der Beitrag der Vorstellung selbst ist +0,0006 AUC
 * [Keine Hoehergewichtung bringt etwas](befunde/gewichtung-bringt-nichts.md) - fuenf Schemata, keines hilft; und die Gegenprobe widerlegt meine Deutung des Augmentierungs-Verlusts
+* [Alte Pufferzeilen abwerten](befunde/alte-zeilen-abwerten.md) - **kauft Naehe, kostet Verallgemeinerung:** +0,0115 bei Luecke 1500, -0,0094 bei Luecke 4000. Ein Positionsgewicht muss gegen ZWEI Luecken geprueft werden
 * [Die Daempfungsfunktion](befunde/daempfungsfunktion.md) - **sie haengt nicht am Betrag, sondern am Nachbarabstand** und ist die Verschmelzungsschwelle: `delta < Nachbarabstand - 40 mm`; die DREHUNG traegt nur `yaw4` und **mit umgekehrtem Vorzeichen**
 
 # Chronik der Entwicklung

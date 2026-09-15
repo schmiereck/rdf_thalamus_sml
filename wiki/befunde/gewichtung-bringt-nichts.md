@@ -74,9 +74,13 @@ das als offene Frage hin, nicht als zweite Erklaerung.
 # Ein Faden, kein Befund
 
 `juengste 2000 nur` (alles Aeltere auf Gewicht 0,1) ist der einzige Kandidat mit positivem
-Vorzeichen (+0,0043, n=2). Das passt zu der Vermutung, dass alte Pufferzeilen wenig beitragen oder
-leicht veraltet sind - liegt aber in der Streuung des Bezugs und ist mit zwei Seeds nichts. Wer den
-Faden zieht, braucht mehr Seeds und einen zweiten Schnitt (etwa 4000, 8000).
+Vorzeichen (+0,0043, n=2).
+
+> **GEZOGEN UND GEKIPPT (2026-09-15).** Mit 6 Seeds und vier Schnitten sah es zunaechst nach einem
+> klaren Fund aus - +0,0115 gepaart bei 6/6 Seeds, mit sauberer Dosis-Wirkungs-Kurve. Bei einer
+> Luecke von 4000 statt 1500 **kehrt sich dasselbe Schema um** (-0,0094, 0/4). Der Gewinn war
+> NAEHE zum Halteteil, nicht Aktualitaet.
+> Siehe [Alte Pufferzeilen abwerten](/befunde/alte-zeilen-abwerten.md).
 
 # Fallen
 
@@ -96,4 +100,5 @@ genauso wenig.
 
 * [Die Augmentierung wirkt wie eine Zeilenwiederholung](/befunde/augmentierung-wirkt-wie-wiederholung.md) - der Anlass, dessen Deutung hier widerlegt wird
 * [Der Nachbar-Block steht auf 6 Prozent der Zeilen](/befunde/merkmale-kommen-zu-spaet.md)
+* [Alte Pufferzeilen abwerten](/befunde/alte-zeilen-abwerten.md) - der Faden, gezogen und gekippt
 * [Guetebewusste Verdraengung](/befunde/imitationspuffer.md) - der aeltere Anlauf, Pufferzeilen nach Guete zu behandeln
