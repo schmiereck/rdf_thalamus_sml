@@ -71,9 +71,20 @@ ZIEHUNGEN = int(os.environ.get("AW_ZIEHUNGEN", "4"))
 VERSATZ = int(os.environ.get("AW_VERSATZ", "0"))
 VARIANTEN = os.environ.get(
     "AW_VARIANTEN",
-    "Vorgabe:|Spanne:ACT23_GROESSE_SPANNE=1|Ident:ACT23_EIG_IDENT=1"
-    "|beide:ACT23_GROESSE_SPANNE=1,ACT23_EIG_IDENT=1")
+    "diskret:|stetig:STETIG=1")
 PARKED_X = 0.4
+# STETIGE ADRESSIERUNG (wiki/fragen/stetige-adressierung.md).  Statt drei Klassen-NAMEN traegt die
+# Adresse dann drei MESSWERTE, und eine Detektion passt, wenn sie in allen genannten Achsen
+# innerhalb der Toleranz liegt.  Alles andere -- Achsen-Wuerfelei, Nachlegen bis eindeutig,
+# Identitaetspruefung, Aufloesung auf der Zielszene -- bleibt Zeile fuer Zeile gleich, damit der
+# Vergleich die MATCHING-Regel misst und nicht die Strategie.
+# Die Toleranzen sind probe-lokal und koennen in AW_VARIANTEN gesetzt werden (STETIG, EMB_TOL,
+# SPAN_TOL); sie gehen NICHT als Umgebungsvariable an pc_act23, das kennt sie nicht.
+LOKAL = {"STETIG": 0.0,       # 1 = stetig adressieren
+         "EMB_TOL": 0.5,      # Formtoleranz als ANTEIL des Median-Abstands zweier VERSCHIEDENER
+         #                      Koerper im Einbettungsraum -- relativ, damit keine nackte Zahl
+         #                      festgeschrieben wird (der Bezug wird je Lauf gemessen)
+         "SPAN_TOL": 0.005}   # Groessentoleranz in METERN (+/-)
 GROB = 0.02                           # "grober Adressierungsfehler" in Metern -- wie im siebten Anlauf
 
 RE_SZENE = re.compile(r"\[dbg\] after ep : \{(.*)\}")
@@ -116,6 +127,9 @@ def lade_modul(zuweisungen):
     """Schalter setzen und pc_act23 NEU laden.  Die Schalter sind Modulkonstanten; ohne Neuladen
     wuerde die zweite Variante die Einstellung der ersten benutzen."""
     for k, v in zuweisungen.items():
+        if k in LOKAL:
+            LOKAL[k] = float(v)          # probe-lokal, gehoert nicht in die Umgebung
+            continue
         os.environ[k] = v
     import importlib
     for m in [k for k in list(sys.modules) if "pc_act23" in k or "shape_classifier" in k]:
@@ -127,11 +141,47 @@ def lade_modul(zuweisungen):
         delattr(sys.modules["pc_cvnn"], "pc_act23")
     mod = importlib.import_module("pc_cvnn.pc_act23")
     for k, v in zuweisungen.items():                 # Gegenprobe: ist der Schalter angekommen?
+        if k in LOKAL:
+            continue
         erwartet = {"ACT23_GROESSE_SPANNE": lambda: mod.GROESSE_SPANNE,
                     "ACT23_EIG_IDENT": lambda: mod.EIG_IDENT}.get(k)
         if erwartet is not None and bool(erwartet()) != (v == "1"):
             raise SystemExit(f"Schalter {k}={v} ist nicht angekommen -- Neuladen fehlgeschlagen.")
     return mod
+
+
+def _passt(d, tri):
+    """Passt eine Detektion auf die Adresse?  Eine Achse mit None ist "beliebig".
+
+    DISKRET  Gleichheit der Namen -- so arbeitet finde_nach_eigenschaften heute.
+    STETIG   Abstand unter Toleranz.  Die Farbschwelle ist NICHT geraten, sondern die schon
+             kalibrierte des Farb-Offenmengen-Moduls (colour_openset.TH) -- dieselbe Zahl, die
+             entscheidet, ob zwei Chromatizitaeten dieselbe Klasse waeren.  Die Formtoleranz ist
+             RELATIV zum gemessenen Abstand zweier verschiedener Koerper (s. LOKAL), die
+             Groessentoleranz in Millimetern."""
+    if not LOKAL["STETIG"]:
+        return ((tri[0] is None or d["_f"] == tri[0])
+                and (tri[1] is None or str(d.get("shape")) == str(tri[1]))
+                and (tri[2] is None or d["_g"] == tri[2]))
+    if tri[0] is not None:
+        if d.get("chroma") is None:
+            return False
+        if float(np.linalg.norm(np.asarray(d["chroma"], float) - tri[0])) > _TOL["chroma"]:
+            return False
+    if tri[1] is not None:
+        if d.get("_e") is None:
+            return False
+        if float(np.linalg.norm(d["_e"] - tri[1])) > _TOL["emb"]:
+            return False
+    if tri[2] is not None:
+        if d.get("span") is None:
+            return False
+        if abs(float(d["span"]) - tri[2]) > LOKAL["SPAN_TOL"]:
+            return False
+    return True
+
+
+_TOL = {"chroma": 0.0, "emb": 0.0}      # je Variante gesetzt, s. eine_variante
 
 
 def adresse_bilden(mod, sim, sc, colours, dets, body, rng, dets_ziel=None,
@@ -148,9 +198,16 @@ def adresse_bilden(mod, sim, sc, colours, dets, body, rng, dets_ziel=None,
               default=None)
     if nah is None or float(np.linalg.norm(np.asarray(nah["pos"], float) - p)) >= 0.04:
         return None, None, [], 0                     # nichts Sichtbares auf dem Koerper
-    f = colours.classify(nah["chroma"])[0] if nah.get("chroma") is not None else None
-    fo = nah.get("shape")
-    g = mod.groessen_band(nah.get("dicke"), nah.get("span"))
+    if LOKAL["STETIG"]:
+        # DIE ADRESSE IST DAS GEMESSENE, nicht sein Etikett: Chromatizitaet, Formeinbettung,
+        # Ausdehnung.  Farbe und Form bleiben die "verfolgbaren" Achsen wie in der Wuerfelei.
+        f = np.asarray(nah["chroma"], float) if nah.get("chroma") is not None else None
+        fo = nah.get("_e")
+        g = None if nah.get("span") is None else float(nah["span"])
+    else:
+        f = colours.classify(nah["chroma"])[0] if nah.get("chroma") is not None else None
+        fo = nah.get("shape")
+        g = mod.groessen_band(nah.get("dicke"), nah.get("span"))
     werte = (f, fo, g)
     verfolgbar = [i for i in (0, 1) if werte[i] is not None]
     if not verfolgbar:
@@ -167,9 +224,7 @@ def adresse_bilden(mod, sim, sc, colours, dets, body, rng, dets_ziel=None,
         # Filterregel ist dieselbe: Achse None = beliebig, sonst Gleichheit, und von den Treffern
         # der flaechengroesste (pc_act23.finde_nach_eigenschaften).
         tr2 = [d for d in dets            # BILDUNG immer auf der QUELL-Szene -- die Wuerfelei
-               if (tri[0] is None or d["_f"] == tri[0])   # sieht die Zukunft nicht
-               and (tri[1] is None or str(d.get("shape")) == str(tri[1]))
-               and (tri[2] is None or d["_g"] == tri[2])]
+               if _passt(d, tri)]                         # sieht die Zukunft nicht
         pos2 = (np.asarray(max(tr2, key=lambda d: float(d.get("area", 0.0)))["pos"], float)
                 if tr2 else None)
         trifft = True
@@ -184,19 +239,49 @@ def adresse_bilden(mod, sim, sc, colours, dets, body, rng, dets_ziel=None,
     if dets_ziel is not None:
         # ERST JETZT die Zielszene: dort wird die fertige Adresse aufgeloest.  Alles davor lief auf
         # der Quell-Szene -- auch die Identitaetspruefung, die sonst die Zukunft kennen wuerde.
-        tr2 = [d for d in dets_ziel
-               if (tri[0] is None or d["_f"] == tri[0])
-               and (tri[1] is None or str(d.get("shape")) == str(tri[1]))
-               and (tri[2] is None or d["_g"] == tri[2])]
+        tr2 = [d for d in dets_ziel if _passt(d, tri)]
         pos2 = (np.asarray(max(tr2, key=lambda d: float(d.get("area", 0.0)))["pos"], float)
                 if tr2 else None)
     return tri, pos2, tr2, sum(1 for t in tri if t is not None)
+
+
+def bezugsmass(sim, sc, koerper):
+    """Median-Abstand der Formeinbettungen ZWEIER VERSCHIEDENER Koerper.
+
+    Ohne ihn waere eine Formtoleranz eine nackte Zahl.  Mit ihm heisst "EMB_TOL 0,5": halb so weit
+    wie zwei verschiedene Koerper typischerweise auseinanderliegen.  Gemessen je Lauf, weil der
+    Deskriptor sich mit dem Lernen verschiebt."""
+    solo = {}
+    for b in koerper:
+        for o in koerper:
+            sim.set_object(o, [0.5, -0.6], z=0.012)
+        sim.set_object(b, [0.0, 0.16], z=0.012, yaw=0.0)
+        mujoco.mj_forward(sim.m, sim.d)
+        sv = sim.d.mocap_pos.copy()
+        ds = [d for d in sc.perceive_all(sim) if d.get("desc") is not None]
+        sim.d.mocap_pos[:] = sv
+        mujoco.mj_forward(sim.m, sim.d)
+        if ds:
+            solo[b] = np.asarray(sc.desc_embed(
+                max(ds, key=lambda x: float(x.get("area", 0)))["desc"]), float)
+    n = sorted(solo)
+    paare = [float(np.linalg.norm(solo[a] - solo[b]))
+             for i, a in enumerate(n) for b in n[i + 1:]]
+    return float(np.median(paare)) if paare else 1.0
 
 
 def eine_variante(mod, sim, szenen, seed):
     with open(STATE, "rb") as f:
         st = pickle.load(f)
     sc, colours = st["shape_clf"], st["colours"]
+    if LOKAL["STETIG"]:
+        from pc_cvnn.arm_modules.colour_openset import TH as _CTH
+        _trenn = bezugsmass(sim, sc, sorted({o for s in szenen for o in s}))
+        _TOL["chroma"] = float(_CTH)
+        _TOL["emb"] = float(LOKAL["EMB_TOL"]) * _trenn
+        print(f"      stetig: Chroma-Toleranz {_TOL['chroma']:.4f} (colour_openset.TH), "
+              f"Form-Toleranz {_TOL['emb']:.3f} = {LOKAL['EMB_TOL']:.2f} x {_trenn:.3f}, "
+              f"Groesse +/-{1000*LOKAL['SPAN_TOL']:.0f} mm", flush=True)
     rng = np.random.default_rng(seed)
     z = dict(adressen=0, grob=0, rueckfall=0, keine=0, achsen=0, eindeutig=0)
     fehler = []
@@ -214,10 +299,12 @@ def eine_variante(mod, sim, szenen, seed):
                 if d.get("pos") is not None and float(d.get("area", 0)) >= 200.0]
         sim.d.mocap_pos[:] = sv
         mujoco.mj_forward(sim.m, sim.d)
-        for d in dets:                      # Farbklasse und Band EINMAL je Detektion, nicht je Wurf
+        for d in dets:                      # Farbklasse, Band und Einbettung EINMAL je Detektion
             d["_f"] = (colours.classify(d["chroma"])[0]
                        if d.get("chroma") is not None else None)
             d["_g"] = mod.groessen_band(d.get("dicke"), d.get("span"))
+            d["_e"] = (np.asarray(sc.desc_embed(d["desc"]), float)
+                       if d.get("desc") is not None else None)
         stand.append((sz, auf, dets))
     for i, (sz, auf, dets) in enumerate(stand):
         j = i + VERSATZ

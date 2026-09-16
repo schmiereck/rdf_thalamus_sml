@@ -114,7 +114,16 @@ ueberhaupt trennscharf genug ist.
 
 # Status
 
-**Idee, nichts gebaut, nichts gemessen.** Sie ist hier festgehalten, weil sie als erste seit Langem
+**Erster Schritt gemacht (2026-09-16):**
+[Die stetige Formachse ist genauso trennscharf](/befunde/stetige-adressierung-erster-schritt.md).
+Ueber fuenf Toleranzen bleiben die groben Adressierungsfehler flach (4,9-6,7 %), keine vom
+diskreten Bezug zu unterscheiden; bei einer Toleranz sind sie identisch. **Der Einwand "ein Vektor
+ist vielleicht nicht trennscharf genug" ist damit ausgeraeumt** - aber die Messung zeigt auch
+keinen Gewinn: sie ist ein anderer Punkt auf derselben Tauschkurve zwischen Genauigkeit und
+Rueckfall. Der behauptete Gewinn muesste aus dem Wegfall des KLASSEN-LEBENSZYKLUS kommen, und den
+misst die Adressierung per Konstruktion nicht.
+
+**Idee im Uebrigen nicht gebaut.** Sie ist hier festgehalten, weil sie als erste seit Langem
 am ZIEL ansetzt statt an einem Verbraucher - und weil sie erklaert, warum so viele Reparaturen
 dieser Woche an derselben Stelle scheiterten.
 
@@ -124,4 +133,5 @@ dieser Woche an derselben Stelle scheiterten.
 * [Die Aneignungskette traegt 29 Episoden](/befunde/kette-haelt-30-episoden.md) - die Saettigung, die hier gegenstandslos waere
 * [Die Daempfungsfunktion](/befunde/daempfungsfunktion.md) - der Rauschboden des Deskriptors
 * [Latente Augmentierung](/fragen/latente-augmentierung.md) - dieselbe Nutzeridee, andere Anwendung
+* [Die stetige Formachse ist genauso trennscharf](/befunde/stetige-adressierung-erster-schritt.md) - der erste Schritt
 * [Ziel](/ziel.md)

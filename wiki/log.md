@@ -7,6 +7,26 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-16
 
+* **Anlage**: [Die stetige Formachse ist genauso trennscharf](/befunde/stetige-adressierung-erster-schritt.md)
+  - der erste Schritt zur stetigen Adressierung, gemacht mit der Adress-Wiedervorlage: dieselben
+  echten Laufszenen, dieselbe Wuerfelei, dieselbe Aufloesung, **nur die Matching-Regel getauscht**
+  (Klassenname gegen Abstand im Einbettungsraum). Zwei der drei Toleranzen sind nicht geraten -
+  die Farbschwelle ist `colour_openset.TH`, die Formtoleranz RELATIV zum je Lauf gemessenen
+  Median-Abstand zweier verschiedener Koerper (1,858). **Ueber fuenf Toleranzen bleiben die groben
+  Adressierungsfehler flach** (4,9 | 5,3 | 5,6 | 4,9 | 5,5 | 6,7 %), keine vom Bezug zu
+  unterscheiden (p = 0,25 bis 1,00), bei `t0.50` sogar identisch (28 von 568 in beiden). **Der
+  Einwand, ein Vektor sei nicht trennscharf genug, ist damit ausgeraeumt.** Was sich mit der
+  Toleranz aendert, ist allein der **Rueckfall**: 60,2 % streng, 27,3 % diskret, 16,2 % locker -
+  und die Achsenzahl daneben erklaert es (1,81 -> 1,89 -> 2,06): eine lockere Formachse trennt
+  weniger, also legt die Wuerfelei mehr Achsen nach. `t1.00` ist nicht bessere Formerkennung,
+  sondern fast "Form egal", kompensiert durch Farbe und Groesse. **Die stetige Achse ist also nicht
+  besser, sondern ein anderer Punkt auf derselben Tauschkurve** - `t0.75` kauft 6,7 Punkte weniger
+  Rueckfall mit 0,6 Punkten mehr groben Fehlern. **Fuer die Frage heisst das: der Weg ist frei, der
+  Gewinn nicht belegt** - er muesste aus dem Wegfall des Klassen-Lebenszyklus kommen (Geburt,
+  Bestaetigung, Knopf, Verhungern, Saettigung), und den misst die Adressierung per Konstruktion
+  nicht. Werkzeug erweitert (`AW_VARIANTEN` kennt jetzt probe-lokale Schluessel STETIG/EMB_TOL/
+  SPAN_TOL, die NICHT an pc_act23 durchgereicht werden).
+
 * **Anlage**: [Stetig adressieren statt Klassen vergeben](/fragen/stetige-adressierung.md) - aus
   einer Nutzerfrage nach der urspruenglichen Vorstellung ("dem Netz ein Bild zeigen, die
   Repraesentation abgreifen, damit kommunizieren -- die Sprache des Netzes lernen, ohne ein
