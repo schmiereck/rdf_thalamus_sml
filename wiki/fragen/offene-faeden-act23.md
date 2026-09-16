@@ -9,6 +9,11 @@ ebene: code
 generated: { by: claude/opus-5, at: 2026-09-07T00:00:00Z }
 ---
 
+> **NEU (2026-09-16), und moeglicherweise ueber beide Engpaesse hinweg:**
+> [Stetig adressieren statt Klassen vergeben](/fragen/stetige-adressierung.md). Alle drei
+> Kommando-Achsen verwandeln stetige Groessen in Namen, und erst die Namen haben Geburt,
+> Bestaetigung und Verhungern. Engpass 1 unten waere damit gegenstandslos statt geloest.
+
 # Die zwei belegten Engpaesse
 
 Beide stammen aus [1109 Episoden ohne Lernfortschritt](/befunde/langlauf-ohne-fortschritt.md)

@@ -7,6 +7,29 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-16
 
+* **Anlage**: [Stetig adressieren statt Klassen vergeben](/fragen/stetige-adressierung.md) - aus
+  einer Nutzerfrage nach der urspruenglichen Vorstellung ("dem Netz ein Bild zeigen, die
+  Repraesentation abgreifen, damit kommunizieren -- die Sprache des Netzes lernen, ohne ein
+  Language-Model zu trainieren"). **Die Haelfte davon ist gebaut:** `desc_embed` liefert genau
+  diesen Vektor, existiert fuer JEDES Objekt auch ohne Klassenslot, verschiebt sich mit dem
+  Lernen mit, und das Weltmodell konditioniert bereits darauf. **Die andere Haelfte fehlt:** das
+  Kommando vergleicht `str(det.get("shape")) != str(form)`, also Klassen-NAMEN aus `resolve(desc)`.
+  Erst dieses Etikett hat einen Lebenszyklus - Geburt, Bestaetigung, Knopf, Verhungern; der Vektor
+  hat davon nichts. **Und es gilt fuer alle drei Achsen** (Farbe ueber `colours.classify`, Form
+  ueber `resolve`, Groesse ueber `groessen_band`). Damit erklaert sich rueckblickend ein ganzer
+  Arbeitstag: Bandgrenzen und das oberste Band im 7-mm-Raster, verschmelzungsgeborene Farbklassen
+  (`farbe-50`), die ganze Kette aus Vergabe-Engstelle und 29-Episoden-Saettigung - **durchweg
+  Diskretisierungsartefakte, keine Wahrnehmungsfehler.** Die Frage ist, ob das Kommando direkt auf
+  den stetigen Groessen arbeiten kann (Zielpunkt plus Toleranz statt Tripel aus Namen; bedient per
+  "zeig auf das Objekt, nimm den Vektor"). Dann waeren Geburt, Knopfvergabe, Verhungerungsschutz,
+  `NOVEL_BODY` und die Saettigung bei sieben Koerpern gegenstandslos. **Dagegen spricht nicht
+  wenig:** eine Klasse entscheidet, wann zwei Dinge DASSELBE sind - beim Vektor wird daraus eine
+  Schwelle, und Schwellen haben an dieser Stelle schon dreimal eigene Fehler produziert; dazu die
+  Verrechnung dreier verschiedener Masse zu einer Entfernung und der gemessene Rauschboden des
+  Deskriptors (13-16 % der Klassentrennung schon bei 2 mm). **Billigster erster Schritt, ohne
+  Lauf:** die Adress-Wiedervorlage kann beide Adressierungen auf denselben echten Laufszenen
+  gegeneinanderstellen. Idee, nichts gebaut, nichts gemessen.
+
 * **Anlage**: [Die Aneignungskette traegt 29 Episoden](/befunde/kette-haelt-30-episoden.md) - der
   Langlauf zur Kette (400 frische Episoden, Erzeuger + freie Vergabe). **Alles Wesentliche passiert
   bis Episode 29:** drei Knoepfe (Ep 21, 26, 29), dazwischen bei Ep 23 die Meldung
