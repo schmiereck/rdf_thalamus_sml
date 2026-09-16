@@ -100,6 +100,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Stetig adressieren statt Klassen vergeben](fragen/stetige-adressierung.md) - **Nutzeridee, zielnah:** die Aneignungsprobleme (Geburt, Knopf, Verhungern, Saettigung) sind Artefakte der Diskretisierung; `desc_embed` existiert fuer jedes Objekt und stirbt nie
 * [Die stetige Formachse ist genauso trennscharf](befunde/stetige-adressierung-erster-schritt.md) - der erste Schritt: der Weg ist frei, ein Gewinn ist es (noch) nicht
 * [Die stetige Adressierung im Lauf](befunde/stetige-adressierung-im-lauf.md) - gebaut und gefahren: neutral wie vorhergesagt (grob 10,8 -> 8,5 %, p = 0,58); der Bau ist damit verifiziert, die These nicht geprueft
+* [Die Adresse ohne Klasse](mechanismen/adresse-ohne-klasse.md) - `ACT23_EIG_DIREKT`: eine Sichtung statt Geburt, Bestaetigung und Knopf. Vorgabepfad zeichengenau unveraendert; auf dem gespeicherten Zustand wirkungslos, weil alle sieben Koerper vergeben sind
 * [Die latente Augmentierung, gebaut](mechanismen/latente-augmentierung-gebaut.md) - `ACT23_AUGMENT`, Regeln aus der Messung; Rauchtest: 4,4 Pufferzeilen je Episode statt einer. **Braucht zwingend `ACT23_NEIGHBOURS=1`**
 * [Die Augmentierung wirkt wie eine Zeilenwiederholung](befunde/augmentierung-wirkt-wie-wiederholung.md) - **ehrliches Negativ:** der Beitrag der Vorstellung selbst ist +0,0006 AUC
 * [Keine Hoehergewichtung bringt etwas](befunde/gewichtung-bringt-nichts.md) - fuenf Schemata, keines hilft; und die Gegenprobe widerlegt meine Deutung des Augmentierungs-Verlusts

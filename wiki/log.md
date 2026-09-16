@@ -7,6 +7,25 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-16
 
+* **Anlage**: [Die Adresse ohne Klasse](/mechanismen/adresse-ohne-klasse.md) - `ACT23_EIG_DIREKT`
+  gebaut, der Schritt, den der Befund davor als naechsten benannt hat. `_direkt_adressieren` sitzt
+  als Gegenstueck zu `_try_bind` im selben Blick und macht einen Koerper OHNE Eintrag aus EINER
+  Detektion adressierbar (Chromatizitaet, `desc_embed`, Spanne) - der Lebenszyklus faellt damit zum
+  ersten Mal WEG statt ergaenzt zu werden. Drei Stellen mussten mit: der Platzhalter `~gesehen`
+  (resolve() liefert fuer eine unbekannte Form keinen Namen -- genau daran ist der Weg diskret
+  verschlossen; der Fovea-Tracker ueberspringt ihn ausdruecklich), `_probe_entdeckt()` (sonst haelt
+  der Erzeuger den Koerper weiter fuer neu und gibt ihm einen zweiten Platz -- der Doppelplatz-Fehler
+  vom 21.08.) und die Identitaetspruefung, die hier NICHT abschaltbar ist (eine Direkt-Adresse bleibt
+  den ganzen Lauf stehen; geprueft wird gegen die Detektion, nicht gegen die wahre Lage, also ohne
+  Privileg). Die Achsen-Wuerfelei steht jetzt als `_adresse_wuerfeln` fuer sich statt kopiert --
+  dieselbe Logik lag schon einmal doppelt und die GUI-Kopie fehlte 332 Episoden unbemerkt.
+  **GLEICHHEITSPROBE: der Vorgabepfad ist zeichengenau unveraendert** (2x12 Episoden, Seed 4242,
+  HEAD gegen Arbeitsstand: 285 inhaltliche Zeilen, 0 Abweichungen; die 14 Rohunterschiede sind
+  Pfadname und Wanduhr). **UND EIN BEFUND AUS DEM RAUCHTEST:** auf `ad9d768c` findet der Schalter
+  NICHTS vor - alle sieben Koerper haben einen Eintrag (5 Basis-Knoepfe, obj_T und obj_X selbst
+  erworben). Das ist die Saettigung in ihrer schaerfsten Form, kein Defekt; gemessen werden kann er
+  nur frisch. Drei frische Arme je 140 Episoden laufen (kette / direkt / beides). **Vorgabe 0.**
+
 * **Anlage**: [Die stetige Adressierung im Lauf](/befunde/stetige-adressierung-im-lauf.md) - der
   Einbau aus `ACT23_EIG_STETIG` zum ersten Mal in act23 gefahren, zwei Arme je 150 Episoden aus
   derselben Kopie von `ad9d768c`, sonst Vorgaben. **Nichts loest auf:** grobe Adressierungsfehler

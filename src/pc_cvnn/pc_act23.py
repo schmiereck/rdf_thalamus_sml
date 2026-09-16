@@ -649,6 +649,60 @@ EIG_STETIG = os.environ.get("ACT23_EIG_STETIG", "0") == "1"
 # weil der Deskriptor sich mit dem Lernen verschiebt und eine nackte Zahl veralten wuerde.
 EIG_TOL_FORM = float(os.environ.get("ACT23_EIG_TOL_FORM", "0.5"))
 EIG_TOL_SPAN = float(os.environ.get("ACT23_EIG_TOL_SPAN", "0.005"))    # Groessentoleranz in METERN
+# ADRESSE AUS EINER SICHTUNG, FUER EINEN KOERPER OHNE KLASSE (ACT23_EIG_DIREKT, Vorgabe 0).
+# DER SCHRITT, DEN wiki/befunde/stetige-adressierung-im-lauf.md als naechsten benennt.  Der
+# Einbau von EIG_STETIG war ADDITIV: er adressiert das Gemessene, aber die Klassen entstehen
+# daneben weiter, also konnte der erhoffte Gewinn -- der aus ihrem WEGFALL kommen soll -- gar
+# nicht auftreten.  Hier faellt der Lebenszyklus zum ersten Mal WEG:
+#
+#     bisher   3 Sichtungen -> Klassengeburt -> 3 von 6 Blicken -> Knopf -> kommandierbar
+#     hier     1 Sichtung   -> Adresse       -> kommandierbar
+#
+# WARUM DAS OHNE KLASSE NUR STETIG GEHT: resolve() liefert fuer eine unbekannte Form (None, d) --
+# es gibt schlicht keinen Namen, den die Formachse nennen koennte.  Die Chromatizitaet, die
+# Formeinbettung und die Spanne liegen dagegen in JEDER Detektion vor, auch in der allerersten.
+# Ohne ACT23_EIG_STETIG traegt die Adresse deshalb nur Farbe und Groesse (s. Meldung unten).
+#
+# WAS DAMIT GEGENSTANDSLOS WIRD, wenn es traegt: Geburt, Bestaetigung, Knopfvergabe, der
+# Verhungerungsschutz und die Vergabe-Engstelle (wiki/befunde/vergabe-engstelle-diagnose.md).
+# Die Aneignungskette brauchte dafuer 29 Episoden und drei Schalter
+# (wiki/befunde/kette-haelt-30-episoden.md).
+#
+# WAS DAMIT AUCH WEGFAELLT, und das ist die Gegenrechnung: die Bestaetigung war ein FILTER.  Sie
+# hat verschmolzene Blobs und Eintagsdetektionen aussortiert -- genau der Fehlermodus, der die
+# Phantom-Farbklassen erzeugt hat (wiki/befunde/geburtenrate-chroma-phantome.md).  Eine Adresse
+# aus einer einzigen Sichtung kann auf einem Blob entstehen, der zwei Koerper enthaelt, und
+# zeigt dann dauerhaft daneben.  Dagegen stehen hier nur die BEREITS GEMESSENEN Tore, keine
+# neuen: die Verschmelzungsschranke `area_hi` (dieselbe, die die Farbstufe schuetzt), der
+# kalibrierte Arbeitsraum und die Identitaetspruefung der Wuerfelei (ACT23_EIG_IDENT).
+# Ob das reicht, ist die eigentliche Messfrage dieses Schalters.
+#
+# WORAUF DER SCHALTER ANGEWIESEN IST, und das ist keine Nebensache: es muss ueberhaupt ein
+# Koerper OHNE Eintrag in der Szene stehen.  Die Szene wird aus state.OBJECTS gebaut, also ist
+# das heute genau einer -- der Probe-Koerper des Neuheits-Erzeugers, und auch der nur, solange
+# er unentdeckt ist.  Im geladenen Zustand des Nutzers ist obj_T (die Vorgabe fuer NOVEL_BODY)
+# laengst gebunden; OHNE ACT23_NOVEL_WEITER=1 findet EIG_DIREKT deshalb NICHTS vor und tut
+# nichts.  Der Vergleich, fuer den er gebaut ist, lautet also:
+#     Arm A   NOVEL_WEITER=1 FREIE_VERGABE=1                  der bekannte Weg ueber Klasse+Knopf
+#     Arm B   NOVEL_WEITER=1 EIG_DIREKT=1 EIG_STETIG=1        eine Sichtung statt der Kette
+EIG_DIREKT = os.environ.get("ACT23_EIG_DIREKT", "0") == "1"
+# PLATZHALTER FUER EINE GENANNTE ACHSE OHNE KLASSENNAMEN.  _eig_passt liest `namen[i] is not
+# None` als "diese Achse ist genannt" und vergleicht dann den MESSWERT -- der Name selbst wird
+# beim stetigen Matchen nirgends gelesen.  Fuer eine Form ohne Klasse braucht es also nur
+# irgendeinen Eintrag, der kein Klassenname ist.  Er steht in der Anzeige ("~gesehen + mittel")
+# und sagt dort das Richtige: die Form ist genannt, aber sie hat keinen Namen.
+# ER DARF NIRGENDS ALS KLASSE GELESEN WERDEN -- die eine Stelle, die das taete, ist der
+# Fovea-Tracker (s. eig_servo); dort wird er ausdruecklich uebersprungen.
+EIG_GESEHEN = "~gesehen"
+# LAUT SAGEN, WAS FEHLT -- nicht still mitschalten (s. AUGMENT/NEIGHBOURS oben: ein Schalter, der
+# einen zweiten heimlich umlegt, macht jedes A/B mehrdeutig).  Ohne EIG_STETIG ist EIG_DIREKT
+# nicht wirkungslos, aber verstuemmelt: die Formachse faellt weg, weil es fuer eine unbekannte
+# Form keinen Namen gibt, und die Adresse traegt nur Farbe und Groesse.
+if EIG_DIREKT and not EIG_STETIG:
+    print("  [Eig-Direkt] ACT23_EIG_DIREKT ist gesetzt, ACT23_EIG_STETIG aber NICHT -- eine "
+          "Adresse ohne Klasse kann die FORMACHSE dann nicht nennen (resolve() liefert None) "
+          "und traegt nur Farbe und Groesse.  Das ist genau der Vergleichsarm, wenn er "
+          "beabsichtigt ist.", flush=True)
 # ABSTUFUNG STATT PRIVILEG (ACT23_EIG_ABSTUFUNG, Vorgabe 0 bis gemessen).  Trifft das
 # Eigenschafts-Tripel nichts, griff bisher der PRIVILEGIERTE Rueckfall: die wahre Lage aus dem
 # Simulator.  Das ist der Preis der Groessenachse -- sie traf gemessen 10,0 statt 4,7 % der
@@ -1953,6 +2007,52 @@ def run_self_learning_steering(headless=False):
         for _k in range(3):
             panel._eig_beschriften(_k)
 
+    def _adresse_wuerfeln(werte, mess, p, ident=None):
+        """Aus (Farbe, Form, Groesse) die KUERZESTE Adresse wuerfeln, die den Koerper bei `p` trifft.
+
+        EINE FASSUNG FUER ALLE ADRESSQUELLEN -- die Auto-Schleife (_auto_eig_umschreiben) und die
+        Direkt-Adressierung (_direkt_adressieren).  Warum extra: die Auto-Schleife hat dieselbe
+        Logik schon einmal in zwei Kopien getragen (kopflos und GUI), und die GUI-Kopie fehlte
+        332 Episoden lang unbemerkt.  Zweimal derselbe Riss an derselben Naht war genug.
+
+        Gibt das Tripel zurueck (None, wo eine Achse verschwiegen wird) oder None, wenn keine
+        VERFOLGBARE Achse zur Verfuegung steht.  `mess` traegt die Messwerte derselben drei
+        Achsen; sie werden nur bei ACT23_EIG_STETIG verglichen.
+
+        `p` ist die Lage, auf die die Adresse zeigen SOLL, und `ident` erzwingt, dass sie das auch
+        tut (None = wie ACT23_EIG_IDENT).  Die Auto-Schleife uebergibt dort die wahre Koerperlage
+        und laesst den Schalter entscheiden; die Direkt-Adressierung uebergibt die DETEKTION, aus
+        der sie die Adresse gebildet hat, und prueft immer -- dort ist die Pruefung damit voellig
+        unprivilegiert ("findet die Adresse dasselbe wieder, was ich gerade gesehen habe?") und
+        sie muss sitzen, weil eine Direkt-Adresse den ganzen Lauf ueber stehen bleibt.
+        """
+        _verfolgbar = [i for i in (0, 1) if werte[i] is not None]
+        if not _verfolgbar:
+            return None
+        _mk = [bool(crng.integers(2)) for _ in range(3)]
+        if not any(_mk[i] for i in _verfolgbar):
+            _mk[_verfolgbar[int(crng.integers(len(_verfolgbar)))]] = True
+        _sv = sim.d.mocap_pos.copy()      # die Suche PARKT die Marker (_park_markers); ohne
+        for _versuch in range(4):         # Rueckgabe liefert goal_fn ein GEPARKTES Ziel
+            _tri = tuple(w if m else None for w, m in zip(werte, _mk))
+            _pos2, _, _tr2 = finde_nach_eigenschaften(sim, shape_clf, colours, *_tri,
+                                                      mess=(mess if EIG_STETIG else None))
+            # IDENTITAET, nicht nur Anzahl (s. EIG_IDENT oben): der eine Treffer muss auf dem
+            # gemeinten Koerper sitzen.  Ohne das gilt eine Adresse als eindeutig, die genau ein
+            # FREMDES Objekt trifft -- gemessen 316 von 318 "eindeutig" bei 8,8 % groben Fehlern.
+            _trifft = True
+            if (EIG_IDENT if ident is None else ident) and _pos2 is not None:
+                _trifft = float(np.linalg.norm(np.asarray(_pos2, float) - p)) < 0.02
+            if len(_tr2) <= 1 and _trifft:
+                break
+            _fehlt = [i for i in range(3) if not _mk[i] and werte[i] is not None]
+            if not _fehlt:
+                break                     # alle Achsen genannt und trotzdem mehrdeutig
+            _mk[_fehlt[int(crng.integers(len(_fehlt)))]] = True
+        sim.d.mocap_pos[:] = _sv          # gemessen: sonst 627-968 mm Endabstand
+        mujoco.mj_forward(sim.m, sim.d)
+        return _tri
+
     def _auto_eig_umschreiben():
         """Die ADRESSIERUNG des gewaehlten Koerpers in ein Eigenschafts-Tripel umschreiben.
 
@@ -1998,38 +2098,22 @@ def run_self_learning_steering(headless=False):
         # VERFOLGBAREN Achsen (Farbe, Form) genannt sein -- das sind zugleich genau die, denen die
         # Fovea folgen kann (s. eig_servo).  Ist keine von beiden vorhanden, wird gar nicht
         # umgeschrieben: dann bleibt das Kommando beim Namen, statt eine blinde Adresse zu bauen.
-        _werte = (_f, _fo, _g)
         # DIE MESSWERTE DERSELBEN DREI ACHSEN, aus derselben Detektion -- die Adresse beschreibt
         # damit garantiert etwas Gesehenes, genau wie die Namen darueber.
         _mess = (np.asarray(_nah["chroma"], float) if _nah.get("chroma") is not None else None,
                  np.asarray(shape_clf.desc_embed(_nah["desc"]), float)
                  if _nah.get("desc") is not None else None,
                  float(_nah["span"]) if _nah.get("span") is not None else None)
-        _verfolgbar = [i for i in (0, 1) if _werte[i] is not None]
-        if not _verfolgbar:
+        # ... UND DIE FORMACHSE OHNE KLASSE, wenn EIG_DIREKT laeuft (s. dort).  Ohne das wuerde die
+        # Auto-Schleife eine Direkt-Adresse in der naechsten Episode um genau die Achse ERLEICHTERN,
+        # die sie ueberhaupt erst moeglich gemacht hat: resolve() liefert fuer den klassenlosen
+        # Koerper weiter None, das Tripel fiele auf Farbe und Groesse zurueck.
+        if EIG_DIREKT and EIG_STETIG and _fo is None and _mess[1] is not None:
+            _fo = EIG_GESEHEN
+        _werte = (_f, _fo, _g)
+        _tri = _adresse_wuerfeln(_werte, _mess, _p)
+        if _tri is None:
             return None
-        _mk = [bool(crng.integers(2)) for _ in range(3)]
-        if not any(_mk[i] for i in _verfolgbar):
-            _mk[_verfolgbar[int(crng.integers(len(_verfolgbar)))]] = True
-        _sv = sim.d.mocap_pos.copy()      # die Suche PARKT die Marker (_park_markers); ohne
-        for _versuch in range(4):         # Rueckgabe liefert goal_fn ein GEPARKTES Ziel
-            _tri = tuple(w if m else None for w, m in zip(_werte, _mk))
-            _pos2, _, _tr2 = finde_nach_eigenschaften(sim, shape_clf, colours, *_tri,
-                                                      mess=(_mess if EIG_STETIG else None))
-            # IDENTITAET, nicht nur Anzahl (s. EIG_IDENT oben): der eine Treffer muss auf dem
-            # gemeinten Koerper sitzen.  Ohne das gilt eine Adresse als eindeutig, die genau ein
-            # FREMDES Objekt trifft -- gemessen 316 von 318 "eindeutig" bei 8,8 % groben Fehlern.
-            _trifft = True
-            if EIG_IDENT and _pos2 is not None:
-                _trifft = float(np.linalg.norm(np.asarray(_pos2, float) - _p)) < 0.02
-            if len(_tr2) <= 1 and _trifft:
-                break
-            _fehlt = [i for i in range(3) if not _mk[i] and _werte[i] is not None]
-            if not _fehlt:
-                break                     # alle Achsen genannt und trotzdem mehrdeutig
-            _mk[_fehlt[int(crng.integers(len(_fehlt)))]] = True
-        sim.d.mocap_pos[:] = _sv          # gemessen: sonst 627-968 mm Endabstand
-        mujoco.mj_forward(sim.m, sim.d)
         state.sel = state.add_eigenschaft(_b, *_tri)
         state.EIG_MESS[_b] = _mess          # dieselben Achsen, als Messwert (s. EIG_STETIG)
         if panel is not None:
@@ -2843,6 +2927,19 @@ def run_self_learning_steering(headless=False):
             return False
         return float(np.linalg.norm(np.asarray(e[0], float) - np.asarray(PARK_XY, float))) < 0.05
 
+    def _probe_entdeckt():
+        """Ist der Probe-Koerper versorgt, also nicht mehr "neu"?
+
+        VORGABE: er traegt eine Formklasse (state.SHAPE_KEY) -- das ist der einzige Weg, auf dem er
+        bisher kommandierbar werden konnte.  MIT ACT23_EIG_DIREKT gibt es einen zweiten: eine
+        Eigenschafts-Adresse ohne Klasse.  Wird die hier nicht mitgezaehlt, glaubt der Erzeuger den
+        Koerper weiter fuer unentdeckt und stellt ihn ZUSAETZLICH hin, obwohl randomize_objects ihm
+        laengst einen regulaeren Platz gibt -- genau der Doppelplatz-Fehler, der am 2026-08-21
+        45-mal aufgetreten ist.  Und die Probe-Rolle wanderte nie weiter.
+        """
+        return (NOVEL_BODY in state.SHAPE_KEY
+                or (EIG_DIREKT and NOVEL_BODY in state.EIGENSCHAFT))
+
     def randomize_objects():
         exp_group["szene"] += 1                                # neue stehende Szene -> neue Gruppe
         sim.reset_home()
@@ -2874,7 +2971,7 @@ def run_self_learning_steering(headless=False):
         # einen reservierten Sonderplatz UND einen regulaeren, und es stuende ein Objekt weniger da als
         # eingestellt.  Genau das ist dem Nutzer am 2026-08-21 aufgefallen: ACT23_SCENE_N=4 gesetzt, nur
         # DREI Objekte auf dem Tisch, weil das Kreuz inzwischen "Neue Form 10" ist.
-        _probe_offen = NOVEL_EVERY > 0 and NOVEL_BODY not in state.SHAPE_KEY
+        _probe_offen = NOVEL_EVERY > 0 and not _probe_entdeckt()
         _n_steht = max(1, SCENE_N - (1 if _probe_offen else 0))
         _k = len(bodies)
         _rot = (exp_group["szene"] * _n_steht) % max(_k, 1)
@@ -3130,6 +3227,81 @@ def run_self_learning_steering(headless=False):
             #   bleiben im Rennen, denn es gibt jetzt mehr als einen Knopf zu vergeben
         else:
             _bind_hits.clear()                                 # der Knopf ist vergeben
+
+    def _direkt_adressieren(dets):
+        """EINE SICHTUNG, EINE ADRESSE -- fuer einen Koerper, der KEINEN Knopf hat (EIG_DIREKT).
+
+        Das Gegenstueck zu _try_bind, und der Unterschied ist der ganze Punkt: _try_bind braucht
+        eine geborene Formklasse und BIND_CONFIRM Blicke, in denen sie sich wiederholt.  Hier
+        genuegt, dass die Kamera den Koerper EINMAL sieht -- Chromatizitaet, Formeinbettung und
+        Spanne liegen in jeder Detektion vor, auch in der ersten.
+
+        WELCHE KOERPER UEBERHAUPT IN FRAGE KOMMEN: nur solche, die in der Szene stehen und noch
+        keinen Eintrag in state.OBJECTS haben.  Heute ist das genau einer -- der Probe-Koerper des
+        Neuheits-Erzeugers, denn die Szene wird aus state.OBJECTS plus NOVEL_BODY gebaut
+        (s. randomize_objects).  Die Welt liefert also weiterhin die Geometrie; was hier wegfaellt,
+        ist der WEG von der Sichtung zum Kommando.
+
+        DER KOERPER-HANDLE IST VERKABELUNG, kein Privileg: er beantwortet nur "zu welchem Eintrag
+        gehoert diese Detektion" -- fuer Buchfuehrung und Szenenverwaltung.  Die Adresse selbst
+        besteht ausschliesslich aus Gemessenem, und die spaetere Lokalisierung (perceive, Zweig
+        'eigenschaft') sieht den Namen nie.  Genauso arbeiten _try_bind, die Farbbindung und
+        _namenlose_kandidaten seit jeher.
+        """
+        if not EIG_DIREKT:
+            return
+        _hat_adresse = {nm for _l, nm, _m in state.OBJECTS}
+        _offen = [nm for nm in scene if nm not in _hat_adresse and not _geparkt_jetzt(nm)]
+        if not _offen:
+            return
+        for d in dets:
+            if d.get("pos") is None or float(d.get("area", 0.0)) < 200.0:
+                continue
+            # DIESELBEN TORE WIE DIE FARBSTUFE, keine neuen.  area_hi ist die gemessene
+            # Verschmelzungsschranke ("merged blob = MIXED chromaticity"); ohne sie entstuende
+            # hier genau die Adresse, die dauerhaft auf den Schwerpunkt ZWEIER Koerper zeigt.
+            # Der Kasten ist der kalibrierte Arbeitsraum -- was daneben liegt, rendert
+            # verzerrt und liest sich aus einem langweiligen Grund als "neu".
+            if shape_clf.area_hi is not None and float(d["area"]) > shape_clf.area_hi:
+                continue
+            _x, _y = float(d["pos"][0]), float(d["pos"][1])
+            if not (-0.115 <= _x <= 0.115 and 0.075 <= _y <= 0.235):
+                continue
+            _p = np.asarray(d["pos"], float)
+            _nah = min(_offen, key=lambda o: float(np.linalg.norm(sim.obj_pos(o)[:2] - _p)))
+            if float(np.linalg.norm(sim.obj_pos(_nah)[:2] - _p)) >= 0.04:
+                continue
+            _mess = (np.asarray(d["chroma"], float) if d.get("chroma") is not None else None,
+                     np.asarray(shape_clf.desc_embed(d["desc"]), float)
+                     if d.get("desc") is not None else None,
+                     float(d["span"]) if d.get("span") is not None else None)
+            _f = colours.classify(d["chroma"])[0] if d.get("chroma") is not None else None
+            _fo, _g = d.get("shape"), groessen_band(d.get("dicke"), d.get("span"))
+            # DIE FORMACHSE OHNE KLASSENNAMEN.  resolve() liefert fuer eine unbekannte Form None --
+            # genau deshalb ist dieser Weg diskret verschlossen.  Stetig braucht die Achse keinen
+            # Namen, nur einen Messwert; der Platzhalter sagt lediglich, dass sie GENANNT ist.
+            if EIG_STETIG and _fo is None and _mess[1] is not None:
+                _fo = EIG_GESEHEN
+            _tri = _adresse_wuerfeln((_f, _fo, _g), _mess, _p, ident=True)
+            if _tri is None:
+                continue                  # weder Farbe noch Form -- eine reine Groessenadresse
+                #   waere blind (s. Nutzervorgabe in _auto_eig_umschreiben)
+            _k = state.add_eigenschaft(_nah, *_tri)
+            state.EIG_MESS[_nah] = _mess
+            # IN DIE SZENENVERWALTUNG AUFNEHMEN, wie es _try_bind bei der Knopfvergabe tut:
+            # HINZUFUEGEN, nicht alles zurueckholen (s. randomize_objects).
+            act16.OBJS = list(dict.fromkeys(list(act16.OBJS) + [_nah]))
+            act16.SCENE_N = len(act16.OBJS)
+            print(f"  [Eig-Direkt] {_nah} aus EINER Sichtung adressiert: "
+                  f"'{state.OBJECTS[_k][0]}' -- ohne Formklasse, ohne Bestaetigung, ohne Knopf "
+                  f"({d.get('area', 0):.0f}px, Form{'klasse ' + str(_fo) if _fo != EIG_GESEHEN else 'vektor'})",
+                  flush=True)
+            if panel is not None:
+                panel.add_discovered(_k)     # der zurueckgegebene Index, nicht len-1: add_eigenschaft
+                #   UEBERSCHREIBT einen vorhandenen Eintrag desselben Koerpers, statt anzuhaengen
+            _offen.remove(_nah)
+            if not _offen:
+                return
 
     # NEUGIER AUF NAMENLOSE: eine eben geborene Klasse hat DREI Belege und alle vom selben Fleck --
     # gemessen beansprucht sie ihr Objekt anderswo nur zu 47%, mit drei Sichtungen von anderswo zu 91%
@@ -3408,7 +3580,7 @@ def run_self_learning_steering(headless=False):
         Ist keiner mehr uebrig, bleibt es beim alten Verhalten (der Erzeuger schweigt); die Welt hat
         dann wirklich nichts Neues mehr, und das ist eine ehrliche Auskunft, keine Panne."""
         nonlocal NOVEL_BODY
-        if not NOVEL_WEITER or NOVEL_BODY not in state.SHAPE_KEY:
+        if not NOVEL_WEITER or not _probe_entdeckt():
             return
         _vergeben = set(state.SHAPE_KEY) | {nm for _l, nm, _m in state.OBJECTS}
         _naechste = [o for o in _FARB_KOERPER if o not in _vergeben]
@@ -3426,7 +3598,7 @@ def run_self_learning_steering(headless=False):
         Szene ueber ACT23_SCENE_N hinaus fuellen.  Im Lauf vom 2026-08-21 geschah das 45 Mal, obwohl
         das Kreuz schon "Neue Form 10" war."""
         _probe_weiterreichen()          # erst weitergeben, dann pruefen (s. oben)
-        if NOVEL_BODY in state.SHAPE_KEY:
+        if _probe_entdeckt():
             return
         # ACT23_NOVEL_HOLD=1 haelt EINE Form ueber den ganzen Lauf fest, statt durchzuwechseln.
         # Fuer den Nachweis, DASS eine Geburt zustande kommt, ist das noetig: eine Klasse braucht
@@ -3471,7 +3643,8 @@ def run_self_learning_steering(headless=False):
         _prot = set(state.SHAPE_KEY.values())                  # bound commands never starve
         if EIG_SCHUETZT:                                       # ... und was ueber EIGENSCHAFTEN
             _prot |= {t[1] for t in state.EIGENSCHAFT.values()  #     kommandierbar ist, auch nicht
-                      if t[1] is not None}                      #     (s. EIG_SCHUETZT oben)
+                      if t[1] is not None and t[1] != EIG_GESEHEN}   # (s. EIG_SCHUETZT oben; der
+            #     Platzhalter ist KEINE Klasse und hat hier nichts zu schuetzen)
         born = shape_clf.observe_scene(sim, bounds=(-0.115, 0.115, 0.075, 0.235),   # only inside the
                                        protect=_prot)
         sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)   # calibrated workspace (5mm inside
@@ -3498,6 +3671,10 @@ def run_self_learning_steering(headless=False):
         _try_bind(dets)                                        # Knopf-Bindung auf DERSELBEN Wahrnehmung
         #   wie die Farbstufe -- kein zusaetzlicher perceive_all, also kostet die Wiederholungspruefung
         #   nichts ausser dem Zaehler.
+        _direkt_adressieren(dets)                              # ... und die Adresse OHNE Klasse auf
+        #   derselben Wahrnehmung (s. EIG_DIREKT).  NACH _try_bind: findet die Bestaetigung in
+        #   diesem Blick statt, soll der regulaere Weg den Vorrang haben -- die Direkt-Adresse
+        #   ueberspringt sie nur, wenn es sonst gar keinen Weg gibt.
         bodies = list(dict.fromkeys([nm for _l, nm, _m in state.OBJECTS]
                                     + ([NOVEL_BODY] if NOVEL_BODY in scene else [])))
         for d in dets:
@@ -4491,13 +4668,18 @@ def run_self_learning_steering(headless=False):
         if method == "eigenschaft":
             _ef, _efo, _eg = state.EIGENSCHAFT.get(body, (None, None, None))
             _skey = f"eig:{body}"                              # so veroeffentlicht perceive() den Keim
-            if _efo is not None:
+            if _efo is not None and _efo != EIG_GESEHEN:
                 track_fn = make_shape_track(body, key=_efo, seed_key=_skey)   # Formklasse -> Form-Tracker
                 eig_servo = True
             elif _ef is not None:
                 track_fn = make_shape_track(body, ckey=_ef, seed_key=_skey)   # Farbklasse -> Farb-Tracker
                 eig_servo = True
             else:
+                # DER PLATZHALTER IST KEINE KLASSE (s. EIG_GESEHEN).  Eine Formachse ohne Namen
+                # traegt nur einen Messwert -- make_shape_track wuerde einer Klasse folgen, die es
+                # nicht gibt.  Also faellt die Adresse hier auf den FARB-Tracker durch, und hat sie
+                # auch keine Farbklasse, bleibt es ehrlich bei servo=False.  Eine Fovea, die dem
+                # Einbettungsvektor selbst folgt, ist ein eigener Bau und existiert nicht.
                 # NUR die Groesse genannt: es gibt keinen Schluessel, dem ein Tracker folgen kann.
                 # Dann EHRLICH nur Anzeige und servo=False, statt einen Regelkreis vorzutaeuschen.
                 # Die Wuerfelei erzeugt solche Adressen nicht mehr (s. _auto_eig_umschreiben:
