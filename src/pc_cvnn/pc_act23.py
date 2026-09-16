@@ -3257,13 +3257,31 @@ def run_self_learning_steering(headless=False):
         for d in dets:
             if d.get("pos") is None or float(d.get("area", 0.0)) < 200.0:
                 continue
-            # DIESELBEN TORE WIE DIE FARBSTUFE, keine neuen.  area_hi ist die gemessene
-            # Verschmelzungsschranke ("merged blob = MIXED chromaticity"); ohne sie entstuende
-            # hier genau die Adresse, die dauerhaft auf den Schwerpunkt ZWEIER Koerper zeigt.
-            # Der Kasten ist der kalibrierte Arbeitsraum -- was daneben liegt, rendert
-            # verzerrt und liest sich aus einem langweiligen Grund als "neu".
-            if shape_clf.area_hi is not None and float(d["area"]) > shape_clf.area_hi:
+            # DIE VERSCHMELZUNGSSPERRE DES AGENTEN SELBST, nicht die Flaechenschranke.
+            # GEMESSEN UND ZUERST FALSCH GEBAUT: ich hatte hier nur `area_hi` stehen, und der
+            # erste frische Lauf hat sofort bewiesen, warum das nicht reicht -- die allererste
+            # Direkt-Adresse entstand auf einem Fleck, den die Formstufe im selben Blick als
+            # ('verschmolzen', [-0.082, 0.087], 603) gemeldet hatte.  603 px liegen weit unter
+            # area_hi (~1411), und der Kommentar im shape_classifier sagt es seit dem 18.08.
+            # ausdruecklich: "Der vorhandene Flaechen-Schutz area_hi kann das prinzipiell nicht:
+            # die Verschmelzungen messen 822-1390, die groesste TRAININGSform ~940."  Die Adresse
+            # beschrieb danach einen Blob aus zwei Koerpern und loeste in KEINER Episode mehr auf.
+            # RICHTIG IST DIE FARBSTREUUNG (_merge_th): aus den eigenen Einzelobjekt-Flecken
+            # gemessen, 0.995-Quantil, nichts eingestellt.  Sie faengt gemessen etwa zwei Drittel
+            # der Phantom-Geburten und sperrt dabei keinen sauberen Einzelfleck (64 von 64 geprueft).
+            # SOLANGE SIE NICHT SCHARF IST (weniger als 12 Referenzwerte), wird GAR NICHT
+            # adressiert: ohne eigenen Massstab fuer "zwei Dinge in einem Fleck" ist eine Adresse,
+            # die den ganzen Lauf stehen bleibt, ein unkalkulierbares Risiko.  Die Bestaetigung,
+            # die hier entfaellt, war genau dieser Filter -- irgendetwas muss ihn ersetzen.
+            _mth = shape_clf._merge_th()
+            if _mth is None:
+                return                    # der Agent hat seinen Verschmelzungs-Massstab noch nicht
+            if d.get("cspread") is None or float(d["cspread"]) > _mth:
                 continue
+            if shape_clf.area_hi is not None and float(d["area"]) > shape_clf.area_hi:
+                continue                  # die groebere Schranke bleibt als zweites Tor stehen
+            # Der Kasten ist der kalibrierte Arbeitsraum -- was daneben liegt, rendert verzerrt
+            # und liest sich aus einem langweiligen Grund als "neu".
             _x, _y = float(d["pos"][0]), float(d["pos"][1])
             if not (-0.115 <= _x <= 0.115 and 0.075 <= _y <= 0.235):
                 continue
@@ -3294,7 +3312,8 @@ def run_self_learning_steering(headless=False):
             act16.SCENE_N = len(act16.OBJS)
             print(f"  [Eig-Direkt] {_nah} aus EINER Sichtung adressiert: "
                   f"'{state.OBJECTS[_k][0]}' -- ohne Formklasse, ohne Bestaetigung, ohne Knopf "
-                  f"({d.get('area', 0):.0f}px, Form{'klasse ' + str(_fo) if _fo != EIG_GESEHEN else 'vektor'})",
+                  f"({d.get('area', 0):.0f}px, Farbstreuung {float(d['cspread']):.3f} < {_mth:.3f}, "
+                  f"Form{'klasse ' + str(_fo) if _fo != EIG_GESEHEN else 'vektor'})",
                   flush=True)
             if panel is not None:
                 panel.add_discovered(_k)     # der zurueckgegebene Index, nicht len-1: add_eigenschaft

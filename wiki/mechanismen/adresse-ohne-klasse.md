@@ -111,6 +111,62 @@ Der Vergleich, fuer den er gebaut ist:
     Arm direkt   NOVEL_WEITER=1 EIG_DIREKT=1 EIG_STETIG=1           eine Sichtung statt der Kette
     Arm beides   NOVEL_WEITER=1 FREIE_VERGABE=1 EIG_DIREKT=1 ...    stoert der neue den alten Weg?
 
+# Der falsche Torwaechter, vom ersten Lauf entlarvt
+
+Die erste Fassung benutzte `area_hi` als Verschmelzungssperre. **Der erste frische Lauf hat sie in
+der allerersten Adresse widerlegt:**
+
+    [dbg open-set] [('verschmolzen', [-0.082, 0.087], 603)]  Belege=0 in 0 Gruppen
+    [Eig-Direkt] obj_T aus EINER Sichtung adressiert: 'farbe-1 + ~gesehen + duenn' (603px)
+
+Die Formstufe hatte den Fleck **im selben Blick** als verschmolzen gemeldet; die Direkt-Adressierung
+nahm ihn trotzdem. Danach loeste die Adresse in **keiner** Episode mehr auf - fuenf von fuenf
+privilegierter Rueckfall. Sie beschrieb einen Blob aus zwei Koerpern, und den gibt es nur, solange
+die beiden beieinanderliegen.
+
+**Der Grund stand seit dem 2026-08-18 im Code, eine Datei weiter:**
+
+> *"Der vorhandene Flaechen-Schutz area_hi (1411) kann das prinzipiell nicht: die Verschmelzungen
+> messen 822-1390, die groesste TRAININGSform ~940."*
+
+603 px liegen weit unter 1411. Die Flaechenschranke ist fuer diesen Zweck gemessen untauglich, und
+das war dokumentiert - ich hatte den falschen der beiden nebeneinanderliegenden Torwaechter
+genommen.
+
+**Jetzt sperrt die Farbstreuung** (`_merge_th`): aus den eigenen Einzelobjekt-Flecken gemessen,
+0,995-Quantil, nichts eingestellt. Sie faengt gemessen etwa zwei Drittel der Phantom-Geburten und
+hat in 64 von 64 geprueften Faellen keinen sauberen Einzelfleck gesperrt. **Und solange sie nicht
+scharf ist** (weniger als 12 Referenzwerte), wird gar nicht adressiert - ohne eigenen Massstab fuer
+"zwei Dinge in einem Fleck" ist eine Adresse, die den ganzen Lauf stehen bleibt, unkalkulierbar.
+`area_hi` bleibt als zweites, groeberes Tor stehen.
+
+Die erste Adresse nach der Reparatur:
+
+    [Eig-Direkt] obj_T aus EINER Sichtung adressiert: '~gesehen'
+                 (605px, Farbstreuung 0.097 < 0.111, Formvektor)
+
+**Nur der Formvektor** - keine Farbe, keine Groesse. Das ist die reinste Fassung der Nutzeridee
+("nimm das, was diesem hier aehnlich ist"), und sie entsteht so, weil im frischen Lauf zu diesem
+Zeitpunkt noch keine Farbklasse existiert. Der Preis steht im Fovea-Zweig: eine reine
+Formvektor-Adresse hat keinen Schluessel, dem ein Tracker folgen koennte, also laeuft sie ehrlich
+mit `servo=False`.
+
+# Kann eine eingefrorene Adresse einen Szenenwechsel ueberhaupt ueberstehen?
+
+Getrennt gemessen, 40 echte Laufszenen, 90 Koerper-Szenenpaare, Zustand `ad9d768c`
+(Pruefstand - der frische Lauf hat eine andere Deskriptorstatistik):
+
+    Achse     Median     p90      Toleranz   ueberschritten
+    chroma    0.0283   0.1251     0.1200        12,2 %
+    form      0.7709   1.8715     1.4563        18,9 %
+    spanne    0.0017   0.0067     0.0050        15,6 %
+
+    alle drei Achsen halten gleichzeitig:  72,2 %
+
+**Keine Achse ist der Ausreisser** - alle drei brechen etwa gleich oft, und das UND kostet
+zusammen 28 Punkte. Eine eingefrorene Drei-Achsen-Adresse kann also halten, aber knapp. Genau
+deshalb waren fuenf Rueckfaelle in Folge ein Signal und kein Rauschen.
+
 # Fallen
 
 * **Die Adresse ist eingefroren.** Sie entsteht aus EINER Lage; der Deskriptor driftet mit Pose
@@ -122,14 +178,17 @@ Der Vergleich, fuer den er gebaut ist:
   gebaut - und waere der naechste Schritt, denn die Nutzeridee sieht sie ausdruecklich vor
   (*"der Vektor kann sich mit der Zeit aendern"*).
 * **Die Bestaetigung war ein FILTER, und der faellt mit weg.** Sie hat verschmolzene Blobs und
-  Eintagsdetektionen aussortiert. Dagegen stehen hier nur bereits gemessene Tore, keine neuen:
-  `area_hi`, der kalibrierte Arbeitsraum, die Identitaetspruefung. Ob das reicht, ist die
-  eigentliche Messfrage.
+  Eintagsdetektionen aussortiert. Dagegen stehen hier nur bereits gemessene Tore, keine neuen.
+  Welche das sein muessen, hat der erste Lauf entschieden - siehe unten.
 * **Nicht persistiert.** Eigenschafts-Adressen werden bewusst nicht gespeichert (ein Messwert von
   gestern beschreibt die heutige Szene nicht). Eine Direkt-Adresse gilt fuer den Lauf, nicht
   darueber hinaus.
 * **Der Schalter ersetzt die Geometriequelle nicht.** Der Erzeuger verteilt weiter Rollen, er
   erfindet keine Objekte. Nach sieben Koerpern ist auch dieser Weg zu Ende.
+* **Die Farbstreuungs-Sperre ist keine Null.** Gemessen faengt sie etwa zwei Drittel der
+  Verschmelzungen; bei aehnlich gefaerbten Nachbarn (obj_U neben obj_blue, 0,099) greift sie kaum.
+  Die erste Adresse nach der Reparatur lag mit 0,097 knapp unter der Schwelle 0,111 - also im
+  Ueberlappungsbereich der beiden Verteilungen.
 * **Vorgabe bleibt 0.**
 
 # Verwandt

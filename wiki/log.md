@@ -7,6 +7,25 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-16
 
+* **Ergaenzung**: [Die Adresse ohne Klasse](/mechanismen/adresse-ohne-klasse.md) - **der falsche
+  Torwaechter, vom ersten Lauf entlarvt.** Meine erste Fassung benutzte `area_hi` als
+  Verschmelzungssperre; der erste frische Lauf hat sie in der ALLERERSTEN Adresse widerlegt: der
+  Fleck war im selben Blick von der Formstufe als `('verschmolzen', [-0.082, 0.087], 603)` gemeldet
+  worden, die Direkt-Adressierung nahm ihn trotzdem, und die Adresse loeste danach in KEINER
+  Episode mehr auf (5 von 5 privilegierter Rueckfall) - sie beschrieb einen Blob aus zwei Koerpern.
+  **Der Grund stand seit dem 18.08. eine Datei weiter im Code:** *"Der vorhandene Flaechen-Schutz
+  area_hi (1411) kann das prinzipiell nicht: die Verschmelzungen messen 822-1390, die groesste
+  TRAININGSform ~940."* 603 px liegen weit darunter. Jetzt sperrt die FARBSTREUUNG (`_merge_th`,
+  selbst gemessenes 0,995-Quantil), und solange die weniger als 12 Referenzwerte hat, wird gar
+  nicht adressiert - die entfallende Bestaetigung WAR dieser Filter. Erste Adresse nach der
+  Reparatur: `'~gesehen'` allein, also **nur der Formvektor**, ohne Farbe und Groesse (605px,
+  Farbstreuung 0,097 < 0,111) - die reinste Fassung der Nutzeridee, zum Preis von `servo=False`,
+  weil kein Tracker einem Vektor folgen kann. **Dazu eine getrennte Achsen-Messung** (40 echte
+  Laufszenen, 90 Koerper-Szenenpaare, Pruefstand): chroma bricht 12,2 %, form 18,9 %, spanne 15,6 %
+  der Faelle - **keine Achse ist der Ausreisser**, aber das UND kostet zusammen 28 Punkte, alle drei
+  halten nur in 72,2 %. Eine eingefrorene Drei-Achsen-Adresse kann also halten, aber knapp; fuenf
+  Rueckfaelle in Folge waren deshalb ein Signal und kein Rauschen. Drei frische Arme neu gestartet.
+
 * **Anlage**: [Die Adresse ohne Klasse](/mechanismen/adresse-ohne-klasse.md) - `ACT23_EIG_DIREKT`
   gebaut, der Schritt, den der Befund davor als naechsten benannt hat. `_direkt_adressieren` sitzt
   als Gegenstueck zu `_try_bind` im selben Blick und macht einen Koerper OHNE Eintrag aus EINER
