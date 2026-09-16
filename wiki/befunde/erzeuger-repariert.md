@@ -100,8 +100,10 @@ nur `obj_X` als zusammengesetzt nennt.
   adressiert) sind mechanisch belegt; Geburtenzahlen und Quote sind es nicht.
 * **Nur bis obj_X.** Die Kette endet, wenn alle sieben Koerper vergeben sind. Ein Langlauf wuerde
   danach wieder stehen.
-* **Nicht geprueft**, ob die drei Knoepfe auch ueber Hunderte Episoden halten oder ob die jungen
-  Klassen spaeter doch noch sterben.
+* ~~**Nicht geprueft**, ob die drei Knoepfe ueber Hunderte Episoden halten.~~ **GEPRUEFT
+  (2026-09-16, 400 Episoden):** die Knoepfe fallen alle bis Ep 29, danach kommt keiner mehr
+  dazu; eine der drei Klassen (obj_X) stirbt nach 145 Episoden, der Koerper bleibt aber
+  adressierbar. Siehe [Die Aneignungskette traegt 29 Episoden](/befunde/kette-haelt-30-episoden.md).
 * **Vorgabe bleibt 0** fuer beide Schalter.
 
 # Verwandt
@@ -109,4 +111,5 @@ nur `obj_X` als zusammengesetzt nennt.
 * [Die freie Vergabe oeffnet die erste Tuer](/befunde/freie-vergabe-erste-tuer.md) - der Lauf davor
 * [Die Vergabe-Engstelle, diagnostiziert](/befunde/vergabe-engstelle-diagnose.md) - die Diagnose
 * [Die Geburtenrate hat zwei Ursachen](/befunde/geburtenrate-und-saettigung.md) - der tote Erzeuger, hier repariert
+* [Die Aneignungskette traegt 29 Episoden](/befunde/kette-haelt-30-episoden.md) - der Langlauf dazu
 * [Ziel](/ziel.md) - der Massstab

@@ -106,6 +106,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Die Vergabe-Engstelle, diagnostiziert](befunde/vergabe-engstelle-diagnose.md) - **genau EIN Knopf je Lauf**, und das Eigenschafts-Kommando umgeht ihn nicht: die Auto-Schleife erweitert `state.OBJECTS` nie. obj_X wird in 300 Episoden nie adressiert
 * [Die freie Vergabe oeffnet die erste Tuer](befunde/freie-vergabe-erste-tuer.md) - `ACT23_FREIE_VERGABE`: 2 Knoepfe statt 1, aber das Repertoire wird nicht breiter. **Dahinter stehen zwei weitere Tueren**, und die Reihenfolge ist jetzt klar
 * [Der Erzeuger reicht die Probe-Rolle weiter](befunde/erzeuger-repariert.md) - **`ACT23_NOVEL_WEITER`: der Agent eignet sich zum ersten Mal einen Koerper an, den er strukturell nie erreichen konnte** (obj_X, 17-mal adressiert); 3 Knoepfe gegen 1
+* [Die Aneignungskette traegt 29 Episoden](befunde/kette-haelt-30-episoden.md) - **400 Episoden: alle drei Knoepfe fallen bis Ep 29, danach 371 Episoden nichts.** Der Engpass ist nicht mehr die Maschinerie, sondern die Welt
 * [Die Daempfungsfunktion](befunde/daempfungsfunktion.md) - **sie haengt nicht am Betrag, sondern am Nachbarabstand** und ist die Verschmelzungsschwelle: `delta < Nachbarabstand - 40 mm`; die DREHUNG traegt nur `yaw4` und **mit umgekehrtem Vorzeichen**
 
 # Chronik der Entwicklung

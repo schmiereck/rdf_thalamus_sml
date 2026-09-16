@@ -5,6 +5,26 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-16
+
+* **Anlage**: [Die Aneignungskette traegt 29 Episoden](/befunde/kette-haelt-30-episoden.md) - der
+  Langlauf zur Kette (400 frische Episoden, Erzeuger + freie Vergabe). **Alles Wesentliche passiert
+  bis Episode 29:** drei Knoepfe (Ep 21, 26, 29), dazwischen bei Ep 23 die Meldung
+  `Probe-Rolle weitergereicht: obj_T ist entdeckt -> obj_X (noch offen: keiner)`. **Danach 371
+  Episoden ohne einen weiteren Knopf.** Fuenf Geburten nach der Saettigung (neu-5 bis neu-8), alle
+  mit derselben Begruendung verhungert - *"nie stabil wiedererkannt"*, nach 24 bis 27 Episoden;
+  freie Koerper gaebe es (obj_red, obj_green, obj_L, obj_U tragen keine Formklasse), aber keine
+  Klasse bestaetigt sich dreimal auf demselben. **Eine der drei GEBUNDENEN Klassen stirbt:** neu-4
+  auf obj_X nach 145 Episoden - ausgerechnet die, wegen der die Kette gebaut wurde. Der Koerper
+  bleibt trotzdem adressierbar (Bloecke nach dem Tod: 10 und 18 Adressierungen), weil der Eintrag
+  in `state.OBJECTS` das Sterben der Klasse ueberlebt und Farbe/Groesse weiter greifen - **verloren
+  ist der selbst gegebene Name, nicht der Zugriff.** Quote je 100 Ep: 3/17/16/16 %, also Hochlauf
+  und dann flach wie im 1109-Episoden-Langlauf. **Der Engpass ist damit nicht mehr die Maschinerie,
+  sondern die Welt:** sieben Koerper sind die Obergrenze der Aneignung, erreicht in 29 Episoden;
+  alles danach ist Churn. Das ist die schaerfste Fassung von *"laenger laufen lassen bringt
+  nichts"* - jetzt mit einem Grund statt einer Beobachtung. **Naechster Schritt ist kein Schalter,
+  sondern eine Quelle neuer Geometrie.** Beide Schalter bleiben auf 0.
+
 ## 2026-09-15
 
 * **Anlage**: [Der Erzeuger reicht die Probe-Rolle weiter](/befunde/erzeuger-repariert.md) -
