@@ -167,6 +167,23 @@ Getrennt gemessen, 40 echte Laufszenen, 90 Koerper-Szenenpaare, Zustand `ad9d768
 zusammen 28 Punkte. Eine eingefrorene Drei-Achsen-Adresse kann also halten, aber knapp. Genau
 deshalb waren fuenf Rueckfaelle in Folge ein Signal und kein Rauschen.
 
+# Die Regel, die der Lauf erzwungen hat: keine Farbe in einer Dauer-Adresse
+
+`ACT23_FARB_MISCHUNG` (Vorgabe 1) faerbt **jede Episode** um. Eine eingefrorene Adresse, die eine
+Farbklasse nennt, trifft deshalb nicht den Koerper, sondern *"was gerade diese Farbe traegt"*.
+Gemessen: obj_X mit `(farbe-1, ..., dick)` **0 von 18 bzw. 0 von 22** brauchbaren Adressierungen,
+ohne die Farbachse **6 von 14**, Median 141 mm -> **1,0 mm**
+([Befund](/befunde/dauer-adresse-vertraegt-keine-farbe.md)).
+
+`_direkt_adressieren` nennt deshalb keine Farbe, solange `FARB_MISCHUNG` laeuft. Das ist kein
+Sonderfall: **eine dauerhafte Adresse darf nur Achsen nennen, die Eigenschaften des Koerpers
+sind**, und in der gemischten Welt ist die Farbe ausdruecklich keine. Mit
+`ACT23_FARB_MISCHUNG=0` ist sie wieder eine und darf wieder genannt werden.
+
+`ACT23_EIG_DIREKT_FORM` (die Formachse zuerst) wird dadurch weitgehend gegenstandslos: ohne
+Farbachse ist die Form die einzige verfolgbare Achse und wird ohnehin immer genannt. Der Schalter
+bleibt, weil er die Sache entschieden hat - und weil er mit `FARB_MISCHUNG=0` wieder greift.
+
 # Fallen
 
 * **Die Adresse ist eingefroren.** Sie entsteht aus EINER Lage; der Deskriptor driftet mit Pose

@@ -7,6 +7,32 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-16
 
+* **Widerlegung + Anlage**: [Eine dauerhafte Adresse darf keine Farbe nennen](/befunde/dauer-adresse-vertraegt-keine-farbe.md)
+  - der entscheidende Versuch aus der Seite davor, gefahren als drei frische Arme je 140 Episoden
+  (wuerfel / formzuerst / ohnefarbe, Seed 4242). **Er sollte trennen, ob die Formachse die gute ist
+  oder obj_T der leichtere Koerper - und hat BEIDE Lesarten widerlegt.** Die Formachse zu erzwingen
+  aendert nichts (obj_X 0 von 22 brauchbar gegen 0 von 18, p = 1,00; die Aufloesung steigt von 5,6
+  auf 27,3 %, aber alle sechs Aufloesungen sind grobe Fehler). Die FARBACHSE zu streichen aendert
+  alles: **0/18 -> 6/14 brauchbar, Median 141,3 -> 1,0 mm, grobe Fehler 1 -> 0** (p = 3,3e-3).
+  **URSACHE:** `ACT23_FARB_MISCHUNG` (Vorgabe 1) faerbt JEDE Episode um -- eine eingefrorene
+  Adresse mit `farbe-1` trifft nicht den Koerper, sondern was gerade diese Farbe traegt. Jede
+  Aufloesung meldete "1 Treffer", also eindeutig, und lag 60-140 mm daneben ("eindeutig ist nicht
+  richtig", zum wiederholten Mal). Der Docstring von `_farbe_wuerfeln` sagt es seit jeher, nur fuer
+  den anderen Pfad: `_auto_eig_umschreiben` wuerfelt jede Episode neu und ist nie betroffen, eine
+  Dauer-Adresse ist es immer. **Die Regel ist allgemeiner als der Schalter: eine dauerhafte Adresse
+  darf nur Achsen nennen, die EIGENSCHAFTEN DES KOERPERS sind** -- in der gemischten Welt ist die
+  Farbe ausdruecklich keine, sie wurde genau deshalb entkoppelt. Gebaut: keine Farbachse in einer
+  Direkt-Adresse, solange FARB_MISCHUNG laeuft. Drei Alternativerklaerungen vorher geprueft und
+  verworfen (Verformung geht nicht verloren; obj_X stand in 10 von 10 Rueckfaellen auf dem Tisch;
+  eine getrennte Achsenmessung sagt sogar, **obj_X sei der LEICHTERE** Koerper -- genau dieser
+  Widerspruch zwischen Pruefstand und Lauf war die Spur). Ausserdem repariert: `_adresse_wuerfeln`
+  wuerfelt jetzt auch dann, wenn ein Startpunkt gesetzt ist -- sonst verbrauchte ein Arm drei
+  Zufallszahlen weniger und die Arme divergierten ab Episode 8, obwohl der Schalter keine
+  Entscheidung anders getroffen hatte (obj_X waere auf 569 gegen 924 px adressiert worden, der
+  Vergleich haette die Szene gemessen statt die Achse). **Vorgabe bleibt 0.**
+  Die Seite davor behaelt ihre Zahlen, bekommt aber einen Nachtrag und einen korrigierten Titel:
+  [Aus einer Sichtung kommandierbar](/befunde/adresse-ohne-klasse-gemessen.md).
+
 * **Anlage**: [Der Formvektor ist die gute Adresse](/befunde/adresse-ohne-klasse-gemessen.md) -
   drei frische Arme je 140 Episoden (kette / direkt / beides, alle mit NOVEL_WEITER=1, Seed 4242).
   **ZWEI Ergebnisse.** Erstens die Geschwindigkeit: der erste Koerper wird nach **7 statt 22

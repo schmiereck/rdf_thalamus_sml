@@ -1,7 +1,7 @@
 ---
 type: Befund
-title: Der Formvektor ist die gute Adresse - ohne Klasse, aus einer Sichtung, nach 7 statt 22 Episoden
-description: Drei frische Arme je 140 Episoden. Die Direkt-Adressierung eignet sich einen Koerper nach 7 Episoden an, der Weg ueber Klassengeburt und Bestaetigung braucht 22. Und die Aufloesung spaltet sich scharf nach der genannten Achse - die reine Formvektor-Adresse haelt in 72,7 und 76,5 Prozent der Episoden mit 5 mm Median und null groben Fehlern, die Adresse aus Farbe und Groessenband in 5,6 und 0,0 Prozent. Zum ersten Mal spricht eine Messung FUER die stetige Adressierung statt nur nicht dagegen.
+title: Aus einer Sichtung kommandierbar - nach 7 statt 22 Episoden (Ursachen-Lesart widerlegt)
+description: NACHTRAG - die Ursachen-Lesart dieser Seite ist widerlegt, die Zahlen stehen. Drei frische Arme je 140 Episoden. Die Direkt-Adressierung eignet sich einen Koerper nach 7 Episoden an, der Weg ueber Klassengeburt und Bestaetigung braucht 22. Und die Aufloesung spaltet sich scharf nach der genannten Achse - die reine Formvektor-Adresse haelt in 72,7 und 76,5 Prozent der Episoden mit 5 mm Median und null groben Fehlern, die Adresse aus Farbe und Groessenband in 5,6 und 0,0 Prozent. Die Erklaerung dafuer war falsch: nicht die Achse entscheidet, sondern dass die Welt jede Episode umfaerbt und eine Adresse deshalb keine Farbe nennen darf.
 tags: [act23, kommando, latent, selbstlernen, ab]
 status: stable
 evidenz: einzelmessung
@@ -15,6 +15,23 @@ sources:
     resource: /mechanismen/adresse-ohne-klasse.md
     title: Der Bau und die zwei Defekte, die dabei auffielen
 ---
+
+# Nachtrag 2026-09-16: die Ursache war eine andere
+
+**Die Zahlen dieser Seite stehen. Ihre Erklaerung nicht.** Die Seite las die Spaltung als
+Achsen-Effekt - Formvektor gut, diskretisierte Achsen schlecht - und nannte die fehlende Trennung
+von Achse und Koerper selbst als offenen Punkt. Der Versuch, der das entscheiden sollte, hat
+**beide Lesarten widerlegt**:
+
+    obj_X mit erzwungener Formachse   0 von 22 brauchbar   (p = 1,00 gegen 0 von 18)
+    obj_X ohne die Farbachse          6 von 14 brauchbar   (p = 3,3e-3), Median 141 -> 1,0 mm
+
+Die Ursache ist die **Farbmischung**: `ACT23_FARB_MISCHUNG` (Vorgabe 1) faerbt jede Episode um,
+also adressiert `farbe-1` nicht den Koerper, sondern was gerade diese Farbe traegt. obj_T
+funktionierte, weil seine Adresse keine Farbe nennt - nicht, weil die Formachse als solche besser
+waere. Die getrennte Achsenmessung sagt sogar, dass **obj_X der leichtere Koerper ist**.
+
+Vollstaendig: [Eine dauerhafte Adresse darf keine Farbe nennen](/befunde/dauer-adresse-vertraegt-keine-farbe.md).
 
 # Aufbau
 
@@ -65,10 +82,12 @@ Achsen zusammen in 72,2 % der Szenenwechsel.
 **Die Adresse aus Farbe und Groessenband haelt nicht.** `'farbe-1 + dick'` loest in 5,6 bzw. 0,0 %
 auf - und der eine Treffer lag **141 mm daneben**, also am falschen Koerper.
 
-> Zum ersten Mal spricht eine Messung **fuer** die stetige Adressierung, statt nur nicht dagegen.
-> Und sie spricht genau in der Richtung der
-> [Nutzeridee](/fragen/stetige-adressierung.md): das Gute ist der LATENTE VEKTOR, das Schlechte
-> sind die diskretisierten Achsen.
+> ~~Zum ersten Mal spricht eine Messung **fuer** die stetige Adressierung... das Gute ist der
+> LATENTE VEKTOR, das Schlechte sind die diskretisierten Achsen.~~
+> **WIDERLEGT (s. Nachtrag oben).** Dass die Formvektor-Adresse haelt und die andere nicht, ist
+> gemessen richtig - aber nicht, weil die eine Achse besser waere. Die andere Adresse nannte die
+> FARBE, und die Welt faerbt jede Episode um. Die Groessenachse steht unter diesem Befund nicht
+> mehr im Verdacht: in `ohnefarbe` traegt obj_X `(None, cube, dick)` und trifft auf 1,0 mm.
 
 # Lieferquote - nicht das Kriterium, aber sie sagt etwas
 
@@ -85,16 +104,19 @@ Adresse geuebt wurde.
 # Was NICHT gezeigt ist
 
 **Ein Koerper je Adresstyp.** `'~gesehen'` sass auf obj_T, `'farbe-1 + dick'` auf obj_X. Ob die
-Formachse besser ist oder obj_T der leichtere Koerper, **trennt diese Messung nicht**. Zwei
-unabhaengige Indizien stuetzen die Achsen-Lesart, ersetzen sie aber nicht:
+Formachse besser ist oder obj_T der leichtere Koerper, **trennt diese Messung nicht**. Damals
+standen zwei Indizien fuer die Achsen-Lesart; **eines davon ist inzwischen entkraeftet, das andere
+war der halbe Weg zur richtigen Antwort:**
 
-* Das oberste Groessenband ist gemessen das Band der VERSCHMOLZENEN Blobs - 26 von 26 groben
-  Adressierungsfehlern lagen dort ([Befund](/befunde/adressfehler-sind-verschmelzung.md)).
-  `'dick'` ist dieses Band.
+* ~~Das oberste Groessenband ist das Band der VERSCHMOLZENEN Blobs, und `'dick'` ist dieses
+  Band.~~ **ENTKRAEFTET:** in `ohnefarbe` traegt obj_X `(None, cube, dick)` - dasselbe Band - und
+  trifft auf 1,0 mm ohne einen einzigen groben Fehler. Die Groessenachse war nicht das Problem.
 * obj_X ist der Koerper, dem als einzigem eine gebundene Farbklasse fehlt, und seine GERENDERTE
-  Chroma ist von obj_L kaum zu unterscheiden ([[act23-kreuz-farbkollision]]).
+  Chroma ist von obj_L kaum zu unterscheiden ([[act23-kreuz-farbkollision]]). **Das zeigte auf die
+  Farbe - nur nicht auf den richtigen Grund.** Es ist nicht die Aehnlichkeit der Chroma, sondern
+  dass die Farbe jede Episode neu VERTEILT wird.
 
-**Der billige naechste Schritt, der es entscheidet:** die Formachse in JEDER Direkt-Adresse
+**GEMACHT (2026-09-16), und er hat beide Lesarten widerlegt - s. Nachtrag oben.** Der Plan war: die Formachse in JEDER Direkt-Adresse
 erzwingen (sie war bei obj_X vorhanden - `resolve()` gab die trainierte Klasse `cube` - die
 Wuerfelei hat sie nur nicht gezogen) und obj_X erneut messen. Dann stehen beide Koerper mit
 derselben Achse da.
@@ -136,3 +158,4 @@ Vor Reparatur 2 loesten die Adressen in 3 von 18 Faellen auf, danach in 29 von 7
 * [Die stetige Adressierung im Lauf](/befunde/stetige-adressierung-im-lauf.md) - der neutrale Schritt davor
 * [Der Erzeuger reicht die Probe-Rolle weiter](/befunde/erzeuger-repariert.md) - der Bezugsarm
 * [Adressfehler sind Verschmelzung](/befunde/adressfehler-sind-verschmelzung.md) - warum das oberste Band verdaechtig ist
+* [Eine dauerhafte Adresse darf keine Farbe nennen](/befunde/dauer-adresse-vertraegt-keine-farbe.md) - die wirkliche Ursache

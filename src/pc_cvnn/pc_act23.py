@@ -686,6 +686,26 @@ EIG_TOL_SPAN = float(os.environ.get("ACT23_EIG_TOL_SPAN", "0.005"))    # Groesse
 #     Arm A   NOVEL_WEITER=1 FREIE_VERGABE=1                  der bekannte Weg ueber Klasse+Knopf
 #     Arm B   NOVEL_WEITER=1 EIG_DIREKT=1 EIG_STETIG=1        eine Sichtung statt der Kette
 EIG_DIREKT = os.environ.get("ACT23_EIG_DIREKT", "0") == "1"
+# DIE FORMACHSE ZUERST (ACT23_EIG_DIREKT_FORM, Vorgabe 0).
+# DER ENTSCHEIDENDE SCHRITT aus wiki/befunde/adresse-ohne-klasse-gemessen.md.  Dort loesten die
+# beiden Direkt-Adressen voellig verschieden auf:
+#     obj_T   (None, ~gesehen, None)    16 von 22 = 72,7 %    5,0 mm Median, 0 grobe Fehler
+#     obj_X   (farbe-1, None, dick)      1 von 18 =  5,6 %    141 mm beim einzigen Treffer
+# Die eine nennt NUR die Formachse, die andere nennt sie GAR NICHT -- aber es ist auch ein anderer
+# Koerper, und die Messung trennt beides nicht.  Der Schalter trennt es: die Direkt-Adresse
+# beginnt bei der Formachse ALLEIN und legt weitere nur nach, solange sie nicht eindeutig ist.
+#
+# WARUM NICHT EINFACH "Formachse zusaetzlich erzwingen": _eig_passt verknuepft alle genannten
+# Achsen mit UND.  Eine Formachse ZU einer kaputten Farb-Groessen-Adresse dazuzulegen macht sie
+# strenger, nicht besser -- der Gewinn kann nur entstehen, wenn die schlechten Achsen WEGFALLEN.
+# Deshalb ersetzt der Schalter die Wuerfelei durch einen festen Startpunkt, statt sie zu ergaenzen.
+#
+# WAS DAGEGEN SPRICHT, und es ist ein echter Einwand: die Wuerfelei uebt ABSICHTLICH
+# unvollstaendige Angaben ("das duenne Ding" statt "das duenne violette Kreuz").  Ein fester
+# Startpunkt nimmt der Adressierung diese Vielfalt.  Fuer die Direkt-Adresse ist das vertretbar --
+# sie steht den ganzen Lauf und wird nicht geuebt, sondern benutzt -- fuer _auto_eig_umschreiben
+# waere es das nicht, und dort greift der Schalter deshalb NICHT.
+EIG_DIREKT_FORM = os.environ.get("ACT23_EIG_DIREKT_FORM", "0") == "1"
 # PLATZHALTER FUER EINE GENANNTE ACHSE OHNE KLASSENNAMEN.  _eig_passt liest `namen[i] is not
 # None` als "diese Achse ist genannt" und vergleicht dann den MESSWERT -- der Name selbst wird
 # beim stetigen Matchen nirgends gelesen.  Fuer eine Form ohne Klasse braucht es also nur
@@ -2014,7 +2034,7 @@ def run_self_learning_steering(headless=False):
         for _k in range(3):
             panel._eig_beschriften(_k)
 
-    def _adresse_wuerfeln(werte, mess, p, ident=None):
+    def _adresse_wuerfeln(werte, mess, p, ident=None, start=None):
         """Aus (Farbe, Form, Groesse) die KUERZESTE Adresse wuerfeln, die den Koerper bei `p` trifft.
 
         EINE FASSUNG FUER ALLE ADRESSQUELLEN -- die Auto-Schleife (_auto_eig_umschreiben) und die
@@ -2026,6 +2046,9 @@ def run_self_learning_steering(headless=False):
         VERFOLGBARE Achse zur Verfuegung steht.  `mess` traegt die Messwerte derselben drei
         Achsen; sie werden nur bei ACT23_EIG_STETIG verglichen.
 
+        `start` setzt die Achsen, mit denen begonnen wird, statt sie zu wuerfeln (s.
+        ACT23_EIG_DIREKT_FORM); nachgelegt wird danach wie immer, bis die Adresse eindeutig ist.
+
         `p` ist die Lage, auf die die Adresse zeigen SOLL, und `ident` erzwingt, dass sie das auch
         tut (None = wie ACT23_EIG_IDENT).  Die Auto-Schleife uebergibt dort die wahre Koerperlage
         und laesst den Schalter entscheiden; die Direkt-Adressierung uebergibt die DETEKTION, aus
@@ -2036,9 +2059,19 @@ def run_self_learning_steering(headless=False):
         _verfolgbar = [i for i in (0, 1) if werte[i] is not None]
         if not _verfolgbar:
             return None
-        _mk = [bool(crng.integers(2)) for _ in range(3)]
+        # IMMER WUERFELN, auch wenn ein Startpunkt gesetzt ist -- und zwar GENAU dieselben Zuege.
+        # WARUM (gemessen, und es haette das ganze A/B verdorben): verbraucht ein Arm drei
+        # Zufallszahlen weniger als der andere, laufen beide ab diesem Moment auseinander, ohne
+        # dass der Schalter eine einzige ENTSCHEIDUNG anders getroffen haette.  Im ersten Anlauf
+        # divergierten die Arme ab Episode 8, obwohl die erste Adresse in beiden zeichengleich war
+        # -- und obj_X wurde dann auf ZWEI VERSCHIEDENEN Detektionen adressiert (569 gegen 924 px).
+        # Damit haette der Vergleich die Szene gemessen statt die Achse.
+        _wurf = [bool(crng.integers(2)) for _ in range(3)]
+        if not any(_wurf[i] for i in _verfolgbar):
+            _wurf[_verfolgbar[int(crng.integers(len(_verfolgbar)))]] = True
+        _mk = list(start) if start is not None else _wurf
         if not any(_mk[i] for i in _verfolgbar):
-            _mk[_verfolgbar[int(crng.integers(len(_verfolgbar)))]] = True
+            return None               # Startpunkt nennt keine verfolgbare Achse -> blinde Adresse
         _sv = sim.d.mocap_pos.copy()      # die Suche PARKT die Marker (_park_markers); ohne
         for _versuch in range(4):         # Rueckgabe liefert goal_fn ein GEPARKTES Ziel
             _tri = tuple(w if m else None for w, m in zip(werte, _mk))
@@ -3302,12 +3335,35 @@ def run_self_learning_steering(headless=False):
                      float(d["span"]) if d.get("span") is not None else None)
             _f = colours.classify(d["chroma"])[0] if d.get("chroma") is not None else None
             _fo, _g = d.get("shape"), groessen_band(d.get("dicke"), d.get("span"))
+            # KEINE FARBE IN EINER DAUERHAFTEN ADRESSE, solange die Welt umfaerbt.
+            # GEMESSEN, und es ist die Erklaerung fuer den bis dahin raetselhaftesten Befund:
+            # obj_X trug die Adresse (farbe-1, cube, dick) und loeste in 140 Episoden KEIN
+            # EINZIGES Mal brauchbar auf -- 0 von 18 ohne, 0 von 22 mit erzwungener Formachse.
+            # Dabei meldete jede Aufloesung "1 Treffer", also eindeutig, und zeigte trotzdem 60-140
+            # mm daneben.  Der Grund steht in _farbe_wuerfeln: ACT23_FARB_MISCHUNG (Vorgabe 1)
+            # faerbt JEDE Episode neu um.  Die Adresse trifft damit nicht den Koerper, sondern
+            # "was gerade farbe-1 ist" -- und das ist von Episode zu Episode ein anderer.
+            # DER DOCSTRING DORT SAGT ES SEIT JEHER, nur fuer den anderen Pfad: "eine nach dem
+            # Umfaerben gewuerfelte Eigenschafts-Adresse muss die NEUE Farbklasse tragen, sonst
+            # adressiert das Kommando eine Farbe, die es nicht mehr gibt."  _auto_eig_umschreiben
+            # wuerfelt JEDE Episode neu und ist deshalb nie betroffen; eine Direkt-Adresse steht
+            # den ganzen Lauf und ist es immer.
+            # DAS IST KEIN SONDERFALL, SONDERN DIE REGEL: eine dauerhafte Adresse darf nur Achsen
+            # nennen, die EIGENSCHAFTEN DES KOERPERS sind.  In der gemischten Welt ist die Farbe
+            # ausdruecklich keine -- sie wurde genau deshalb entkoppelt, damit der Farbpfad die
+            # Identitaet nicht mehr mittraegt (s. FARB_MISCHUNG).  Mit ACT23_FARB_MISCHUNG=0 ist
+            # sie wieder eine, und dann darf sie auch wieder genannt werden.
+            if FARB_MISCHUNG:
+                _f = None
             # DIE FORMACHSE OHNE KLASSENNAMEN.  resolve() liefert fuer eine unbekannte Form None --
             # genau deshalb ist dieser Weg diskret verschlossen.  Stetig braucht die Achse keinen
             # Namen, nur einen Messwert; der Platzhalter sagt lediglich, dass sie GENANNT ist.
             if EIG_STETIG and _fo is None and _mess[1] is not None:
                 _fo = EIG_GESEHEN
-            _tri = _adresse_wuerfeln((_f, _fo, _g), _mess, _p, ident=True)
+            if EIG_DIREKT_FORM and _fo is None:
+                continue              # ohne Formachse gibt es hier nichts zu adressieren
+            _tri = _adresse_wuerfeln((_f, _fo, _g), _mess, _p, ident=True,
+                                     start=([False, True, False] if EIG_DIREKT_FORM else None))
             if _tri is None:
                 continue                  # weder Farbe noch Form -- eine reine Groessenadresse
                 #   waere blind (s. Nutzervorgabe in _auto_eig_umschreiben)
