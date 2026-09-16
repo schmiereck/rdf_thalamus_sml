@@ -631,6 +631,24 @@ GROESSE_SPANNE = os.environ.get("ACT23_GROESSE_SPANNE", "0") == "1"
 # MIT dem Schalter muss der eine Treffer DERSELBE sein wie die Detektion auf dem gemeinten
 # Koerper -- sonst werden weiter Achsen nachgelegt, und notfalls gar nicht umgeschrieben.
 EIG_IDENT = os.environ.get("ACT23_EIG_IDENT", "0") == "1"
+# STETIGE ADRESSIERUNG (ACT23_EIG_STETIG, Vorgabe 0 bis gemessen).
+# NUTZERIDEE (wiki/fragen/stetige-adressierung.md): nicht das ETIKETT adressieren, sondern das
+# GEMESSENE -- Chromatizitaet, Formeinbettung, Ausdehnung.  Der Vektor existiert fuer jedes Objekt,
+# auch fuer nie gesehene, und hat keinen Lebenszyklus: er wird nicht geboren und verhungert nicht.
+# ERSTER SCHRITT GEMESSEN (wiki/befunde/stetige-adressierung-erster-schritt.md): ueber fuenf
+# Toleranzen bleiben die groben Adressierungsfehler flach (4,9-6,7 %) und sind vom Klassennamen
+# nicht zu unterscheiden -- die stetige Achse ist trennscharf genug.  Sie ist aber auch nicht
+# besser, sondern ein anderer Punkt auf derselben Tauschkurve (Genauigkeit gegen Rueckfall).
+# WAS HIER GEBAUT IST, ist bewusst ADDITIV: die Namen bleiben in state.EIGENSCHAFT und tragen
+# Anzeige und Protokoll weiter, denn ein Vektor laesst sich nicht in eine Statuszeile schreiben.
+# Gematcht wird auf den Messwerten aus state.EIG_MESS -- die Namen sagen nur noch, WELCHE Achsen
+# genannt sind.
+EIG_STETIG = os.environ.get("ACT23_EIG_STETIG", "0") == "1"
+# Formtoleranz RELATIV zum typischen Abstand zweier Klassen im Einbettungsraum (s. _eig_bezug):
+# 0,5 = "halb so weit, wie zwei verschiedene Formen typischerweise auseinanderliegen".  Relativ,
+# weil der Deskriptor sich mit dem Lernen verschiebt und eine nackte Zahl veralten wuerde.
+EIG_TOL_FORM = float(os.environ.get("ACT23_EIG_TOL_FORM", "0.5"))
+EIG_TOL_SPAN = float(os.environ.get("ACT23_EIG_TOL_SPAN", "0.005"))    # Groessentoleranz in METERN
 # ABSTUFUNG STATT PRIVILEG (ACT23_EIG_ABSTUFUNG, Vorgabe 0 bis gemessen).  Trifft das
 # Eigenschafts-Tripel nichts, griff bisher der PRIVILEGIERTE Rueckfall: die wahre Lage aus dem
 # Simulator.  Das ist der Preis der Groessenachse -- sie traf gemessen 10,0 statt 4,7 % der
@@ -819,8 +837,67 @@ def groessen_band(dicke, span=None):
     return None
 
 
+_EIG_BEZUG = {"wert": None}          # Bezugsabstand im Einbettungsraum, einmal je Lauf gemessen
+
+
+def eig_bezug(shape_clf):
+    """Typischer Abstand ZWEIER KLASSEN im desc_embed-Raum -- der Massstab der Formtoleranz.
+
+    Gemessen aus dem, was der Agent selbst gelernt hat: die Exemplarwolken seiner offenen Klassen
+    (`shape_clf.open`), je Klasse gemittelt, dann der Median ueber alle Paare.  Keine privilegierte
+    Information, kein zusaetzliches Rendern - und er wandert mit, wenn sich der Deskriptor durch
+    Weiterlernen verschiebt.
+
+    RUECKFALL 1,86, falls weniger als zwei offene Klassen existieren (frischer Zustand): das ist
+    der auf ad9d768c gemessene Median-Abstand zweier verschiedener KOERPER
+    (wiki/befunde/stetige-adressierung-erster-schritt.md).  Eine nackte Zahl, aber nur als
+    Notnagel - sobald zwei Klassen leben, zaehlt das Gemessene."""
+    if _EIG_BEZUG["wert"] is not None:
+        return _EIG_BEZUG["wert"]
+    mittel = []
+    for nm in getattr(shape_clf, "open_names", []):
+        ex = (getattr(shape_clf, "open", {}) or {}).get(nm) or []
+        if not ex:
+            continue
+        E = np.asarray(ex, float)
+        mittel.append(E.reshape(len(E), len(shape_clf.RW), shape_clf.NH).mean(1).mean(0))
+    if len(mittel) >= 2:
+        d = [float(np.linalg.norm(mittel[i] - mittel[j]))
+             for i in range(len(mittel)) for j in range(i + 1, len(mittel))]
+        _EIG_BEZUG["wert"] = float(np.median(d)) or 1.86
+    else:
+        _EIG_BEZUG["wert"] = 1.86
+    return _EIG_BEZUG["wert"]
+
+
+def _eig_passt(det, namen, mess, shape_clf):
+    """Passt eine Detektion auf eine STETIGE Adresse?  Eine Achse ohne Namen ist 'beliebig'.
+
+    `namen` sagt, welche Achsen genannt sind (die Wuerfelei entscheidet das wie bisher), `mess`
+    traegt die Werte: (Chromatizitaet, Formeinbettung, Spanne in Metern)."""
+    from pc_cvnn.arm_modules.colour_openset import TH as _CTH
+    if namen[0] is not None and mess[0] is not None:
+        if det.get("chroma") is None:
+            return False
+        if float(np.linalg.norm(np.asarray(det["chroma"], float)
+                                - np.asarray(mess[0], float))) > _CTH:
+            return False
+    if namen[1] is not None and mess[1] is not None:
+        if det.get("desc") is None:
+            return False
+        _e = np.asarray(shape_clf.desc_embed(det["desc"]), float)
+        if float(np.linalg.norm(_e - np.asarray(mess[1], float))) >                 EIG_TOL_FORM * eig_bezug(shape_clf):
+            return False
+    if namen[2] is not None and mess[2] is not None:
+        if det.get("span") is None:
+            return False
+        if abs(float(det["span"]) - float(mess[2])) > EIG_TOL_SPAN:
+            return False
+    return True
+
+
 def finde_nach_eigenschaften(sim, shape_clf, colours, farbe=None, form=None, groesse=None,
-                             min_area=200.0):
+                             min_area=200.0, mess=None):
     """Sucht die Detektion, die auf das Tripel passt.  Jede Angabe darf None sein = 'beliebig'.
 
     Gibt (pos, det, treffer) zurueck: die Weltposition, die Detektion und ALLE passenden
@@ -830,6 +907,15 @@ def finde_nach_eigenschaften(sim, shape_clf, colours, farbe=None, form=None, gro
     treffer = []
     for det in shape_clf.perceive_all(sim):
         if det.get("pos") is None or float(det.get("area", 0.0)) < min_area:
+            continue
+        if mess is not None:
+            # STETIG: die Namen sagen nur, WELCHE Achsen genannt sind; verglichen wird das
+            # Gemessene.  Die Farbschwelle ist NICHT geraten, sondern die schon kalibrierte des
+            # Farb-Offenmengen-Moduls -- dieselbe Zahl, die entscheidet, ob zwei Chromatizitaeten
+            # dieselbe Klasse waeren.
+            if not _eig_passt(det, (farbe, form, groesse), mess, shape_clf):
+                continue
+            treffer.append(det)
             continue
         f = None
         if colours is not None and det.get("chroma") is not None:
@@ -991,6 +1077,10 @@ class CommandState23:
         self.OBJECTS = list(CommandState23.OBJECTS)
         self.SHAPE_KEY = dict(CommandState23.SHAPE_KEY)
         self.EIGENSCHAFT = {}      # Koerper -> (Farbklasse, Formklasse, Groessenband); s. add_eigenschaft
+        self.EIG_MESS = {}         # Koerper -> (Chromatizitaet, Formeinbettung, Spanne) -- die
+        #   GEMESSENEN Werte derselben drei Achsen (ACT23_EIG_STETIG).  Die Namen oben bleiben fuer
+        #   Anzeige und Protokoll, gematcht wird auf diesen hier.  Wird wie EIGENSCHAFT NICHT
+        #   persistiert: ein Messwert von gestern beschreibt die heutige Szene nicht.
 
     def add_object(self, label, body, shape_key):
         """Register a SELF-DISCOVERED object: commandable like L/U, localised by its self-labelled open
@@ -1909,6 +1999,12 @@ def run_self_learning_steering(headless=False):
         # Fovea folgen kann (s. eig_servo).  Ist keine von beiden vorhanden, wird gar nicht
         # umgeschrieben: dann bleibt das Kommando beim Namen, statt eine blinde Adresse zu bauen.
         _werte = (_f, _fo, _g)
+        # DIE MESSWERTE DERSELBEN DREI ACHSEN, aus derselben Detektion -- die Adresse beschreibt
+        # damit garantiert etwas Gesehenes, genau wie die Namen darueber.
+        _mess = (np.asarray(_nah["chroma"], float) if _nah.get("chroma") is not None else None,
+                 np.asarray(shape_clf.desc_embed(_nah["desc"]), float)
+                 if _nah.get("desc") is not None else None,
+                 float(_nah["span"]) if _nah.get("span") is not None else None)
         _verfolgbar = [i for i in (0, 1) if _werte[i] is not None]
         if not _verfolgbar:
             return None
@@ -1918,7 +2014,8 @@ def run_self_learning_steering(headless=False):
         _sv = sim.d.mocap_pos.copy()      # die Suche PARKT die Marker (_park_markers); ohne
         for _versuch in range(4):         # Rueckgabe liefert goal_fn ein GEPARKTES Ziel
             _tri = tuple(w if m else None for w, m in zip(_werte, _mk))
-            _pos2, _, _tr2 = finde_nach_eigenschaften(sim, shape_clf, colours, *_tri)
+            _pos2, _, _tr2 = finde_nach_eigenschaften(sim, shape_clf, colours, *_tri,
+                                                      mess=(_mess if EIG_STETIG else None))
             # IDENTITAET, nicht nur Anzahl (s. EIG_IDENT oben): der eine Treffer muss auf dem
             # gemeinten Koerper sitzen.  Ohne das gilt eine Adresse als eindeutig, die genau ein
             # FREMDES Objekt trifft -- gemessen 316 von 318 "eindeutig" bei 8,8 % groben Fehlern.
@@ -1934,6 +2031,7 @@ def run_self_learning_steering(headless=False):
         sim.d.mocap_pos[:] = _sv          # gemessen: sonst 627-968 mm Endabstand
         mujoco.mj_forward(sim.m, sim.d)
         state.sel = state.add_eigenschaft(_b, *_tri)
+        state.EIG_MESS[_b] = _mess          # dieselben Achsen, als Messwert (s. EIG_STETIG)
         if panel is not None:
             panel._eig_werte = _eig_werte()    # waehrend des Laufs geborene Klassen nachziehen
             panel.zeige_eigenschaft(*_tri, verfuegbar=_werte)   # genannt UND was verschwiegen wurde
@@ -3639,7 +3737,9 @@ def run_self_learning_steering(headless=False):
             # Lokalisierung (0 mm).  Der shape-Zweig macht es seit jeher genauso; ich hatte es
             # beim Bau des Eigenschafts-Zweigs uebersehen.
             _saved = sim.d.mocap_pos.copy()
-            _pos, _det, _tr = finde_nach_eigenschaften(sim, shape_clf, colours, _f, _fo, _g)
+            _pos, _det, _tr = finde_nach_eigenschaften(
+                sim, shape_clf, colours, _f, _fo, _g,
+                mess=(state.EIG_MESS.get(body) if EIG_STETIG else None))
             sim.d.mocap_pos[:] = _saved
             mujoco.mj_forward(sim.m, sim.d)
             if _pos is not None and EIG_SPLIT:
