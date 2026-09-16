@@ -905,7 +905,15 @@ def eig_bezug(shape_clf):
     RUECKFALL 1,86, falls weniger als zwei offene Klassen existieren (frischer Zustand): das ist
     der auf ad9d768c gemessene Median-Abstand zweier verschiedener KOERPER
     (wiki/befunde/stetige-adressierung-erster-schritt.md).  Eine nackte Zahl, aber nur als
-    Notnagel - sobald zwei Klassen leben, zaehlt das Gemessene."""
+    Notnagel - sobald zwei Klassen leben, zaehlt das Gemessene.
+
+    DER RUECKFALL WIRD NICHT GEMERKT, und das war zuerst falsch gebaut.  Der Cache stand vor der
+    Fallunterscheidung, also fror der ERSTE Aufruf den Wert ein - im frischen Lauf passiert der,
+    WAEHREND noch keine zwei Klassenwolken existieren, und dann galt 1,86 fuer den ganzen Lauf.
+    Gemessen im ersten frischen Arm: nach 46 Episoden lag das echte Bezugsmass bei 2,257, benutzt
+    wurde weiter 1,86 - die Formtoleranz war damit dauerhaft 21 % zu eng, genau in der einzigen
+    Konfiguration, in der die Direkt-Adressierung ueberhaupt arbeitet.  Der Satz "sobald zwei
+    Klassen leben, zaehlt das Gemessene" stand schon hier; der Code hielt ihn nicht ein."""
     if _EIG_BEZUG["wert"] is not None:
         return _EIG_BEZUG["wert"]
     mittel = []
@@ -919,9 +927,8 @@ def eig_bezug(shape_clf):
         d = [float(np.linalg.norm(mittel[i] - mittel[j]))
              for i in range(len(mittel)) for j in range(i + 1, len(mittel))]
         _EIG_BEZUG["wert"] = float(np.median(d)) or 1.86
-    else:
-        _EIG_BEZUG["wert"] = 1.86
-    return _EIG_BEZUG["wert"]
+        return _EIG_BEZUG["wert"]
+    return 1.86              # NICHT merken -- s. oben: der Notnagel darf den Lauf nicht praegen
 
 
 def _eig_passt(det, namen, mess, shape_clf):

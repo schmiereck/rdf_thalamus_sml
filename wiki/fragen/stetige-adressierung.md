@@ -130,7 +130,18 @@ ohne Namen auf; im A/B ueber zwei mal 150 Episoden loest nichts auf (grob 10,8 g
 p = 0,58), **genau wie die Sonde es vorhersagte** - womit der Bau gegen seine Nachbildung
 verifiziert ist.
 
-**Die These selbst ist damit weiter ungeprueft.** Der Einbau ist additiv: die Klassen entstehen
+**Dritter Schritt gemacht (2026-09-16): die These wird zum ersten Mal GESTUETZT.**
+`ACT23_EIG_DIREKT` laesst den Lebenszyklus weg, statt ihn zu ergaenzen - und in drei frischen
+Armen je 140 Episoden
+([Befund](/befunde/adresse-ohne-klasse-gemessen.md)) wird der erste Koerper nach **7 statt 22
+Episoden** kommandierbar, ohne Geburt, Bestaetigung oder Knopf. Vor allem aber spaltet sich die
+Aufloesung **scharf nach der genannten Achse**: die reine Formvektor-Adresse haelt in 72,7 bzw.
+76,5 % der Episoden (5 mm Median, null grobe Fehler), die Adresse aus Farbklasse und Groessenband
+in 5,6 bzw. 0,0 % (zusammen 29/39 gegen 1/39, p = 1,5e-11). **Das ist genau die Richtung dieser
+Seite: das Gute ist der latente Vektor, das Schlechte sind die diskretisierten Achsen.**
+Einschraenkung: ein Koerper je Adresstyp, die Messung trennt Achse und Koerper nicht.
+
+**Der Rest der These ist weiter ungeprueft.** Der Einbau ist additiv: die Klassen entstehen
 daneben weiter, also kann der Gewinn aus ihrem Wegfall gar nicht auftreten. Der naechste
 pruefbare Schritt waere, die Auto-Schleife eine Adresse fuer einen Koerper OHNE Klasse anlegen zu
 lassen - stetig moeglich, diskret nicht, weil ohne Klasse kein Name existiert. Erst dann zeigt
@@ -148,4 +159,5 @@ scheiterten.
 * [Latente Augmentierung](/fragen/latente-augmentierung.md) - dieselbe Nutzeridee, andere Anwendung
 * [Die stetige Formachse ist genauso trennscharf](/befunde/stetige-adressierung-erster-schritt.md) - der erste Schritt
 * [Die stetige Adressierung im Lauf](/befunde/stetige-adressierung-im-lauf.md) - der zweite Schritt: gebaut, verifiziert, neutral
+* [Der Formvektor ist die gute Adresse](/befunde/adresse-ohne-klasse-gemessen.md) - der dritte Schritt: die erste Stuetze
 * [Ziel](/ziel.md)

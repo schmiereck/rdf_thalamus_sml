@@ -7,6 +7,29 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-16
 
+* **Anlage**: [Der Formvektor ist die gute Adresse](/befunde/adresse-ohne-klasse-gemessen.md) -
+  drei frische Arme je 140 Episoden (kette / direkt / beides, alle mit NOVEL_WEITER=1, Seed 4242).
+  **ZWEI Ergebnisse.** Erstens die Geschwindigkeit: der erste Koerper wird nach **7 statt 22
+  Episoden** kommandierbar, ohne Geburt, Bestaetigung oder Knopf; in `beides` kommt die
+  Direkt-Adresse der ersten Knopfvergabe um acht Episoden zuvor. Zweitens, und das ist das
+  eigentliche Ergebnis, **die Aufloesung spaltet sich scharf nach der genannten Achse**: die reine
+  Formvektor-Adresse `'~gesehen'` (EINE Achse, ohne Namen, nur der 8-dimensionale Vektor) loest in
+  72,7 bzw. 76,5 % der Episoden auf, mit 5 mm Median, 100 % Eindeutigkeit und NULL groben Fehlern
+  - die Adresse `'farbe-1 + dick'` aus Farbe und Groessenband in 5,6 bzw. 0,0 %, und ihr einziger
+  Treffer lag 141 mm daneben. Zusammen 29/39 gegen 1/39, **p = 1,5e-11**. Die 72 % treffen die
+  Offline-Vorhersage (72,2 %) auf den Punkt. **Zum ersten Mal spricht eine Messung FUER die stetige
+  Adressierung statt nur nicht dagegen, und genau in der Richtung der Nutzeridee: das Gute ist der
+  latente Vektor, das Schlechte sind die diskretisierten Achsen.** Lieferquote 10,0 / 5,0 / 9,3 %
+  (p = 0,17 bzw. 1,00) - nicht das Kriterium, aber `beides` ist von `kette` nicht zu unterscheiden,
+  die Direkt-Adressierung stoert den regulaeren Weg also nicht. **EHRLICHE GRENZE: ein Koerper je
+  Adresstyp** (obj_T gegen obj_X) - ob die Formachse besser ist oder obj_T der leichtere Koerper,
+  trennt die Messung NICHT; zwei unabhaengige Indizien stuetzen die Achsen-Lesart. Der billige
+  naechste Schritt, der es entscheidet: die Formachse in jeder Direkt-Adresse erzwingen (bei obj_X
+  war sie vorhanden -- `resolve()` gab `cube` -- die Wuerfelei hat sie nur nicht gezogen) und obj_X
+  erneut messen. Ausserdem: reiner Formvektor heisst `servo=False`, weil kein Tracker einem Vektor
+  folgen kann -- dass die Adresse trotzdem auf 5 mm trifft, macht eine Fovea auf dem
+  Einbettungsvektor zu einem lohnenden eigenen Bau. **Vorgabe bleibt 0.**
+
 * **Ergaenzung**: [Die Adresse ohne Klasse](/mechanismen/adresse-ohne-klasse.md) - **der falsche
   Torwaechter, vom ersten Lauf entlarvt.** Meine erste Fassung benutzte `area_hi` als
   Verschmelzungssperre; der erste frische Lauf hat sie in der ALLERERSTEN Adresse widerlegt: der
