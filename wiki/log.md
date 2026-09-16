@@ -7,6 +7,24 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-16
 
+* **Anlage**: [Das Wrist-Gitter kostet nichts](/befunde/wrist-gitter-kostet-nichts.md) - offline am
+  gelernten Weltmodell geprueft, ob der Wrist die vierte Problemachse ist (60 echte
+  Puffersituationen, je 720 Winkel, LCB = mu - sigma, Gitter geschachtelt). **Er ist es nicht.**
+  8 -> 16 Gitterpunkte bringt **exakt null** (gepaarter Median 0,0000); echte Gewinne beginnen erst
+  unter 4 Grad Schrittweite und saettigen bei +0,023 Guete = rund 3,8 mm aequivalenter Ablage, bei
+  25 mm Toleranz. **Die entscheidende Kontrolle:** das Maximum ueber 720 Punkte schlaegt das ueber
+  8 auch bei reinem Rauschen. Auf der geglaetteten Kurve faellt der Gewinn 8 -> 720 von +0,0462 auf
+  +0,0230 - **die Haelfte war Rausch-Jagd**, passend zu 23 % Restvariation nach Glaettung ueber eine
+  halbe Stufe. Dieselben 8 Punkte nur um eine halbe Stufe zu VERSCHIEBEN kostet dagegen **-0,1057,
+  also 2,3-mal so viel, wie die feinste Verfeinerung bringt.** **Die LAGE des Gitters ist wichtiger
+  als seine DICHTE** - und sie ist gebaut: `ACT23_WRIST_REL` spannt das Gitter um die
+  Objektachse, damit liegen zwei Punkte exakt parallel und exakt senkrecht, wo gemessen 35 % gegen
+  17 % liefern. Die Messung bestaetigt WRIST_REL damit unabhaengig und von der anderen Seite.
+  **Ein feineres Gitter ist nicht zu rechtfertigen und ein act23-Lauf eruebrigt sich** - genau der
+  Zweck der Offline-Pruefung. Erste Fassung der Reihe war fehlerhaft (32/64/128 enthalten die 8
+  Punkte nicht, die Reihe verglich verschiedene Punktmengen statt einer Verfeinerung) und ist auf
+  der Seite korrigiert vermerkt.
+
 * **Ruecknahme**: der Faden "Komplexer Wrist-Kopf" stand in
   [offene Faeden](/fragen/offene-faeden-act23.md) und der
   [Modullandschaft](/mechanismen/act23-modullandschaft.md) als **"nicht gemessen"** - beide Seiten
