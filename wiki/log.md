@@ -7,6 +7,27 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-16
 
+* **Ruecknahme**: der Faden "Komplexer Wrist-Kopf" stand in
+  [offene Faeden](/fragen/offene-faeden-act23.md) und der
+  [Modullandschaft](/mechanismen/act23-modullandschaft.md) als **"nicht gemessen"** - beide Seiten
+  korrigiert, denn **der Kern ist seit dem 2026-07-17 gebaut, Vorgabe an und gemessen.**
+  `world_model.cross_augment` rechnet genau `z_w * conj(z_yaw)` (`c = cw*cy + sw*sy`,
+  `s = sw*cy - cw*sy`, im Code als "Re(z_w * conj(z_yaw))" kommentiert), dazu die Schaerfe
+  `|cos2(w-yaw)|` (`ACT23_WORLD_SHARP`), dasselbe Produkt gegen die ARMRICHTUNG mit
+  Distanz-Interaktion (`ACT23_WORLD_ARMREL`) und die Neigung gegen die kinematisch erzwungene als
+  `z_tilt * conj(z_kin)`. Belege: Kapazitaetstest **n ~ 150 statt ~3000** sauberen Zeilen fuer
+  dieselbe bilineare Regel; Lauf 27/40 = 67,5 % gegen 45 % (Kontrolle: ausgerichtete Griffe 89 %,
+  nicht ausgerichtete 48 % = Grundrate, der Gewinn ist also die Konditionierung).
+  **Was der alte Eintrag zusaetzlich falsch nahelegte:** das Weltmodell laufe in einem
+  komplexwertigen Netz. Es laeuft auf `Policy`, einem **reellen** MLP (`np.tanh`, reelle Gewichte);
+  komplex sind `connection.py`, `node.py`, `relax_vec.py`, `rope.py`, `planner.py` und der
+  Shape-Kopf. Dort IST `[cos2w, sin2w]` bereits `e^{2iw}` als (Re, Im) - es als komplexe Zahl zu
+  schreiben aendert keine einzige Zahl. Ein nativer Kopf hiesse, ihn in die PC-Engine zu verlegen,
+  und dafuer gibt es keine Hypothese, was er besser machen soll.
+  **Was WIRKLICH offen bleibt:** der Wrist wird ueber ein Gitter gewaehlt (`wrist_grid=8`, also
+  22,5-Grad-Stufen) und per Ensemble-Argmax gescort - die **vierte diskretisierte Achse** neben
+  Farbe, Form und Groesse, und die einzige, an der die Diskretisierung nie gemessen wurde.
+
 * **Widerlegung + Anlage**: [Eine dauerhafte Adresse darf keine Farbe nennen](/befunde/dauer-adresse-vertraegt-keine-farbe.md)
   - der entscheidende Versuch aus der Seite davor, gefahren als drei frische Arme je 140 Episoden
   (wuerfel / formzuerst / ohnefarbe, Seed 4242). **Er sollte trennen, ob die Formachse die gute ist

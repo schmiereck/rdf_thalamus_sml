@@ -62,12 +62,33 @@ Reell geblieben: `RuntimePolicy` (die Choreographie!), `WorldModel`, `BodyModel`
 `ObjectMemory`, `ColourOpenSet`. Der Shape-Kopf hat ein PC-Engine-Backend, Vorgabe ist aber der
 MLP (`ACT_SHAPE_ENGINE=pc` schaltet um).
 
-**Offener Kandidat: der Wrist.** Heute wird der Winkel im Aktionsvektor von Hand als
-`[cos2w, sin2w]` kodiert (`world_model.action_vec`), die Situationsmerkmale tragen `cos2yaw`,
-`sin2yaw`. Das ist eine handgebaute Phasenkodierung - genau der Zweck der komplexen Zahl. Ein
-komplexer Wrist-Kopf trueg `z = e^{2iw}` nativ; die pi-Periodizitaet der Greifersymmetrie ist
-das Quadrieren der Phase, nicht ein Merkmalspaar. Die Invariante `cos2(w-yaw)` waere schlicht
-`z_w * conj(z_yaw)`. Siehe [offene Faeden](/fragen/offene-faeden-act23.md).
+**Der Wrist - und was daran WIRKLICH offen ist (korrigiert 2026-09-16).** Der Winkel wird im
+Aktionsvektor von Hand als `[cos2w, sin2w]` kodiert (`world_model.action_vec`), die
+Situationsmerkmale tragen `cos2yaw`, `sin2yaw`.
+
+**Die Invariante `cos2(w-yaw)` ist NICHT offen - sie ist gebaut, Vorgabe an und gemessen.**
+`world_model.cross_augment` rechnet genau das komplexe Produkt, Zeile fuer Zeile:
+
+    c = cw * cy + sw * sy     # cos2(w-yaw)  -- Re(z_w * conj(z_yaw))
+    s = sw * cy - cw * sy     # sin2(w-yaw)  -- Im(...)
+
+Dazu die Schaerfe `|cos2(w-yaw)|` (`ACT23_WORLD_SHARP`), dasselbe Produkt gegen die ARMRICHTUNG
+`z_w * conj(z_alpha)` samt Distanz-Interaktion (`ACT23_WORLD_ARMREL`) und die Neigung gegen die
+kinematisch erzwungene als `z_tilt * conj(z_kin)`. Belegt ist es zweifach: im Kapazitaetstest
+findet das MLP die bilineare Regel ohne die Invariante erst bei ~3000 sauberen Zeilen, mit ihr bei
+**n ~ 150**; im Lauf 27/40 = 67,5 % gegen 45 % (Kontrolle: ausgerichtete Griffe 89 %, nicht
+ausgerichtete 48 %, der Gewinn ist also die Konditionierung).
+
+**Offen bleibt nur die andere Haelfte, und sie ist kleiner, als sie klingt:** `WorldModel` laeuft
+auf `Policy`, einem **reellen** MLP (`np.tanh`, reelle Gewichte) - es ist kein CVNN. Dort IST
+`[cos2w, sin2w]` bereits `e^{2iw}` als (Re, Im); es als komplexe Zahl zu schreiben aendert keine
+einzige Zahl. Ein wirklich nativer Wrist-Kopf hiesse, den Kopf in die komplexe PC-Engine zu
+verlegen - ein eigener Bau ohne bisher formulierte Hypothese, was er besser machen soll.
+
+Wovon der Wrist dagegen NICHT frei ist: er wird ueber ein **Gitter** gewaehlt
+(`wrist_grid=8` ueber pi, also 22,5-Grad-Stufen) und per Ensemble-Argmax gescort - die vierte
+diskretisierte Achse neben Farbe, Form und Groesse. Siehe
+[stetige Adressierung](/fragen/stetige-adressierung.md) fuer dieselbe Frage an den drei anderen.
 
 # Was pro Episode lifelong lernt
 

@@ -58,11 +58,23 @@ naheliegende Ersatz ueber den Fingerdruck ist dreifach gemessen **negativ**. Off
 Weg ueber ein wahrgenommenes Objekt-im-Greifer-Signal. Siehe
 [Laufzeitregeln](/mechanismen/laufzeit-regeln.md).
 
-**Komplexer Wrist-Kopf.** Der Wrist-Winkel wird heute von Hand als `[cos2w, sin2w]` kodiert -
-eine handgebaute Phasenkodierung in einem komplexwertigen Netz. `z = e^{2iw}` waere nativ, die
-pi-Periodizitaet der Greifersymmetrie das Quadrieren der Phase, und `cos2(w-yaw)` schlicht
-`z_w * conj(z_yaw)`. Nicht gemessen. Siehe
-[Modullandschaft](/mechanismen/act23-modullandschaft.md).
+**Komplexer Wrist-Kopf - GROESSTENTEILS ERLEDIGT, Eintrag korrigiert 2026-09-16.** Dieser Faden
+stand hier als "nicht gemessen". **Das war falsch.** Das komplexe Produkt `z_w * conj(z_yaw)`
+rechnet `world_model.cross_augment` seit dem 2026-07-17, Vorgabe an, mit Messung: der
+Kapazitaetstest zeigt die bilineare Regel bei **n ~ 150 statt ~3000** sauberen Zeilen, der Lauf
+67,5 % gegen 45 %. Dazu gebaut: `|cos2(w-yaw)|` als Schaerfe, dasselbe Produkt gegen die
+Armrichtung, und die Neigung gegen die kinematisch erzwungene.
+
+Was uebrig bleibt, ist schmaler als der alte Eintrag suggerierte: `WorldModel` laeuft auf einem
+**reellen** MLP, nicht im CVNN - dort ist `[cos2w, sin2w]` bereits `e^{2iw}` als (Re, Im), und es
+umzuschreiben aendert keine Zahl. Ein nativer Kopf hiesse, ihn in die komplexe PC-Engine zu
+verlegen; eine Hypothese, was das besser machen soll, gibt es nicht.
+
+**Der interessantere Rest:** der Wrist wird ueber ein Gitter gewaehlt (`wrist_grid=8`, 22,5-Grad-
+Stufen) - die vierte diskretisierte Achse neben Farbe, Form und Groesse, und die einzige, an der
+die Diskretisierung noch nie gemessen wurde. Siehe
+[Modullandschaft](/mechanismen/act23-modullandschaft.md) und
+[stetige Adressierung](/fragen/stetige-adressierung.md).
 
 **Situationsrepraesentation des Weltmodells.** Zwischen Grundrate 54 % und Obergrenze 82 %
 liegen ~27 Punkte lernbares Signal, die das Modell nicht einsammelt (AUC 0,489 im Lauf). Vier
