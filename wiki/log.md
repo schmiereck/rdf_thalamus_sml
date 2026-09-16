@@ -7,6 +7,23 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-16
 
+* **Anlage**: [Die stetige Adressierung im Lauf](/befunde/stetige-adressierung-im-lauf.md) - der
+  Einbau aus `ACT23_EIG_STETIG` zum ersten Mal in act23 gefahren, zwei Arme je 150 Episoden aus
+  derselben Kopie von `ad9d768c`, sonst Vorgaben. **Nichts loest auf:** grobe Adressierungsfehler
+  18/167 = 10,8 % gegen 14/164 = 8,5 % (p = 0,58), Quote 58,7 gegen 56,0 % (p = 0,73), Rueckfall
+  7 gegen 10 (p = 0,62), Adress-Median 2,0 gegen 2,2 mm. **Das war die Vorhersage der Sonde** -
+  bei `EIG_TOL_FORM=0,5` liegt die stetige Achse praktisch auf dem diskreten Bezug, und auch die
+  Nebenrichtungen stimmen ueberein (Achsen je Adresse 1,81 -> 1,91, eindeutig 98,2 -> 99,4 %: die
+  stetige Achse trennt minimal weniger, also legt die Wuerfelei haeufiger nach). **Zweck des Laufs
+  war die Verifikation des Baus gegen seine Nachbildung, und die ist bestanden**; dazu reproduziert
+  `st_aus` den bekannten Vorgabe-Bezug zifferngenau (58,7 %, 18/167, 7 Rueckfall - zum sechsten
+  Mal). **Der Baustein ist bestaetigt, die These ist es nicht:** der Einbau ist additiv, die
+  Formklassen entstehen weiter, bekommen weiter Knoepfe und verhungern weiter - der erhoffte Gewinn
+  soll aber gerade aus dem Wegfall dieses Lebenszyklus kommen. Naechster pruefbarer Schritt waere,
+  die Auto-Schleife eine Adresse fuer einen Koerper OHNE Klasse anlegen zu lassen; das ist stetig
+  moeglich und diskret nicht. Offen bleiben eine Toleranz (nur 0,5 gefahren) und der GUI-Pfad
+  (`_eig_setzen` schreibt kein `EIG_MESS`, faellt auf Namensvergleich zurueck). **Vorgabe bleibt 0.**
+
 * **Anlage**: [Die stetige Formachse ist genauso trennscharf](/befunde/stetige-adressierung-erster-schritt.md)
   - der erste Schritt zur stetigen Adressierung, gemacht mit der Adress-Wiedervorlage: dieselben
   echten Laufszenen, dieselbe Wuerfelei, dieselbe Aufloesung, **nur die Matching-Regel getauscht**

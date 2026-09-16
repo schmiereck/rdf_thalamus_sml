@@ -123,9 +123,22 @@ keinen Gewinn: sie ist ein anderer Punkt auf derselben Tauschkurve zwischen Gena
 Rueckfall. Der behauptete Gewinn muesste aus dem Wegfall des KLASSEN-LEBENSZYKLUS kommen, und den
 misst die Adressierung per Konstruktion nicht.
 
-**Idee im Uebrigen nicht gebaut.** Sie ist hier festgehalten, weil sie als erste seit Langem
-am ZIEL ansetzt statt an einem Verbraucher - und weil sie erklaert, warum so viele Reparaturen
-dieser Woche an derselben Stelle scheiterten.
+**Zweiter Schritt gemacht (2026-09-16): die Adressierung ist gebaut** (`ACT23_EIG_STETIG`,
+Vorgabe 0) und in act23 gefahren -
+[Die stetige Adressierung im Lauf](/befunde/stetige-adressierung-im-lauf.md). Sie loest Adressen
+ohne Namen auf; im A/B ueber zwei mal 150 Episoden loest nichts auf (grob 10,8 gegen 8,5 %,
+p = 0,58), **genau wie die Sonde es vorhersagte** - womit der Bau gegen seine Nachbildung
+verifiziert ist.
+
+**Die These selbst ist damit weiter ungeprueft.** Der Einbau ist additiv: die Klassen entstehen
+daneben weiter, also kann der Gewinn aus ihrem Wegfall gar nicht auftreten. Der naechste
+pruefbare Schritt waere, die Auto-Schleife eine Adresse fuer einen Koerper OHNE Klasse anlegen zu
+lassen - stetig moeglich, diskret nicht, weil ohne Klasse kein Name existiert. Erst dann zeigt
+sich, ob das Kommando die Klassen ueberhaupt braucht.
+
+Die Frage bleibt hier stehen, weil sie als erste seit Langem am ZIEL ansetzt statt an einem
+Verbraucher - und weil sie erklaert, warum so viele Reparaturen dieser Woche an derselben Stelle
+scheiterten.
 
 # Verwandt
 
@@ -134,4 +147,5 @@ dieser Woche an derselben Stelle scheiterten.
 * [Die Daempfungsfunktion](/befunde/daempfungsfunktion.md) - der Rauschboden des Deskriptors
 * [Latente Augmentierung](/fragen/latente-augmentierung.md) - dieselbe Nutzeridee, andere Anwendung
 * [Die stetige Formachse ist genauso trennscharf](/befunde/stetige-adressierung-erster-schritt.md) - der erste Schritt
+* [Die stetige Adressierung im Lauf](/befunde/stetige-adressierung-im-lauf.md) - der zweite Schritt: gebaut, verifiziert, neutral
 * [Ziel](/ziel.md)
