@@ -21,6 +21,126 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
   F20/RES480-Versuch wird als Codehinweis mit Konfounder eingeordnet. Keine bisherigen
   Negativbefunde widerrufen, keine Trainingslaeufe und keine Implementierung gestartet.
 
+* **Anlage**: [Der Arm hat einen Mindestabstand von rund 37 mm](/befunde/mindestabstand-zur-ablage.md) -
+  Punkt 4 der Stufe-2-Liste, gemessen als Dosis-Wirkung: vier Arme je 100 Episoden mit
+  Ablageabstand **30 / 50 / 70 / 90 mm**, aus identischen Zustandskopien, Seed 4242,
+  `ACT16_ZIEL_SAEUBERN=0` in allen (sonst haette die Regel jede Vorgabe unter 50 mm still auf
+  50 mm aufgeblasen und die Kurve waere flach gewesen, ohne dass man es sieht).
+  **Das Ergebnis ist kein Zielfehler, sondern ein MINDESTABSTAND.** Ueberschuss (Ist minus Soll)
+  zum Bezugskoerper: bei 90 mm **-0,5 mm** und sauber symmetrisch (48,5 % zu weit), bei 70 mm +8,
+  bei 50 mm +7, bei 30 mm **+20,0 mm und in 93,3 % der Faelle zu weit** (Spearman rho = -0,389,
+  p = 1,3e-10; Mann-Whitney 30 gegen 90 p = 3,2e-09). Ueber alle 254 Ablagen landen nur **1,2 %
+  naeher als 20 mm** an einem Koerper, das 5. Perzentil liegt bei **37,6 mm**.
+  **Woran es NICHT liegt:** nicht an einem Stoss nach dem Loslassen - die Drift ist in allen vier
+  Armen gleich (Median 13,0-14,0 mm, Trend rho = +0,013, p = 0,83), das Objekt wird also **nicht
+  weggestossen, sondern gar nicht erst hingebracht**; nicht hauptsaechlich an der Wahrnehmung (der
+  neu protokollierte Glaubensfehler beim Loslassen liegt bei Median 12,5-16 mm in allen Armen,
+  grobe Fehler >25 mm 19,7 % bei 30 gegen 7,6 % bei 90 mm - ein Nebeneffekt, kein 20-mm-Versatz in
+  93 % der Ablagen); nicht an der Adressierung (86-93 von 99 eindeutig, ohne Trend). Die Quote
+  (38 / 47 / 48 / 51 %) traegt **nichts** - bestes p = 0,087.
+  **Die naechstliegende Ursache ist die Regel selbst:** `run_combined` saeubert seit jeher jedes
+  Ziel auf 0,05 m Abstand zu jedem Koerper, also lag in der gesamten Vorgeschichte **kein einziges
+  Ablageziel naeher als 50 mm an einem Koerper** - das ist Bauart, nicht Vermutung. Die Policy hat
+  die Situation nie gesehen, und der gemessene Boden von ~37 mm ist die Extrapolationsreichweite
+  jenseits des Trainingsrandes. **Die Regel, die das Stapeln verbietet, hat auch die Daten
+  verhindert, mit denen man es lernen koennte.** Gegenkandidat ist die Klauenmechanik; beide sagen
+  denselben Boden vorher und trennen sich an einer billigen Frage - bewegt sich der Bezugskoerper?
+  Nicht protokolliert, naechste Messung. Gebaut dafuer: `ACT16_ZIEL_SAEUBERN` (Vorgabe 1) und zwei
+  Messfelder in der Ablage-Zeile (`Glaube`, `zum Bezug`).
+
+* **Widerlegung (Teil)**: [Die Zieladresse traegt](/befunde/ziel-als-adresse-gemessen.md) - der
+  dort gemessene Schwanz **p90 = 86,0 mm** bei 50 mm Abstand **reproduziert sich nicht** (hier
+  43,4 mm). Drei Unterschiede: Saeuberungsregel an statt aus, XML mit Sockel (und nach den
+  Invarianten sind Laeufe ueber eine XML-Aenderung hinweg nicht vergleichbar), 140 gegen 100
+  Episoden. Was sich BESTAETIGT, ist die Lesart darunter: die Drift nach dem Loslassen aendert sich
+  ueber den Abstand nicht - falsch hingetragen, nicht weggestossen. Nachtrag auf der Seite; die
+  Zahl gilt nur fuer ihre eigene Konfiguration.
+
+* **Anlage**: [Stufe 2 vorbereitet](/mechanismen/stufe2-vorbereitet.md) - drei Teile gebaut, alle
+  auf Schaltern mit Vorgabe 0: der **Sockel** (70 x 70 x 8 mm, tiefblau, schwer, geparkt),
+  **`ACT16_GOAL_Z`** (goal_fn darf drei Werte liefern, die Ablagephase zielt auf `tgt_z` statt auf
+  die Konstante `GRASP_Z`, und der Zustandsvektor der Policy bekommt die Hoehe als 14. Eingang) und
+  **`ACT16_ERFOLG_RUHT`** (Erfolg heisst "ruht und Klaue offen" statt woertlich "liegt auf dem
+  Tisch"). **Warum die 14. Spalte auf einen Schalter gehoert:** sie ist KEINE verhaltensneutrale
+  Ergaenzung - der Vorwaertsdurchlauf bleibt bitgleich (gemessen, `max |diff| = 0.0` nach der
+  Migration mit Nullspalten), aber ein frisches Netz wird mit anderer Breite gezogen und jeder
+  Refit sieht eine Spalte mehr. **Die Migration braucht ausnahmsweise kein Gueltigkeits-Flag:**
+  beim Tastsinn waere "0 N" die Luege "Klaue leer" gewesen, die Ablagehoehe dagegen WAR in jeder
+  alten Episode `GRASP_Z` - der Neutralwert ist die Wahrheit.
+
+* **Anlage**: [Der Sockel verschluckt den Stapel](/befunde/sockel-verschluckt-den-stapel.md) -
+  die Messung am Sockel, und sie faellt anders aus als geplant. Ein Wuerfel auf der Platte wird in
+  **0 von 25** Stellen eine eigene Detektion; die Flaeche aendert sich um **kein einziges Pixel**,
+  weil die Silhouette des Wuerfels ganz innerhalb der Platte liegt. Nicht ungenau lokalisiert,
+  sondern **verschluckt** - die Frage nach dem Parallaxenfehler stellt sich gar nicht. Der
+  Chroma-Schnitt hilft nicht (ebenfalls 0 von 25): er ist auf "Deskriptor trifft KEINE Klasse"
+  verriegelt, und der Sockel-Blob loest sauber als `U` auf. **Was ihn doch verraet, ist `cspread`:**
+  leer 0,069 (max 0,118), belegt 0,149 bis 0,397 - ueber 100 Positiv- und 50 Negativfaelle **kein
+  einziger Ueberlapp**, Abstand +0,030. Zusammen mit der unveraenderten Flaeche ergibt das eine
+  Signatur aus schon berechneten Groessen: **Flaeche unveraendert + Farbstreuung hoch = da liegt
+  etwas drauf**, und das trennt einen Stapel auch von zwei nebeneinander verschmolzenen Koerpern,
+  deren Flaeche sich ADDIERT. "A liegt auf B" wird damit als RELATION lesbar statt als zweite
+  Position. Engpass ist Violett (0,161), die dem Sockelblau naechste Farbe; der Sockel steht
+  deshalb nicht in `_FARB_KOERPER`. Der Nachtrag im Entwurf entkraeftet entsprechend den Absatz
+  "Hoehe aus dem Widerspruch Ort/Groesse lesen" fuer den Sockel-Fall.
+
+* **Ergaenzung**: [Invarianten](/mechanismen/invarianten.md) - neue Regel aus diesem Einbau:
+  **ein zusaetzlicher KOERPER im Modell veraendert das gerenderte Bild, immer.** Zustand bitgleich
+  (`qpos` und `qvel` Zeichen fuer Zeichen identisch), Bild nicht: **2 von 57.600 Pixeln**, +44 im
+  Rotkanal an der Silhouettenkante des roten Wuerfels. Der Effekt bleibt unveraendert 2 Pixel, wenn
+  man den Koerper voellig durchsichtig, winzig oder in eine ausgeblendete Geom-Gruppe setzt - es ist
+  der Szenengraph, nicht sein Aussehen. Da die ganze Wahrnehmung am Bild haengt, driften zwei
+  Laeufe danach auseinander (Warmup ab Schritt ~100, `sensor_err` 40,05 gegen 40,04).
+  **Wer einen Koerper hinzufuegt, kann keinen Lauf mehr bitweise mit einem Lauf von davor
+  vergleichen; beide Arme eines A/B muessen dieselbe XML fahren.** Verhaltensneutral ist es
+  trotzdem: 5 frische Episoden gegen einen `git worktree` auf `84a5d71`, Befehle und Ausgaenge
+  identisch, 4 von 5 millimetergenau gleich, eine 87 gegen 89 mm.
+
+* **Anlage**: [Die Zieladresse traegt](/befunde/ziel-als-adresse-gemessen.md) - das A/B zum
+  Bau, drei Arme je 140 Episoden aus identischen Kopien von `ad9d768c`, Seed 4242:
+  `ort` / `an05` / `an09`. **Die Adresse traegt:** 127/139 = 91,4 % bzw. 135/139 = 97,1 % loesen
+  eindeutig auf, der Bezugskoerper wird auf **1,0 mm** Median wahrgenommen (p90 7 mm). Das
+  Ablageziel kommt damit aus der Kamera statt aus `mocap_pos`. **Der Preis, und seine richtige
+  Zuordnung:** Lieferquote 57,1 -> 35,7 % bei 50 mm Ablageabstand (Fisher p = 4,9e-4,
+  Bonferroni-Schranke 0,0167), aber **49,3 % bei 90 mm und damit vom Marker-Arm nicht zu
+  unterscheiden** (p = 0,231). Der Abstand allein holt **13,6 der 21,4 verlorenen Punkte** zurueck -
+  und die unabhaengige Messung der [Nachbarnaehe](/befunde/nachbarnaehe-im-lauf.md) hatte
+  **13,9 Punkte** vorhergesagt. Ohne diesen dritten Arm stuende hier eine falsch zugeordnete
+  Aussage; der direkte Vergleich an05 gegen an09 (p = 0,029) traegt die Schranke NICHT, belastbar
+  ist nur die Lage zum Marker-Arm. **Wo der Verlust sitzt:** nicht im Griff (129/120/126
+  gegriffen), sondern in der letzten Etappe (liefern|abgelegt 75,5 -> 54,9 %, p = 0,0027) - und
+  dort **nicht im Median, sondern im oberen Zehntel**: seitlicher Fehler beim Loslassen p90
+  **86,0 mm gegen 31,5 mm**, waehrend der Median in allen drei Armen exakt 25,0 mm ist und die
+  Drift nach dem Loslassen praktisch gleich. **Das Objekt wird also falsch hingetragen, nicht
+  weggestossen** - die Signatur der [Ablenker-Bindung](/befunde/ablenker-anfahrt.md), diesmal am
+  ZIEL statt am Objekt. Nicht bewiesen; der Gegenkandidat (Absenken ueber den Nachbarn hinweg)
+  braucht die Schrittdaten des Transports. **Folge fuer Stufe 2:** Stapeln verlangt ein Ziel mit
+  0 mm Abstand zu einem Koerper - der Transport muss das aushalten, und heute haelt er 90 mm gut
+  und 50 mm schlecht. Das ist der naechste konkrete Zwischenschritt und war vorher nicht sichtbar.
+
+* **Anlage**: [Das Ablageziel als Adresse](/mechanismen/ziel-als-adresse.md) - **Stufe 1 aus dem
+  Stapel-Entwurf ist gebaut**, `ACT23_ZIEL_ADRESSE` (Vorgabe 0). Die Sprache waechst um einen TYP,
+  nicht um ein Verb: `BEZUG := ORT | RELATION ADRESSE`, Relation "an". `_ziel_adresse_wuerfeln`
+  waehlt je Episode einen Bezugskoerper und wuerfelt seine Adresse mit derselben
+  `_adresse_wuerfeln`-Fassung wie fuer das Objekt; `_ziel_aufloesen` findet ihn beim Abholen des
+  Ziels ueber `finde_nach_eigenschaften` wieder und gibt die Stelle `ZIEL_ABSTAND` (0,05 m) daneben
+  zurueck. **Damit verliert das Kommando sein letztes Privileg:** `goal_fn` las bisher
+  `marker_xy` -> `sim.d.mocap_pos`, eine Designer-Koordinate; jetzt kommt das Ziel aus der Kamera.
+  Entscheidungen mit Begruendung auf der Seite: neben statt auf (die Hoehe ist mit einer
+  Ebenen-Homographie nicht beurteilbar), 0,05 m ist die Zahl, mit der act16 ohnehin jedes Ziel von
+  Koerpern wegschiebt, die Peilung wird gewuerfelt statt gesetzt, die Adresse darf hier die Farbe
+  nennen (sie gilt nur fuer EINE Episode), mehrdeutig zaehlt wie nicht gefunden und wird laut
+  protokolliert, und `mocap_pos` muss um `perceive_all` herum gesichert werden, sonst liefert
+  ausgerechnet der Rueckfall eine GEPARKTE Markerkoordinate. **Verifikation:** Vorgabepfad ueber
+  5 frische Episoden (Seed 4242) gegen `HEAD` - **64 Inhaltszeilen, 0 Unterschiede**; die 18
+  Kopfzeilen weichen ab, weil der Vergleichsstand aus dem Scratchpad lief und `_source_defaults()`
+  dort keine Nachbardateien findet (Artefakt des Aufbaus, auf der Seite als Falle vermerkt).
+  Rauchtest mit Schalter auf einer Zustandskopie: **4 von 4 Zieladressen eindeutig**, Bezugskoerper
+  auf 1-5 mm wahrgenommen, 2 von 4 geliefert. **Vorab benannter Konfounder fuer das A/B:** ein Ziel
+  50 mm neben einem Koerper liegt in der Zone, in der
+  [Nachbarnaehe](/befunde/nachbarnaehe-im-lauf.md) gemessen 13,9 Punkte kostet - die Kontrolle
+  `ACT23_ZIEL_ABSTAND=0.09` ist eingebaut.
+
 * **Anlage**: [Stapeln als neue Aufgabe](/fragen/stapeln-als-aufgabe.md) - Nutzeridee vom
   2026-09-17: als Ziel andere Objekte angeben koennen. **Machbar, und ungewoehnlich billig**, weil
   vier Voraussetzungen schon stehen: das Ablageziel ist ein HAKEN (`goal_fn`), es ist schon ein

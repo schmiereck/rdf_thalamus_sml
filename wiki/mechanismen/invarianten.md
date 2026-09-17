@@ -22,6 +22,17 @@ sources:
 * **Jede neue Codebahn, die `set_arm3_targets` ruft, MUSS `joint_4` neu setzen.** Die Funktion
   ueberschreibt es bei jedem Aufruf auf HOME; ohne Neusetzung peitscht das Handgelenk beim ersten
   Hubschritt am Boden nach Hause und schleudert Objekte.
+* **Ein zusaetzlicher KOERPER im Modell veraendert das gerenderte Bild - immer.** Gemessen beim
+  Einbau des Sockels (2026-09-17): Zustand bitgleich (`qpos` und `qvel` Zeichen fuer Zeichen
+  identisch), **Bild aber nicht** - 2 von 57.600 Pixeln, +44 im Rotkanal an der Silhouettenkante
+  des roten Wuerfels. Der Sockel stand dabei geparkt weit ausserhalb des Bildes, und der Effekt
+  bleibt **unveraendert 2 Pixel**, wenn man ihn voellig durchsichtig, winzig oder in eine
+  ausgeblendete Geom-Gruppe setzt: es ist der Szenengraph, nicht sein Aussehen.
+  **Folge:** die ganze Wahrnehmung haengt am Bild, also driftet ein Lauf danach auseinander (im
+  Warmup ab Schritt ~100, `sensor_err` 40,05 gegen 40,04). **Wer einen Koerper hinzufuegt, kann
+  keinen Lauf mehr bitweise mit einem Lauf von davor vergleichen; beide Arme eines A/B muessen
+  dieselbe XML fahren.** Verhaltensneutral ist es trotzdem: 4 von 5 Episoden millimetergenau
+  gleich, eine 87 gegen 89 mm, Befehle und Ausgaenge identisch.
 * **Wer `perceive_all` ruft, muss `mocap_pos` zuruecksetzen.** `perceive_all` parkt die magenta
   Zielscheiben; wer sie nicht wiederherstellt, bekommt ein geparktes Ziel. **Ein Endabstand
   jenseits des Arbeitsraums ist immer eine geparkte Groesse, nie schlechte Ausfuehrung.**

@@ -102,6 +102,14 @@ mehr, sondern haengt an seiner Hoehe.
 > `r = +1,00` mit dem Kameraabstand. **Die Hoehe ist rekonstruierbar** - sie steckt im Widerspruch
 > zwischen Ort und scheinbarer Groesse. Das ist die Aufgabe, nicht ihr Hindernis.
 
+**NACHTRAG 2026-09-17, und er entkraeftet den Absatz oben fuer den gebauten Fall.** Der Weg
+"Hoehe aus dem Widerspruch lesen" setzt voraus, dass der gestapelte Koerper ueberhaupt GESEHEN
+wird. Auf einer BREITEN Auflage wird er es nicht: gemessen 0 von 25 Stellen, die Flaeche aendert
+sich um kein Pixel, die Silhouette des Wuerfels liegt ganz innerhalb der Platte
+([Der Sockel verschluckt den Stapel](/befunde/sockel-verschluckt-den-stapel.md)). Es gibt dann
+keinen Ortsfehler, weil es keine Ortsmessung gibt. Der Absatz oben gilt weiter fuer Wuerfel auf
+Wuerfel; fuer den Sockel traegt stattdessen die **Farbstreuung** der Auflage.
+
 **3. Die Ablagegenauigkeit reicht geometrisch nicht.** Gemessen sind Median 25 mm seitlicher
 Fehler beim Loslassen und 21 mm am Ende ([Ablage und Platzieren](/befunde/ablage-und-platzieren.md)).
 Ein 24-mm-Wuerfel bleibt auf einem 24-mm-Wuerfel nur liegen, solange der Schwerpunkt ueber der
@@ -136,9 +144,9 @@ Der kleinste Schnitt, der das nicht zur Grossbaustelle macht:
 | Stufe | was | wozu |
 |---|---|---|
 | 0 | die Hoehenmessung | **erledigt**, s. [Befund](/befunde/stapeln-bricht-die-tischebene.md) |
-| 1 | `BEZUG := an ADRESSE` - das Ziel ist ein Koerper, abgelegt DANEBEN | die Sprachaenderung allein, ohne Hoehe. Beurteilbar mit der heutigen flachen Wahrnehmung, und sie nimmt dem Befehl sein letztes Privileg |
-| 2 | Sockel in die Welt, `BEZUG := auf ADRESSE`, Ziel dreidimensional | die Aufgabe, mit einer Toleranz, die zur vorhandenen Genauigkeit passt |
-| 3 | Hoehe aus dem Widerspruch Ort/Groesse lesen | erst dann kann der Agent den eigenen Stapel BEURTEILEN - und erst dann ist es Selbstlernen und nicht ein Sonderfall im Richter |
+| 1 | `BEZUG := an ADRESSE` - das Ziel ist ein Koerper, abgelegt DANEBEN | **gebaut**, s. [Das Ablageziel als Adresse](/mechanismen/ziel-als-adresse.md). Die Sprachaenderung allein, ohne Hoehe. Beurteilbar mit der heutigen flachen Wahrnehmung, und sie nimmt dem Befehl sein letztes Privileg |
+| 2 | Sockel in die Welt, `BEZUG := auf ADRESSE`, Ziel dreidimensional | **vorbereitet**, s. [Stufe 2 vorbereitet](/mechanismen/stufe2-vorbereitet.md): Sockel, `ACT16_GOAL_Z`, `ACT16_ERFOLG_RUHT` stehen. Offen bleiben die Relation selbst, woher die Hoehe kommt, der Selbstrichter - und zuerst der Transport zu einem besetzten Ziel |
+| 3 | ~~Hoehe aus dem Widerspruch Ort/Groesse lesen~~ -> **Relation aus der Farbstreuung lesen** | auf einer BREITEN Auflage gibt es keinen Ortsfehler, weil es keine Ortsmessung gibt: der Koerper ist verschluckt ([gemessen](/befunde/sockel-verschluckt-den-stapel.md), 0 von 25). Was traegt, ist `cspread` - "A liegt auf B" als RELATION statt als zweite Position |
 
 **Stufe 1 ist fuer sich wertvoll** und kostet fast nichts: sie ist ein sauberes A/B gegen die
 Marker-Koordinate, mit unveraendertem Erfolgsbegriff.
