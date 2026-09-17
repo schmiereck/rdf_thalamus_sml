@@ -113,12 +113,20 @@ Steht jetzt in den [Invarianten](/mechanismen/invarianten.md).
 3. **Der Selbstrichter.** Er muss "A liegt auf B" aus der Farbstreuung lesen koennen, sonst
    beurteilt der Agent seinen eigenen Stapel nicht und die Selbst-Imitation bekommt falsche
    Etiketten.
-4. **Der Transport muss ein Ziel aushalten, an dem ein Koerper steht.** Das ist der Engpass aus
-   [Die Zieladresse traegt](/befunde/ziel-als-adresse-gemessen.md): bei 50 mm Abstand kommt jedes
-   zehnte Objekt 86 mm daneben an, bei 90 mm nur 43 mm. Stapeln verlangt 0 mm.
+4. **Der Transport muss ein Ziel aushalten, an dem ein Koerper steht.** -- **GEMESSEN**, s.
+   [Der Arm hat einen Mindestabstand von rund 37 mm](/befunde/mindestabstand-zur-ablage.md). Er
+   haelt es nicht aus: bei 90 mm Soll trifft er auf 0,5 mm genau, bei 30 mm legt er in 93 % der
+   Faelle 20 mm zu weit weg ab, und ueber 254 Ablagen landen nur 1,2 % naeher als 20 mm an einem
+   Koerper. **Die Drift nach dem Loslassen aendert sich dabei nicht** - das Objekt wird nicht
+   weggestossen, sondern gar nicht erst hingebracht. Naechstliegende Ursache: die Saeuberungsregel
+   hat ueber die gesamte Vorgeschichte garantiert, dass NIE ein Ziel naeher als 50 mm an einem
+   Koerper lag - **die Regel, die das Stapeln verbietet, hat auch die Daten verhindert, mit denen
+   man es lernen koennte.**
 
-**Punkt 4 ist der, der zuerst gemessen gehoert** - die drei anderen zu bauen nuetzt nichts,
-solange der Weg zum Ziel am Zielkoerper scheitert.
+**Punkt 4 ist beantwortet und aendert die Reihenfolge:** vor allem anderen braucht Stufe 2 eine
+Trainingsphase OHNE `ZIEL_SAEUBERN`, damit der Teacher nahe Ablagen ueberhaupt vorfuehrt. Offen
+bleibt die Trennung der beiden Ursachen (Trainingsverteilung gegen Klauenmechanik); sie haengt an
+einer billigen Frage - **bewegt sich der Bezugskoerper?**
 
 # Verwandt
 

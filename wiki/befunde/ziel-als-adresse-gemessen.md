@@ -93,6 +93,15 @@ Faellen kommt das Objekt 86 statt 31 mm daneben **an**.
 > Hindernis, muesste die Drift NACH dem Loslassen explodieren; sie tut es nicht (8,8 gegen 2,8 %,
 > und der Median ist gleich). Der Fehler steht schon beim Oeffnen der Klaue in den Zahlen.
 
+**NACHTRAG 2026-09-17: der Schwanz reproduziert sich nicht.** Die Dosis-Wirkungs-Messung
+([Mindestabstand zur Ablage](/befunde/mindestabstand-zur-ablage.md)) misst bei 50 mm einen p90 von
+**43,4 statt 86,0 mm**. Drei Unterschiede kommen infrage: die Saeuberungsregel (dort AN, hier AUS),
+die XML (dort mit Sockel - und nach den [Invarianten](/mechanismen/invarianten.md) sind Laeufe
+ueber eine XML-Aenderung hinweg nicht vergleichbar) und 140 gegen 100 Episoden. **Was sich
+BESTAETIGT, ist die Lesart darunter:** die Drift nach dem Loslassen aendert sich ueber den Abstand
+nicht (rho = 0,013) - das Objekt wird falsch hingetragen, nicht weggestossen. Die ZAHL 86 mm gilt
+nur fuer ihre eigene Konfiguration.
+
 Das ist die Signatur der [Ablenker-Bindung in der Anfahrt](/befunde/ablenker-anfahrt.md), nur an
 der anderen Seite der Episode: dort fahren 6,8 % der Episoden >80 mm am OBJEKT vorbei, hier landet
 das obere Zehntel 86 mm neben dem ZIEL - und zwar genau dann, wenn am Ziel ein Koerper steht.

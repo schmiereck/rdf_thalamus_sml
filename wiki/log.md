@@ -7,6 +7,41 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-17
 
+* **Anlage**: [Der Arm hat einen Mindestabstand von rund 37 mm](/befunde/mindestabstand-zur-ablage.md) -
+  Punkt 4 der Stufe-2-Liste, gemessen als Dosis-Wirkung: vier Arme je 100 Episoden mit
+  Ablageabstand **30 / 50 / 70 / 90 mm**, aus identischen Zustandskopien, Seed 4242,
+  `ACT16_ZIEL_SAEUBERN=0` in allen (sonst haette die Regel jede Vorgabe unter 50 mm still auf
+  50 mm aufgeblasen und die Kurve waere flach gewesen, ohne dass man es sieht).
+  **Das Ergebnis ist kein Zielfehler, sondern ein MINDESTABSTAND.** Ueberschuss (Ist minus Soll)
+  zum Bezugskoerper: bei 90 mm **-0,5 mm** und sauber symmetrisch (48,5 % zu weit), bei 70 mm +8,
+  bei 50 mm +7, bei 30 mm **+20,0 mm und in 93,3 % der Faelle zu weit** (Spearman rho = -0,389,
+  p = 1,3e-10; Mann-Whitney 30 gegen 90 p = 3,2e-09). Ueber alle 254 Ablagen landen nur **1,2 %
+  naeher als 20 mm** an einem Koerper, das 5. Perzentil liegt bei **37,6 mm**.
+  **Woran es NICHT liegt:** nicht an einem Stoss nach dem Loslassen - die Drift ist in allen vier
+  Armen gleich (Median 13,0-14,0 mm, Trend rho = +0,013, p = 0,83), das Objekt wird also **nicht
+  weggestossen, sondern gar nicht erst hingebracht**; nicht hauptsaechlich an der Wahrnehmung (der
+  neu protokollierte Glaubensfehler beim Loslassen liegt bei Median 12,5-16 mm in allen Armen,
+  grobe Fehler >25 mm 19,7 % bei 30 gegen 7,6 % bei 90 mm - ein Nebeneffekt, kein 20-mm-Versatz in
+  93 % der Ablagen); nicht an der Adressierung (86-93 von 99 eindeutig, ohne Trend). Die Quote
+  (38 / 47 / 48 / 51 %) traegt **nichts** - bestes p = 0,087.
+  **Die naechstliegende Ursache ist die Regel selbst:** `run_combined` saeubert seit jeher jedes
+  Ziel auf 0,05 m Abstand zu jedem Koerper, also lag in der gesamten Vorgeschichte **kein einziges
+  Ablageziel naeher als 50 mm an einem Koerper** - das ist Bauart, nicht Vermutung. Die Policy hat
+  die Situation nie gesehen, und der gemessene Boden von ~37 mm ist die Extrapolationsreichweite
+  jenseits des Trainingsrandes. **Die Regel, die das Stapeln verbietet, hat auch die Daten
+  verhindert, mit denen man es lernen koennte.** Gegenkandidat ist die Klauenmechanik; beide sagen
+  denselben Boden vorher und trennen sich an einer billigen Frage - bewegt sich der Bezugskoerper?
+  Nicht protokolliert, naechste Messung. Gebaut dafuer: `ACT16_ZIEL_SAEUBERN` (Vorgabe 1) und zwei
+  Messfelder in der Ablage-Zeile (`Glaube`, `zum Bezug`).
+
+* **Widerlegung (Teil)**: [Die Zieladresse traegt](/befunde/ziel-als-adresse-gemessen.md) - der
+  dort gemessene Schwanz **p90 = 86,0 mm** bei 50 mm Abstand **reproduziert sich nicht** (hier
+  43,4 mm). Drei Unterschiede: Saeuberungsregel an statt aus, XML mit Sockel (und nach den
+  Invarianten sind Laeufe ueber eine XML-Aenderung hinweg nicht vergleichbar), 140 gegen 100
+  Episoden. Was sich BESTAETIGT, ist die Lesart darunter: die Drift nach dem Loslassen aendert sich
+  ueber den Abstand nicht - falsch hingetragen, nicht weggestossen. Nachtrag auf der Seite; die
+  Zahl gilt nur fuer ihre eigene Konfiguration.
+
 * **Anlage**: [Stufe 2 vorbereitet](/mechanismen/stufe2-vorbereitet.md) - drei Teile gebaut, alle
   auf Schaltern mit Vorgabe 0: der **Sockel** (70 x 70 x 8 mm, tiefblau, schwer, geparkt),
   **`ACT16_GOAL_Z`** (goal_fn darf drei Werte liefern, die Ablagephase zielt auf `tgt_z` statt auf

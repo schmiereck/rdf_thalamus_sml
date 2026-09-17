@@ -99,6 +99,14 @@ WRIST_APPROACH_R = float(os.environ.get("ACT16_WRIST_APPROACH_R", "0.07"))   # a
 #   collides with arm/base).  Once the hand has descended to the grip (WRIST_LOCK_MARGIN) the angle is HELD
 #   (re-asserted, NOT re-corrected) so the wrist does not suddenly roll and twist the object out at contact.
 WRIST_LOCK_MARGIN = float(os.environ.get("ACT16_WRIST_LOCK", "0.012"))   # lock the wrist this far above grip z
+# DIE REGEL GEGEN STAPEL (ACT16_ZIEL_SAEUBERN, Vorgabe 1 = wie bisher).
+# run_combined schiebt ein uebergebenes Ziel in acht Durchgaengen von JEDEM Koerper um 0,05 m weg.
+# Das ist eine LAUFZEITREGEL (wiki/mechanismen/laufzeit-regeln.md) und zugleich das, was ein Ziel
+# AUF oder NAHE einem Koerper unmoeglich macht: jede kleinere Vorgabe wird stillschweigend auf
+# 50 mm aufgeblasen.  Der Schalter laesst sie aus, ohne den Rest der Saeuberung anzutasten --
+# die Sockelfreiheit (BASE_CLEAR) bleibt in jedem Fall aktiv, sonst faehrt der Arm in seinen
+# eigenen Fuss.
+ZIEL_SAEUBERN = os.environ.get("ACT16_ZIEL_SAEUBERN", "1") == "1"
 # DIE DRITTE ZIELDIMENSION (ACT16_GOAL_Z, Vorgabe 0).  Stufe 2 von
 # wiki/fragen/stapeln-als-aufgabe.md.  Eingeschaltet darf goal_fn DREI Werte liefern (der dritte
 # ist die Ablagehoehe der Hand), und der Zustandsvektor der Policy bekommt sie als 14. Eingang.
@@ -412,7 +420,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 tgt = tgt[:2]
             for _ in range(8):                                # SANITIZE the dreamed goal: off objects + base
                 moved = False
-                for o in OBJS:                                # (#3) push it OFF any object it landed on
+                for o in (OBJS if ZIEL_SAEUBERN else ()):     # (#3) push it OFF any object it landed on
                     dv = tgt - sim.obj_pos(o)[:2]; dn = float(np.linalg.norm(dv))
                     if dn < 0.05:
                         tgt = sim.obj_pos(o)[:2] + (dv / dn if dn > 1e-6 else np.array([1.0, 0.0])) * 0.05
@@ -790,6 +798,12 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 run_combined._release = {"hz": float(hz), "cz": float(cz),
                                          "obj_h": float(obj_h),
                                          "cxy": np.asarray(c_true, float).copy(),
+                                         # WAS DER AGENT GLAUBTE, wo das Objekt ist, im selben
+                                         # Augenblick (Messung, geht in keine Entscheidung).  Ohne
+                                         # das ist "86 mm daneben abgelegt" nicht aufzuloesen:
+                                         # falsch HINGETRAGEN (Glaube stimmt, Bahn nicht) sieht
+                                         # genauso aus wie VERLOREN (Glaube sitzt woanders).
+                                         "cbel": np.asarray(c_st, float).copy(),
                                          "tgt": np.asarray(tgt_true, float).copy(),
                                          # KLAUENRICHTUNG beim Loslassen, fuer die Zerlegung des
                                          # Ablage-Fehlers (2026-08-13): der Klauenversatz CLAW_OFF

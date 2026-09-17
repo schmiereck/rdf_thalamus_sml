@@ -5187,9 +5187,25 @@ def run_self_learning_steering(headless=False):
                 _al = 1000.0 * float(_e @ _u)
                 _qu = 1000.0 * float(_e @ np.array([-_u[1], _u[0]]))
                 _dec = f" | entlang Klaue {_al:+.0f}mm, quer {_qu:+.0f}mm"
+            # WARUM EINE ABLAGE DANEBENGEHT -- die zwei Faelle, die in "86 mm daneben" stecken und
+            # ohne diese Zeile nicht zu trennen sind (s. wiki/befunde/ziel-als-adresse-gemessen.md):
+            #   glaube   |Glaube - Wahrheit| beim Loslassen.  Gross = der Agent hat das getragene
+            #            Objekt VERLOREN (Ablenker-Bindung); klein = er wusste, wo es ist.
+            #   zumBezug wie weit die WAHRE Ablage vom Bezugskoerper der Zieladresse entfernt ist,
+            #            und wie weit der SOLL-Abstand war.  Zieht es das Objekt zum Bezugskoerper
+            #            HIN, ist der Nachbar der Magnet; streut es richtungslos, ist es die Bahn.
+            _zus = ""
+            _cb = _rel.get("cbel")
+            if _cb is not None:
+                _zus += f" | Glaube {1000.0 * float(np.linalg.norm(np.asarray(_cb, float) - _rel['cxy'])):.0f}mm"
+            _bz = state.ziel_bezug
+            if _bz is not None:
+                _bp = sim.obj_pos(_bz["body"])[:2]
+                _zus += (f" | zum Bezug {1000.0 * float(np.linalg.norm(_end - _bp)):.0f}mm"
+                         f" (Soll {1000.0 * ZIEL_ABSTAND:.0f}mm)")
             print(f"    [Ablage] {body}: beim Oeffnen Objekt {_fall:.0f}mm ueber Ruhelage, "
                   f"seitlich {_lat:.0f}mm vom Ziel -> danach {_drift:.0f}mm gedriftet, "
-                  f"final {_fin:.0f}mm{_dec}", flush=True)
+                  f"final {_fin:.0f}mm{_dec}{_zus}", flush=True)
         _fsv = getattr(vc, "_fsv", None)
         if FOVEA_SERVO != "0" and _fsv and (_fsv["nf"] or _fsv["nd"]):
             # measurement line (shadow AND live): how often the net belief carried the servo vs the
