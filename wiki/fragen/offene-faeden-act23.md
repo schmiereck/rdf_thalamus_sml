@@ -14,6 +14,14 @@ generated: { by: claude/opus-5, at: 2026-09-07T00:00:00Z }
 > Kommando-Achsen verwandeln stetige Groessen in Namen, und erst die Namen haben Geburt,
 > Bestaetigung und Verhungern. Engpass 1 unten waere damit gegenstandslos statt geloest.
 
+> **NEU (2026-09-17), eine AUFGABE statt einer Reparatur:**
+> [Stapeln als neue Aufgabe](/fragen/stapeln-als-aufgabe.md). Das Ablageziel bekommt denselben Typ
+> wie das Objekt - eine Adresse -, die Relation "auf" wird eine Phasendrehung im RoPE-Ziellatent.
+> Die Verdrahtung steht groesstenteils; benannt und beziffert sind drei Huerden (eine Laufzeitregel,
+> die Ziele von Koerpern wegschiebt; ein Erfolgsbegriff, der "liegt auf dem Tisch" heisst; und eine
+> Ablagegenauigkeit, die doppelt so grob ist wie die geometrische Stapeltoleranz). Erste Messung:
+> [ein gestapelter Koerper liest 16 mm daneben](/befunde/stapeln-bricht-die-tischebene.md).
+
 # Die zwei belegten Engpaesse
 
 Beide stammen aus [1109 Episoden ohne Lernfortschritt](/befunde/langlauf-ohne-fortschritt.md)

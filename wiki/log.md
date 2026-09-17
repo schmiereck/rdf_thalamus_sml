@@ -5,6 +5,45 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-17
+
+* **Anlage**: [Stapeln als neue Aufgabe](/fragen/stapeln-als-aufgabe.md) - Nutzeridee vom
+  2026-09-17: als Ziel andere Objekte angeben koennen. **Machbar, und ungewoehnlich billig**, weil
+  vier Voraussetzungen schon stehen: das Ablageziel ist ein HAKEN (`goal_fn`), es ist schon ein
+  LATENT (`post_goal_fn` / `set_goal_vector`), es wird waehrend des Tragens in jedem Schritt NEU
+  GELESEN (`place_servo_fn`), und Adressen aufloesen kann der Agent seit `ACT23_EIG_DIREKT` aus
+  einer einzigen Sichtung. **Der Sprachvorschlag:** kein neues Verb, sondern ein Typ mehr -
+  `BEZUG := ORT | RELATION ADRESSE`, der Zielplatz bekommt denselben Typ wie das Objekt. Die
+  RELATION ist im Latentraum eine Verschiebung, und **RoPE macht eine Verschiebung zur exakten
+  Phasendrehung** - "auf B" ist das Latent von B, um eine gelernte Objekthoehe phasengedreht, nicht
+  ein Koordinatenaufschlag. Damit gilt die Relation an JEDER Stelle, weil die Phase die Position
+  traegt; das ist die Hypothese, die dem komplexen Wrist-Kopf fehlte. **Nebengewinn:** das
+  Ablageziel ist heute das einzige Stueck des Befehls, das der Agent NICHT wahrnimmt
+  (`marker_xy` liest `mocap_pos`) - eine Zieladresse nimmt dieses Privileg weg. **Drei bezifferte
+  Huerden:** (1) act16:382-394 schiebt ein uebergebenes Ziel in acht Durchgaengen um 0,05 m von
+  jedem Koerper WEG - eine Laufzeitregel gegen Stapel; (2) der Erfolgsbegriff ist flach in beiden
+  Richtungen, privilegiert `rested = cz < half+0,010` ("liegt auf dem Tisch") und beim Selbstrichter
+  ueber die Homographie; (3) Ablagegenauigkeit Median 21-25 mm gegen eine geometrische
+  Stapeltoleranz von 12 mm - **die Aufgabe verlangt die doppelte Genauigkeit des Vorhandenen**,
+  Abhilfe waere ein breiter flacher Sockel als erstes Stapelziel. Die eigentliche Arbeit: das Ziel
+  ist ueberall 2D (`GoalModule2D`, und im Policy-Zustand act16:601 steht kein `tgt_z`) - Stapeln ist
+  die erste Aufgabe, die eine dritte Dimension im ZIEL braucht. Vier Stufen vorgeschlagen, Stufe 1
+  ("an ADRESSE" statt Koordinate) ist fuer sich wertvoll und mit heutiger Wahrnehmung beurteilbar.
+
+* **Anlage**: [Ein gestapelter Koerper liest 16 mm daneben](/befunde/stapeln-bricht-die-tischebene.md) -
+  Stufe 0 dazu, offline am echten Wahrnehmungspfad (frischer Klassifikator, `calibrate()` aus 40
+  Punkten, dann `perceive_all` an 49 Gitterstellen des Arbeitsraums, je z=0,012 und z=0,036).
+  **Flach 0,8 mm, gestapelt 15,9 mm** (4,6-25,3 mm), an **12 % der Stellen ueber der
+  Liefertoleranz** von 25 mm. Der Versatz zeigt zu **100 % radial von der Kamera weg** und
+  korreliert mit **r = +1,00** mit dem Kameraabstand: reine Parallaxe, die Homographie ist eine
+  EBENEN-Abbildung und wurde auf der Wuerfelmitte am Boden geeicht. Nebenbefund: der gestapelte
+  Koerper erscheint 11-16 % groesser (span x1,114, area x1,161), und **das Groessenband kippt an
+  einem Drittel der Stellen** (16/49 Dickenachse, 15/49 Spannenachse). Damit ist die scheinbare
+  Groesse in einer Welt mit Stapeln keine Eigenschaft des Koerpers mehr - dieselbe Regel wie bei
+  der Farbe, eine Achse weiter. **Das ist kein Hindernis, sondern der Inhalt der Aufgabe:** bei
+  r = 1,00 ist die Hoehe rekonstruierbar, sie steckt im Widerspruch zwischen Ort und scheinbarer
+  Groesse. Eine zweite Homographie fuer z=0,036 waere Geruest, kein Selbstlernen.
+
 ## 2026-09-16
 
 * **Anlage**: [Das Wrist-Gitter kostet nichts](/befunde/wrist-gitter-kostet-nichts.md) - offline am
