@@ -1,7 +1,7 @@
 ---
 type: Befund
-title: Der Arm hat einen Mindestabstand von rund 37 mm - und die Ursache ist die Regel, die das Stapeln verbietet
-description: Vier Arme je 100 Episoden mit Ablageabstand 30, 50, 70 und 90 mm. Bei 90 mm trifft der Arm den befohlenen Abstand auf 0,5 mm genau; bei 30 mm legt er 20 mm zu weit weg ab, in 93 Prozent der Faelle zu weit. Ueber alle 254 Ablagen landen nur 1,2 Prozent naeher als 20 mm an einem Koerper, das 5. Perzentil liegt bei 37,6 mm. Die Drift NACH dem Loslassen aendert sich dabei nicht (rho = 0,013) - das Objekt wird also nicht weggestossen, sondern gar nicht erst hingebracht. Die naechstliegende Ursache ist die Saeuberungsregel selbst: sie hat ueber tausend Episoden lang garantiert, dass NIE ein Ziel naeher als 50 mm an einem Koerper lag.
+title: Der Arm hat einen Mindestabstand von rund 37 mm (Ursachen-Lesart widerlegt)
+description: Vier Arme je 100 Episoden mit Ablageabstand 30, 50, 70 und 90 mm. Bei 90 mm trifft der Arm den befohlenen Abstand auf 0,5 mm genau; bei 30 mm legt er 20 mm zu weit weg ab, in 93 Prozent der Faelle zu weit. Ueber alle 254 Ablagen landen nur 1,2 Prozent naeher als 20 mm an einem Koerper, das 5. Perzentil liegt bei 37,6 mm. Die Drift NACH dem Loslassen aendert sich dabei nicht (rho = 0,013) - das Objekt wird also nicht weggestossen, sondern gar nicht erst hingebracht. Die hier notierte Ursache (die Saeuberungsregel habe die Daten verhindert) ist am selben Tag WIDERLEGT: der untrainierte Teacher legt genauso weit weg ab, es ist die Klauenmechanik - s. /befunde/nahe-ablage-ist-mechanik.md. Die Zahlen dieser Seite stehen.
 tags: [act23, ablage, stapeln, policy, ab]
 status: stable
 evidenz: gemessen
@@ -87,7 +87,17 @@ er erklaert keinen 20-mm-Versatz in 93 % der Ablagen.
 
 **Nicht an der Adressierung.** 86 bis 93 von 99 Zieladressen loesen eindeutig auf, ohne Trend.
 
-# Die naechstliegende Ursache: die Regel hat ihre eigenen Daten verhindert
+# Die naechstliegende Ursache: die Regel hat ihre eigenen Daten verhindert -- WIDERLEGT
+
+> **NACHTRAG 2026-09-17: dieser ganze Abschnitt ist widerlegt.**
+> [Der geskriptete Teacher kann es auch nicht](/befunde/nahe-ablage-ist-mechanik.md) - er hat
+> keinerlei Training und faehrt stur auf das Ziel, legt aber genauso weit weg ab (Ueberschuss
+> +25,0 gegen +21,0 mm, p = 0,14). Ein Verhalten, das ein untrainierter Regler genauso zeigt, ist
+> nicht das Ergebnis fehlender Daten. **Es ist die Klauenmechanik:** der Nachbarkoerper wird in
+> 64 % der Teacher-Ablagen verschoben, und eine Ablage unter 35 mm ohne ihn anzuruehren gelingt in
+> 3 von 70 Faellen. Der Abschnitt bleibt als Beleg dafuer stehen, wie plausibel die falsche Lesart
+> war - die ZAHLEN dieser Seite sind unberuehrt.
+
 
 `run_combined` saeubert seit jeher jedes uebergebene Ziel und schiebt es von JEDEM Koerper auf
 0,05 m weg; das Zufallsziel wird ueber `clear(tgt, OBJS, 0.05)` gezogen. **Damit lag in der
@@ -112,7 +122,9 @@ protokolliert und die naechste Messung dieser Linie.
 
 # Was das fuer das Stapeln heisst
 
-**Bei 0 mm ist heute nichts zu holen** - der Arm kommt gemessen nicht unter ~37 mm. Die Kurve
+**Bei 0 mm ist heute nichts zu holen** - der Arm kommt gemessen nicht unter ~37 mm.
+(NACHTRAG: fuer "an B" gilt das weiter, fuer "auf B" NICHT - dort liegt der Bezugskoerper
+unter dem Objekt und nicht im Absenkweg, s. [den Teacher-Test](/befunde/nahe-ablage-ist-mechanik.md).) Die Kurve
 extrapoliert, sie misst diesen Punkt nicht; ein 0-mm-Arm braucht `ACT16_GOAL_Z`, sonst faehrt die
 Klaue auf Greifhoehe in den Bezugskoerper.
 

@@ -5203,6 +5203,17 @@ def run_self_learning_steering(headless=False):
                 _bp = sim.obj_pos(_bz["body"])[:2]
                 _zus += (f" | zum Bezug {1000.0 * float(np.linalg.norm(_end - _bp)):.0f}mm"
                          f" (Soll {1000.0 * ZIEL_ABSTAND:.0f}mm)")
+                # HAT DER ARM DEN BEZUGSKOERPER ANGERUEHRT?  Das ist der Trennungstest zwischen den
+                # zwei Erklaerungen des gemessenen Mindestabstands (wiki/befunde/mindestabstand-
+                # zur-ablage.md): verschiebt sich der Nachbar, ist die KLAUENMECHANIK die Ursache;
+                # bleibt er stehen, waehrend der Arm vorher abbricht, ist es die
+                # TRAININGSVERTEILUNG (nie ein Ziel naeher als 50 mm, s. ZIEL_SAEUBERN).
+                # MUSS HIER STEHEN, nicht spaeter: die Aufraeumschleife unten setzt jeden
+                # NICHT-kommandierten Koerper auf seine Pose vor der Episode zurueck -- danach
+                # gemessen waere die Verschiebung per Bauart immer null.
+                if _bz["body"] in snap:
+                    _zus += (f" | Bezug verschoben "
+                             f"{1000.0 * float(np.linalg.norm(_bp - snap[_bz['body']][0])):.0f}mm")
             print(f"    [Ablage] {body}: beim Oeffnen Objekt {_fall:.0f}mm ueber Ruhelage, "
                   f"seitlich {_lat:.0f}mm vom Ziel -> danach {_drift:.0f}mm gedriftet, "
                   f"final {_fin:.0f}mm{_dec}{_zus}", flush=True)

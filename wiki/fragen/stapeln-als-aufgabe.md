@@ -144,9 +144,19 @@ Der kleinste Schnitt, der das nicht zur Grossbaustelle macht:
 | Stufe | was | wozu |
 |---|---|---|
 | 0 | die Hoehenmessung | **erledigt**, s. [Befund](/befunde/stapeln-bricht-die-tischebene.md) |
-| 1 | `BEZUG := an ADRESSE` - das Ziel ist ein Koerper, abgelegt DANEBEN | **gebaut**, s. [Das Ablageziel als Adresse](/mechanismen/ziel-als-adresse.md). Die Sprachaenderung allein, ohne Hoehe. Beurteilbar mit der heutigen flachen Wahrnehmung, und sie nimmt dem Befehl sein letztes Privileg |
+| 1 | `BEZUG := an ADRESSE` - das Ziel ist ein Koerper, abgelegt DANEBEN | **gebaut und gemessen**, s. [Das Ablageziel als Adresse](/mechanismen/ziel-als-adresse.md). Die Sprachaenderung allein, ohne Hoehe. Beurteilbar mit der heutigen flachen Wahrnehmung, und sie nimmt dem Befehl sein letztes Privileg |
 | 2 | Sockel in die Welt, `BEZUG := auf ADRESSE`, Ziel dreidimensional | **vorbereitet**, s. [Stufe 2 vorbereitet](/mechanismen/stufe2-vorbereitet.md): Sockel, `ACT16_GOAL_Z`, `ACT16_ERFOLG_RUHT` stehen. Offen bleiben die Relation selbst, woher die Hoehe kommt, der Selbstrichter - und zuerst der Transport zu einem besetzten Ziel |
 | 3 | ~~Hoehe aus dem Widerspruch Ort/Groesse lesen~~ -> **Relation aus der Farbstreuung lesen** | auf einer BREITEN Auflage gibt es keinen Ortsfehler, weil es keine Ortsmessung gibt: der Koerper ist verschluckt ([gemessen](/befunde/sockel-verschluckt-den-stapel.md), 0 von 25). Was traegt, ist `cspread` - "A liegt auf B" als RELATION statt als zweite Position |
+
+> **UMSORTIERT 2026-09-17.** Stufe 1 bei KLEINEM Abstand ist keine Vorstufe von Stufe 2, sondern
+> die haertere Aufgabe. Gemessen: der Arm kommt nicht unter ~37 mm an einen Koerper heran, und die
+> Ursache ist die Klauenmechanik - sie muss NEBEN einem Hindernis absenken
+> ([Teacher-Test](/befunde/nahe-ablage-ist-mechanik.md): der untrainierte Teacher kann es genauso
+> wenig und verschiebt den Nachbarn in 64 % der Ablagen; nah UND beruehrungsfrei gelingt 3-mal in
+> 70 Ablagen). Beim Stapeln liegt der Bezugskoerper UNTER dem Objekt und gar nicht im Absenkweg.
+> **Der naechste Schritt ist deshalb direkt `RELATION := auf` mit `ACT16_GOAL_Z`**, nicht ein Umweg
+> ueber nahe Seitenablagen. Stufe 1 bei GROSSEM Abstand (90 mm) bleibt gemessen unauffaellig und
+> traegt die Sprachaussage.
 
 **Stufe 1 ist fuer sich wertvoll** und kostet fast nichts: sie ist ein sauberes A/B gegen die
 Marker-Koordinate, mit unveraendertem Erfolgsbegriff.

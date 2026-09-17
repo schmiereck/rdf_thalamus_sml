@@ -7,6 +7,35 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-17
 
+* **Widerlegung**: [Der Mindestabstand ist die Mechanik](/befunde/nahe-ablage-ist-mechanik.md) -
+  der Trennungstest zu Punkt 4, und er widerlegt **meine eigene** Ursachen-Lesart von heute
+  Nachmittag. Zwei Arme je 60 Episoden bei 30 mm Ablageabstand, alles gleich ausser
+  `ACT23_CHOREO` (fsm gegen netz). **Der geskriptete Teacher hat kein Training** - er ist eine
+  reaktive Funktion, die stur auf `[tgt, GRASP_Z]` faehrt - und legt **genauso weit weg ab wie die
+  Policy**: Ueberschuss +25,0 gegen +21,0 mm (Mann-Whitney p = 0,14), zu weit in 97,4 gegen
+  96,8 %, 5. Perzentil 31,9 gegen 32,5 mm. Ein Verhalten, das ein untrainierter Regler genauso
+  zeigt, ist nicht das Ergebnis fehlender Daten. **Es ist die Klauenmechanik**, und das neue
+  Messfeld `Bezug verschoben` zeigt sie direkt: der Nachbarkoerper wird in **64,1 %** der
+  Teacher-Ablagen verschoben (Netz 38,7 %, Fisher p = 0,053), Median 9 mm, max 45 mm.
+  **Getrennt nach Beruehrung wird es eindeutig:** beruehrt der Teacher den Nachbarn, endet das
+  Objekt +21 mm zu weit; beruehrt er ihn NICHT, endet es +55,5 mm zu weit. **Es gibt kein "nah UND
+  sauber"** - eine Ablage unter 35 mm ohne Beruehrung gelingt 1 von 39 (Teacher) und 1 von 31
+  (Netz), zusammen **3 von 70**. **Folge fuer das Stapeln, und sie ist die Umkehrung des
+  Erwarteten:** die Sperre ist LATERAL (die Klaue senkt neben einem Hindernis ab); beim Stapeln
+  liegt der Bezugskoerper UNTER dem Objekt und gar nicht im Absenkweg. **"auf B" ist mechanisch der
+  leichtere Fall, "an B" bei kleinem Abstand der schwerere** - die Stufenfolge im Entwurf ist
+  entsprechend umsortiert, und der geplante Trainingslauf ohne `ZIEL_SAEUBERN` **entfaellt**: es
+  gibt nichts abzuschauen. Falle fuer die Nachwelt: `Bezug verschoben` muss VOR der
+  Aufraeumschleife gemessen werden, die jeden nicht-kommandierten Koerper zuruecksetzt - danach
+  bekommt man lauter Nullen und schliesst das Gegenteil.
+
+* **Ergaenzung**: [Der Arm hat einen Mindestabstand von rund 37 mm](/befunde/mindestabstand-zur-ablage.md) -
+  Titel, Kurzbeschreibung und der Ursachen-Abschnitt als **widerlegt** gekennzeichnet; die Zahlen
+  der Seite stehen unveraendert. Der falsche Abschnitt bleibt als Beleg dafuer stehen, wie
+  plausibel er war. Ebenso fortgeschrieben: [Stufe 2 vorbereitet](/mechanismen/stufe2-vorbereitet.md)
+  (Punkt 4 beantwortet, Reihenfolge gedreht) und
+  [Stapeln als neue Aufgabe](/fragen/stapeln-als-aufgabe.md) (Stufentabelle umsortiert).
+
 * **Anlage**: [Der Arm hat einen Mindestabstand von rund 37 mm](/befunde/mindestabstand-zur-ablage.md) -
   Punkt 4 der Stufe-2-Liste, gemessen als Dosis-Wirkung: vier Arme je 100 Episoden mit
   Ablageabstand **30 / 50 / 70 / 90 mm**, aus identischen Zustandskopien, Seed 4242,

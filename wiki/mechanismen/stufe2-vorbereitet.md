@@ -123,10 +123,18 @@ Steht jetzt in den [Invarianten](/mechanismen/invarianten.md).
    Koerper lag - **die Regel, die das Stapeln verbietet, hat auch die Daten verhindert, mit denen
    man es lernen koennte.**
 
-**Punkt 4 ist beantwortet und aendert die Reihenfolge:** vor allem anderen braucht Stufe 2 eine
-Trainingsphase OHNE `ZIEL_SAEUBERN`, damit der Teacher nahe Ablagen ueberhaupt vorfuehrt. Offen
-bleibt die Trennung der beiden Ursachen (Trainingsverteilung gegen Klauenmechanik); sie haengt an
-einer billigen Frage - **bewegt sich der Bezugskoerper?**
+**Punkt 4 ist beantwortet, und die Ursache ist inzwischen getrennt** - die Frage "bewegt sich der
+Bezugskoerper?" ist gestellt und beantwortet: **er bewegt sich, in 64 % der Teacher-Ablagen.**
+Es ist die **Klauenmechanik**, nicht die Trainingsverteilung; der untrainierte Teacher legt genauso
+weit weg ab wie die Policy. Siehe
+[Der Mindestabstand ist die Mechanik](/befunde/nahe-ablage-ist-mechanik.md).
+
+**Damit entfaellt der geplante Trainingslauf ohne `ZIEL_SAEUBERN`** - es gibt nichts abzuschauen.
+Und die Reihenfolge dreht sich: die Sperre ist LATERAL (die Klaue senkt neben einem Hindernis ab),
+beim Stapeln liegt der Bezugskoerper aber UNTER dem Objekt und gar nicht im Absenkweg.
+**"auf B" ist mechanisch der leichtere Fall, "an B" bei kleinem Abstand der schwerere.** Der
+naechste Schritt ist deshalb `RELATION := auf` mit `ACT16_GOAL_Z`, nicht ein Umweg ueber nahe
+Seitenablagen.
 
 # Verwandt
 
