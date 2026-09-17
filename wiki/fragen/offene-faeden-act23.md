@@ -22,6 +22,15 @@ generated: { by: claude/opus-5, at: 2026-09-07T00:00:00Z }
 > Ablagegenauigkeit, die doppelt so grob ist wie die geometrische Stapeltoleranz). Erste Messung:
 > [ein gestapelter Koerper liest 16 mm daneben](/befunde/stapeln-bricht-die-tischebene.md).
 
+> **Forschungsprogramm (2026-09-17):**
+> [Dream-RSI: Forschungs- und Entwicklungsplan](/fragen/dream-rsi-forschungsplan.md) fuehrt
+> die neuen Arbeitspakete und Entscheidungstore. Optionale Nutzerwuensche sind
+> [direkte Servosteuerung](/fragen/dream-rsi-servosteuerung.md) und
+> [weitere Fovea-Aufgaben mit schrittweisem Detailausbau](/fragen/dream-rsi-fovea.md).
+> Dies sind ungepruefte Hypothesen. Die unten geschlossenen Faeden werden dadurch nicht
+> wieder als erfolgversprechend behauptet: Motorik wird auf eigene Anpassung statt kleinen
+> Zusatzgewinn ueber dem Teacher geprueft; Fovea-Ausbau braucht einen neuen Informationsbedarf.
+
 # Die zwei belegten Engpaesse
 
 Beide stammen aus [1109 Episoden ohne Lernfortschritt](/befunde/langlauf-ohne-fortschritt.md)

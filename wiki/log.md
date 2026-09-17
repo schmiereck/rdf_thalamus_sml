@@ -7,6 +7,20 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-17
 
+* **Anlage**: [Dream-RSI: Forschungs- und Entwicklungsplan](/fragen/dream-rsi-forschungsplan.md)
+  samt [Evaluationsvertrag](/messungen/dream-rsi-evaluation.md),
+  [Servo-Zweig](/fragen/dream-rsi-servosteuerung.md) und
+  [Fovea-Zweig](/fragen/dream-rsi-fovea.md). Nutzerauftrag: Konzept schrittweise umsetzen und
+  evaluieren; alle ACT23-Bausteine duerfen untersucht werden. **Nur Planung**, alle
+  Entwicklungspakete offen, `evidenz: vermutung`, `ebene: code`.
+  Praezisierung der Gespraechsanalyse: historische Trainingsepisoden sind wegen geaenderter
+  Lernzustaende nicht beliebig neu kombinierbar; zuerst Budgetverteilung auf getrennte echte
+  Trainingslinien, erst spaeter adaptives Curriculum. D0-D7 erhalten Abhaengigkeiten und Tore;
+  S0-S3 pruefen Eigenanpassung eines direkten Motorpfads, F0-F3 erst weitere Wahrnehmung auf
+  vorhandenen Netzzustaenden, danach Detailausbau mit Bestandserhalt. Der historische
+  F20/RES480-Versuch wird als Codehinweis mit Konfounder eingeordnet. Keine bisherigen
+  Negativbefunde widerrufen, keine Trainingslaeufe und keine Implementierung gestartet.
+
 * **Anlage**: [Stapeln als neue Aufgabe](/fragen/stapeln-als-aufgabe.md) - Nutzeridee vom
   2026-09-17: als Ziel andere Objekte angeben koennen. **Machbar, und ungewoehnlich billig**, weil
   vier Voraussetzungen schon stehen: das Ablageziel ist ein HAKEN (`goal_fn`), es ist schon ein

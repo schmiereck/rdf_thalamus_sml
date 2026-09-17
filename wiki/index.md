@@ -6,6 +6,7 @@ okf_version: "0.2"
 
 * [Das Verfahren](wiki.md) - wie dieses Wiki funktioniert: Aufbau, Frontmatter, Operationen
 * [Projektziel und Erfolgskriterium](ziel.md) - die Architektur soll selbst lernen; den Teacher zu schlagen ist nicht verlangt
+* [Dream-RSI: Forschungs- und Entwicklungsplan](fragen/dream-rsi-forschungsplan.md) - Arbeitsliste D0-D7 mit Entscheidungstoren; optionale Zweige fuer direkte Servosteuerung und Fovea, noch keine Umsetzung
 * [Chronik](log.md) - was wann ins Wiki eingetragen wurde
 * [Rohbelege](raw/index.md) - Laufprotokolle, Werkzeuge, Zustaende, aeltere Dokumente
 
@@ -90,11 +91,15 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 # Messvorschriften
 
+* [Dream-RSI: Evaluationsvertrag](messungen/dream-rsi-evaluation.md) - Entwurf: Zustand/Replay, unabhaengige Testdaten, Lernfortschritt und Gesamtkosten; in D0 vor dem ersten Experiment konkretisieren
 * [Kopfloses A/B im vollen act23-Lauf](messungen/act23-headless-ab.md) - die einzige Ebene, auf der Wirkung behauptet werden darf
 * [Wiederholungsmessung EXV](messungen/exekutionsvarianz-exv.md) - trennt Ausfuehrungsstreuung von Situationssignal
 
 # Offene Fragen
 
+* [Dream-RSI: Forschungsplan](fragen/dream-rsi-forschungsplan.md) - replaygestuetzte Trainingssteuerung zuerst ueber getrennte Trainingslinien, danach Curriculum eines Arms; zentrale Paketstatus-Tabelle
+* [Direkte Servosteuerung](fragen/dream-rsi-servosteuerung.md) - S0-S3: eigener Motorpfad ohne kartesische Zwischenziele, spaeter optional Geschwindigkeits-/Drehmomentsteuerung; Eigenanpassung statt Teacher-Ueberbietung
+* [Fovea: neue Aufgaben und mehr Detail](fragen/dream-rsi-fovea.md) - F0-F3: Netzzustaende nutzen, Detailbedarf pruefen, Bestand beim Ausbau erhalten; bisherige Gegenbefunde bleiben gueltig
 * [Offene Faeden in act23](fragen/offene-faeden-act23.md) - geordnet nach belegter Wichtigkeit, mit den ausdruecklich geschlossenen Faeden am Ende
 * [Latente Augmentierung](fragen/latente-augmentierung.md) - die Nutzeridee; Voraussetzungsmessung gemacht, Bau erfolgt
 * [Stetig adressieren statt Klassen vergeben](fragen/stetige-adressierung.md) - **Nutzeridee, zielnah:** die Aneignungsprobleme (Geburt, Knopf, Verhungern, Saettigung) sind Artefakte der Diskretisierung; `desc_embed` existiert fuer jedes Objekt und stirbt nie
