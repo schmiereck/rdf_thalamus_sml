@@ -30,10 +30,10 @@ Objekte, Situationen und Aufgaben bei nachvollziehbarem Aufwand. Lieferquote all
 nicht. Die [Projektziele](/ziel.md) gelten auch fuer die beiden optionalen Zweige.
 
 Dies ist ein Plan, keine implementierte Funktion und kein Nachweis einer Wirkung auf ACT23.
-Nur die Dokumentation ist erstellt. Alle Entwicklungspakete unten sind offen. Zeit- und
+Der Plan ist dokumentiert; D0 wurde am 2026-09-17 gestartet. Zeit- und
 Erfolgsschwellen sind vorgeschlagene Forschungsentscheidungen, keine gemessenen Eigenschaften.
-Vor der Umsetzung wird der aktuelle gemeinsame Code-Stand festgelegt; die laufende
-Zieladressen-Arbeit im anderen Worktree ist in der hier gelesenen Basis nicht enthalten.
+Fuer D0 ist main `15c063e` im eigenen Commit `b351207` integriert. Spaetere parallele
+Arbeit bleibt ausserhalb dieser fixierten Messbasis.
 
 **Lesereihenfolge:** diese Seite -> [Evaluationsvertrag](/messungen/dream-rsi-evaluation.md)
 -> bei Bedarf [Motorpfad](/fragen/dream-rsi-servosteuerung.md) oder
@@ -108,7 +108,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 
 | Paket | Inhalt | Voraussetzung | Status | Befund / Entscheidung |
 |---|---|---|---|---|
-| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | offen | - |
+| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | in Arbeit | [Pilotvertrag](/messungen/dream-rsi-d0-pilot.md); [beide Aufgabenvarianten verfehlen das Tor](/befunde/dream-rsi-d0-lernaufgabe.md) |
 | D1 | Beobachtung, Checkpoints, Neustart- und Nichtbeeinflussungsnachweis | D0 | offen | - |
 | D2 | Kleine Bibliothek echter Trainingslinien | D1 | offen | - |
 | D3 | Replay mit Abdeckungs- und Informationspruefung | D2 | offen | - |
@@ -127,17 +127,22 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 
 ## D0 - Vor dem ersten Umbau das Experiment festlegen
 
-- [ ] Code-Commit, Welt/Geometrie, Startzustand, Modell- und Sensorkonfiguration inventarisieren;
+- [x] Code-Commit, Welt/Geometrie, Startzustand, Modell- und Sensorkonfiguration inventarisieren;
   mit der laufenden Zieladressen-Arbeit abgleichen. Die bislang unversionierten Dateien erst
   erfassen und referenzieren; den Live-Zustand nicht veraendern.
 - [ ] Pilotaufgabe waehlen: Aneignung neuer Koerper und Farb/Form-Kombinationen auf dem Tisch,
   getrennt nach Erkennen, Adressieren und Ausfuehren. Eine sofortige direkte Adresse zaehlt
   alleine nicht als Lernen. Zieladressen als Zusatzaufgabe erst nach ihrer Integration.
-- [ ] Auf einer kleinen unabhaengigen Pilotmenge eingefrorenen Lerner gegen lernenden
+- [x] Auf einer kleinen unabhaengigen Pilotmenge eingefrorenen Lerner gegen lernenden
   vergleichen. Bei Deckeneffekt, unerreichbarer Aufgabe oder ungueltigem Urteil die Aufgabe
   korrigieren, bevor ein Scheduler entsteht.
 - [ ] [Evaluationsvertrag](/messungen/dream-rsi-evaluation.md) konkret ausfuellen: Teilmengen,
   Budget, Kontrollarme, Metrik, kleinster relevanter Effekt und Statistik.
+
+Stand 2026-09-18: Komponentenvertrag und zwei Pilotvarianten ausgewertet; beide als
+Scheduler-Aufgabe ungeeignet. Die Auswahl einer tragfaehigen Lernaufgabe sowie der volle
+Arm-Evaluationsvertrag bleiben offen. Details und naechster Schritt im
+[D0-Befund](/befunde/dream-rsi-d0-lernaufgabe.md).
 
 **Tor D0:** ein gemessener, zugaenglicher Lernspielraum und ein fixiertes Protokoll. Stapeln
 ist wegen [Hoehenabbildung und Erfolgsurteil](/befunde/stapeln-bricht-die-tischebene.md) noch

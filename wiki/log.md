@@ -5,7 +5,28 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-18
+
+* **Ergaenzung**: [D0-Gegenprobe](/befunde/dream-rsi-d0-lernaufgabe.md) abgeschlossen:
+  frischer Grundform-Lerner erkennt Y in beiden Seeds ab drei Sichten zu 24/24, beansprucht
+  aber jeweils alle vier T-Kontrollen. Freeze 0/24; Gewichte und Live-Zustand unveraendert.
+  Beide Varianten als Scheduler-Benchmark verworfen; D0 bleibt offen. Messwerkzeug und
+  Rohbelegverweise gesichert, keine D1-Implementierung und kein Arm-Lernnachweis.
+
 ## 2026-09-17
+
+* **Anlage**: [D0: Ungebunden ist nicht unbekannt](/befunde/dream-rsi-d0-lernaufgabe.md) -
+  erster vorab festgelegter Komponentenpilot: beide Seeds nach 24 Y-Sichtungen ohne neue
+  Klasse, gehaltene Wiedererkennung 0/24 gegen 0/24. Kein Schaden an bekannten Formen,
+  aber auch kein Lernsignal. Eine frische Grundform-Basis wird als separate Gegenprobe
+  vorangemeldet; kein Nachstellen der v1-Kriterien. D0-Tor bleibt offen.
+
+* **Anlage**: [D0-Pilotvertrag](/messungen/dream-rsi-d0-pilot.md), vor dem ersten Lernlauf
+  festgelegt. Gemeinsame Basis `b351207` integriert main `15c063e`, eigener Startzustand
+  `ad9d768c` per Hash geprueft. Message Board informiert. Der erste Technik-Rauchtest des
+  isolierten Wahrnehmungsvergleichs besteht seine Integritaetspruefungen; nach drei
+  Y-Sichten noch keine Klasse. **Kein ACT23-Lernbefund.** Der vorhandene EXV-Freeze schaltet
+  nicht alle Lerner ab; deshalb zuerst ein explizit begrenzter Komponentenpilot.
 
 * **Anlage**: [Dream-RSI: Forschungs- und Entwicklungsplan](/fragen/dream-rsi-forschungsplan.md)
   samt [Evaluationsvertrag](/messungen/dream-rsi-evaluation.md),

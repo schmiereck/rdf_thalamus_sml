@@ -30,6 +30,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 # Befunde
 
+* [D0: Ungebunden ist nicht unbekannt](befunde/dream-rsi-d0-lernaufgabe.md) - gewachsen kein Y-Lernen; frisch schnelle Y-Erkennung mit T-Verwechslung, beide Pilotvarianten ungeeignet; D0-Tor offen
 * [Exekutionsvarianz](befunde/exekutionsvarianz.md) - ICC 0,61, Obergrenze 82 % gegen Grundrate 54 %; der Deckel sitzt in der Situationsrepraesentation
 * [1109 Episoden ohne Lernfortschritt](befunde/langlauf-ohne-fortschritt.md) - 43 h GUI-Lauf, vier unabhaengige Groessen flach
 * [Selbst-Aneignung stockt](befunde/selbstaneignung-stockt.md) - 17/17 und 14/14 selbst geborene Klassen verhungern, keine je kommandiert
@@ -91,6 +92,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 # Messvorschriften
 
+* [D0-Pilot: Wiedererkennung einer neuen Form](messungen/dream-rsi-d0-pilot.md) - vorab fixierter Komponentenvergleich eingefroren/lernend; kein Arm-Lernnachweis
 * [Dream-RSI: Evaluationsvertrag](messungen/dream-rsi-evaluation.md) - Entwurf: Zustand/Replay, unabhaengige Testdaten, Lernfortschritt und Gesamtkosten; in D0 vor dem ersten Experiment konkretisieren
 * [Kopfloses A/B im vollen act23-Lauf](messungen/act23-headless-ab.md) - die einzige Ebene, auf der Wirkung behauptet werden darf
 * [Wiederholungsmessung EXV](messungen/exekutionsvarianz-exv.md) - trennt Ausfuehrungsstreuung von Situationssignal

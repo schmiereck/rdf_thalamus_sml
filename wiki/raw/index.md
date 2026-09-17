@@ -5,6 +5,14 @@ wird nie umgeschrieben, nur ergaenzt. Jede Zahl im Wiki soll von hier aus nachvo
 
 # Laufprotokolle
 
+* `log/dream_rsi_d0_20260917/` im Codex-Worktree: `inventory.json`, `smoke_01`,
+  `pilot_01` und `pilot_fresh_01`. Die Pilotordner enthalten Manifeste, Einzelurteile,
+  Szenen, Zusammenfassungen und archivierte Runner; v2 auch Vertrag und Bootstrap-Pickles.
+  Lokal, unversioniert; Startkopie unter `src/pc_cvnn/state/dream_rsi_d0_20260917/base.pkl`.
+  Werkzeug: `src/pc_cvnn/act23_dream_rsi_d0.py`.
+  -> [D0-Befund](/befunde/dream-rsi-d0-lernaufgabe.md),
+  [Pilotvertrag](/messungen/dream-rsi-d0-pilot.md).
+
 `log/pc_act23_<datum>_<zeit>.txt` - je ein GUI- oder kopfloser act23-Lauf, angelegt von
 `_start_session_log()` in `pc_act23.py`. Nicht in git (`log/` ist unversioniert), liegt nur
 lokal. Die im Wiki zitierten Laeufe:
