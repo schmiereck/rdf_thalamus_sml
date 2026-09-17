@@ -136,7 +136,7 @@ Der kleinste Schnitt, der das nicht zur Grossbaustelle macht:
 | Stufe | was | wozu |
 |---|---|---|
 | 0 | die Hoehenmessung | **erledigt**, s. [Befund](/befunde/stapeln-bricht-die-tischebene.md) |
-| 1 | `BEZUG := an ADRESSE` - das Ziel ist ein Koerper, abgelegt DANEBEN | die Sprachaenderung allein, ohne Hoehe. Beurteilbar mit der heutigen flachen Wahrnehmung, und sie nimmt dem Befehl sein letztes Privileg |
+| 1 | `BEZUG := an ADRESSE` - das Ziel ist ein Koerper, abgelegt DANEBEN | **gebaut**, s. [Das Ablageziel als Adresse](/mechanismen/ziel-als-adresse.md). Die Sprachaenderung allein, ohne Hoehe. Beurteilbar mit der heutigen flachen Wahrnehmung, und sie nimmt dem Befehl sein letztes Privileg |
 | 2 | Sockel in die Welt, `BEZUG := auf ADRESSE`, Ziel dreidimensional | die Aufgabe, mit einer Toleranz, die zur vorhandenen Genauigkeit passt |
 | 3 | Hoehe aus dem Widerspruch Ort/Groesse lesen | erst dann kann der Agent den eigenen Stapel BEURTEILEN - und erst dann ist es Selbstlernen und nicht ein Sonderfall im Richter |
 

@@ -7,6 +7,29 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-17
 
+* **Anlage**: [Das Ablageziel als Adresse](/mechanismen/ziel-als-adresse.md) - **Stufe 1 aus dem
+  Stapel-Entwurf ist gebaut**, `ACT23_ZIEL_ADRESSE` (Vorgabe 0). Die Sprache waechst um einen TYP,
+  nicht um ein Verb: `BEZUG := ORT | RELATION ADRESSE`, Relation "an". `_ziel_adresse_wuerfeln`
+  waehlt je Episode einen Bezugskoerper und wuerfelt seine Adresse mit derselben
+  `_adresse_wuerfeln`-Fassung wie fuer das Objekt; `_ziel_aufloesen` findet ihn beim Abholen des
+  Ziels ueber `finde_nach_eigenschaften` wieder und gibt die Stelle `ZIEL_ABSTAND` (0,05 m) daneben
+  zurueck. **Damit verliert das Kommando sein letztes Privileg:** `goal_fn` las bisher
+  `marker_xy` -> `sim.d.mocap_pos`, eine Designer-Koordinate; jetzt kommt das Ziel aus der Kamera.
+  Entscheidungen mit Begruendung auf der Seite: neben statt auf (die Hoehe ist mit einer
+  Ebenen-Homographie nicht beurteilbar), 0,05 m ist die Zahl, mit der act16 ohnehin jedes Ziel von
+  Koerpern wegschiebt, die Peilung wird gewuerfelt statt gesetzt, die Adresse darf hier die Farbe
+  nennen (sie gilt nur fuer EINE Episode), mehrdeutig zaehlt wie nicht gefunden und wird laut
+  protokolliert, und `mocap_pos` muss um `perceive_all` herum gesichert werden, sonst liefert
+  ausgerechnet der Rueckfall eine GEPARKTE Markerkoordinate. **Verifikation:** Vorgabepfad ueber
+  5 frische Episoden (Seed 4242) gegen `HEAD` - **64 Inhaltszeilen, 0 Unterschiede**; die 18
+  Kopfzeilen weichen ab, weil der Vergleichsstand aus dem Scratchpad lief und `_source_defaults()`
+  dort keine Nachbardateien findet (Artefakt des Aufbaus, auf der Seite als Falle vermerkt).
+  Rauchtest mit Schalter auf einer Zustandskopie: **4 von 4 Zieladressen eindeutig**, Bezugskoerper
+  auf 1-5 mm wahrgenommen, 2 von 4 geliefert. **Vorab benannter Konfounder fuer das A/B:** ein Ziel
+  50 mm neben einem Koerper liegt in der Zone, in der
+  [Nachbarnaehe](/befunde/nachbarnaehe-im-lauf.md) gemessen 13,9 Punkte kostet - die Kontrolle
+  `ACT23_ZIEL_ABSTAND=0.09` ist eingebaut.
+
 * **Anlage**: [Stapeln als neue Aufgabe](/fragen/stapeln-als-aufgabe.md) - Nutzeridee vom
   2026-09-17: als Ziel andere Objekte angeben koennen. **Machbar, und ungewoehnlich billig**, weil
   vier Voraussetzungen schon stehen: das Ablageziel ist ein HAKEN (`goal_fn`), es ist schon ein

@@ -723,6 +723,45 @@ if EIG_DIREKT and not EIG_STETIG:
           "Adresse ohne Klasse kann die FORMACHSE dann nicht nennen (resolve() liefert None) "
           "und traegt nur Farbe und Groesse.  Das ist genau der Vergleichsarm, wenn er "
           "beabsichtigt ist.", flush=True)
+# =========================================================================================
+# DAS ABLAGEZIEL ALS ADRESSE (ACT23_ZIEL_ADRESSE, Vorgabe 0).
+#
+# NUTZERIDEE 2026-09-17, Stufe 1 von wiki/fragen/stapeln-als-aufgabe.md: "als Ziel andere
+# Objekte angeben koennen".  Die Sprache waechst dabei NICHT um ein Verb, sondern um einen TYP --
+# der Zielplatz bekommt denselben Typ, den das Objekt schon hat:
+#
+#     heute      BEFEHL   := ADRESSE  AKTION  ORT
+#     mit dem    BEFEHL   := ADRESSE  AKTION  BEZUG
+#     Schalter   BEZUG    := ORT | RELATION ADRESSE
+#                RELATION := an        (Stufe 1; "auf" waere Stufe 2 und braucht eine Hoehe)
+#
+# STUFE 1 IST BEWUSST OHNE HOEHE.  Ein Ziel AUF einem Koerper ist mit der heutigen Wahrnehmung
+# nicht beurteilbar: die Homographie ist eine EBENEN-Abbildung, ein gestapelter Wuerfel liest
+# gemessen 15,9 mm daneben (wiki/befunde/stapeln-bricht-die-tischebene.md), und der Erfolgsbegriff
+# heisst woertlich "liegt auf dem Tisch".  "an" laesst beides unveraendert -- gemessen wird
+# ausschliesslich die SPRACHAENDERUNG.
+#
+# WAS DIE AENDERUNG WERT IST, unabhaengig von jeder Quote: das Ablageziel ist heute das EINZIGE
+# Stueck des Befehls, das der Agent NICHT wahrnimmt.  state.goal_fn liefert marker_xy(), und das
+# liest sim.d.mocap_pos -- eine privilegierte Designer-Koordinate.  Eine Zieladresse wird dagegen
+# ueber finde_nach_eigenschaften aus der eigenen Kamera aufgeloest, genau wie das Objekt.  Der
+# Schalter nimmt dem Kommando also sein letztes Privileg (wiki/ziel.md).
+#
+# WARUM NEBEN UND NICHT AUF, im Abstand ZIEL_ABSTAND: 0,05 m ist keine neue Zahl, sondern
+# dieselbe, mit der run_combined seit jeher jedes Ziel von jedem Koerper wegschiebt
+# (pc_act16: clear(tgt, OBJS, 0.05)).  Damit bleibt die Saeuberung wirkungslos statt zu stoeren,
+# und ein geliefertes Objekt beruehrt den Bezugskoerper nicht.
+#
+# DIE PEILUNG WIRD GEWUERFELT, nicht gesetzt: acht Richtungen ab einem zufaelligen Winkel, die
+# erste erreichbare gewinnt.  Ein fester Versatz waere eine geskriptete Konvention ("immer
+# oestlich"); der Wurf ist dasselbe, was die Marker-Vorgabe mit place_selected_random ohnehin tut.
+#
+# DIE ADRESSE WIRD JEDE EPISODE NEU GEWUERFELT -- wie in _auto_eig_umschreiben und anders als
+# eine Direkt-Adresse.  Deshalb darf sie die FARBE nennen, obwohl ACT23_FARB_MISCHUNG jede Episode
+# umfaerbt: gewuerfelt wird NACH _farbe_wuerfeln, die Adresse gilt genau fuer diese eine Episode.
+# Der Befund wiki/befunde/dauer-adresse-vertraegt-keine-farbe.md trifft nur DAUERHAFTE Adressen.
+ZIEL_ADRESSE = os.environ.get("ACT23_ZIEL_ADRESSE", "0") == "1"
+ZIEL_ABSTAND = float(os.environ.get("ACT23_ZIEL_ABSTAND", "0.05"))
 # ABSTUFUNG STATT PRIVILEG (ACT23_EIG_ABSTUFUNG, Vorgabe 0 bis gemessen).  Trifft das
 # Eigenschafts-Tripel nichts, griff bisher der PRIVILEGIERTE Rueckfall: die wahre Lage aus dem
 # Simulator.  Das ist der Preis der Groessenachse -- sie traf gemessen 10,0 statt 4,7 % der
@@ -1158,6 +1197,13 @@ class CommandState23:
         self.OBJECTS = list(CommandState23.OBJECTS)
         self.SHAPE_KEY = dict(CommandState23.SHAPE_KEY)
         self.EIGENSCHAFT = {}      # Koerper -> (Farbklasse, Formklasse, Groessenband); s. add_eigenschaft
+        # DAS ABLAGEZIEL ALS ADRESSE (s. ZIEL_ADRESSE oben).  "ort" = der gewaehlte Marker wie
+        # bisher, "koerper" = ein BEZUG auf einen anderen Koerper, aufgeloest aus der Wahrnehmung.
+        # ziel_bezug traegt den Wurf DIESER Episode, ziel_loeser die Aufloesung (sie braucht
+        # shape_clf und colours und kann deshalb nicht hier stehen).
+        self.ziel_modus = "koerper" if ZIEL_ADRESSE else "ort"
+        self.ziel_bezug = None
+        self.ziel_loeser = None
         self.EIG_MESS = {}         # Koerper -> (Chromatizitaet, Formeinbettung, Spanne) -- die
         #   GEMESSENEN Werte derselben drei Achsen (ACT23_EIG_STETIG).  Die Namen oben bleiben fuer
         #   Anzeige und Protokoll, gematcht wird auf diesen hier.  Wird wie EIGENSCHAFT NICHT
@@ -1228,6 +1274,16 @@ class CommandState23:
         return self.action
 
     def goal_fn(self, cmd, obj_xy):
+        """Das Ablageziel, wie run_combined es abholt und auf das es sich festlegt.
+
+        MIT EINER ZIELADRESSE (s. ZIEL_ADRESSE) kommt es aus der WAHRNEHMUNG statt aus
+        mocap_pos.  Der Rueckfall ist NICHT still: der Aufloeser sagt im Protokoll, ob er nichts
+        gefunden hat oder mehrdeutig war -- eine Zieladresse, die heimlich zum Marker wird, waere
+        in der Auswertung von einer geloesten nicht zu unterscheiden."""
+        if self.ziel_bezug is not None and self.ziel_loeser is not None:
+            p = self.ziel_loeser(self.ziel_bezug)
+            if p is not None:
+                return p
         return self.marker_xy(self.target_idx)
 
     def label(self):
@@ -1235,7 +1291,13 @@ class CommandState23:
         pol = "Selbst-gelernt" if self.policy == "self" else "Teacher"
         ch = {"netz": "Netz", "attractor": "Attraktor"}.get(self.choreo, "FSM")
         zl = " (latent)" if self.goalmode == "latent" else ""
-        return f"{self.selected()[0]} | {act} | Greifer: {pol} | Choreo: {ch} | Ziel {self.target_idx + 1}{zl}"
+        if self.ziel_bezug is not None:
+            zt = f"Ziel: an {self.ziel_bezug['label']}"
+        elif self.ziel_modus == "koerper":
+            zt = "Ziel: an <kein Bezug>"
+        else:
+            zt = f"Ziel {self.target_idx + 1}"
+        return f"{self.selected()[0]} | {act} | Greifer: {pol} | Choreo: {ch} | {zt}{zl}"
 
 
 EIG_ONLY = os.environ.get("ACT23_EIG_ONLY", "0") != "0"   # alte Objektzeile ausblenden
@@ -1331,11 +1393,18 @@ class CommandPanel23:
                           color=("#2a6a5a" if _lat else "#5a4a3a"), hovercolor="#3a8a75")
         self.bLG.label.set_fontsize(7)
         self.bLG.on_clicked(self._toggle_goalmode)
+        # DAS ABLAGEZIEL: ein ORT (Marker) oder ein BEZUG auf einen Koerper (s. ZIEL_ADRESSE).
+        # Der Umschalter steht VOR den Marker-Knoepfen, weil er sie gegenstandslos macht.
+        self._ziel_fn = None
+        axZM = self.fig.add_axes([0.55, 0.220, 0.115, 0.05])
+        self.bZM = Button(axZM, "", color="#3a3a44", hovercolor="#55556a")
+        self.bZM.label.set_fontsize(7); self.bZM.on_clicked(self._toggle_zielmodus)
         # named target buttons (top-right of the control band)
         self._tgt_btns = {}
         for i in range(len(state.MARKERS)):
-            ax = self.fig.add_axes([0.55 + 0.135 * i, 0.220, 0.12, 0.05])
+            ax = self.fig.add_axes([0.675 + 0.09 * i, 0.220, 0.085, 0.05])
             b = Button(ax, f"Ziel {i + 1}", color="#3a3a44", hovercolor="#55556a")
+            b.label.set_fontsize(8)
             b.on_clicked(lambda _e, i=i: self._set_tgt(i)); self._tgt_btns[i] = b
         # bottom controls
         axA = self.fig.add_axes([0.035, 0.04, 0.20, 0.07])
@@ -1408,6 +1477,16 @@ class CommandPanel23:
         self.state.policy = "teacher" if self.state.policy == "self" else "self"; self._refresh()
     def _go(self, _e): self.state.go = True
     def _exit(self, _e): self.state.exit = True
+
+    def _toggle_zielmodus(self, _e):
+        """ORT <-> BEZUG.  Beim Umschalten auf "Körper" wird gleich gewuerfelt, damit der Befehl
+        oben sofort sagt, WORAUF er sich bezieht -- sonst stuende dort bis zum naechsten
+        "Ausführen" ein leerer Bezug, und der Nutzer saehe nicht, ob der Schalter etwas tut."""
+        self.state.ziel_modus = "ort" if self.state.ziel_modus == "koerper" else "koerper"
+        self.state.ziel_bezug = None
+        if self.state.ziel_modus == "koerper" and self._ziel_fn is not None and not self.state.busy:
+            self._ziel_fn()
+        self._refresh()
 
     def _set_tgt(self, i):
         self.state.target_idx = i; self.state.sync_active()
@@ -1491,8 +1570,13 @@ class CommandPanel23:
             lbl = self.state.OBJECTS[i][0]
             b.label.set_text(("● " if i == self.state.sel else "") + lbl)
         self.bPol.label.set_text("Greifer: " + ("Selbst-gelernt" if self.state.policy == "self" else "Teacher"))
+        _bez = self.state.ziel_modus == "koerper"
+        self.bZM.label.set_text("Ziel: an Körper" if _bez else "Ziel: Ort")
+        self.bZM.color = "#2a6a5a" if _bez else "#3a3a44"; self.bZM.ax.set_facecolor(self.bZM.color)
         for i, b in self._tgt_btns.items():
-            b.color = "#c050c0" if i == self.state.target_idx else "#3a3a44"; b.ax.set_facecolor(b.color)
+            b.color = ("#3a3a44" if _bez else                  # der Marker ist dann gegenstandslos
+                       ("#c050c0" if i == self.state.target_idx else "#3a3a44"))
+            b.ax.set_facecolor(b.color)
         self.status.set_text("Befehl:  " + self.state.label()); self.fig.canvas.draw_idle()
 
     def update(self, frame, txt=""):
@@ -2159,6 +2243,107 @@ def run_self_learning_steering(headless=False):
         if panel is not None:
             panel._eig_werte = _eig_werte()    # waehrend des Laufs geborene Klassen nachziehen
             panel.zeige_eigenschaft(*_tri, verfuegbar=_werte)   # genannt UND was verschwiegen wurde
+        return _tri
+
+    def _ziel_aufloesen(bez):
+        """Das Ablageziel aus der WAHRNEHMUNG aufloesen (s. ZIEL_ADRESSE).
+
+        Genau derselbe Weg wie beim Objekt: finde_nach_eigenschaften ueber die Kamera, kein
+        sim.obj_pos.  Zurueck kommt eine Stelle NEBEN dem Bezugskoerper, ZIEL_ABSTAND entfernt,
+        auf der ersten erreichbaren der gewuerfelten Peilungen.
+
+        ZWEI TORE, beide schon anderswo gemessen:
+          * MEHRDEUTIG IST NICHT GEFUNDEN.  Passt die Adresse auf mehrere Detektionen, wird
+            NICHT die flaechengroesste genommen -- genau das hat in der Objekt-Adressierung
+            152 mm danebengegriffen (s. _auto_eig_umschreiben).  Ein Ziel, das seinen Bezug
+            nicht identifiziert, faellt auf den Marker zurueck.
+          * DIE MARKER MUESSEN ZURUECK.  perceive_all parkt sie (_park_markers); ohne
+            Wiederherstellung liefert der Rueckfall marker_xy() eine GEPARKTE Koordinate.
+            Dieselbe Falle wie in _adresse_wuerfeln, deshalb dasselbe Sichern/Zuruecklegen.
+        """
+        from pc_cvnn.pc_act14 import REACH_XY
+        from pc_cvnn.pc_act16 import BASE_CLEAR
+        _sm = sim.d.mocap_pos.copy()
+        try:
+            _p, _det, _tr = finde_nach_eigenschaften(sim, shape_clf, colours, *bez["tripel"],
+                                                     mess=(bez["mess"] if EIG_STETIG else None))
+        finally:
+            sim.d.mocap_pos[:] = _sm
+            mujoco.mj_forward(sim.m, sim.d)
+        if _p is None or len(_tr) != 1:
+            print(f"    [Zieladresse] '{bez['label']}': "
+                  f"{'mehrdeutig, ' + str(len(_tr)) + ' Treffer' if _tr else 'nicht gefunden'}"
+                  f" -- Rückfall auf Ziel {state.target_idx + 1}", flush=True)
+            return None
+        for _ph in bez["peilungen"]:
+            _q = _p + ZIEL_ABSTAND * np.array([np.cos(_ph), np.sin(_ph)])
+            if (REACH_XY[0][0] <= _q[0] <= REACH_XY[1][0] and REACH_XY[0][1] <= _q[1] <= REACH_XY[1][1]
+                    and float(np.linalg.norm(_q)) >= BASE_CLEAR):
+                # "wahr" ist AUSSCHLIESSLICH Protokoll: wie weit die wahrgenommene Stelle des
+                # Bezugskoerpers von seiner echten abweicht.  Der Wert geht in keine Entscheidung,
+                # in kein Ziel und in keinen Lernenden -- ohne ihn waere im Log aber nicht zu
+                # trennen, ob eine danebengegangene Ablage an der Adresse oder am Arm lag.
+                _wahr = 1000.0 * float(np.linalg.norm(_p - sim.obj_pos(bez["body"])[:2]))
+                print(f"    [Zieladresse] '{bez['label']}' 1 Treffer bei "
+                      f"[{_p[0]:+.3f},{_p[1]:+.3f}] (wahr {_wahr:.0f}mm) -> ablegen daneben bei "
+                      f"[{_q[0]:+.3f},{_q[1]:+.3f}]", flush=True)
+                return _q
+        print(f"    [Zieladresse] '{bez['label']}' gefunden, aber keine erreichbare Ablage daneben"
+              f" -- Rückfall auf Ziel {state.target_idx + 1}", flush=True)
+        return None
+
+    state.ziel_loeser = _ziel_aufloesen
+
+    def _ziel_adresse_wuerfeln():
+        """STUFE 1 von "Stapeln als neue Aufgabe": das Ablageziel wird eine ADRESSE.
+
+        Gewuerfelt wird EINMAL JE EPISODE und danach benutzt; aufgeloest wird erst, wenn
+        run_combined das Ziel abholt (goal_fn -> _ziel_aufloesen).  Die Trennung ist Absicht:
+        der Wurf legt fest, WAS gesagt wird, die Aufloesung findet es in der Szene wieder.
+
+        WER DER BEZUGSKOERPER IST, waehlt der Wurf aus den Koerpern, die gerade auf dem Tisch
+        stehen -- das ist Aufgabenerzeugung wie die Wahl des Objekts oder die Marker-Position,
+        kein Privileg im Vollzug.  Die ADRESSE selbst kommt aus der Detektion, die auf ihm sitzt,
+        also aus dem, was die Kamera hergibt.
+
+        DIE EINDEUTIGKEIT ERZWINGT _adresse_wuerfeln -- dieselbe Fassung wie fuer das Objekt,
+        samt der Nutzervorgabe, dass eine reine Groessenangabe keine Adresse ist ("der blaue
+        Wuerfel", nie "das groesste Objekt").  Bleibt keine eindeutige Adresse uebrig, wird gar
+        keine gesetzt und der Marker bleibt das Ziel.
+        """
+        state.ziel_bezug = None
+        if state.ziel_modus != "koerper":
+            return None
+        _a = state.selected()[1]
+        _kand = [nm for nm in dict.fromkeys(nm for _l, nm, _m in state.OBJECTS)
+                 if nm != _a and not _geparkt_jetzt(nm)]
+        if not _kand:
+            return None
+        _b = _kand[int(crng.integers(len(_kand)))]
+        _sm = sim.d.mocap_pos.copy()
+        _ds = [d for d in shape_clf.perceive_all(sim)
+               if d.get("pos") is not None and float(d.get("area", 0)) >= 200.0]
+        sim.d.mocap_pos[:] = _sm; mujoco.mj_forward(sim.m, sim.d)
+        _p = sim.obj_pos(_b)[:2]
+        _nah = min(_ds, key=lambda d: float(np.linalg.norm(
+            np.asarray(d["pos"], float) - _p)), default=None)
+        if _nah is None or float(np.linalg.norm(np.asarray(_nah["pos"], float) - _p)) >= 0.04:
+            return None                                  # nichts Sichtbares auf dem Bezugskoerper
+        _f = colours.classify(_nah["chroma"])[0] if _nah.get("chroma") is not None else None
+        _fo, _g = _nah.get("shape"), groessen_band(_nah.get("dicke"), _nah.get("span"))
+        _mess = (np.asarray(_nah["chroma"], float) if _nah.get("chroma") is not None else None,
+                 np.asarray(shape_clf.desc_embed(_nah["desc"]), float)
+                 if _nah.get("desc") is not None else None,
+                 float(_nah["span"]) if _nah.get("span") is not None else None)
+        if EIG_DIREKT and EIG_STETIG and _fo is None and _mess[1] is not None:
+            _fo = EIG_GESEHEN                            # Formachse ohne Klasse, s. dort
+        _tri = _adresse_wuerfeln((_f, _fo, _g), _mess, _p, ident=True)
+        if _tri is None:
+            return None
+        _ph0 = float(crng.uniform(0.0, 2.0 * np.pi))     # acht Peilungen ab einem zufaelligen
+        _peil = [(_ph0 + 2.0 * np.pi * k / 8.0) for k in range(8)]   # Winkel, s. ZIEL_ADRESSE
+        state.ziel_bezug = {"tripel": _tri, "mess": _mess, "peilungen": _peil, "body": _b,
+                            "label": " + ".join(str(t) for t in _tri if t is not None) or "beliebig"}
         return _tri
 
     colour_of_body = dict(_loaded.get("colour_of_body", {})) if _loaded is not None else {}
@@ -3860,6 +4045,8 @@ def run_self_learning_steering(headless=False):
     if panel is not None:
         panel._randomize_fn = randomize_objects     # wire "Objekte neu" (panel built before randomize_objects existed)
         panel._introduce_fn = introduce_object      # wire "Objekt hinzufügen" (open-set discovery)
+        panel._ziel_fn = _ziel_adresse_wuerfeln     # wire "Ziel: an Körper" (s. ZIEL_ADRESSE)
+        panel._refresh()                            # Zielmodus aus der Umgebung sichtbar machen
     # CONTINUITY: make run_combined treat ALL objects as its scene -> with SCENE_N = all, keep=all so it never
     # PARKS a distractor off-table, and reposition_strays never fires (nothing is a stray) -> nothing teleports.
     # The scene just evolves: only the commanded object is grasped + delivered (and STAYS), like real life.
@@ -5728,6 +5915,7 @@ def run_self_learning_steering(headless=False):
                     mujoco.mj_forward(sim.m, sim.d); sim.step(40)
                     world.rng.bit_generator.state = _rng0
                 _auto_eig_umschreiben()
+                _ziel_adresse_wuerfeln()                       # ZIEL als Adresse (s. ZIEL_ADRESSE)
                 print(f"  [Auto {ep}]{f' W{_rep}' if _reps > 1 else ''} {state.label()} ...", flush=True)
                 try:
                     ok, err = run_one()
@@ -5812,6 +6000,10 @@ def run_self_learning_steering(headless=False):
                 print(f"    {pick}", flush=True)
             _auto_eig_umschreiben()                            # ADRESSIERUNG ueber Eigenschaften
             panel._refresh()                                   # "Auto: aus" stoppt nach der Episode
+        # ZIEL als Adresse (s. ZIEL_ADRESSE) -- AUSSERHALB des Auto-Zweigs, damit der Schalter
+        # auch im Hand-Befehl wirkt.  Der Wurf gilt je Episode; ohne Zielmodus "koerper" ist er
+        # eine sofortige Rueckkehr und der Marker bleibt das Ziel.
+        _ziel_adresse_wuerfeln()
         state.go = False
         tag = "Auto" if state.auto else "Befehl"
         print(f"  [{tag} {ep}] {state.label()} ...")
