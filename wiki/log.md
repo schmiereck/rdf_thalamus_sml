@@ -7,6 +7,46 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-17
 
+* **Anlage**: [Stufe 2 vorbereitet](/mechanismen/stufe2-vorbereitet.md) - drei Teile gebaut, alle
+  auf Schaltern mit Vorgabe 0: der **Sockel** (70 x 70 x 8 mm, tiefblau, schwer, geparkt),
+  **`ACT16_GOAL_Z`** (goal_fn darf drei Werte liefern, die Ablagephase zielt auf `tgt_z` statt auf
+  die Konstante `GRASP_Z`, und der Zustandsvektor der Policy bekommt die Hoehe als 14. Eingang) und
+  **`ACT16_ERFOLG_RUHT`** (Erfolg heisst "ruht und Klaue offen" statt woertlich "liegt auf dem
+  Tisch"). **Warum die 14. Spalte auf einen Schalter gehoert:** sie ist KEINE verhaltensneutrale
+  Ergaenzung - der Vorwaertsdurchlauf bleibt bitgleich (gemessen, `max |diff| = 0.0` nach der
+  Migration mit Nullspalten), aber ein frisches Netz wird mit anderer Breite gezogen und jeder
+  Refit sieht eine Spalte mehr. **Die Migration braucht ausnahmsweise kein Gueltigkeits-Flag:**
+  beim Tastsinn waere "0 N" die Luege "Klaue leer" gewesen, die Ablagehoehe dagegen WAR in jeder
+  alten Episode `GRASP_Z` - der Neutralwert ist die Wahrheit.
+
+* **Anlage**: [Der Sockel verschluckt den Stapel](/befunde/sockel-verschluckt-den-stapel.md) -
+  die Messung am Sockel, und sie faellt anders aus als geplant. Ein Wuerfel auf der Platte wird in
+  **0 von 25** Stellen eine eigene Detektion; die Flaeche aendert sich um **kein einziges Pixel**,
+  weil die Silhouette des Wuerfels ganz innerhalb der Platte liegt. Nicht ungenau lokalisiert,
+  sondern **verschluckt** - die Frage nach dem Parallaxenfehler stellt sich gar nicht. Der
+  Chroma-Schnitt hilft nicht (ebenfalls 0 von 25): er ist auf "Deskriptor trifft KEINE Klasse"
+  verriegelt, und der Sockel-Blob loest sauber als `U` auf. **Was ihn doch verraet, ist `cspread`:**
+  leer 0,069 (max 0,118), belegt 0,149 bis 0,397 - ueber 100 Positiv- und 50 Negativfaelle **kein
+  einziger Ueberlapp**, Abstand +0,030. Zusammen mit der unveraenderten Flaeche ergibt das eine
+  Signatur aus schon berechneten Groessen: **Flaeche unveraendert + Farbstreuung hoch = da liegt
+  etwas drauf**, und das trennt einen Stapel auch von zwei nebeneinander verschmolzenen Koerpern,
+  deren Flaeche sich ADDIERT. "A liegt auf B" wird damit als RELATION lesbar statt als zweite
+  Position. Engpass ist Violett (0,161), die dem Sockelblau naechste Farbe; der Sockel steht
+  deshalb nicht in `_FARB_KOERPER`. Der Nachtrag im Entwurf entkraeftet entsprechend den Absatz
+  "Hoehe aus dem Widerspruch Ort/Groesse lesen" fuer den Sockel-Fall.
+
+* **Ergaenzung**: [Invarianten](/mechanismen/invarianten.md) - neue Regel aus diesem Einbau:
+  **ein zusaetzlicher KOERPER im Modell veraendert das gerenderte Bild, immer.** Zustand bitgleich
+  (`qpos` und `qvel` Zeichen fuer Zeichen identisch), Bild nicht: **2 von 57.600 Pixeln**, +44 im
+  Rotkanal an der Silhouettenkante des roten Wuerfels. Der Effekt bleibt unveraendert 2 Pixel, wenn
+  man den Koerper voellig durchsichtig, winzig oder in eine ausgeblendete Geom-Gruppe setzt - es ist
+  der Szenengraph, nicht sein Aussehen. Da die ganze Wahrnehmung am Bild haengt, driften zwei
+  Laeufe danach auseinander (Warmup ab Schritt ~100, `sensor_err` 40,05 gegen 40,04).
+  **Wer einen Koerper hinzufuegt, kann keinen Lauf mehr bitweise mit einem Lauf von davor
+  vergleichen; beide Arme eines A/B muessen dieselbe XML fahren.** Verhaltensneutral ist es
+  trotzdem: 5 frische Episoden gegen einen `git worktree` auf `84a5d71`, Befehle und Ausgaenge
+  identisch, 4 von 5 millimetergenau gleich, eine 87 gegen 89 mm.
+
 * **Anlage**: [Die Zieladresse traegt](/befunde/ziel-als-adresse-gemessen.md) - das A/B zum
   Bau, drei Arme je 140 Episoden aus identischen Kopien von `ad9d768c`, Seed 4242:
   `ort` / `an05` / `an09`. **Die Adresse traegt:** 127/139 = 91,4 % bzw. 135/139 = 97,1 % loesen

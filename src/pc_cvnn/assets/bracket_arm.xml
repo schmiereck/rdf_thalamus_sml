@@ -172,6 +172,37 @@
       <geom type="box" pos="0.01126 -0.00650 0" size="0.007 0.013 0.012" euler="0 0 4.18879" rgba="0.85 0.1 0.45 1" density="700" friction="1.4 0.05 0.001"/>
     </body>
 
+    <!-- SOCKEL: eine breite flache Platte als STAPELZIEL (Stufe 2 von wiki/fragen/stapeln-als-aufgabe.md).
+         Startet GEPARKT ausserhalb des Tisches wie obj_T/X/Y -- kein bestehender Lauf sieht ihn.
+
+         WARUM BREIT UND FLACH, und beides aus einer Messung:
+         (1) BREIT, weil die Ablagegenauigkeit gemessen 21-25 mm betraegt
+             (wiki/befunde/ablage-und-platzieren.md).  Ein 24-mm-Wuerfel auf einem 24-mm-Wuerfel
+             verlangt < 12 mm -- die Aufgabe waere von Anfang an unloesbar und das Lernsignal null.
+             70 mm Kantenlaenge geben 35 - 12 = 23 mm Toleranz, also etwa die vorhandene
+             Genauigkeit.  Die Auflage laesst sich spaeter schrumpfen; das ist die
+             Schwierigkeitsachse, an der sich Uebertragung messen laesst.
+         (2) FLACH, weil die Homographie eine EBENEN-Abbildung ist: der Versatz waechst mit
+             (h - h0)/(z_kamera - h) (wiki/befunde/stapeln-bricht-die-tischebene.md).  Auf einem
+             zweiten Wuerfel steht die Mitte bei 36 mm und liest 15,9 mm daneben; auf einer 8 mm
+             hohen Platte steht sie bei 20 mm.  Die flache Platte kauft also zugleich die
+             Beurteilbarkeit, die dem Stapeln sonst fehlt.
+
+         SCHWER (Dichte 3000) und rauh: der Sockel soll nicht verrutschen, wenn ein Wuerfel
+         danebentrifft.  Freejoint trotzdem, damit sim.set_object ihn wie jeden anderen Koerper
+         setzen kann und die Wahrnehmung ihn nicht anders behandelt als den Rest.
+
+         TIEFBLAU (0.05 0.05 1.0): der Farbraum ist voll.  Das ist der Ton mit dem GROESSTEN
+         Mindestabstand in der Chromatizitaet zu allen belegten (0,292 zu obj_blue) -- weiter
+         getrennt als das engste bestehende Paar (0,220).  Er steht bewusst NICHT in
+         _FARB_KOERPER: der Sockel ist Moebel, kein zu adressierendes Objekt, und seine Adresse
+         soll ueber die FORM laufen (eine 70-mm-Platte ist von allem anderen weit entfernt). -->
+    <body name="sockel" pos="0.75 -0.6 0.004">
+      <freejoint/>
+      <geom type="box" size="0.035 0.035 0.004" rgba="0.05 0.05 1.0 1" density="3000"
+                        friction="1.6 0.05 0.001"/>
+    </body>
+
     <!-- target marker: a flat disk on the table (mocap = kinematic, moved per episode),
          no collision so it never disturbs the cubes; also a visible cue for the camera.
          target_marker is the ACTIVE-goal disk run_combined snaps onto the committed goal each episode.

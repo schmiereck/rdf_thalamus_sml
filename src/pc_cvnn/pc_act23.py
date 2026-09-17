@@ -2063,6 +2063,18 @@ def run_self_learning_steering(headless=False):
         # Druckspalten allmaehlich aus den neuen Demos.
         print(f"  [Schema] Tastsinn in der Runtime-Policy ergaenzt: {_n_rt} Zeilen migriert "
               f"(gueltig-Flag 0), Netz verhaltensneutral auf 13 Eingaenge verbreitert", flush=True)
+    # ABLAGEHOEHE-Migration (13 -> 14), Stufe 2 von wiki/fragen/stapeln-als-aufgabe.md.
+    # DER NEUTRALWERT IST HIER KEINE NOTLUEGE.  Beim Tastsinn musste ein Gueltigkeits-Flag mit,
+    # weil der Druck in den alten Episoden zwar PHYSISCH da war, aber nicht aufgezeichnet wurde --
+    # "0 N" zu behaupten waere die Luege "Klaue leer" gewesen.  Die Ablagehoehe dagegen WAR in
+    # jeder alten Episode GRASP_Z: die Ablagephase zielte auf genau diese Konstante.  Die alten
+    # Zeilen bekommen also ihren wahren Wert, nicht einen erfundenen, und brauchen kein Flag.
+    _n_tz = (runtime.ensure_state_dim(14, neutral=(act16.GRASP_Z,))
+             if act16.GOAL_Z and hasattr(runtime, "ensure_state_dim") else 0)
+    if _n_tz:
+        print(f"  [Schema] Ablagehoehe in der Runtime-Policy ergaenzt: {_n_tz} Zeilen migriert "
+              f"(Wert {act16.GRASP_Z}, der in ihren Episoden GALT), Netz verhaltensneutral auf "
+              f"14 Eingaenge verbreitert", flush=True)
 
     # STAGE 3 (user request): OPEN-SET COLOURS -- fully self-labelled, no teacher colour set anywhere.
     # Scene glances feed component CHROMATICITIES; classes are self-named ("farbe-N") and bound to the

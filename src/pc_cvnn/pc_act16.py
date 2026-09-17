@@ -99,6 +99,27 @@ WRIST_APPROACH_R = float(os.environ.get("ACT16_WRIST_APPROACH_R", "0.07"))   # a
 #   collides with arm/base).  Once the hand has descended to the grip (WRIST_LOCK_MARGIN) the angle is HELD
 #   (re-asserted, NOT re-corrected) so the wrist does not suddenly roll and twist the object out at contact.
 WRIST_LOCK_MARGIN = float(os.environ.get("ACT16_WRIST_LOCK", "0.012"))   # lock the wrist this far above grip z
+# DIE DRITTE ZIELDIMENSION (ACT16_GOAL_Z, Vorgabe 0).  Stufe 2 von
+# wiki/fragen/stapeln-als-aufgabe.md.  Eingeschaltet darf goal_fn DREI Werte liefern (der dritte
+# ist die Ablagehoehe der Hand), und der Zustandsvektor der Policy bekommt sie als 14. Eingang.
+# WARUM UEBERHAUPT EIN SCHALTER, obwohl der Wert ohne Stapelaufgabe konstant GRASP_Z waere:
+# eine 14. Spalte ist KEINE verhaltensneutrale Ergaenzung.  Der Vorwaertsdurchlauf bleibt zwar
+# bitgleich (ensure_state_dim verbreitert mit NULL-Spalten), aber ein FRISCHES Netz wird mit
+# anderer Breite gezogen und jeder Refit sieht eine Spalte mehr -- ein Vorgabelauf waere danach
+# nicht mehr derselbe Lauf.  Mit dem Schalter auf 0 bleibt der Zustand 13-dimensional.
+# EINBAHNSTRASSE: ein Lauf MIT Schalter migriert den Puffer der Zustandsdatei dauerhaft auf 14
+# Spalten.  Deshalb nur auf Kopien fahren.
+GOAL_Z = os.environ.get("ACT16_GOAL_Z", "0") == "1"
+# ERFOLGSBEGRIFF "RUHT" STATT "LIEGT TIEF" (ACT16_ERFOLG_RUHT, Vorgabe 0 bis gemessen).
+# Stufe 2 von wiki/fragen/stapeln-als-aufgabe.md: `rested = cz < half + 0,010` heisst woertlich
+# "liegt auf dem Tisch" und verbucht damit jeden GELUNGENEN Stapel als Fehlschlag.  Der Schalter
+# ersetzt das durch "das Objekt bewegt sich nicht mehr und die Klaue ist offen" -- eine Definition,
+# die von der Aufgabe unabhaengig ist und fuer die alte genauso gilt.
+# VORGABE 0, weil er die alte Messreihe veraendern KANN (ein noch rollendes Objekt gilt jetzt als
+# nicht geliefert, ein sauber gestapeltes als geliefert) und die Uebereinstimmung der beiden
+# Begriffe erst gemessen werden muss.
+ERFOLG_RUHT = os.environ.get("ACT16_ERFOLG_RUHT", "0") == "1"
+RUHT_V = float(os.environ.get("ACT16_RUHT_V", "0.005"))   # m/s, darunter gilt ein Koerper als ruhend
 SOFT_RELEASE = os.environ.get("ACT16_SOFT_RELEASE", "1") == "1"   # place: RAMP the claw open (mirror of the
 #   close ramp) + retreat UP open, and never grasp-reflex onto an object already AT the goal -- the old
 #   instant snap-open at grasp height FLICKED the just-placed object off the target (user-observed in the
@@ -362,6 +383,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             wrist_tgt, wrist_mod = WRIST_TGT, np.pi / 2
         run_combined._wrist_tgt = float(wrist_tgt)            # expose the teacher's wrist target so a BC
         #   collector (act23) can log it as the 5th action dim (learn the wrist from the teacher).
+        tgt_z = GRASP_Z                                      # ABLAGEHOEHE der Hand; s. goal_fn unten
         tgt = _rand_xy(rng)                                  # target: away from the cube, off any cube, off base
         while np.linalg.norm(tgt - c0) < 0.06 or not clear(tgt, OBJS, 0.05) or np.linalg.norm(tgt) < BASE_CLEAR:
             tgt = _rand_xy(rng)
@@ -379,6 +401,15 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         if goal_fn is not None:                               # PLANNER dreams the place target from the
             obj_xy = cube_plan if cube_plan is not None else sim.obj_pos(cmd)[:2]   # perceived object
             tgt = np.asarray(goal_fn(cmd, obj_xy), float)     # -> commit to it (and SCORE against it)
+            # DIE DRITTE ZIELDIMENSION (Stufe 2 von wiki/fragen/stapeln-als-aufgabe.md).
+            # goal_fn darf DREI Werte liefern: dann ist der dritte die ABLAGEHOEHE der Hand.
+            # Bisher war sie die Konstante GRASP_Z -- die Policy konnte "lass hoeher los" gar nicht
+            # ausdruecken, und damit war Stapeln nicht nur ungelernt, sondern unsagbar.
+            # VERHALTENSNEUTRAL: ohne Schalter oder ohne dritten Wert bleibt tgt_z = GRASP_Z.
+            if GOAL_Z and len(tgt) >= 3:
+                tgt_z, tgt = float(tgt[2]), tgt[:2]
+            elif len(tgt) >= 3:
+                tgt = tgt[:2]
             for _ in range(8):                                # SANITIZE the dreamed goal: off objects + base
                 moved = False
                 for o in OBJS:                                # (#3) push it OFF any object it landed on
@@ -529,20 +560,22 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                     if np.linalg.norm(hxy - tgt_true) < NEAR:
                         phase = "place"
                 elif phase == "place":
-                    j5, aim = gclose, np.array([tgt[0], tgt[1], GRASP_Z])
-                    if hz < GRASP_Z + 0.012:
+                    # ABLAGEHOEHE: tgt_z statt der Konstanten GRASP_Z.  Ohne dritten Wert aus
+                    # goal_fn ist tgt_z == GRASP_Z, und diese Zeilen sind Zeichen fuer Zeichen die alten.
+                    j5, aim = gclose, np.array([tgt[0], tgt[1], tgt_z])
+                    if hz < tgt_z + 0.012:
                         phase, dwell = "release", 0
                 else:  # release
                     if SOFT_RELEASE:
                         dwell += 1
                         frac = min(1.0, dwell / 40.0)         # open SLOWLY (the mirror of the close ramp:
                         j5 = gclose + (J5_OPEN - gclose) * frac   # an instant snap-open FLICKS the placed
-                        zr = GRASP_Z if dwell <= 40 else OVER_Z   # object); then retreat UP already open
+                        zr = tgt_z if dwell <= 40 else OVER_Z   # object); then retreat UP already open
                         aim = np.array([tgt[0], tgt[1], zr])
                         if dwell > 65:
                             break
                     else:
-                        j5, aim, dwell = J5_OPEN, np.array([tgt[0], tgt[1], GRASP_Z]), dwell + 1
+                        j5, aim, dwell = J5_OPEN, np.array([tgt[0], tgt[1], tgt_z]), dwell + 1
                         if dwell > 50:
                             break
             else:  # PUSH: get behind the object (OVER it, since the arm can't go through), push
@@ -598,9 +631,17 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 c_st, cz_st = run_combined._cobs
             else:
                 c_st, cz_st = c, cz                            # altes Verhalten (privilegiert im Carry)
+            # DIE ABLAGEHOEHE als 14. Eingang (ACT16_GOAL_Z, s. oben).  Bisher stand hier NICHTS --
+            # das Ziel war zweidimensional, und die Policy konnte "lass hoeher los" nicht einmal
+            # ausdruecken.
+            # KEIN GUELTIGKEITS-FLAG noetig, anders als beim Tastsinn: alte Zeilen bekommen bei der
+            # Migration GRASP_Z, und das ist keine Erfindung, sondern was in ihren Episoden
+            # tatsaechlich galt (die Ablagehoehe war bis hierhin diese Konstante).  Der Neutralwert
+            # ist hier die Wahrheit, nicht eine Notluege.
             state = np.array([h[0], h[1], h[2], c_st[0], c_st[1], cz_st, tgt_eff[0], tgt_eff[1],
                               _j5q, obj_h, obj_fp,
-                              1.0 if press >= 0 else 0.0, max(press, 0.0)], float)
+                              1.0 if press >= 0 else 0.0, max(press, 0.0)]
+                             + ([tgt_z] if GOAL_Z else []), float)
             if GLAUBDIAG:
                 # GLAUBENS-DIAGNOSE: wo genau geht der Zustand kaputt, den die Policy sieht?
                 # ZERLEGT in die drei Stellen, an denen er entstehen kann -- eine Gesamtabweichung
@@ -836,6 +877,20 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         cpos = sim.obj_pos(cmd)
         err = np.linalg.norm(cpos[:2] - tgt_true)           # measure against the TRUE target
         rested = cpos[2] < cmd_half[2] + 0.010              # rests on the table (uses the OBJECT's height)
+        if ERFOLG_RUHT:
+            # ERFOLGSBEGRIFF FUER STUFE 2 (wiki/fragen/stapeln-als-aufgabe.md).
+            # "rested" heisst woertlich LIEGT AUF DEM TISCH -- ein gelungener Stapel faellt
+            # deshalb durch, obwohl er die Aufgabe erfuellt.  Der aufgabenunabhaengige Begriff ist
+            # RUHT: das Objekt bewegt sich nicht mehr.  Er gilt fuer die alte Aufgabe genauso
+            # (etwas, das auf dem Tisch liegt, ruht) und ist damit der ehrlichere von beiden --
+            # er verlangt nur, dass die Sendung ANGEKOMMEN ist, nicht, wie hoch sie liegt.
+            # ER IST NICHT GRATIS, und darum steht er auf einem Schalter: ein Objekt, das der Arm
+            # noch haelt, ruht in der Klaue ebenfalls.  Deshalb die zweite Bedingung -- die Klaue
+            # ist offen (nach dem Settle steht sie auf J5_OPEN, s. oben).
+            _bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, cmd)
+            _da = int(sim.m.jnt_dofadr[int(sim.m.body_jntadr[_bid])])   # Freejoint: 3 Linear-DOF zuerst
+            _v = float(np.linalg.norm(sim.d.qvel[_da:_da + 3]))
+            rested = (_v < RUHT_V) and sim.d.qpos[sim.jqadr["joint_5"]] > J5_CLOSED_TH
         ok = err < tol and rested
         deliveries += ok; n_grasp += (via == "grasp" and ok); n_push += (via == "push" and ok)
         if via == "grasp":

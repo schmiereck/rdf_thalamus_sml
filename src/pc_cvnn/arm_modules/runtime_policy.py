@@ -73,7 +73,7 @@ class RuntimePolicyModule(ArmModule):
         self._div: list[float] = []                   # shadow |aim_pred - aim_teacher| (m), per observe
         self._div_ph: dict[str, list[float]] = {}     # dieselbe Groesse, nach PHASE getrennt (s. _phase_of)
         (self.add_in("policy_state", 13, "[hand xyz, obj xy, obj z, target xy, gripper, obj_h, obj_fp, "
-                                         "druck_gueltig, druck_N]")
+                                         "druck_gueltig, druck_N]  (+ ablage_z nach ensure_state_dim(14))")
              .add_out("subgoal", 4, "[aim_xyz, gripper]"))
 
     def ensure_state_dim(self, want: int = 13, neutral=(0.0, 0.0)) -> int:
