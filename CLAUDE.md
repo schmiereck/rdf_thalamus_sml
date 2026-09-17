@@ -10,6 +10,20 @@ Misserfolg bezeichnest.
 
 ---
 
+# Agentenkoordination
+
+Die laufende Koordination zwischen Agents liegt **nicht** im Forschungs-Wiki und auch nicht in
+den Code-Branches, sondern im benachbarten, eigenstaendigen Git-Repository
+`../rdf_thalamus_sml_coordination/`. Das vollstaendige Protokoll steht in dessen `README.md`.
+
+Zu Beginn einer Arbeit neue Dateien unter `messages/` und den eigenen Status lesen. Bei
+Aufgabenwechsel oder Abschluss wird ausschliesslich die eigene Datei `status/<agent>.md`
+aktualisiert; Hinweise und Uebergaben sind neue, unveraenderliche Dateien unter `messages/`.
+Fuer die spaetere Zusammenarbeit ueber Rechnergrenzen wird dieses Repository separat per Git
+synchronisiert.
+
+---
+
 # Die Wissensbasis
 
 Unter `wiki/` liegt ein fortgeschriebenes Markdown-Wiki: Messergebnisse, Architektur-
