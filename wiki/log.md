@@ -7,6 +7,28 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-17
 
+* **Anlage**: [Die Zieladresse traegt](/befunde/ziel-als-adresse-gemessen.md) - das A/B zum
+  Bau, drei Arme je 140 Episoden aus identischen Kopien von `ad9d768c`, Seed 4242:
+  `ort` / `an05` / `an09`. **Die Adresse traegt:** 127/139 = 91,4 % bzw. 135/139 = 97,1 % loesen
+  eindeutig auf, der Bezugskoerper wird auf **1,0 mm** Median wahrgenommen (p90 7 mm). Das
+  Ablageziel kommt damit aus der Kamera statt aus `mocap_pos`. **Der Preis, und seine richtige
+  Zuordnung:** Lieferquote 57,1 -> 35,7 % bei 50 mm Ablageabstand (Fisher p = 4,9e-4,
+  Bonferroni-Schranke 0,0167), aber **49,3 % bei 90 mm und damit vom Marker-Arm nicht zu
+  unterscheiden** (p = 0,231). Der Abstand allein holt **13,6 der 21,4 verlorenen Punkte** zurueck -
+  und die unabhaengige Messung der [Nachbarnaehe](/befunde/nachbarnaehe-im-lauf.md) hatte
+  **13,9 Punkte** vorhergesagt. Ohne diesen dritten Arm stuende hier eine falsch zugeordnete
+  Aussage; der direkte Vergleich an05 gegen an09 (p = 0,029) traegt die Schranke NICHT, belastbar
+  ist nur die Lage zum Marker-Arm. **Wo der Verlust sitzt:** nicht im Griff (129/120/126
+  gegriffen), sondern in der letzten Etappe (liefern|abgelegt 75,5 -> 54,9 %, p = 0,0027) - und
+  dort **nicht im Median, sondern im oberen Zehntel**: seitlicher Fehler beim Loslassen p90
+  **86,0 mm gegen 31,5 mm**, waehrend der Median in allen drei Armen exakt 25,0 mm ist und die
+  Drift nach dem Loslassen praktisch gleich. **Das Objekt wird also falsch hingetragen, nicht
+  weggestossen** - die Signatur der [Ablenker-Bindung](/befunde/ablenker-anfahrt.md), diesmal am
+  ZIEL statt am Objekt. Nicht bewiesen; der Gegenkandidat (Absenken ueber den Nachbarn hinweg)
+  braucht die Schrittdaten des Transports. **Folge fuer Stufe 2:** Stapeln verlangt ein Ziel mit
+  0 mm Abstand zu einem Koerper - der Transport muss das aushalten, und heute haelt er 90 mm gut
+  und 50 mm schlecht. Das ist der naechste konkrete Zwischenschritt und war vorher nicht sichtbar.
+
 * **Anlage**: [Das Ablageziel als Adresse](/mechanismen/ziel-als-adresse.md) - **Stufe 1 aus dem
   Stapel-Entwurf ist gebaut**, `ACT23_ZIEL_ADRESSE` (Vorgabe 0). Die Sprache waechst um einen TYP,
   nicht um ein Verb: `BEZUG := ORT | RELATION ADRESSE`, Relation "an". `_ziel_adresse_wuerfeln`

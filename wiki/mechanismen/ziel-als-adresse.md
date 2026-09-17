@@ -108,9 +108,10 @@ jeweils 50 mm daneben und im Arbeitsraum.
 * **Die Aufgabe wird geometrisch schwieriger, und zwar aus einem SCHON GEMESSENEN Grund.** Ein Ziel
   50 mm neben einem Koerper legt die Ablage in die Zone, in der
   [Nachbarnaehe die Quote um 13,9 Punkte druckt](/befunde/nachbarnaehe-im-lauf.md) (Schwelle
-  55 mm). Ein Quotenverlust in einem A/B waere damit **nicht** ohne Weiteres der Sprache
-  zuzuschreiben. Die noetige Kontrolle ist billig und eingebaut: derselbe Arm mit
-  `ACT23_ZIEL_ABSTAND=0.09` liegt ausserhalb der Zone.
+  55 mm). Die Kontrolle ist eingebaut (`ACT23_ZIEL_ABSTAND=0.09`) und **inzwischen gefahren**: der
+  Verlust ist tatsaechlich die Geometrie, 13,6 der 21,4 Punkte kommen mit dem groesseren Abstand
+  zurueck. Siehe [Die Zieladresse traegt](/befunde/ziel-als-adresse-gemessen.md). **Wer dieses A/B
+  ohne den dritten Arm faehrt, ordnet den Verlust falsch zu.**
 * **Das Ziel wird nach `goal_fn` noch gesaeubert** (act16:382-394). Faellt die Ablagestelle unter
   50 mm an einen ANDEREN Koerper oder zu nah an den Sockel, verschiebt `run_combined` sie - das
   Protokoll zeigt die Stelle VOR der Saeuberung.
@@ -128,4 +129,5 @@ jeweils 50 mm daneben und im Arbeitsraum.
 * [Ein gestapelter Koerper liest 16 mm daneben](/befunde/stapeln-bricht-die-tischebene.md) - warum Stufe 1 ohne Hoehe bleibt
 * [Die Adresse ohne Klasse](/mechanismen/adresse-ohne-klasse.md) - der Adresstyp, den das Ziel erbt
 * [Nachbarnaehe im Lauf](/befunde/nachbarnaehe-im-lauf.md) - der Konfounder, den ein A/B kontrollieren muss
+* [Die Zieladresse traegt](/befunde/ziel-als-adresse-gemessen.md) - das A/B zu diesem Bau
 * [Eigenschafts-Kommando](/mechanismen/eigenschafts-kommando.md) - die Maschinerie dahinter
