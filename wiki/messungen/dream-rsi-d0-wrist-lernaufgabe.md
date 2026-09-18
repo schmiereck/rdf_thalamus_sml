@@ -3,7 +3,7 @@ type: Messvorschrift
 title: D0-Kandidat - Selbstlernen einer objektrelativen Wrist-Ausrichtung
 description: Vorgeschlagene, signalreiche D0-Lernaufgabe: Das Weltmodell soll aus eigenen L-Form-Griffen die objektrelative Wrist-Ausrichtung bewerten und auf neuen Positionen und Yaws besser wählen als eingefroren.
 tags: [act23, dream-rsi, d0, wrist, selbstlernen, lernaufgabe]
-status: draft
+status: pruefbereit
 evidenz: vermutung
 ebene: code
 generated: { by: codex, at: 2026-09-18T06:55:00Z }
@@ -79,6 +79,36 @@ Die Zahlen sind bewusst Pilot-Tore, keine Powerrechnung. 40 Testepisoden pro See
 Fisher-Test sind nur deskriptiv; eine nachfolgende Scheduler-Wirkung braucht unabhaengige
 Startzustaende und die im Evaluationsvertrag geforderte Stichprobe.
 
+# Fixierter D0-Pilotvertrag v1
+
+Dieser Vertrag ist vor einer Lernserie festgelegt. Er nutzt die vorhandene Auto-Schleife; er ist
+kein Ersatz fuer den vollstaendigen Szenen- und Checkpointvertrag aus D1.
+
+| Feld | Festlegung |
+|---|---|
+| Code / Basis | Commit `7d4f444`, `src/pc_cvnn/state/dream_rsi_d0_20260917/base.pkl`, SHA-256 `ad9d768c...c09b9e` |
+| Trainingslinien | zwei getrennte Kopien der Basis, `ACT23_SEED=17` und `29`; keine Kopie wird zwischen Linien geteilt |
+| Training | je 120 gepinnte FSM-`L-Form`-Episoden, `ACT23_WRIST_REL=1`, kein `ACT23_FORCE_WRIST`; Updates nur im Linien-Checkpoint |
+| Primaere Kreditdaten | nur JSONL-Zeilen mit `action_source=Selbst`, `label_source=Selbst`, Gewicht 1,0 und einer kausalen Aktionsroute |
+| Testdaten | je Linie vor und nach Training zwei eingefrorene Familien a 40 Episoden mit `ACT23_SEED=101` und `103`, `ACT23_AUTO_OBJ=L-Form`, getrennte Wegwerfkopien |
+| Kontrolle | dieselbe Basis auf denselben Testseeds mit `ACT23_D0_FREEZE=1`; vor/nach jeder Evaluation leerer Lernzustands-Diff und bitgleicher Pkl-Kopiehash |
+| Zusatzreferenz | feste ausgerichtete Wrist bleibt als Machbarkeitsreferenz getrennt und zaehlt nicht zum Lernvergleich |
+| Primaere Metriken | pro Linie und gepoolt: Anteil ausgerichteter relativer Wrist, Lieferung, Selbsturteil, gueltige Selbst-Kreditzeilen und deren Routen |
+| Annahmetor | in **beiden** Linien mindestens +20 Prozentpunkte ausgerichtete Wahl gegen die eingefrorene Kontrolle, mindestens +10 Punkte Lieferung, kein Rueckgang des Selbsturteils und kein Test-Integritaetsfehler |
+| Statistik | Quoten und Differenzen je 40er-Familie berichten; Fisher-Test deskriptiv, Linien als unabhaengige Einheiten, kein positiver Schluss allein aus gepoolten Episoden |
+
+Die Testseeds sind fest und kommen nie im Training vor. Bis D1 gibt es keine serialisierte
+Szenenliste: gleiche Seedfamilie bedeutet deshalb dieselbe Auto-Schleifen-Initialisierung auf
+einer frischen, eingefrorenen Kopie, nicht den behaupteten Bit-fuer-Bit-Simulatorzustand.
+Das ist als Pilotgrenze zu berichten, nicht wegzunormieren.
+
+**Technische Abbruchregel:** Nach 60 Trainingsfolgen wird die Linie als technisch unzureichend
+geschlossen, wenn weniger als 20 primaere Selbst-Kreditzeilen oder weniger als vier belegte
+relative Wrist-Gitterzellen vorliegen. Nach 120 Folgen gilt dasselbe mit 40 Zeilen bzw. vier
+Zellen. Ein solcher Arm wird als unentschieden dokumentiert und nicht bis zu einem guenstigen
+Ergebnis nachgefuellt. ACT23-Abbruch, fehlender Kredit-JSONL, Pkl-Hashabweichung oder ein
+Lernzustands-Diff im Test beendet nur die betroffene Messung als technisch fehlgeschlagen.
+
 # Anschluss an Dream-RSI
 
 Diese Aufgabe bietet echte, unterschiedlich informative Fortsetzungen: breite Wrist-Abdeckung,
@@ -94,6 +124,5 @@ Er bestaetigt das objektrelative Gitter und die kausalen Negativrouten, korrigie
 Versuchskern bei Labelquelle und Kontrolle. Der [D0-Integritaetshelfer](/mechanismen/dream-rsi-d0-integritaet.md)
 baut Komponentenhash und maschinenlesbares Kreditprotokoll bereits opt-in. Der
 [`D0EvaluationRunner`](../../src/pc_cvnn/act23_d0_evaluation_runner.py) legt diese um feste
-Episoden und verwirft jede Mutation. Sein erster Preflight soll die heute noch lernenden
-Komponenten bestimmen; erst danach wird ein vollstaendiger Freeze gebaut. Keine Laufserie ist
-mit dieser Seite gestartet.
+Episoden; der Lernzustands-Freeze besteht im L-Preflight. Keine Lernserie ist mit dieser Seite
+gestartet.

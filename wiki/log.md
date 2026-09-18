@@ -2,6 +2,12 @@
 
 ## 2026-09-18
 
+* **Messvertrag**: [D0-Wrist-Lernaufgabe](/messungen/dream-rsi-d0-wrist-lernaufgabe.md) -
+  Pilotvertrag v1 vor dem ersten Lernlauf festgelegt: zwei Linien (Seeds 17/29), je 120
+  Trainingsepisoden, zwei getrennte 40er-Testfamilien (101/103), Selbst-Kreditfilter,
+  Freeze-Kontrolle, Effekt- und technische Abbruchregeln. Die fehlende serialisierte
+  Szenenliste ist als D0-Pilotgrenze explizit dokumentiert.
+
 * **Freeze-Preflight**: [D0-Zustandsmutation](/befunde/dream-rsi-d0-preflight-mutation.md) - eine
   eingefrorene FSM-L-Form-Episode besteht: Pkl-Kopie bitgleich und **0 geaenderte
   Lernkomponenten**. Sechs Vollzustandsdifferenzen bleiben als Diagnose sichtbar und sind

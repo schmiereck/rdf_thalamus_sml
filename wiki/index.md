@@ -98,7 +98,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 * [D0-Pilot: Wiedererkennung einer neuen Form](messungen/dream-rsi-d0-pilot.md) - vorab fixierter Komponentenvergleich eingefroren/lernend; kein Arm-Lernnachweis
 * [D0-Pilot: Y/T-Trennbarkeit](messungen/dream-rsi-yt-trennbarkeit.md) - frische Y/T-Szenen, Dreisicht-Open-Set-Anspruch und explorative lokale Deskriptordiagnose
-* [D0-Kandidat: Wrist-Lernaufgabe](messungen/dream-rsi-d0-wrist-lernaufgabe.md) - signalreiche L-Wrist-Aufgabe; Audit beendet, vor Lauf nichtmutierenden Evaluator und Kreditprotokoll bauen
+* [D0-Kandidat: Wrist-Lernaufgabe](messungen/dream-rsi-d0-wrist-lernaufgabe.md) - signalreiche L-Wrist-Aufgabe; Freeze bestanden, Pilotvertrag v1 mit Seeds, Budget, Kontrolle und Abbruchregel fixiert
 * [Dream-RSI: Evaluationsvertrag](messungen/dream-rsi-evaluation.md) - Entwurf: Zustand/Replay, unabhaengige Testdaten, Lernfortschritt und Gesamtkosten; in D0 vor dem ersten Experiment konkretisieren
 * [Kopfloses A/B im vollen act23-Lauf](messungen/act23-headless-ab.md) - die einzige Ebene, auf der Wirkung behauptet werden darf
 * [Wiederholungsmessung EXV](messungen/exekutionsvarianz-exv.md) - trennt Ausfuehrungsstreuung von Situationssignal

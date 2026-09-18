@@ -108,7 +108,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 
 | Paket | Inhalt | Voraussetzung | Status | Befund / Entscheidung |
 |---|---|---|---|---|
-| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | in Arbeit | Formpiloten verworfen; [Wrist-Lernaufgabe](/messungen/dream-rsi-d0-wrist-lernaufgabe.md), Audit/Runner gebaut; [L-Preflight](/befunde/dream-rsi-d0-preflight-mutation.md) zeigt 9 Mutationen, Freeze-Audit offen |
+| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | pruefbereit | Formpiloten verworfen; [Wrist-Lernaufgabe](/messungen/dream-rsi-d0-wrist-lernaufgabe.md) v1 fixiert, Audit/Runner gebaut; [L-Preflight](/befunde/dream-rsi-d0-preflight-mutation.md) besteht mit leerem Lernzustands-Diff |
 | D1 | Beobachtung, Checkpoints, Neustart- und Nichtbeeinflussungsnachweis | D0 | offen | - |
 | D2 | Kleine Bibliothek echter Trainingslinien | D1 | offen | - |
 | D3 | Replay mit Abdeckungs- und Informationspruefung | D2 | offen | - |
@@ -138,15 +138,18 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 - [x] Auf einer kleinen unabhaengigen Pilotmenge eingefrorenen Lerner gegen lernenden
   vergleichen. Bei Deckeneffekt, unerreichbarer Aufgabe oder ungueltigem Urteil die Aufgabe
   korrigieren, bevor ein Scheduler entsteht.
-- [ ] [Evaluationsvertrag](/messungen/dream-rsi-evaluation.md) konkret ausfuellen: Teilmengen,
-  Budget, Kontrollarme, Metrik, kleinster relevanter Effekt und Statistik.
+- [x] [Evaluationsvertrag](/messungen/dream-rsi-evaluation.md) fuer D0 konkret ausfuellen:
+  Teilmengen, Budget, Kontrollarme, Metrik, kleinster relevanter Effekt und Statistik stehen in
+  [D0-Wrist-Lernaufgabe](/messungen/dream-rsi-d0-wrist-lernaufgabe.md), Abschnitt
+  "Fixierter D0-Pilotvertrag v1".
 
 Stand 2026-09-18: Komponentenvertrag und zwei Formpilotvarianten ausgewertet; beide als
 Scheduler-Aufgabe ungeeignet. Als naechster Kandidat ist die Wrist-Lernaufgabe ausgewaehlt,
 weil sie bereits einen eigenen Lernbefund hat. Der Codeaudit belegt objektrelatives Gitter und
 kausale Negativkredite, verlangt aber einen eigenen nichtmutierenden Evaluator und den Ausschluss
 privilegierter Welt-Labels. Der Komponentenhash und das opt-in Kreditprotokoll sind gebaut; der
-volle Arm-Evaluationsvertrag bleibt offen.
+eingefrorene L-Preflight besteht und der D0-Pilotvertrag v1 ist vor dem ersten Lernlauf
+festgelegt.
 
 **Tor D0:** ein gemessener, zugaenglicher Lernspielraum und ein fixiertes Protokoll. Stapeln
 ist wegen [Hoehenabbildung und Erfolgsurteil](/befunde/stapeln-bricht-die-tischebene.md) noch
