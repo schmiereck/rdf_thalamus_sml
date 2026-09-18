@@ -108,7 +108,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 
 | Paket | Inhalt | Voraussetzung | Status | Befund / Entscheidung |
 |---|---|---|---|---|
-| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | in Arbeit | Formpiloten verworfen; [Wrist-Lernaufgabe ausgewaehlt](/messungen/dream-rsi-d0-wrist-lernaufgabe.md), Kredit-/Zustandsaudit offen |
+| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | in Arbeit | Formpiloten verworfen; [Wrist-Lernaufgabe ausgewaehlt](/messungen/dream-rsi-d0-wrist-lernaufgabe.md), [Audit](/befunde/dream-rsi-d0-wrist-audit.md) beendet; eingefrorener Evaluator noch offen |
 | D1 | Beobachtung, Checkpoints, Neustart- und Nichtbeeinflussungsnachweis | D0 | offen | - |
 | D2 | Kleine Bibliothek echter Trainingslinien | D1 | offen | - |
 | D3 | Replay mit Abdeckungs- und Informationspruefung | D2 | offen | - |
@@ -143,8 +143,9 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 
 Stand 2026-09-18: Komponentenvertrag und zwei Formpilotvarianten ausgewertet; beide als
 Scheduler-Aufgabe ungeeignet. Als naechster Kandidat ist die Wrist-Lernaufgabe ausgewaehlt,
-weil sie bereits einen eigenen Lernbefund hat. Der Kredit-/Zustandsaudit und der volle
-Arm-Evaluationsvertrag bleiben offen.
+weil sie bereits einen eigenen Lernbefund hat. Der Codeaudit belegt objektrelatives Gitter und
+kausale Negativkredite, verlangt aber einen eigenen nichtmutierenden Evaluator und den Ausschluss
+privilegierter Welt-Labels; der volle Arm-Evaluationsvertrag bleibt offen.
 
 **Tor D0:** ein gemessener, zugaenglicher Lernspielraum und ein fixiertes Protokoll. Stapeln
 ist wegen [Hoehenabbildung und Erfolgsurteil](/befunde/stapeln-bricht-die-tischebene.md) noch

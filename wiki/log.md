@@ -1,5 +1,15 @@
 # Chronik
 
+## 2026-09-18
+
+* **Codeaudit**: [D0-Wrist-Audit](/befunde/dream-rsi-d0-wrist-audit.md) - das aktuelle
+  Weltmodell kann Wrist-Kandidaten um den wahrgenommenen Objekt-Yaw bilden; Drucksensor- und
+  FSM-Anfahrtsrouten liefern heute kausale Negativkredite. Zwei Bedingungen korrigieren den
+  Entwurf: Primaerer Selbstlernbeleg zaehlt nur `Label Selbst`, weil sonst `s_ok=None` auf die
+  privilegierte Welt faellt; `ACT23_NO_PERSIST` und `EXV_FREEZE` belegen keine vollstaendige,
+  nichtmutierende D0-Kontrolle. Vor einer Serie wird deshalb ein wegwerfbarer Evaluator mit
+  Komponentenhash und Kreditprotokoll gebaut. Kein Lauf gestartet.
+
 Neueste zuerst. Datumsueberschriften in ISO-Form `YYYY-MM-DD`. Ein Eintrag je Vorgang, das
 fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**, **Ruecknahme**.
 

@@ -25,9 +25,9 @@ sources:
 # Entscheidung
 
 Der naechste D0-Kandidat ist das **Lernen einer objektrelativen Wrist-Ausrichtung fuer die
-L-Form**, nicht die Aneignung einer weiteren Formklasse. Das Netz erhaelt Wahrnehmung, eigene
-ausgefuehrte Wrist-Aktion und sein bestehendes Selbst-/Erfolgsurteil; es erhaelt keine
-Soll-Ausrichtung. Es soll nach eigenen, gezielt diversen Griffen auf zurueckgehaltenen
+L-Form**, nicht die Aneignung einer weiteren Formklasse. Das Netz erhaelt Wahrnehmung, die
+tatsaechlich ausgefuehrte Wrist-Aktion und sein bestehendes Selbst-/Erfolgsurteil; es erhaelt
+keine Soll-Ausrichtung. Es soll nach gezielt diversen Griffen auf zurueckgehaltenen
 Objektpositionen und Yaws haeufiger ausgerichtete Aktionen waehlen und besser liefern als
 sein eingefrorener Ausgangszustand.
 
@@ -60,11 +60,14 @@ Kredit und Budget fuer Dream-RSI neu festgelegt werden muessen.
    Anteil ausgerichteter Wahl, Lieferung, Nichtgriff, Selbsturteil und die Ausgabe des
    Weltmodells ueber alle Wrist-Kandidaten.
 3. Lernen: gleiche Zahl realer, gepinnter L-Griffe mit bewusst breiter relativer
-   Wrist-Abdeckung. Der Agent sieht nur den tatsaechlichen Ausgang. Negativkredit darf nur
-   greifen, wenn die Anfahrt selbst sauber war; sonst wuerde ein Wahrnehmungs- oder
-   Transportfehler der Wrist-Aktion zugeschrieben.
+   Wrist-Abdeckung. Zuerst fuehrt der FSM den klaren Griffversuch aus; gespeichert wird allein
+   seine tatsaechlich ausgefuehrte Aktion, keine Soll-Wrist. Der Lernbeleg verwendet nur
+   `Label Selbst`. Negativkredit darf nur greifen, wenn die Anfahrt selbst sauber war; sonst
+   wuerde ein Wahrnehmungs- oder Transportfehler der Wrist-Aktion zugeschrieben.
 4. Eingefrorener Kontrollarm: identische Szenen und ausgefuehrte Aktionen, aber keine Updates
-   des Weltmodells oder seiner Auswahlstatistik. Eine zusaetzliche Referenz mit fester,
+   irgendeiner auswertungsrelevanten Komponente. Er wird aus einer Wegwerfkopie erzeugt und
+   vor/nach dem Test per Komponentenhash geprueft; `ACT23_NO_PERSIST` und `EXV_FREEZE` allein
+   genuegen dafuer nicht. Eine zusaetzliche Referenz mit fester,
    ausgerichteter Wrist-Aktion misst den physikalisch erreichbaren Spielraum, nicht die
    Lernleistung.
 5. Nach jedem vorab festgelegten Block nur auf Wegwerfkopien bewerten. Der Test-RNG bleibt vom
@@ -84,10 +87,10 @@ darauf aus gemeinsamen Startkopien kleine Trainingslinien bauen, ohne die Gewich
 Aesten zu vermischen. Damit ist sie eine bessere erste Erfahrung fuer Replay als eine Aufgabe,
 die schon bei der Wahrnehmung keine stabile Identitaet hat.
 
-# Vor dem Lauf noch zu klaeren
+# Audit und verbleibende Freigabe
 
-Der aktuelle Code- und Kreditpfad muss gegen den historischen Wrist-Befund auditiert werden:
-welche nicht-gegriffenen Faelle werden heute gelabelt, ob der objektrelative Wrist-Schalter in
-beiden Armen identisch ist und ob die Evaluation wirklich alle Updates einfriert. Erst danach
-wird dieser Entwurf zu einer ausfuehrbaren Messvorschrift. Keine Laufserie ist mit dieser Seite
-gestartet.
+Der Kredit- und Zustandsaudit ist abgeschlossen: [D0-Wrist-Audit](/befunde/dream-rsi-d0-wrist-audit.md).
+Er bestaetigt das objektrelative Gitter und die kausalen Negativrouten, korrigiert aber den
+Versuchskern bei Labelquelle und Kontrolle. Vor dem Lauf muss nun der wegwerfbare Evaluator mit
+Komponentenhash und maschinenlesbarem Kreditprotokoll gebaut und als eigene Preflight-Pruefung
+gefahren werden. Keine Laufserie ist mit dieser Seite gestartet.
