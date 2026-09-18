@@ -80,6 +80,7 @@ from pc_cvnn.arm_modules.latent_attractor import LatentAttractorController
 from pc_cvnn.arm_modules.curiosity import DistanceNovelty
 from pc_cvnn.arm_modules.self_eval import SelfEvalModule
 from pc_cvnn.arm_modules.object_memory import ObjectMemoryModule
+from pc_cvnn.arm_modules.d0_integrity import append_credit as _d0_append_credit
 import pc_cvnn.pc_act16 as act16
 
 CAM = "overview"
@@ -328,6 +329,9 @@ def welt_fit_epochen():
 # Nebeneffekt (erwuenscht): eine Messung verschmutzt den ueber Wochen gewachsenen Zustand nicht.
 EXV_N = max(1, int(os.environ.get("ACT23_EXV", "1")))
 EXV_FREEZE = EXV_N > 1 and os.environ.get("ACT23_EXV_FREEZE", "1") == "1"
+# D0 writes structured credit lines only when an explicit disposable artifact path is supplied.
+# The normal human-readable log and all default behaviour remain unchanged.
+D0_CREDIT_JSONL = os.environ.get("ACT23_D0_CREDIT_JSONL", "")
 # MuJoCo selbst ist deterministisch: bleibt das Objekt liegen und der Arm kehrt in dieselbe
 # Ruhelage zurueck, wiederholt sich eine Episode BIS AUF DEN MILLIMETER (im Rauchtest gemessen:
 # 63+-0 mm ueber drei Laeufe).  Der einzige natuerliche Streukanal ist die ARMSTELLUNG beim Start
@@ -5536,6 +5540,17 @@ def run_self_learning_steering(headless=False):
                       f"{', sanft' if a_obs[5] > 0.5 else ''}, "
                       f"{'geliefert' if outcome else 'nicht geliefert'}{_qs}) -> {world.n()} Versuche",
                       flush=True)
+                if D0_CREDIT_JSONL:
+                    _yaw = 0.5 * np.arctan2(float(fe[3]), float(fe[2]))
+                    _rel = abs((np.degrees(wrist_of(a_obs) - _yaw) + 90.0) % 180.0 - 90.0)
+                    _d0_append_credit(D0_CREDIT_JSONL, {
+                        "body": body, "action_source": src, "label_source": lbl_src,
+                        "route": route, "outcome": bool(outcome), "weight": float(obs_w),
+                        "frozen": bool(EXV_FREEZE), "world_rows": int(world.n()),
+                        "wrist_deg": float(np.degrees(wrist_of(a_obs)) % 180.0),
+                        "relative_wrist_deg": float(_rel), "grip": float(a_obs[4]),
+                        "gentle": bool(a_obs[5] > 0.5), "self_distance_m": _qd,
+                    })
         elif fe is not None:
             print(f"    [Kredit] {route} -- Welt-Modell enthält sich (Aktion nicht schuld)", flush=True)
         # STEP 3: SELF-IMITATION GATE.  On a Netz episode the POLICY drove; if the agent self-judges a

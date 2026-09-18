@@ -2,6 +2,12 @@
 
 ## 2026-09-18
 
+* **Bau**: [D0-Integritaet](/mechanismen/dream-rsi-d0-integritaet.md) - der Wegwerfpfad hat jetzt
+  SHA-256-Fingerabdruecke je Lernkomponente und ein opt-in JSONL-Kreditprotokoll
+  (`ACT23_D0_CREDIT_JSONL`). Werkzeugtest und Python-Kompilierung sind erfolgreich; kein
+  ACT23-Lauf gestartet. Der noch fehlende Runner muss die Fingerabdruecke um feste Testepisoden
+  legen und jede Mutation abbrechen.
+
 * **Codeaudit**: [D0-Wrist-Audit](/befunde/dream-rsi-d0-wrist-audit.md) - das aktuelle
   Weltmodell kann Wrist-Kandidaten um den wahrgenommenen Objekt-Yaw bilden; Drucksensor- und
   FSM-Anfahrtsrouten liefern heute kausale Negativkredite. Zwei Bedingungen korrigieren den
