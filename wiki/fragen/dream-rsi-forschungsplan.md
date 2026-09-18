@@ -108,7 +108,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 
 | Paket | Inhalt | Voraussetzung | Status | Befund / Entscheidung |
 |---|---|---|---|---|
-| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | in Arbeit | [Pilotvertrag](/messungen/dream-rsi-d0-pilot.md); [beide Aufgabenvarianten verfehlen das Tor](/befunde/dream-rsi-d0-lernaufgabe.md) |
+| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | in Arbeit | Formpiloten verworfen; [Wrist-Lernaufgabe ausgewaehlt](/messungen/dream-rsi-d0-wrist-lernaufgabe.md), Kredit-/Zustandsaudit offen |
 | D1 | Beobachtung, Checkpoints, Neustart- und Nichtbeeinflussungsnachweis | D0 | offen | - |
 | D2 | Kleine Bibliothek echter Trainingslinien | D1 | offen | - |
 | D3 | Replay mit Abdeckungs- und Informationspruefung | D2 | offen | - |
@@ -130,19 +130,21 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 - [x] Code-Commit, Welt/Geometrie, Startzustand, Modell- und Sensorkonfiguration inventarisieren;
   mit der laufenden Zieladressen-Arbeit abgleichen. Die bislang unversionierten Dateien erst
   erfassen und referenzieren; den Live-Zustand nicht veraendern.
-- [ ] Pilotaufgabe waehlen: Aneignung neuer Koerper und Farb/Form-Kombinationen auf dem Tisch,
+- [x] Pilotaufgabe waehlen: Aneignung neuer Koerper und Farb/Form-Kombinationen auf dem Tisch,
   getrennt nach Erkennen, Adressieren und Ausfuehren. Eine sofortige direkte Adresse zaehlt
   alleine nicht als Lernen. Zieladressen als Zusatzaufgabe erst nach ihrer Integration.
+  Ausgewaehlt ist die [objektrelative Wrist-Lernaufgabe](/messungen/dream-rsi-d0-wrist-lernaufgabe.md);
+  ihr ausfuehrbarer Vertrag bleibt vor einem Lauf zu pruefen.
 - [x] Auf einer kleinen unabhaengigen Pilotmenge eingefrorenen Lerner gegen lernenden
   vergleichen. Bei Deckeneffekt, unerreichbarer Aufgabe oder ungueltigem Urteil die Aufgabe
   korrigieren, bevor ein Scheduler entsteht.
 - [ ] [Evaluationsvertrag](/messungen/dream-rsi-evaluation.md) konkret ausfuellen: Teilmengen,
   Budget, Kontrollarme, Metrik, kleinster relevanter Effekt und Statistik.
 
-Stand 2026-09-18: Komponentenvertrag und zwei Pilotvarianten ausgewertet; beide als
-Scheduler-Aufgabe ungeeignet. Die Auswahl einer tragfaehigen Lernaufgabe sowie der volle
-Arm-Evaluationsvertrag bleiben offen. Details und naechster Schritt im
-[D0-Befund](/befunde/dream-rsi-d0-lernaufgabe.md).
+Stand 2026-09-18: Komponentenvertrag und zwei Formpilotvarianten ausgewertet; beide als
+Scheduler-Aufgabe ungeeignet. Als naechster Kandidat ist die Wrist-Lernaufgabe ausgewaehlt,
+weil sie bereits einen eigenen Lernbefund hat. Der Kredit-/Zustandsaudit und der volle
+Arm-Evaluationsvertrag bleiben offen.
 
 **Tor D0:** ein gemessener, zugaenglicher Lernspielraum und ein fixiertes Protokoll. Stapeln
 ist wegen [Hoehenabbildung und Erfolgsurteil](/befunde/stapeln-bricht-die-tischebene.md) noch

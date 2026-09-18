@@ -7,6 +7,11 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-18
 
+* **Entscheidung**: [D0-Kandidat: Wrist-Lernaufgabe](/messungen/dream-rsi-d0-wrist-lernaufgabe.md)
+  ausgewaehlt. Der historische `act23-ab`-Befund zeigt echte eigene Verbesserung der
+  objektrelativen Wrist-Wahl; Formpiloten, sofortige Direktadressen, Stapeln und Fovea erfuellen
+  die D0-Anforderung derzeit nicht. Noch kein Lauf: Kredit- und Zustandsaudit stehen davor.
+
 * **Anlage**: [D0: Y/T-Trennbarkeit](/befunde/dream-rsi-yt-trennbarkeit.md) - zwei neue
   Klassifikator-Seeds: ein LOO-Nachbar trennt Y/T lokal zu 90,6 bzw. 92,2 %, die tatsaechliche
   Dreisicht-Open-Set-Klasse beansprucht aber 59/64 T-Sichten. Das lokalisiert die Grenze beim
