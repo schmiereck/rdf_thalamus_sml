@@ -92,6 +92,8 @@ die schon bei der Wahrnehmung keine stabile Identitaet hat.
 Der Kredit- und Zustandsaudit ist abgeschlossen: [D0-Wrist-Audit](/befunde/dream-rsi-d0-wrist-audit.md).
 Er bestaetigt das objektrelative Gitter und die kausalen Negativrouten, korrigiert aber den
 Versuchskern bei Labelquelle und Kontrolle. Der [D0-Integritaetshelfer](/mechanismen/dream-rsi-d0-integritaet.md)
-baut Komponentenhash und maschinenlesbares Kreditprotokoll bereits opt-in. Vor dem Lauf muss nun
-der wegwerfbare Evaluator ihn um feste Testepisoden legen und als eigene Preflight-Pruefung
-fahren. Keine Laufserie ist mit dieser Seite gestartet.
+baut Komponentenhash und maschinenlesbares Kreditprotokoll bereits opt-in. Der
+[`D0EvaluationRunner`](../../src/pc_cvnn/act23_d0_evaluation_runner.py) legt diese um feste
+Episoden und verwirft jede Mutation. Sein erster Preflight soll die heute noch lernenden
+Komponenten bestimmen; erst danach wird ein vollstaendiger Freeze gebaut. Keine Laufserie ist
+mit dieser Seite gestartet.

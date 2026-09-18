@@ -2,6 +2,12 @@
 
 ## 2026-09-18
 
+* **Bau**: [D0-Integritaet](/mechanismen/dream-rsi-d0-integritaet.md) um den
+  `D0EvaluationRunner` erweitert. Er kopiert die Pkl, startet eine begrenzte kopflose
+  FSM-Evaluation, vergleicht In-Process-Manifeste und den Pkl-Hash und schreibt ein maschinell
+  pruefbares Ergebnis. Runner-Hilfe, Integritaetstest und Kompilierung OK; kein ACT23-Lauf
+  gestartet. Der erste Lauf ist bewusst ein Preflight auf Mutation, nicht schon die Kontrolle.
+
 * **Bau**: [D0-Integritaet](/mechanismen/dream-rsi-d0-integritaet.md) - der Wegwerfpfad hat jetzt
   SHA-256-Fingerabdruecke je Lernkomponente und ein opt-in JSONL-Kreditprotokoll
   (`ACT23_D0_CREDIT_JSONL`). Werkzeugtest und Python-Kompilierung sind erfolgreich; kein

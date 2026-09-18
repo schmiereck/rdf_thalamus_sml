@@ -80,7 +80,12 @@ from pc_cvnn.arm_modules.latent_attractor import LatentAttractorController
 from pc_cvnn.arm_modules.curiosity import DistanceNovelty
 from pc_cvnn.arm_modules.self_eval import SelfEvalModule
 from pc_cvnn.arm_modules.object_memory import ObjectMemoryModule
-from pc_cvnn.arm_modules.d0_integrity import append_credit as _d0_append_credit
+from pc_cvnn.arm_modules.d0_integrity import (
+    append_credit as _d0_append_credit,
+    changed_components as _d0_changed_components,
+    snapshot as _d0_snapshot,
+    write_manifest as _d0_write_manifest,
+)
 import pc_cvnn.pc_act16 as act16
 
 CAM = "overview"
@@ -332,6 +337,7 @@ EXV_FREEZE = EXV_N > 1 and os.environ.get("ACT23_EXV_FREEZE", "1") == "1"
 # D0 writes structured credit lines only when an explicit disposable artifact path is supplied.
 # The normal human-readable log and all default behaviour remain unchanged.
 D0_CREDIT_JSONL = os.environ.get("ACT23_D0_CREDIT_JSONL", "")
+D0_MANIFEST_DIR = os.environ.get("ACT23_D0_MANIFEST_DIR", "")
 # MuJoCo selbst ist deterministisch: bleibt das Objekt liegen und der Arm kehrt in dieselbe
 # Ruhelage zurueck, wiederholt sich eine Episode BIS AUF DEN MILLIMETER (im Rauchtest gemessen:
 # 63+-0 mm ueber drei Laeufe).  Der einzige natuerliche Streukanal ist die ARMSTELLUNG beim Start
@@ -5841,6 +5847,28 @@ def run_self_learning_steering(headless=False):
         return ("    [Bilanz] letzte 30 je Modus: " + ", ".join(parts)
                 + (f"  |  je Objekt: {objs}" if objs else ""))
 
+    def _d0_components():
+        """The complete in-process learner set at an AUTO-evaluation boundary.
+
+        This is intentionally a declaration, not a freeze switch: a preflight must first expose
+        every component that still learns during an evaluation before it is suppressed.
+        """
+        return {"bm": bm, "shape_clf": shape_clf, "world": world, "runtime": runtime,
+                "colours": colours, "fovea": getattr(vc, "fovea", None), "latent_goal": lgoal,
+                "latent_dynamics": lat_dyn, "dream_seen": dream_nov.seen, "self_eval": seval}
+
+    def _d0_boundary(name, **context):
+        if not D0_MANIFEST_DIR:
+            return None
+        data = _d0_snapshot(_d0_components(), context={
+            "boundary": name, "seed": os.environ.get("ACT23_SEED", "7"),
+            "choreo": state.choreo, "auto_n": os.environ.get("ACT23_AUTO_N", "0"),
+            **context,
+        })
+        _d0_write_manifest(os.path.join(D0_MANIFEST_DIR, f"{name}.json"), data)
+        print(f"  [D0-Integritaet] {name}: Manifest geschrieben", flush=True)
+        return data
+
     if headless and int(os.environ.get("ACT23_AUTO_N", "0")) > 0:
         # HEADLESS AUTO-RUN (for A/B measurement without the GUI): run N curiosity-picked episodes in
         # the requested choreo mode with the rolling Bilanz scoreboard -- the same loop the GUI Auto
@@ -5868,6 +5896,7 @@ def run_self_learning_steering(headless=False):
                       flush=True)
         bilanz = {"fsm": [], "netz": []}
         obj_hist = []
+        _d0_before = _d0_boundary("before")
         force_list = [s.strip() for s in os.environ.get("ACT23_AUTO_OBJ", "").split(",") if s.strip()]
         #   measurement knob: pin the auto pick to one object (label substring) or CYCLE a comma list
         #   ("U-Form,Gruenes" = interleaved practice, the interference probe); curiosity mix confounds
@@ -5977,6 +6006,11 @@ def run_self_learning_steering(headless=False):
                       flush=True)
             if (ep + 1) % 10 == 0:
                 print(bilanz_line(bilanz, obj_hist), flush=True)
+        _d0_after = _d0_boundary("after")
+        if _d0_before is not None:
+            _d0_changed = _d0_changed_components(_d0_before, _d0_after)
+            print(f"  [D0-Integritaet] {'MUTATION: ' + ', '.join(_d0_changed) if _d0_changed else 'unveraendert'}",
+                  flush=True)
         return
 
     if headless:

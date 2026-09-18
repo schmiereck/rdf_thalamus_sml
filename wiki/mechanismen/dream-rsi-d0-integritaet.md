@@ -53,8 +53,25 @@ Das ist ein Werkzeugtest, kein ACT23-Lauf und kein Nachweis, dass die komplette 
 einfriert. Ein Volltest wird erst nach Abschluss der parallelen Stapelreihe auf einer
 Zustandskopie gefahren.
 
+# Wegwerfbarer Preflight-Runner
+
+`src/pc_cvnn/act23_d0_evaluation_runner.py` kopiert einen explizit genannten Startzustand nach
+`log/d0-preflight/<Zeit>/state-input.pkl`, setzt `ACT23_NO_PERSIST=1` und startet eine feste Zahl
+kopflose FSM-Autoepisoden. Die Quelle wird nie als `ACT23_STATE_PATH` verwendet.
+
+Der Steuerpfad schreibt bei gesetztem `ACT23_D0_MANIFEST_DIR` im **gleichen Prozess** ein
+`before.json` und `after.json`. Der Runner vergleicht beide, prueft zusaetzlich den Hash seiner
+Zustandskopie und schreibt `result.json`, Log und Kredit-JSONL. Jede Prozessmutation oder ein
+fehlendes Manifest ergibt `FAIL` und Exit-Code 2. Damit ist ein stilles `NO_PERSIST`-Ergebnis
+ausgeschlossen: fehlendes Schreiben genuegt nicht zum Bestehen.
+
+Der Runner setzt absichtlich noch keinen globalen Lern-Aus-Schalter. Der erste Preflight soll
+zunaechst offenlegen, welche Komponenten im heutigen AUTO-Pfad veraendert werden. Erst auf
+dieser Liste wird eine explizite, vollstaendige Einfrierung gebaut und erneut gemessen.
+
 # Naechster Schritt
 
-Der noch fehlende `D0EvaluationRunner` erzeugt aus derselben geladenen Startkopie die beiden
-Manifeste um einen festen Satz Testepisoden und bricht bei jeder Differenz ab. Erst dann kann die
-Wrist-Messvorschrift Budget, Seeds und Abbruchregel endgueltig fixieren.
+Als Naechstes wird der Runner mit einer einzelnen FSM-L-Episode auf der D0-Zustandskopie
+ausgefuehrt. Erwartet ist zunaechst ein offen berichteter Mutationsbefund. Danach wird der
+vollstaendige Einfrierpfad gebaut; erst sein bestandener Wiederholungstest gibt Budget, Seeds und
+Abbruchregel der Wrist-Messvorschrift frei.
