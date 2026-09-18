@@ -1325,10 +1325,16 @@ class CommandState23:
         from pc_cvnn.pc_act14 import _rand_xy
         from pc_cvnn.pc_act16 import BASE_CLEAR
         bodies = [nm for _l, nm, _m in self.OBJECTS]
+        # STUETZEN BRAUCHEN MEHR ABSTAND ALS OBJEKTE.  Ein Marker-Ziel, das auf dem Sockel landet,
+        # laesst den Arm dort ABLEGEN -- in einem Arm, der gar nicht stapeln soll.  Genau dieser
+        # Konfounder haette das Stapel-A/B unbrauchbar gemacht.  0,05 m ist fuer 24-mm-Koerper
+        # bemessen; die 70-mm-Platte braucht ihre Halbdiagonale obendrauf.
         p = _rand_xy(rng)
         for _ in range(200):
-            if float(np.linalg.norm(p)) >= BASE_CLEAR and all(
-                    float(np.linalg.norm(p - self.sim.obj_pos(o)[:2])) > 0.05 for o in bodies):
+            if (float(np.linalg.norm(p)) >= BASE_CLEAR
+                    and all(float(np.linalg.norm(p - self.sim.obj_pos(o)[:2])) > 0.05 for o in bodies)
+                    and all(float(np.linalg.norm(p - self.sim.obj_pos(o)[:2])) > 0.10
+                            for o in self.STUETZEN)):
                 break
             p = _rand_xy(rng)
         self.set_marker_xy(self.target_idx, p); self.sync_active()
@@ -5954,8 +5960,13 @@ def run_self_learning_steering(headless=False):
         best_p, best_z, best_nov = None, None, -1.0
         for _ in range(24):                                    # target = most NOVEL reachable spot;
             p = _rand_xy(crng)                                 #   4b: novelty in the GOAL-LATENT space
-            if float(np.linalg.norm(p)) < BASE_CLEAR or any(
-                    float(np.linalg.norm(p - sim.obj_pos(o)[:2])) < 0.05 for o in bodies):
+            if (float(np.linalg.norm(p)) < BASE_CLEAR
+                    or any(float(np.linalg.norm(p - sim.obj_pos(o)[:2])) < 0.05 for o in bodies)
+                    # ... und STUETZEN mit ihrer groesseren Ausdehnung (s. place_selected_random):
+                    # ein getraeumtes Ziel auf dem Sockel liesse den Arm stapeln, ohne dass es
+                    # befohlen war.
+                    or any(float(np.linalg.norm(p - sim.obj_pos(o)[:2])) < 0.10
+                           for o in state.STUETZEN)):
                 continue
             if DREAM:
                 z = lgoal.encode_world(p)                      # the candidate's latent on the shared
