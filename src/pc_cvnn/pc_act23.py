@@ -334,6 +334,7 @@ def welt_fit_epochen():
 # Nebeneffekt (erwuenscht): eine Messung verschmutzt den ueber Wochen gewachsenen Zustand nicht.
 EXV_N = max(1, int(os.environ.get("ACT23_EXV", "1")))
 EXV_FREEZE = EXV_N > 1 and os.environ.get("ACT23_EXV_FREEZE", "1") == "1"
+D0_FREEZE = os.environ.get("ACT23_D0_FREEZE", "0") == "1"
 # D0 writes structured credit lines only when an explicit disposable artifact path is supplied.
 # The normal human-readable log and all default behaviour remain unchanged.
 D0_CREDIT_JSONL = os.environ.get("ACT23_D0_CREDIT_JSONL", "")
@@ -2817,7 +2818,8 @@ def run_self_learning_steering(headless=False):
             print(f"  [Persistenz] Speichern fehlgeschlagen: {e}", flush=True)
 
     def choreo_log(s, _aim, _j5):
-        runtime.observe(s, act16.reactive_subgoal(s))      # label the VISITED state, ignore the FSM's own
+        if not D0_FREEZE:
+            runtime.observe(s, act16.reactive_subgoal(s))  # label visited states for lifelong DAgger
         #   (aim, j5): the reactive teacher is a pure function of state, the phase machine is not
 
     def situation_feats(cmd):
@@ -3926,7 +3928,7 @@ def run_self_learning_steering(headless=False):
         """One open-set LOOK at the current scene: unknown blobs feed the novelty buffer, a young class's
         exemplar set grows over new poses (observe_scene); a class born here becomes a commandable object.
         Runs at scene EVENTS (placement, after a command), not per tracked frame."""
-        if shape_clf.novel_th is None:
+        if D0_FREEZE or shape_clf.novel_th is None:
             return []
         saved = sim.d.mocap_pos.copy()                         # observe_scene parks the markers -> restore
         _prot = set(state.SHAPE_KEY.values())                  # bound commands never starve
@@ -4494,9 +4496,9 @@ def run_self_learning_steering(headless=False):
                 vc._P["state"]["gaze"] = gaze
                 img = sim.render(CAM)
                 if id_mu is not None:                              # class-conditioned perception (sel = the
-                    arr = vc.fovea.step_id(img, gaze, id_mu, True)  #   commanded colour class' saliency)
+                    arr = vc.fovea.step_id(img, gaze, id_mu, not D0_FREEZE)
                 else:
-                    arr = vc.fovea.step(img, gaze, vc._P["state"]["cmd"], True)
+                    arr = vc.fovea.step(img, gaze, vc._P["state"]["cmd"], not D0_FREEZE)
                 if FOVEA_NET:
                     ctr = (HEX_F - 1) / 2.0
                     sel = np.real(arr[:, :, 0]) if id_mu is not None else None
@@ -5048,7 +5050,8 @@ def run_self_learning_steering(headless=False):
                 _imit_verworfen[0] += 1
                 return
             pol_trace.append((s.copy(), out.copy()))
-        runtime.begin_episode()                                # PEND the teacher rows; committed only if
+        if not D0_FREEZE:
+            runtime.begin_episode()                            # pend teacher rows for lifelong DAgger
         #   this episode is NOT a self-validated success (teacher corrects failures, see end_episode)
         # dir_ref wurde ggf. oben aus der gewaehlten AKTION gekippt -- Originalwert sichern und nach
         # der Episode zuruecksetzen, damit die Neigung NUR fuer diesen Griff gilt und nicht dauerhaft
@@ -5125,7 +5128,7 @@ def run_self_learning_steering(headless=False):
                            place_servo_fn=_plan_ueber_ports,
                            servo=(method in ("color", "shape") or eig_servo),
                            rescatter=False, episode_end_fn=ep_end,
-                           lifelong=True, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
+                           lifelong=not D0_FREEZE, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
                            arm_reset=False)
         _T["nach_ausfuehrung"] = _time.perf_counter()
         if _dir_ref_orig is not None:
@@ -5270,7 +5273,7 @@ def run_self_learning_steering(headless=False):
         if s_ok is None:
             print(f"    [Selbst-Urteil] enthalten -- noch keine eigene Klasse für {body}", flush=True)
         else:
-            tally = seval.record(s_ok, res.get("ok", False))
+            tally = seval.record(s_ok, res.get("ok", False)) if not D0_FREEZE else "eingefroren"
             ref = (seval._last or {}).get("ref_mm", 0.0)   # self-calibrated perception radius applied
             refs = f", Ref-Korrektur {ref:.0f}mm" if ref >= 1.0 else ""
             if (seval._last or {}).get("merged"):
@@ -5295,7 +5298,7 @@ def run_self_learning_steering(headless=False):
         # z_end) transition, skip teacher episodes (a_exec None), and errors are LOGGED not swallowed.
         # NOTE: this is an EPISODE-LEVEL transition (one per episode), not per-step -- coarse but honest;
         # a_exec is the 6-dim world-model action (the dynamics module truncates to its action_dim).
-        if a_exec is not None:
+        if a_exec is not None and not D0_FREEZE:
             try:
                 _a_dyn = np.asarray(a_exec, float)
                 z_start_dyn = lgoal.encode_world(snap[body][0][:2])
@@ -5500,7 +5503,7 @@ def run_self_learning_steering(headless=False):
                 _qd = s_d if (lbl_src == "Selbst" and s_d is not None) else None
                 _we = WORLD_EPOCHS               # bleibt so, wenn das Lernen eingefroren ist
                 _naug = 0                        # auch bei eingefrorenem Lernen definiert
-                if not EXV_FREEZE:
+                if not EXV_FREEZE and not D0_FREEZE:
                     # PUNKT 3, GEPRUEFT UND NICHT NOETIG: diese Paarung ist von den logischen
                     # Raten unberuehrt.  `fe` entsteht in situation_feats VOR run_combined (also
                     # ausserhalb des Bild-Takts), `a_obs` ist die EINE Wahl dieser Episode
@@ -5552,7 +5555,7 @@ def run_self_learning_steering(headless=False):
                     _d0_append_credit(D0_CREDIT_JSONL, {
                         "body": body, "action_source": src, "label_source": lbl_src,
                         "route": route, "outcome": bool(outcome), "weight": float(obs_w),
-                        "frozen": bool(EXV_FREEZE), "world_rows": int(world.n()),
+                        "frozen": bool(EXV_FREEZE or D0_FREEZE), "world_rows": int(world.n()),
                         "wrist_deg": float(np.degrees(wrist_of(a_obs)) % 180.0),
                         "relative_wrist_deg": float(_rel), "grip": float(a_obs[4]),
                         "gentle": bool(a_obs[5] > 0.5), "self_distance_m": _qd,
@@ -5609,7 +5612,7 @@ def run_self_learning_steering(headless=False):
         imit_ok = (s_d is not None and s_d < imit_bar) and (delivered or _ifail)
         imitated = False
         if (use_net and pol_trace and lifted and imit_ok and not slipped
-                and not EXV_FREEZE
+                and not EXV_FREEZE and not D0_FREEZE
                 and os.environ.get("ACT23_SELFIMIT", "1") == "1"):
             _q = wm_quality(s_d) if _gimit else 1.0
             added = runtime.imitate([s for s, _a in pol_trace], [a for _s, a in pol_trace],
@@ -5635,7 +5638,8 @@ def run_self_learning_steering(headless=False):
         # the teacher's correction rows stays tied to the STRICT confident bar (imit_tol) -- a merely-ok
         # episode now contributes its own demos AND keeps the teacher's correction, which is exactly the
         # regime where both signals are useful.  keep-behaviour is therefore unchanged from before.
-        runtime.end_episode(keep=not (imitated and confident) and not EXV_FREEZE)  # failure/uncertain -> the teacher's
+        if not D0_FREEZE:
+            runtime.end_episode(keep=not (imitated and confident) and not EXV_FREEZE)
         #   correction rows enter DAgger; a self-validated success keeps ONLY its own actions
         # STAGE 2 lifelong: refit the choreography on the aggregated teacher labels; report the SHADOW
         # divergence |policy - teacher| over this episode's VISITED states in BOTH modes -- on FSM
@@ -5666,7 +5670,7 @@ def run_self_learning_steering(headless=False):
             except Exception as _e:
                 if os.environ.get("ACT23_DEBUG", "0") == "1":
                     print(f"    [ModulViz] push uebersprungen: {_e}", flush=True)
-        if not EXV_FREEZE:
+        if not EXV_FREEZE and not D0_FREEZE:
             runtime.train(epochs=200)                          # act19's DAgger refits used 300; 80 underfit
         #   the shifting aggregate (user watched the net under-CLOSE the gripper -- the BC smoothing
         #   artefact that stronger refits + DAgger labels at the visited close-states sharpen)
