@@ -14,6 +14,9 @@ sources:
   - id: test
     resource: ../../src/pc_cvnn/test_d0_integrity.py
     title: Deterministischer Werkzeugtest
+  - id: training-runner
+    resource: ../../src/pc_cvnn/act23_d0_training_runner.py
+    title: Isolierter D0-Trainingsblock mit Kreditabdeckung
   - id: audit
     resource: /befunde/dream-rsi-d0-wrist-audit.md
     title: Audit, der den Mechanismus verlangt
@@ -74,6 +77,21 @@ ein stilles `NO_PERSIST`-Ergebnis ausgeschlossen: fehlendes Schreiben genuegt ni
 `ACT23_D0_FREEZE=1` sperrt die Update-Stellen fuer Weltmodell, Runtime, Fovea, Form-/Farb-
 Open-Set, Body-Refinement, Latent-Dynamics und SelfEval-Statistik. Die Steuerung und das
 Selbsturteil bleiben lesend aktiv, damit die eingefrorene Kontrolle dieselbe Aufgabe ausfuehrt.
+
+# Isolierte Trainingslinien
+
+`act23_d0_training_runner.py` ist das Gegenstueck fuer den **mutablen** D0-Trainingsarm. Er
+kopiert den angegebenen Startcheckpoint nach `state-trained.pkl` in ein neues
+Ergebnisverzeichnis und gibt nur dieser Kopie als `ACT23_STATE_PATH` frei. Der Runner erzwingt
+FSM, `L-Form`, objektrelative Wrist und einen expliziten Trainingsseed; `NO_PERSIST` und der
+Freeze werden im Kindprozess auf `0` gesetzt.
+
+Er schreibt Log, Kredit-JSONL und `result.json`. Seine Abdeckungspruefung zaehlt nur volle,
+kausale Selbst/Selbst-Kredite und ihre acht objektsymmetrischen relativen Wrist-Zellen. Ein
+60er-Block verlangt mindestens 20 Zeilen, ein 120er-Block mindestens 40; beide verlangen vier
+Zellen. Damit kann eine Linie am vorab vereinbarten 60er-Tor technisch enden, ohne nach einem
+positiven Resultat weiterzulaufen. Der Test `test_d0_training_runner.py` prueft Filter und
+Wrist-Binning mit synthetischen Daten.
 
 # Naechster Schritt
 

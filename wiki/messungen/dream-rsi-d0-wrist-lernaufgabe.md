@@ -88,7 +88,7 @@ kein Ersatz fuer den vollstaendigen Szenen- und Checkpointvertrag aus D1.
 |---|---|
 | Code / Basis | Commit `7d4f444`, `src/pc_cvnn/state/dream_rsi_d0_20260917/base.pkl`, SHA-256 `ad9d768c...c09b9e` |
 | Trainingslinien | zwei getrennte Kopien der Basis, `ACT23_SEED=17` und `29`; keine Kopie wird zwischen Linien geteilt |
-| Training | je 120 gepinnte FSM-`L-Form`-Episoden, `ACT23_WRIST_REL=1`, kein `ACT23_FORCE_WRIST`; Updates nur im Linien-Checkpoint |
+| Training | je 120 gepinnte FSM-`L-Form`-Episoden mit [`act23_d0_training_runner.py`](../../src/pc_cvnn/act23_d0_training_runner.py), `ACT23_WRIST_REL=1`, kein `ACT23_FORCE_WRIST`; Updates nur im Linien-Checkpoint |
 | Primaere Kreditdaten | nur JSONL-Zeilen mit `action_source=Selbst`, `label_source=Selbst`, Gewicht 1,0 und einer kausalen Aktionsroute |
 | Testdaten | je Linie vor und nach Training zwei eingefrorene Familien a 40 Episoden mit `ACT23_SEED=101` und `103`, `ACT23_AUTO_OBJ=L-Form`, getrennte Wegwerfkopien |
 | Kontrolle | dieselbe Basis auf denselben Testseeds mit `ACT23_D0_FREEZE=1`; vor/nach jeder Evaluation leerer Lernzustands-Diff und bitgleicher Pkl-Kopiehash |

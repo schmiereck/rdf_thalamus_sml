@@ -2,6 +2,11 @@
 
 ## 2026-09-18
 
+* **Bau**: [D0-Integritaet](/mechanismen/dream-rsi-d0-integritaet.md) um den isolierten
+  Trainingslinien-Runner ergaenzt. Er schreibt nur eine neue Checkpoint-Kopie, filtert die
+  vorab definierten Selbst-Kredite und prueft die Wrist-Abdeckung an den 60-/120-Episoden-
+  Toren. Kompilierung, Hilfe und ein synthetischer Filtertest sind OK; kein ACT23-Lauf gestartet.
+
 * **Messvertrag**: [D0-Wrist-Lernaufgabe](/messungen/dream-rsi-d0-wrist-lernaufgabe.md) -
   Pilotvertrag v1 vor dem ersten Lernlauf festgelegt: zwei Linien (Seeds 17/29), je 120
   Trainingsepisoden, zwei getrennte 40er-Testfamilien (101/103), Selbst-Kreditfilter,
