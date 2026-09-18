@@ -71,7 +71,8 @@ dieser Liste wird eine explizite, vollstaendige Einfrierung gebaut und erneut ge
 
 # Naechster Schritt
 
-Als Naechstes wird der Runner mit einer einzelnen FSM-L-Episode auf der D0-Zustandskopie
-ausgefuehrt. Erwartet ist zunaechst ein offen berichteter Mutationsbefund. Danach wird der
-vollstaendige Einfrierpfad gebaut; erst sein bestandener Wiederholungstest gibt Budget, Seeds und
-Abbruchregel der Wrist-Messvorschrift frei.
+Der erste FSM-L-Preflight ist gefahren und meldet die erwartete Mutation, siehe
+[D0-Preflight](/befunde/dream-rsi-d0-preflight-mutation.md). Als Naechstes werden seine neun
+Komponenten auf die wirklichen Update-Stellen und den erlaubten episodischen Aufgaben-Zustand
+aufgeteilt. Danach wird der vollstaendige Einfrierpfad gebaut; erst sein bestandener
+Wiederholungstest gibt Budget, Seeds und Abbruchregel der Wrist-Messvorschrift frei.

@@ -2,6 +2,12 @@
 
 ## 2026-09-18
 
+* **Wiederholung**: [D0-Zustandsmutation](/befunde/dream-rsi-d0-preflight-mutation.md) fuer die
+  nun exakt gepinnte L-Form. Die Kreditzeile ist ein sauberer eigener Aktion- und Selbsturteil-
+  Fehlgriff (Gewicht 1,0, relativer Wrist 22,5 Grad); Pkl weiter bitgleich, dieselben 9/10
+  beobachteten Komponenten mutieren. Der Preflight gilt damit fuer die D0-L-Aufgabe, ist aber
+  kein Lernvergleich.
+
 * **Preflight**: [D0-Zustandsmutation](/befunde/dream-rsi-d0-preflight-mutation.md) - erste
   kopflose FSM-Episode auf einer Kopie der D0-Basis: Pkl bitgleich, aber **9/10** beobachtete
   In-Process-Komponenten veraendert. Der erwartete FAIL belegt unmittelbar, dass `NO_PERSIST`

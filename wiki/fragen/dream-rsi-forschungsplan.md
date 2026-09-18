@@ -108,7 +108,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 
 | Paket | Inhalt | Voraussetzung | Status | Befund / Entscheidung |
 |---|---|---|---|---|
-| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | in Arbeit | Formpiloten verworfen; [Wrist-Lernaufgabe](/messungen/dream-rsi-d0-wrist-lernaufgabe.md), Audit und Wegwerf-Runner gebaut; erster Mutations-Preflight offen |
+| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | in Arbeit | Formpiloten verworfen; [Wrist-Lernaufgabe](/messungen/dream-rsi-d0-wrist-lernaufgabe.md), Audit/Runner gebaut; [L-Preflight](/befunde/dream-rsi-d0-preflight-mutation.md) zeigt 9 Mutationen, Freeze-Audit offen |
 | D1 | Beobachtung, Checkpoints, Neustart- und Nichtbeeinflussungsnachweis | D0 | offen | - |
 | D2 | Kleine Bibliothek echter Trainingslinien | D1 | offen | - |
 | D3 | Replay mit Abdeckungs- und Informationspruefung | D2 | offen | - |

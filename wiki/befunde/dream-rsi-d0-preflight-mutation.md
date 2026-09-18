@@ -17,6 +17,9 @@ sources:
   - id: audit
     resource: /befunde/dream-rsi-d0-wrist-audit.md
     title: Vorheriger Kredit- und Zustandsaudit
+  - id: l-result
+    resource: ../../log/d0-preflight/fsm-l-form-1ep/result.json
+    title: Korrigierter L-Form-Preflight
 ---
 
 # Behauptung
@@ -41,12 +44,23 @@ zu breit: `ACT23_AUTO_OBJ=L` matchte den Buchstaben in "Rotes Wuerfel" und fuhr 
 Dieser Lauf ist deshalb **kein** L-Wrist-Vorversuch, sondern ausschliesslich ein
 Zustandsintegritaetsbefund.
 
+# Korrigierte L-Form-Wiederholung
+
+Nach der Korrektur auf `ACT23_AUTO_OBJ=L-Form` fuhr der Preflight tatsaechlich `obj_L`.
+Der FSM-Griff scheiterte kausal (`Griff am Objekt fehlgeschlagen (Aktion)`), mit
+`action_source=Selbst`, `label_source=Selbst`, Gewicht 1,0 und relativem Wrist 22,5 Grad.
+Die Pkl-Kopie blieb wiederum bitgleich; die identische Liste aus neun Komponenten mutierte.
+
+Diese Wiederholung macht den Befund fuer den gewaehlten D0-Gegenstand gueltig. Sie zeigt nicht,
+dass alle neun Differenzen jeweils Lernen sind: etwa `latent_goal` enthaelt auch den
+episodischen Zielzustand. Der naechste Freeze-Audit trennt deshalb Update-Stellen von erlaubtem
+Aufgaben-Zustand, bevor Methoden gesperrt werden.
+
 # Bewertung
 
 Der Runner und die In-Process-Manifeste funktionieren: sie machten genau die Mutationen sichtbar,
 die der Audit vermutet hatte. Ein Freeze darf nicht als Auswahl aus diesen Komponenten erraten
 werden; er muss jede dieser Lernstellen unterdruecken und denselben Preflight danach bestehen.
 
-Der Runner ist vor dem L-spezifischen Preflight korrigiert: seine Vorgabe lautet jetzt
-`L-Form`, nicht das mehrdeutige Teilwort `L`. Die einzelne Episode traegt keinen Lern- oder
-Wirkungsnachweis und ersetzt weder die festgelegte L-Aufgabe noch eine Kontrolle.
+Die einzelne Episode traegt keinen Lern- oder Wirkungsnachweis und ersetzt weder die festgelegte
+L-Aufgabe noch eine Kontrolle.
