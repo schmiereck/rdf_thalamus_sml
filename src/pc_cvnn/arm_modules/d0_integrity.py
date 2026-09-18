@@ -55,9 +55,11 @@ def _pc_net_learning_state(net: Any) -> dict[str, Any]:
 def _learning_state(name: str, value: Any) -> Any:
     """Project one component to the state that a D0 freeze promises to preserve."""
     if name == "bm":
-        # The arm body model has no separate, stable public learning payload yet.  Keep it whole
-        # until that module offers one, so D0 cannot accidentally overlook a body-model update.
-        return value
+        body = getattr(value, "body", None)
+        # `dir_ref` and surprise are execution state.  W/Wd are the learned FK and claw-direction
+        # maps; `ik` is the optional learned inverse map.
+        return {"body": _attrs(body, ("dof", "aux", "NF", "W", "Wd")),
+                "ik": getattr(value, "ik", None)}
     if name == "world":
         return _attrs(value, ("members", "_X", "_Y", "_W", "_G", "feat_dim", "off_max", "wrist_grid"))
     if name == "runtime":

@@ -4133,7 +4133,7 @@ def run_self_learning_steering(headless=False):
     #   "chroma" tags the sel PRIMITIVE the classes were trained with: step_id switched from the
     #   cosine match (grey table leaked through vs unsaturated class centroids) to _match_chroma,
     #   so a fovea class-trained on the old cosine-sel retrains once.
-    if (FOVEA_NET and os.environ.get("ACT23_FOVEA_TRAIN", "1") == "1"
+    if (FOVEA_NET and not D0_FREEZE and os.environ.get("ACT23_FOVEA_TRAIN", "1") == "1"
             and (not _fovea_loaded                 # a loaded fovea was already class-trained -> skip,
                  or getattr(vc.fovea, "_zoom_trained", "nie") != _zoom_span)):   # UNLESS zoom span or
         if _fovea_loaded:                          # sel primitive changed since it was trained
