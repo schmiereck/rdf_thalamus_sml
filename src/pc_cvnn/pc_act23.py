@@ -6013,7 +6013,12 @@ def run_self_learning_steering(headless=False):
         _d0_after = _d0_boundary("after")
         if _d0_before is not None:
             _d0_changed = _d0_changed_components(_d0_before, _d0_after)
-            print(f"  [D0-Integritaet] {'MUTATION: ' + ', '.join(_d0_changed) if _d0_changed else 'unveraendert'}",
+            _d0_learn_changed = _d0_changed_components(_d0_before, _d0_after, learning_only=True)
+            print(f"  [D0-Integritaet] Vollzustand: "
+                  f"{'MUTATION: ' + ', '.join(_d0_changed) if _d0_changed else 'unveraendert'}",
+                  flush=True)
+            print(f"  [D0-Integritaet] Lernzustand: "
+                  f"{'MUTATION: ' + ', '.join(_d0_learn_changed) if _d0_learn_changed else 'unveraendert'}",
                   flush=True)
         return
 

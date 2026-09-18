@@ -97,7 +97,8 @@ def main() -> int:
         before = json.loads((manifests / "before.json").read_text(encoding="utf-8"))
         after = json.loads((manifests / "after.json").read_text(encoding="utf-8"))
         result["changed_components"] = changed_components(before, after)
-        result["passed"] = completed.returncode == 0 and not result["changed_components"] and \
+        result["changed_learning_components"] = changed_components(before, after, learning_only=True)
+        result["passed"] = completed.returncode == 0 and not result["changed_learning_components"] and \
             result["copied_sha256_before"] == result["copied_sha256_after"]
     except FileNotFoundError as error:
         result["passed"] = False

@@ -2,6 +2,12 @@
 
 ## 2026-09-18
 
+* **Freeze-Preflight**: [D0-Zustandsmutation](/befunde/dream-rsi-d0-preflight-mutation.md) - eine
+  eingefrorene FSM-L-Form-Episode besteht: Pkl-Kopie bitgleich und **0 geaenderte
+  Lernkomponenten**. Sechs Vollzustandsdifferenzen bleiben als Diagnose sichtbar und sind
+  explizit von Gewichten, Puffern und dauerhaften Kalibrierungen getrennt. Werkzeugtest und
+  Kompilierung OK; noch kein Lernvergleich.
+
 * **Wiederholung**: [D0-Zustandsmutation](/befunde/dream-rsi-d0-preflight-mutation.md) fuer die
   nun exakt gepinnte L-Form. Die Kreditzeile ist ein sauberer eigener Aktion- und Selbsturteil-
   Fehlgriff (Gewicht 1,0, relativer Wrist 22,5 Grad); Pkl weiter bitgleich, dieselben 9/10

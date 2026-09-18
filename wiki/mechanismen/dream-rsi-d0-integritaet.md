@@ -1,7 +1,7 @@
 ---
 type: Mechanismus
 title: D0-Integritaet - Fingerabdruck und Kreditprotokoll
-description: Der D0-Helfer erzeugt komponentenweise Zustandsfingerabdruecke und opt-in JSONL-Kreditzeilen; der erste volle Evaluator nutzt ihn erst im naechsten Schritt.
+description: Der D0-Helfer erzeugt getrennte Fingerabdruecke fuer Voll- und Lernzustand sowie opt-in JSONL-Kreditzeilen; der gefrorene FSM-L-Preflight besteht.
 tags: [act23, dream-rsi, d0, zustand, kredit, reproduzierbarkeit]
 status: stable
 evidenz: einzelmessung
@@ -28,10 +28,16 @@ eine konkrete Weltmodellzeile hatte. Er aendert keinen ACT23-Vorgabepfad.
 # Aufbau
 
 `component_fingerprints()` serialisiert die Komponenten in derselben Darstellungsfamilie wie
-ACT23-Persistenz und bildet je Komponente einen SHA-256. Der D0-Satz umfasst Bodymodell,
+ACT23-Persistenz und bildet je Komponente einen SHA-256. Das Vollmanifest umfasst Bodymodell,
 Formklassifikator, Weltmodell, Runtime, Farben, optionale Fovea, Ziel-/Dynamikmodule,
 Neuheitsspeicher und SelfEval. Fehlende optionale Komponenten werden als `absent` festgehalten,
 nicht still ausgelassen.
+
+Daneben schreibt jedes Manifest `learning_components`. Dieser Fingerabdruck umfasst nur
+Gewichte, Trainingspuffer und persistente Kalibrierung. Fovea-Aktivierungen, Portwerte,
+Diagnosehistorien, episodisches Ziel und Generatorfortschritt bleiben im Vollmanifest sichtbar,
+zaehlen aber nicht als Lernen. Der Runner legt beide Diffs ab; `passed` verlangt einen leeren
+Lernzustands-Diff und einen bitgleichen Pkl-Kopiehash.
 
 `snapshot()` schreibt diese Fingerabdruecke samt Kontext in ein Manifest. `changed_components()`
 liefert die betroffenen Namen mit Vorher-/Nachher-Werten, `assert_unchanged()` verwirft eine
@@ -60,19 +66,17 @@ Zustandskopie gefahren.
 kopflose FSM-Autoepisoden. Die Quelle wird nie als `ACT23_STATE_PATH` verwendet.
 
 Der Steuerpfad schreibt bei gesetztem `ACT23_D0_MANIFEST_DIR` im **gleichen Prozess** ein
-`before.json` und `after.json`. Der Runner vergleicht beide, prueft zusaetzlich den Hash seiner
-Zustandskopie und schreibt `result.json`, Log und Kredit-JSONL. Jede Prozessmutation oder ein
-fehlendes Manifest ergibt `FAIL` und Exit-Code 2. Damit ist ein stilles `NO_PERSIST`-Ergebnis
-ausgeschlossen: fehlendes Schreiben genuegt nicht zum Bestehen.
+`before.json` und `after.json`. Der Runner legt Voll- und Lernzustands-Diff ab, prueft zusaetzlich
+den Hash seiner Zustandskopie und schreibt `result.json`, Log und Kredit-JSONL. Eine Lernmutation,
+ein fehlendes Manifest oder ein geaenderter Pkl-Kopiehash ergibt `FAIL` und Exit-Code 2. Damit ist
+ein stilles `NO_PERSIST`-Ergebnis ausgeschlossen: fehlendes Schreiben genuegt nicht zum Bestehen.
 
-Der Runner setzt absichtlich noch keinen globalen Lern-Aus-Schalter. Der erste Preflight soll
-zunaechst offenlegen, welche Komponenten im heutigen AUTO-Pfad veraendert werden. Erst auf
-dieser Liste wird eine explizite, vollstaendige Einfrierung gebaut und erneut gemessen.
+`ACT23_D0_FREEZE=1` sperrt die Update-Stellen fuer Weltmodell, Runtime, Fovea, Form-/Farb-
+Open-Set, Body-Refinement, Latent-Dynamics und SelfEval-Statistik. Die Steuerung und das
+Selbsturteil bleiben lesend aktiv, damit die eingefrorene Kontrolle dieselbe Aufgabe ausfuehrt.
 
 # Naechster Schritt
 
-Der erste FSM-L-Preflight ist gefahren und meldet die erwartete Mutation, siehe
-[D0-Preflight](/befunde/dream-rsi-d0-preflight-mutation.md). Als Naechstes werden seine neun
-Komponenten auf die wirklichen Update-Stellen und den erlaubten episodischen Aufgaben-Zustand
-aufgeteilt. Danach wird der vollstaendige Einfrierpfad gebaut; erst sein bestandener
-Wiederholungstest gibt Budget, Seeds und Abbruchregel der Wrist-Messvorschrift frei.
+Der gefrorene FSM-L-Preflight besteht, siehe [D0-Preflight](/befunde/dream-rsi-d0-preflight-mutation.md).
+Als Naechstes werden Wiederholungen, Seeds, Budget und Abbruchregel der Wrist-Messvorschrift
+festgelegt. Erst dann beginnt eine Lernserie.

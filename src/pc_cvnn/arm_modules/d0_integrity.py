@@ -27,6 +27,58 @@ D0_COMPONENTS = (
 )
 
 
+def _attrs(value: Any, names: tuple[str, ...]) -> dict[str, Any]:
+    """Pick only persistent learning fields from an ACT23 module.
+
+    This boundary deliberately excludes inference activations, ports, diagnostic histories and
+    random-number-generator advancement.  Those change when a frozen policy is *read* to execute
+    an episode, but they are not learned knowledge.  Every included field is either a parameter,
+    a training/example buffer, or a persistent self-calibration datum.
+    """
+    return {name: getattr(value, name, None) for name in names if hasattr(value, name)}
+
+
+def _pc_net_learning_state(net: Any) -> dict[str, Any]:
+    """Return PC-network weights without frame-local node activations."""
+    return {
+        "connections": [
+            _attrs(conn, ("id", "W", "eta_learn", "lambda_decay", "w_clip", "pressure_scale"))
+            for conn in getattr(net, "_connections", [])
+        ],
+        "nodes": {
+            node_id: _attrs(node, ("id", "dim", "V", "eta_temporal", "w_clip_V"))
+            for node_id, node in getattr(net, "_nodes", {}).items()
+        },
+    }
+
+
+def _learning_state(name: str, value: Any) -> Any:
+    """Project one component to the state that a D0 freeze promises to preserve."""
+    if name == "bm":
+        # The arm body model has no separate, stable public learning payload yet.  Keep it whole
+        # until that module offers one, so D0 cannot accidentally overlook a body-model update.
+        return value
+    if name == "world":
+        return _attrs(value, ("members", "_X", "_Y", "_W", "_G", "feat_dim", "off_max", "wrist_grid"))
+    if name == "runtime":
+        return _attrs(value, ("net", "_X", "_Y", "_Xi", "_Yi", "_Xk", "_Xq", "trained"))
+    if name == "shape_clf":
+        return _attrs(value, ("NA", "NH", "cam", "RW", "RPX", "H", "Hinv", "engine", "W1", "b1",
+                              "W2", "b2", "head", "fmu", "fsd", "_ZX", "novel_th", "area_hi",
+                              "open", "open_names", "_novel_buf"))
+    if name == "fovea":
+        return {"K": getattr(value, "K", None), "net": _pc_net_learning_state(getattr(value, "net", None)),
+                "sel_head": getattr(value, "sel_head", None)}
+    if name == "latent_goal":
+        return _attrs(value, ("gm", "_gx", "_grid_z", "D", "zmu", "zsd"))
+    if name == "latent_dynamics":
+        return _attrs(value, ("latent_dim", "action_dim", "hidden_dim", "lr", "in_dim", "out_dim",
+                              "W1", "b1", "W2", "b2", "buffer_z", "buffer_a", "buffer_zn", "max_buffer"))
+    if name == "self_eval":
+        return _attrs(value, ("tol", "n", "agree", "recent", "ref"))
+    return value
+
+
 def _json_value(value: Any) -> Any:
     """Convert scalar/array values used in a credit line to JSON without lossy string parsing."""
     if isinstance(value, np.generic):
@@ -42,7 +94,8 @@ def _json_value(value: Any) -> Any:
     raise TypeError(f"not JSON serialisable: {type(value).__name__}")
 
 
-def component_fingerprints(components: Mapping[str, Any], *, names=D0_COMPONENTS) -> dict[str, str]:
+def component_fingerprints(components: Mapping[str, Any], *, names=D0_COMPONENTS,
+                           learning_only: bool = False) -> dict[str, str]:
     """Return a content fingerprint for every D0-relevant component.
 
     Pickle is also ACT23's persistence representation.  Hashing each component separately makes
@@ -54,7 +107,8 @@ def component_fingerprints(components: Mapping[str, Any], *, names=D0_COMPONENTS
         if name not in components or components[name] is None:
             result[name] = "absent"
             continue
-        raw = pickle.dumps(components[name], protocol=pickle.HIGHEST_PROTOCOL)
+        value = _learning_state(name, components[name]) if learning_only else components[name]
+        raw = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
         result[name] = hashlib.sha256(raw).hexdigest()
     return result
 
@@ -65,22 +119,25 @@ def snapshot(components: Mapping[str, Any], *, context: Mapping[str, Any] | None
         "schema": "act23-d0-integrity-v1",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "components": component_fingerprints(components),
+        "learning_components": component_fingerprints(components, learning_only=True),
         "context": _json_value(dict(context or {})),
     }
 
 
-def changed_components(before: Mapping[str, Any], after: Mapping[str, Any]) -> dict[str, dict[str, str]]:
-    """Return every changed component in two manifests created by :func:`snapshot`."""
-    old = before.get("components", {})
-    new = after.get("components", {})
+def changed_components(before: Mapping[str, Any], after: Mapping[str, Any], *,
+                       learning_only: bool = False) -> dict[str, dict[str, str]]:
+    """Return changed full objects, or only persistent learned state, from two snapshots."""
+    key = "learning_components" if learning_only else "components"
+    old = before.get(key, {})
+    new = after.get(key, {})
     names = sorted(set(old) | set(new))
     return {name: {"before": old.get(name, "missing"), "after": new.get(name, "missing")}
             for name in names if old.get(name) != new.get(name)}
 
 
-def assert_unchanged(before: Mapping[str, Any], after: Mapping[str, Any]) -> None:
+def assert_unchanged(before: Mapping[str, Any], after: Mapping[str, Any], *, learning_only: bool = False) -> None:
     """Raise when a supposedly frozen evaluation changed a declared learner component."""
-    changed = changed_components(before, after)
+    changed = changed_components(before, after, learning_only=learning_only)
     if changed:
         detail = ", ".join(changed)
         raise RuntimeError(f"D0 frozen evaluation mutated: {detail}")
@@ -109,4 +166,3 @@ def append_credit(path: str | os.PathLike[str], record: Mapping[str, Any]) -> No
     data.setdefault("recorded_at", datetime.now(timezone.utc).isoformat())
     with target.open("a", encoding="utf-8", newline="\n") as handle:
         handle.write(json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n")
-

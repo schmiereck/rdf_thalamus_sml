@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 import tempfile
+from types import SimpleNamespace
 from pathlib import Path
 
 import numpy as np
@@ -25,6 +26,18 @@ def main() -> None:
     components["world"]["weights"][0] = 3.0
     changed = changed_components(before, snapshot(components))
     assert set(changed) == {"world"}, changed
+
+    # A frozen execution may advance a generator/diagnostic state.  It is visible in the full
+    # audit, but must not be mistaken for a changed learning buffer or weight.
+    world = SimpleNamespace(members=[np.array([1.0])], _X=[], _Y=[], _W=[], _G=[],
+                            feat_dim=3, off_max=0.01, wrist_grid=8, rng=np.random.default_rng(1))
+    frozen_before = snapshot({"world": world})
+    world.rng.random()
+    frozen_after = snapshot({"world": world})
+    assert "world" in changed_components(frozen_before, frozen_after)
+    assert not changed_components(frozen_before, frozen_after, learning_only=True)
+    world.members[0][0] = 2.0
+    assert "world" in changed_components(frozen_before, snapshot({"world": world}), learning_only=True)
 
     # Keep the disposable artifact inside the worktree: the shared Windows venv can be denied
     # access to the system temp directory while another worker has an ACT23 process open.

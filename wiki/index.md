@@ -24,7 +24,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Wahrnehmungs-Splits](mechanismen/wahrnehmungs-splits.md) - verschmolzene Blobs, drei Reparaturen, der am besten belegte Gewinn der Wahrnehmungslinie
 * [Formklassen-Lebenszyklus](mechanismen/formklassen-lebenszyklus.md) - Geburt, namenloses Fenster, Bindung, Anspruch, Verhungern, Einfrieren
 * [Kredit und Selbst-Urteil](mechanismen/kredit-und-selbsturteil.md) - der Agent beurteilt sich selbst und verteilt die Schuld; drei Regeln aus drei Vergiftungen
-* [D0-Integritaet](mechanismen/dream-rsi-d0-integritaet.md) - Komponentenfingerabdruck und opt-in Kredit-JSONL fuer wegwerfbare D0-Evaluationen
+* [D0-Integritaet](mechanismen/dream-rsi-d0-integritaet.md) - Voll- und Lernzustandsfingerabdruck, Kredit-JSONL und bestandener Freeze-Preflight
 * [Fovea und Blicksteuerung](mechanismen/fovea-und-blick.md) - detektorfreier Blick, Drift 38 → 8,5 px; kein Lieferhebel
 * [Eigenschafts-Kommando](mechanismen/eigenschafts-kommando.md) - Farbe + Form + Groesse statt Name; Eindeutigkeit ist nicht Richtigkeit
 * [Ports und Takte](mechanismen/ports-und-takte.md) - der Port-Umbau und die Bitgleichheits-Pruefung; Traegheit nur im Planer
@@ -34,7 +34,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [D0: Ungebunden ist nicht unbekannt](befunde/dream-rsi-d0-lernaufgabe.md) - gewachsen kein Y-Lernen; frisch schnelle Y-Erkennung mit T-Verwechslung, beide Pilotvarianten ungeeignet; D0-Tor offen
 * [D0: Y/T-Trennbarkeit](befunde/dream-rsi-yt-trennbarkeit.md) - lokales Deskriptorsignal vorhanden, aber 59/64 T-Sichten von einer Dreisicht-Y-Klasse beansprucht; keine geeignete D0-Lernaufgabe
 * [D0-Wrist-Audit](befunde/dream-rsi-d0-wrist-audit.md) - objektrelatives Gitter und kausale Negativkredite vorhanden; D0 braucht einen eigenen nichtmutierenden Evaluator und Selbst-Labels
-* [D0-Preflight: Zustandsmutation](befunde/dream-rsi-d0-preflight-mutation.md) - eine FSM-Episode mutiert neun Komponenten trotz bitgleicher Pkl; Freeze muss alle Lernpfade sperren
+* [D0-Preflight: Lernzustand eingefroren](befunde/dream-rsi-d0-preflight-mutation.md) - L-Form-FSM besteht ohne Lernmutation; episodischer Inferenzzustand bleibt getrennt sichtbar
 * [Exekutionsvarianz](befunde/exekutionsvarianz.md) - ICC 0,61, Obergrenze 82 % gegen Grundrate 54 %; der Deckel sitzt in der Situationsrepraesentation
 * [1109 Episoden ohne Lernfortschritt](befunde/langlauf-ohne-fortschritt.md) - 43 h GUI-Lauf, vier unabhaengige Groessen flach
 * [Selbst-Aneignung stockt](befunde/selbstaneignung-stockt.md) - 17/17 und 14/14 selbst geborene Klassen verhungern, keine je kommandiert

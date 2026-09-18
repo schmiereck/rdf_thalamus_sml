@@ -1,7 +1,7 @@
 ---
 type: Befund
-title: D0-Preflight - eine Episode mutiert neun Lernkomponenten
-description: Die Pkl blieb bitgleich, doch eine kopflose FSM-Episode veraenderte Weltmodell, Runtime, Fovea, Wahrnehmung, Selbsturteil und weitere In-Process-Zustaende. NO_PERSIST ist keine eingefrorene Evaluation.
+title: D0-Preflight - Lernzustand eingefroren, Episodenzustand sichtbar
+description: Die Pkl blieb bitgleich. Nach einem Vollzustands-Audit und expliziten Freeze-Wachen bleibt der definierte Lernzustand einer FSM-L-Form-Episode unveraendert; episodische Inferenzdifferenzen werden weiter protokolliert.
 tags: [act23, dream-rsi, d0, preflight, zustand, mutation]
 status: stable
 evidenz: einzelmessung
@@ -20,6 +20,9 @@ sources:
   - id: l-result
     resource: ../../log/d0-preflight/fsm-l-form-1ep/result.json
     title: Korrigierter L-Form-Preflight
+  - id: freeze-result
+    resource: ../../log/d0-preflight/fsm-l-freeze-learning-1ep/result.json
+    title: Bestandener gefrorener L-Form-Preflight
 ---
 
 # Behauptung
@@ -56,11 +59,33 @@ dass alle neun Differenzen jeweils Lernen sind: etwa `latent_goal` enthaelt auch
 episodischen Zielzustand. Der naechste Freeze-Audit trennt deshalb Update-Stellen von erlaubtem
 Aufgaben-Zustand, bevor Methoden gesperrt werden.
 
+# Bestandener Freeze-Preflight
+
+`ACT23_D0_FREEZE=1` sperrt die im Audit gefundenen Lernpfade: Weltmodell-Kredit,
+Runtime-DAgger und -Imitation, Fovea-Lernen, Open-Set-Glance, Body-Modell-Refinement,
+Latent-Dynamics sowie die Statistik des Selbsturteils. Der erneute L-Form-Lauf bestand:
+
+| Pruefung | Ergebnis |
+|---|---|
+| Objekt, Episode | `obj_L`, eine FSM-Episode |
+| Aktion / Label | Selbst / Selbst, Fehlgriff, Gewicht 1,0, relativer Wrist 22,5 Grad |
+| Pkl-Kopie | vor/nach SHA-256 `ad9d768c...c09b9e` |
+| Lernzustand | **0 geaenderte Komponenten** |
+| Vollzustand | `fovea`, `latent_goal`, `runtime`, `self_eval`, `shape_clf`, `world` |
+
+Der Vollzustand bleibt absichtlich sichtbar: Fovea-Aktivierungen, der episodische Zielvektor,
+letzte Wahrnehmungsdiagnostik und die Zufallsfolge der Kandidaten aendern sich beim Lesen und
+Ausfuehren. Der D0-Lernfingerabdruck umfasst dagegen Gewichte, Trainingspuffer und dauerhafte
+Kalibrierungen. Der Werkzeugtest prueft beide Seiten: RNG-Fortschritt ist im Voll-Audit sichtbar,
+eine Gewichtsveraenderung bleibt ein Freeze-Fehler.
+
 # Bewertung
 
 Der Runner und die In-Process-Manifeste funktionieren: sie machten genau die Mutationen sichtbar,
-die der Audit vermutet hatte. Ein Freeze darf nicht als Auswahl aus diesen Komponenten erraten
-werden; er muss jede dieser Lernstellen unterdruecken und denselben Preflight danach bestehen.
+die der Audit vermutet hatte, und der getrennte Lernzustandsfingerabdruck besteht nach den
+expliziten Wachen. Damit ist die notwendige D0-Voraussetzung fuer eine nichtlernende Kontrolle
+erfuellt.
 
-Die einzelne Episode traegt keinen Lern- oder Wirkungsnachweis und ersetzt weder die festgelegte
-L-Aufgabe noch eine Kontrolle.
+Die einzelne Episode traegt keinen Lern- oder Wirkungsnachweis. Als naechstes werden fuer die
+Wrist-Lernaufgabe Wiederholungen, Seeds, Budget und Abbruchregel festgelegt; erst dann darf der
+eingefrorene Evaluator als Kontrolle einer Lernserie dienen.
