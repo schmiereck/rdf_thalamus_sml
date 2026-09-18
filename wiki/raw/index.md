@@ -5,6 +5,11 @@ wird nie umgeschrieben, nur ergaenzt. Jede Zahl im Wiki soll von hier aus nachvo
 
 # Laufprotokolle
 
+* `log/dream_rsi_d0_20260918/yt_separation_01/` im Codex-Worktree: frische Bootstraps,
+  Szenen, Einzelansprueche, Zusammenfassung, Manifest, archivierter Runner und Vertrag der
+  Y/T-Trennbarkeits-Sonde. Lokal, unversioniert.
+  -> [D0: Y/T-Trennbarkeit](/befunde/dream-rsi-yt-trennbarkeit.md).
+
 * `log/dream_rsi_d0_20260917/` im Codex-Worktree: `inventory.json`, `smoke_01`,
   `pilot_01` und `pilot_fresh_01`. Die Pilotordner enthalten Manifeste, Einzelurteile,
   Szenen, Zusammenfassungen und archivierte Runner; v2 auch Vertrag und Bootstrap-Pickles.

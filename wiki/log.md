@@ -7,6 +7,11 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-18
 
+* **Anlage**: [D0: Y/T-Trennbarkeit](/befunde/dream-rsi-yt-trennbarkeit.md) - zwei neue
+  Klassifikator-Seeds: ein LOO-Nachbar trennt Y/T lokal zu 90,6 bzw. 92,2 %, die tatsaechliche
+  Dreisicht-Open-Set-Klasse beansprucht aber 59/64 T-Sichten. Das lokalisiert die Grenze beim
+  aktuellen Anspruchspfad; keine Aussage ueber Armleistung. D0 bleibt offen.
+
 * **Ergaenzung**: [D0-Gegenprobe](/befunde/dream-rsi-d0-lernaufgabe.md) abgeschlossen:
   frischer Grundform-Lerner erkennt Y in beiden Seeds ab drei Sichten zu 24/24, beansprucht
   aber jeweils alle vier T-Kontrollen. Freeze 0/24; Gewichte und Live-Zustand unveraendert.

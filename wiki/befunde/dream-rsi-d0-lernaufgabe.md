@@ -92,11 +92,13 @@ SHA256 `ad9d768c...`. Rohbelege: `log/dream_rsi_d0_20260917/pilot_fresh_01/`, in
 in Arbeit, sein Tor ist nicht bestanden.** Inventar, eingefrorene Kontrollkopien und
 Pilotvertrag sind vorhanden. D1 und Scheduler-Entwicklung sind nicht begonnen.
 
-Als naechstes ist vor einem weiteren Lauf eine Lernaufgabe zu begruenden, deren gehaltene
-Unterscheidung ueber mehrere Trainingsbudgets verbessert werden kann. Fuer den Formpfad
-muss zuerst geklaert werden, ob die vorhandene Repraesentation Y und T ueberhaupt trennt;
-eine neue Messvorschrift braucht getrennte Entwicklungs-/Testszenen und unveraenderte
-Fehlanspruchskriterien. Keine weiteren Seeds oder laengeren Laeufe desselben Piloten.
+Die anschliessende [Y/T-Trennbarkeits-Sonde](/befunde/dream-rsi-yt-trennbarkeit.md) beantwortet
+die offene Vorfrage: Der Deskriptor traegt ein lokales Signal (LOO-1-NN 90,6 bzw. 92,2 %), aber
+die reale Dreisicht-Anspruchsregel beansprucht 29 bzw. 30 von 32 T-Sichten. Damit ist nicht die
+vollstaendige geometrische Trennung widerlegt, sondern ihre ausreichende Nutzung im aktuellen
+Lernpfad. Eine neue Lernaufgabe braucht weiterhin getrennte Entwicklungs-/Testszenen und
+unveraenderte Fehlanspruchskriterien. Keine weiteren Seeds oder laengeren Laeufe desselben
+Piloten.
 
 Die parallele Nachricht von Claude (Board, 2026-09-17 22:15 UTC; main `2124e96`,
 `wiki/befunde/nahe-ablage-ist-mechanik.md`) ordnet die nahe Ablage einem mechanischen Engpass
