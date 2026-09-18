@@ -762,6 +762,68 @@ if EIG_DIREKT and not EIG_STETIG:
 # Der Befund wiki/befunde/dauer-adresse-vertraegt-keine-farbe.md trifft nur DAUERHAFTE Adressen.
 ZIEL_ADRESSE = os.environ.get("ACT23_ZIEL_ADRESSE", "0") == "1"
 ZIEL_ABSTAND = float(os.environ.get("ACT23_ZIEL_ABSTAND", "0.05"))
+# =========================================================================================
+# DIE RELATION (ACT23_ZIEL_RELATION, Vorgabe "an").  Stufe 2 von
+# wiki/fragen/stapeln-als-aufgabe.md.
+#
+#     an    das Objekt kommt NEBEN den Bezugskoerper, ZIEL_ABSTAND entfernt (Stufe 1)
+#     auf   das Objekt kommt AUF ihn -- das Ziel ist seine Stelle, und die Ablagehoehe steigt
+#
+# WARUM "auf" DER LEICHTERE FALL IST, entgegen der urspruenglichen Stufenfolge: die gemessene
+# Sperre ist LATERAL.  Der Arm kommt einem Koerper nicht naeher als ~37 mm, weil die Klaue NEBEN
+# ihm absenken muss und dabei in 64 % der Faelle gegen ihn stoesst -- der untrainierte Teacher
+# genauso wenig wie die Policy (wiki/befunde/nahe-ablage-ist-mechanik.md).  Beim Stapeln liegt der
+# Bezugskoerper UNTER dem getragenen Objekt und gar nicht im Absenkweg.
+#
+# WOHER DIE HOEHE KOMMT, und das ist die einzige Stelle, an der hier ein Privileg sitzt:
+# `GRASP_Z + Oberkante des Bezugskoerpers`.  Die Oberkante kommt aus dem Simulator, weil die
+# Wahrnehmung sie nicht hergibt (die Homographie ist eine Ebenen-Abbildung).  Das ist nach
+# wiki/mechanismen/laufzeit-regeln.md als TEACHER-Geruest zulaessig -- wie WRIST_ALIGN -, und es
+# muss zur Testzeit verschwinden: die Policy hat die Hoehe ab ACT16_GOAL_Z im Zustandsvektor und
+# soll sie lernen.  Solange sie das nicht kann, ist ein "auf"-Lauf ein Teacher-Lauf.
+# WARUM GRASP_Z + Oberkante die richtige Formel ist: GRASP_Z (0,014) ist die HANDhoehe, bei der ein
+# Koerper mit Ruhemitte 0,012 abgelegt wird, also Handhoehe = Ruhemitte + 0,002.  Steht der Koerper
+# auf einer Auflage der Hoehe h, liegt seine Ruhemitte bei h + 0,012, die Hand also bei
+# GRASP_Z + h.  Alle Koerper dieser Welt sind 24 mm hoch (0,012 Halbmass), der Aufschlag ist
+# deshalb fuer alle derselbe.
+ZIEL_RELATION = os.environ.get("ACT23_ZIEL_RELATION", "an").strip().lower()
+if ZIEL_RELATION not in ("an", "auf"):
+    raise SystemExit(f"ACT23_ZIEL_RELATION muss 'an' oder 'auf' sein, nicht {ZIEL_RELATION!r}")
+# DER SOCKEL IN DIE SZENE (ACT23_SOCKEL, Vorgabe 0).  Eine 70-mm-Platte als Stapelziel: die
+# geometrische Toleranz (35 - 12 = 23 mm) passt damit zur gemessenen Ablagegenauigkeit von
+# 21-25 mm, waehrend ein Wuerfel auf einem Wuerfel unter 12 mm verlangt.
+# ER IST KEIN OBJEKT, sondern MOEBEL: er steht nicht in state.OBJECTS, wird nie kommandiert und
+# nie gegriffen, sondern in state.STUETZEN gefuehrt.  Sonst koennte die Neugier ihn zum Greifen
+# auswaehlen -- 70 mm breit und schwer.
+SOCKEL = os.environ.get("ACT23_SOCKEL", "0") == "1"
+# DIE VORGABESTELLE IST GESUCHT, NICHT GERATEN.  Sie maximiert den Abstand zu den
+# Objekt-Slots der Vorgabe-Szenengroesse (ACT23_SCENE_N=4) und liefert 86 mm Freiraum gegen
+# die gemessenen 80 mm, die es braucht.  Mit SCENE_N=5 oder 6 ist der Arbeitsraum zu klein:
+# dort bleiben nur 72 bzw. 62 mm, und der Sockel verschmilzt mit einem Nachbarn.  Der
+# Startcheck rechnet das nach und nennt die beste Stelle fuer die eingestellte Slot-Zahl.
+SOCKEL_XY = [float(v) for v in os.environ.get("ACT23_SOCKEL_XY", "-0.018,0.149").split(",")]
+# LAUT SAGEN, WAS FEHLT -- nicht still mitschalten.  Ein Schalter, der einen zweiten heimlich
+# umlegt, macht jedes A/B mehrdeutig (dieselbe Regel wie bei AUGMENT/NEIGHBOURS und EIG_DIREKT).
+# "auf" braucht DREI fremde Schalter, und ohne sie ist es nicht wirkungslos, sondern STILL FALSCH:
+if ZIEL_RELATION == "auf":
+    _fehlt = []
+    if not act16.GOAL_Z:
+        _fehlt.append("ACT16_GOAL_Z=1 -- sonst wird die dritte Zielgroesse verworfen und die Klaue "
+                      "faehrt auf Greifhoehe IN den Bezugskoerper")
+    if act16.ZIEL_SAEUBERN:
+        _fehlt.append("ACT16_ZIEL_SAEUBERN=0 -- sonst schiebt run_combined das Ziel um 0,05 m vom "
+                      "Bezugskoerper WEG, und aus 'auf' wird 'daneben'")
+    if not act16.ERFOLG_RUHT:
+        _fehlt.append("ACT16_ERFOLG_RUHT=1 -- sonst heisst 'geliefert' woertlich 'liegt auf dem "
+                      "Tisch' und JEDER gelungene Stapel zaehlt als Fehlschlag")
+    if _fehlt:
+        print("  [Ziel-Relation] ACT23_ZIEL_RELATION=auf ist gesetzt, aber es fehlt:", flush=True)
+        for _m in _fehlt:
+            print(f"      {_m}", flush=True)
+    if not SOCKEL:
+        print("  [Ziel-Relation] ACT23_SOCKEL ist NICHT gesetzt -- dann gibt es keine Stuetze in "
+              "der Szene, auf die 'auf' zeigen koennte, und jede Episode faellt auf den Marker "
+              "zurueck.", flush=True)
 # ABSTUFUNG STATT PRIVILEG (ACT23_EIG_ABSTUFUNG, Vorgabe 0 bis gemessen).  Trifft das
 # Eigenschafts-Tripel nichts, griff bisher der PRIVILEGIERTE Rueckfall: die wahre Lage aus dem
 # Simulator.  Das ist der Preis der Groessenachse -- sie traf gemessen 10,0 statt 4,7 % der
@@ -1204,6 +1266,11 @@ class CommandState23:
         self.ziel_modus = "koerper" if ZIEL_ADRESSE else "ort"
         self.ziel_bezug = None
         self.ziel_loeser = None
+        # STUETZEN sind MOEBEL, keine Objekte: Koerper, auf die etwas gestellt werden kann, die aber
+        # nie kommandiert und nie gegriffen werden (s. SOCKEL oben).  Sie stehen deshalb NICHT in
+        # OBJECTS -- sonst koennte die Neugier sie zum Greifen auswaehlen -, werden aber von der
+        # Szene aufgebaut und nach jeder Episode wiederhergestellt wie jeder andere Koerper.
+        self.STUETZEN = []
         self.EIG_MESS = {}         # Koerper -> (Chromatizitaet, Formeinbettung, Spanne) -- die
         #   GEMESSENEN Werte derselben drei Achsen (ACT23_EIG_STETIG).  Die Namen oben bleiben fuer
         #   Anzeige und Protokoll, gematcht wird auf diesen hier.  Wird wie EIGENSCHAFT NICHT
@@ -1292,9 +1359,11 @@ class CommandState23:
         ch = {"netz": "Netz", "attractor": "Attraktor"}.get(self.choreo, "FSM")
         zl = " (latent)" if self.goalmode == "latent" else ""
         if self.ziel_bezug is not None:
-            zt = f"Ziel: an {self.ziel_bezug['label']}"
+            # das Label traegt die Relation schon ("auf ..."), fuer "an" steht sie hier davor
+            _r = self.ziel_bezug.get("relation", "an")
+            zt = f"Ziel: {'an ' if _r == 'an' else ''}{self.ziel_bezug['label']}"
         elif self.ziel_modus == "koerper":
-            zt = "Ziel: an <kein Bezug>"
+            zt = f"Ziel: {ZIEL_RELATION} <kein Bezug>"
         else:
             zt = f"Ziel {self.target_idx + 1}"
         return f"{self.selected()[0]} | {act} | Greifer: {pol} | Choreo: {ch} | {zt}{zl}"
@@ -2287,6 +2356,25 @@ def run_self_learning_steering(headless=False):
                   f"{'mehrdeutig, ' + str(len(_tr)) + ' Treffer' if _tr else 'nicht gefunden'}"
                   f" -- Rückfall auf Ziel {state.target_idx + 1}", flush=True)
             return None
+        if bez.get("relation") == "auf":
+            # AUF: das Ziel IST die Stelle des Bezugskoerpers -- keine Peilung, kein Abstand.  Dafuer
+            # kommt eine dritte Groesse dazu, die HAND-Ablagehoehe (s. ZIEL_RELATION oben):
+            #     GRASP_Z + Oberkante des Bezugskoerpers
+            # Die Oberkante ist das einzige Privileg auf diesem Pfad -- Teacher-Geruest, weil eine
+            # Ebenen-Homographie keine Hoehe hergibt.  Sie steht NICHT im Ziel-Latent und nicht in
+            # der Adresse; sie geht ueber tgt_z in die Ablagephase und (mit ACT16_GOAL_Z) in den
+            # Zustandsvektor, damit die Policy sie lernen KANN.
+            _bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, bez["body"])
+            _oben = float(sim.obj_pos(bez["body"])[2]
+                          + sim.m.geom_size[sim.m.body_geomadr[_bid]][2])
+            _tz = float(act16.GRASP_Z) + _oben
+            _wahr = 1000.0 * float(np.linalg.norm(_p - sim.obj_pos(bez["body"])[:2]))
+            print(f"    [Zieladresse] '{bez['label']}' 1 Treffer bei "
+                  f"[{_p[0]:+.3f},{_p[1]:+.3f}] (wahr {_wahr:.0f}mm) -> DARAUF ablegen, "
+                  f"Oberkante {1000 * _oben:.0f}mm, Handhoehe {1000 * _tz:.0f}mm"
+                  + ("" if act16.GOAL_Z else "  [ACT16_GOAL_Z=0: die Hoehe wird VERWORFEN]"),
+                  flush=True)
+            return np.array([_p[0], _p[1], _tz], float)
         for _ph in bez["peilungen"]:
             _q = _p + ZIEL_ABSTAND * np.array([np.cos(_ph), np.sin(_ph)])
             if (REACH_XY[0][0] <= _q[0] <= REACH_XY[1][0] and REACH_XY[0][1] <= _q[1] <= REACH_XY[1][1]
@@ -2327,8 +2415,14 @@ def run_self_learning_steering(headless=False):
         if state.ziel_modus != "koerper":
             return None
         _a = state.selected()[1]
-        _kand = [nm for nm in dict.fromkeys(nm for _l, nm, _m in state.OBJECTS)
-                 if nm != _a and not _geparkt_jetzt(nm)]
+        if ZIEL_RELATION == "auf":
+            # AUF etwas gestellt wird nur, was tragen kann -- die STUETZEN.  Ein 24-mm-Wuerfel auf
+            # einem 24-mm-Wuerfel verlangt unter 12 mm Versatz und ist bei gemessenen 21-25 mm
+            # Ablagegenauigkeit von Anfang an unloesbar; die Auflage ist die Schwierigkeitsachse.
+            _kand = [nm for nm in state.STUETZEN if nm != _a and not _geparkt_jetzt(nm)]
+        else:
+            _kand = [nm for nm in dict.fromkeys(nm for _l, nm, _m in state.OBJECTS)
+                     if nm != _a and not _geparkt_jetzt(nm)]
         if not _kand:
             return None
         _b = _kand[int(crng.integers(len(_kand)))]
@@ -2355,7 +2449,9 @@ def run_self_learning_steering(headless=False):
         _ph0 = float(crng.uniform(0.0, 2.0 * np.pi))     # acht Peilungen ab einem zufaelligen
         _peil = [(_ph0 + 2.0 * np.pi * k / 8.0) for k in range(8)]   # Winkel, s. ZIEL_ADRESSE
         state.ziel_bezug = {"tripel": _tri, "mess": _mess, "peilungen": _peil, "body": _b,
-                            "label": " + ".join(str(t) for t in _tri if t is not None) or "beliebig"}
+                            "relation": ZIEL_RELATION,
+                            "label": ("auf " if ZIEL_RELATION == "auf" else "")
+                                     + (" + ".join(str(t) for t in _tri if t is not None) or "beliebig")}
         return _tri
 
     colour_of_body = dict(_loaded.get("colour_of_body", {})) if _loaded is not None else {}
@@ -3144,6 +3240,54 @@ def run_self_learning_steering(headless=False):
     SLOTS = SCENE_SLOTS[SCENE_N]
     PARK_XY = [0.5, -0.6]                                          # ausserhalb des Kamerabildes
     scene_slots = {}                                           # body -> slot index (finds the FREE slot)
+    # DER SOCKEL ALS STUETZE (s. SOCKEL oben).  Er bekommt KEINEN der SLOTS, sondern eine eigene
+    # feste Stelle -- ein Slot ist fuer einen 24-mm-Koerper bemessen, die Platte ist 70 mm breit.
+    # Der Abstand zu jedem Slot wird beim Start NACHGERECHNET und gemeldet.
+    # DIE SCHWELLE IST GEMESSEN, NICHT GERECHNET, und das war eine Korrektur: zuerst stand hier
+    # die Ueberlappungsrechnung (Sockel-Halbdiagonale 49 mm + Objekt-Halbdiagonale 17 mm = 66 mm).
+    # Das ist die falsche Groesse -- Blobs VERSCHMELZEN, lange bevor sie sich beruehren.  Gemessen
+    # (acht Richtungen, `perceive_all` zaehlt die Detektionen): getrennt ab **60 mm entlang der
+    # Achsen und 80 mm auf den Diagonalen** -- die Ecken der quadratischen Platte reichen am
+    # weitesten. Maßgeblich ist der schlechteste Fall.
+    SOCKEL_FREI = 0.080
+    if SOCKEL:
+        state.STUETZEN = ["sockel"]
+        _sxy = np.asarray(SOCKEL_XY, float)
+        _mind = min(float(np.linalg.norm(_sxy - np.asarray(s, float))) for s in SLOTS)
+        print(f"  [Sockel] steht bei [{_sxy[0]:+.3f},{_sxy[1]:+.3f}], naechster Objekt-Slot "
+              f"{1000 * _mind:.0f} mm entfernt (gemessen noetig {1000 * SOCKEL_FREI:.0f} mm)"
+              + ("" if _mind >= SOCKEL_FREI else
+                 "  -- ZU NAH: Objekte verschmelzen mit dem Sockel, die Zieladresse trifft dann "
+                 "den gemeinsamen Blob-Schwerpunkt statt die Platte"), flush=True)
+        if _mind < SOCKEL_FREI + 0.005:
+            # NICHT NUR MECKERN, SONDERN DIE BESTE STELLE NENNEN.  Der Arbeitsraum ist 240 x 170 mm;
+            # mit einer 70-mm-Platte und vier 24-mm-Koerpern ist er knapp, und wo genau noch Platz
+            # ist, haengt an ACT23_SCENE_N (jede Slot-Zahl hat ein eigenes Muster).  Die Suche
+            # laeuft ueber ein grobes Raster im Arbeitsraum und meldet das Optimum samt der
+            # Slot-Zahl, mit der es reicht -- billiger als vom Nutzer geratene Koordinaten.
+            from pc_cvnn.pc_act14 import REACH_XY as _RX
+            _best, _bp, _bn = -1.0, None, None
+            for _n, _sl in sorted(SCENE_SLOTS.items()):
+                for _gx in np.linspace(_RX[0][0] + 0.04, _RX[1][0] - 0.04, 17):
+                    for _gy in np.linspace(_RX[0][1] + 0.04, _RX[1][1] - 0.04, 17):
+                        _q = np.array([_gx, _gy])
+                        if float(np.linalg.norm(_q)) < 0.10:       # Sockelfreiheit des Arms
+                            continue
+                        _d = min(float(np.linalg.norm(_q - np.asarray(s, float))) for s in _sl)
+                        if _d > _best:
+                            _best, _bp, _bn = _d, _q, _n
+            print(f"  [Sockel] bester Platz im Raster: [{_bp[0]:+.3f},{_bp[1]:+.3f}] mit "
+                  f"ACT23_SCENE_N={_bn} -> {1000 * _best:.0f} mm Freiraum.  Setzen mit "
+                  f"ACT23_SOCKEL_XY={_bp[0]:.3f},{_bp[1]:.3f}", flush=True)
+        # UND DIE UNVERMEIDLICHE HAELFTE: ein erfolgreich abgelegtes Objekt BLEIBT auf dem Sockel
+        # (die Aufraeumschleife stellt nur NICHT-kommandierte Koerper zurueck).  Danach ist der
+        # Sockel-Blob per Bauart verschmolzen -- gemessen wird ein Wuerfel auf der Platte in 0 von
+        # 25 Stellen eine eigene Detektion (wiki/befunde/sockel-verschluckt-den-stapel.md).  Das
+        # ist kein Layoutfehler, sondern die Aufgabe: ab dem ersten Stapel adressiert "auf den
+        # Sockel" einen Blob, der den Stapel enthaelt.
+        print("  [Sockel] Hinweis: ein abgelegtes Objekt bleibt oben liegen; ab dann ist der "
+              "Sockel-Blob verschmolzen und die Zieladresse wird mehrdeutig.", flush=True)
+        scene["sockel"] = (_sxy.copy(), 0.004, 0.0)
 
     # ERFAHRUNGS-GRUPPE fuer den Block-Bootstrap des Welt-Modells (s. world_model._bootstrap_blocks).
     # Eine Gruppe = eine STEHENDE SZENE innerhalb EINES Laufs.  Genau das ist die Einheit, ueber die
@@ -4676,7 +4820,11 @@ def run_self_learning_steering(headless=False):
         # arm can knock objects -> afterwards restore all NON-commanded objects to exactly here, so the scene
         # stays put and only the commanded object moves (to the target).  No more surprise re-scatter.
         snap = {nm: (sim.obj_pos(nm)[:2].copy(), float(sim.obj_pos(nm)[2]), float(sim.obj_yaw(nm)))
-                for _l2, nm, _m in state.OBJECTS}
+                # STUETZEN MIT AUFNEHMEN (s. state.STUETZEN): der Sockel ist kein Objekt, muss aber
+                # wie jedes nicht-kommandierte Ding nach der Episode zurueck an seine Stelle --
+                # sonst wandert die Auflage ueber den Lauf davon, sobald der Arm sie anstreift.
+                # Die Aufraeumschleife unten laeuft ueber `snap`, also genuegt dieser Zusatz.
+                for nm in dict.fromkeys([n for _l2, n, _m in state.OBJECTS] + list(state.STUETZEN))}
         if _dbg: print(f"    [dbg] before  : {_pos()}", flush=True)
         _save(f"{body}_0before")
         perception.clear_seed()                                # form tracker seeds from THIS command's select()
@@ -5202,7 +5350,7 @@ def run_self_learning_steering(headless=False):
             if _bz is not None:
                 _bp = sim.obj_pos(_bz["body"])[:2]
                 _zus += (f" | zum Bezug {1000.0 * float(np.linalg.norm(_end - _bp)):.0f}mm"
-                         f" (Soll {1000.0 * ZIEL_ABSTAND:.0f}mm)")
+                         f" (Soll {0.0 if _bz.get('relation') == 'auf' else 1000.0 * ZIEL_ABSTAND:.0f}mm)")
                 # HAT DER ARM DEN BEZUGSKOERPER ANGERUEHRT?  Das ist der Trennungstest zwischen den
                 # zwei Erklaerungen des gemessenen Mindestabstands (wiki/befunde/mindestabstand-
                 # zur-ablage.md): verschiebt sich der Nachbar, ist die KLAUENMECHANIK die Ursache;
@@ -5214,6 +5362,20 @@ def run_self_learning_steering(headless=False):
                 if _bz["body"] in snap:
                     _zus += (f" | Bezug verschoben "
                              f"{1000.0 * float(np.linalg.norm(_bp - snap[_bz['body']][0])):.0f}mm")
+                if _bz.get("relation") == "auf":
+                    # LIEGT ES DRAUF?  Zwei Groessen, und beide braucht man: die HOEHE sagt, ob es
+                    # oben liegt, der seitliche VERSATZ, ob es dort auch halten kann.  Die Auflage
+                    # traegt, solange der Schwerpunkt ueber ihr steht -- bei 70 mm Platte und
+                    # 24 mm Wuerfel also unter 23 mm Versatz.
+                    _sb = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, _bz["body"])
+                    _ok_h = float(sim.obj_pos(_bz["body"])[2]
+                                  + sim.m.geom_size[sim.m.body_geomadr[_sb]][2])
+                    _oz = float(sim.obj_pos(body)[2])
+                    _vers = 1000.0 * float(np.linalg.norm(_end - _bp))
+                    _drauf = _oz > _ok_h + 0.004 and _vers < 23.0
+                    _zus += (f" | Stapel: Objektmitte {1000.0 * _oz:.0f}mm (Auflage "
+                             f"{1000.0 * _ok_h:.0f}mm), Versatz {_vers:.0f}mm -> "
+                             f"{'LIEGT DRAUF' if _drauf else 'nicht drauf'}")
             print(f"    [Ablage] {body}: beim Oeffnen Objekt {_fall:.0f}mm ueber Ruhelage, "
                   f"seitlich {_lat:.0f}mm vom Ziel -> danach {_drift:.0f}mm gedriftet, "
                   f"final {_fin:.0f}mm{_dec}{_zus}", flush=True)

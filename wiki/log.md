@@ -5,6 +5,42 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-18
+
+* **Anlage**: [Die Relation "auf", gebaut](/mechanismen/relation-auf-gebaut.md) - **Stufe 2 steht**,
+  `ACT23_ZIEL_RELATION=auf` (Vorgabe "an"). Gegenueber "an" fallen Peilung und Abstand weg, dafuer
+  liefert `goal_fn` eine dritte Groesse: `tgt_z = GRASP_Z + Oberkante des Bezugskoerpers`.
+  Begruendung der Formel auf der Seite (GRASP_Z ist die HANDhoehe bei Ruhemitte 0,012, alle Koerper
+  dieser Welt sind 24 mm hoch). **Die Oberkante ist das einzige Privileg auf diesem Pfad** - eine
+  Ebenen-Homographie gibt keine Hoehe her -, zulaessig als Teacher-Geruest nach
+  [Laufzeitregeln](/mechanismen/laufzeit-regeln.md), und solange die Policy die 14. Zustandsspalte
+  nicht nutzt, **ist ein "auf"-Lauf ein Teacher-Lauf**. Dazu `ACT23_SOCKEL` (die Platte in die
+  Szene) und `state.STUETZEN` - Moebel, getrennt von `OBJECTS`, damit die Neugier den 70-mm-Sockel
+  nicht zum Greifen auswaehlt, aber im Posen-Schnappschuss, damit die Aufraeumschleife ihn
+  zurueckstellt. **Vier fremde Schalter muessen mit** (`ACT16_GOAL_Z`, `ACT16_ZIEL_SAEUBERN=0`,
+  `ACT16_ERFOLG_RUHT`, `ACT23_SOCKEL`); ohne sie ist "auf" nicht wirkungslos, sondern **still
+  falsch**, deshalb prueft der Start und meldet jeden einzeln - keiner legt einen anderen heimlich
+  um. **Rauchtest:** 2 saubere Stapel in 4 adressierten Episoden (Versatz 14 und 20 mm, beide als
+  geliefert gezaehlt), Sockel auf 1-8 mm wahrgenommen. Kein Quotenbefund (n = 6, ein Seed, Teacher
+  fahrend).
+
+* **Anlage**: [Der Sockel braucht 80 mm Freiraum](/befunde/sockel-braucht-80mm-freiraum.md) - zwei
+  Pruefstandsmessungen, und eine davon **korrigiert meinen eigenen Code**. (1) Der Sockel wird auf
+  **5,9 mm** genau lokalisiert (max 8,5), systematisch zur Kamera hin und mit dem Kameraabstand
+  wachsend - dieselbe Parallaxe wie beim gestapelten Wuerfel, nur klein, weil die Platte flach ist.
+  0 % ueber der Stapeltoleranz von 23 mm; ein Wuerfel wird auf 0,8 mm lokalisiert. **Die Platte ist
+  kein Ortsproblem.** (2) Ein Objekt daneben bleibt erst ab **60 mm entlang der Achsen und 80 mm
+  auf den Diagonalen** eine eigene Detektion (die Ecken der quadratischen Platte reichen am
+  weitesten). **Meine erste Freiraum-Schranke im Code rechnete Ueberlappung** - Halbdiagonale plus
+  Halbdiagonale = 66 mm - und das ist die falsche Groesse: Blobs verschmelzen lange bevor sie sich
+  beruehren. Mit der gemessenen Schranke passt der Sockel nur bei `ACT23_SCENE_N` bis **4** in den
+  Arbeitsraum (bester Freiraum 105 / 86 / 72 / 62 mm bei 3 / 4 / 5 / 6 Objekten). Die Vorgabestelle
+  ist jetzt gesucht statt geraten: mit der geratenen (81 mm) las der Agent die Platte 14-18 mm
+  daneben, mit der gesuchten (86 mm) 1-8 mm. **Was sich nicht wegplanen laesst:** ein abgelegtes
+  Objekt bleibt oben liegen, ab dem ersten Stapel ist der Sockel-Blob per Bauart verschmolzen - das
+  ist die Aufgabe, nicht ein Layoutfehler, und genau dafuer ist die Farbstreuung da. Der Start sagt
+  es laut, damit niemand die spaeteren Mehrdeutigkeiten fuer einen Fehler haelt.
+
 ## 2026-09-17
 
 * **Widerlegung**: [Der Mindestabstand ist die Mechanik](/befunde/nahe-ablage-ist-mechanik.md) -
