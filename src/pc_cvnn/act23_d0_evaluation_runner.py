@@ -50,6 +50,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--state", type=Path, required=True, help="existing source state; read and copied only")
     parser.add_argument("--episodes", type=int, default=1, help="fixed AUTO episode count (default: 1)")
+    parser.add_argument("--object", default="L-Form", help="ACT23 command label pinned for every episode")
     parser.add_argument("--output", type=Path, default=None, help="new or empty result directory")
     parser.add_argument("--python", type=Path, default=Path(sys.executable), help="venv Python executable")
     parser.add_argument("--set", action="append", type=parse_assignment, default=[], metavar="ACT23_X=V")
@@ -79,7 +80,7 @@ def main() -> int:
         "ACT23_AUTO_N": str(args.episodes), "ACT23_STATE_PATH": str(copied),
         "ACT23_NO_PERSIST": "1", "ACT23_D0_MANIFEST_DIR": str(manifests),
         "ACT23_D0_CREDIT_JSONL": str(output / "credit.jsonl"),
-        "ACT23_CHOREO": "fsm", "ACT23_AUTO_CURIOUS": "0", "ACT23_AUTO_OBJ": "L",
+        "ACT23_CHOREO": "fsm", "ACT23_AUTO_CURIOUS": "0", "ACT23_AUTO_OBJ": args.object,
     })
     env.update(dict(args.set))
     command = [str(args.python), str(ACT23)]
@@ -90,7 +91,7 @@ def main() -> int:
     result = {"schema": "act23-d0-preflight-v1", "created_at": datetime.now(timezone.utc).isoformat(),
               "command": command, "returncode": completed.returncode, "source_state": str(source),
               "source_sha256": input_hash, "copied_sha256_before": copied_hash_before,
-              "copied_sha256_after": sha256(copied), "episodes": args.episodes,
+              "copied_sha256_after": sha256(copied), "episodes": args.episodes, "object": args.object,
               "settings": {key: env[key] for key in sorted(env) if key.startswith("ACT23_D0_")}}
     try:
         before = json.loads((manifests / "before.json").read_text(encoding="utf-8"))

@@ -2,6 +2,13 @@
 
 ## 2026-09-18
 
+* **Preflight**: [D0-Zustandsmutation](/befunde/dream-rsi-d0-preflight-mutation.md) - erste
+  kopflose FSM-Episode auf einer Kopie der D0-Basis: Pkl bitgleich, aber **9/10** beobachtete
+  In-Process-Komponenten veraendert. Der erwartete FAIL belegt unmittelbar, dass `NO_PERSIST`
+  keine eingefrorene Evaluation ist. Die Kreditzeile ist Selbst/Selbst und voll gewichtet; der
+  Objektfilter traf wegen Teilwort `L` allerdings den roten Wuerfel. Runner auf `L-Form`
+  korrigiert; noch kein L-Wrist-Vorversuch und kein Lernbefund.
+
 * **Bau**: [D0-Integritaet](/mechanismen/dream-rsi-d0-integritaet.md) um den
   `D0EvaluationRunner` erweitert. Er kopiert die Pkl, startet eine begrenzte kopflose
   FSM-Evaluation, vergleicht In-Process-Manifeste und den Pkl-Hash und schreibt ein maschinell
