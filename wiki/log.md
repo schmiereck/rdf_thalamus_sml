@@ -2,6 +2,8 @@
 
 ## 2026-09-18
 
+* **Technische Validierung**: [D0 Seed 17](/befunde/dream-rsi-d0-seed17-block60.md) - der erste 60er-Block ist kein Lernbefund: sein neuer Filter liess `sicher geliefert` aus und meldete daher 4 statt 40 gueltige Selbst-Kredite. Die Rohdaten erreichen nach dem getesteten Filter fuenf Wrist-Zellen, bleiben aber nur Werkzeugvalidierung; Seed 17 wird auf neuer Kopie wiederholt.
+
 * **Bau**: [D0-Integritaet](/mechanismen/dream-rsi-d0-integritaet.md) um den isolierten
   Trainingslinien-Runner ergaenzt. Er schreibt nur eine neue Checkpoint-Kopie, filtert die
   vorab definierten Selbst-Kredite und prueft die Wrist-Abdeckung an den 60-/120-Episoden-

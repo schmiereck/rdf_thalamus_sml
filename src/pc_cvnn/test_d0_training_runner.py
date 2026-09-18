@@ -15,7 +15,9 @@ def main() -> None:
     assert wrist_bin(180.0) == 0
     records = [
         {"action_source": "Selbst", "label_source": "Selbst", "weight": 1.0,
-         "route": "Griff am Objekt fehlgeschlagen (Aktion)", "relative_wrist_deg": 0.0},
+         "route": "sicher geliefert", "relative_wrist_deg": 0.0},
+        {"action_source": "Selbst", "label_source": "Selbst", "weight": 1.0,
+         "route": "Griff am Objekt fehlgeschlagen (Aktion)", "relative_wrist_deg": 22.5},
         {"action_source": "Selbst", "label_source": "Selbst", "weight": 1.0,
          "route": "Griff hielt nicht (Drucksensor)", "relative_wrist_deg": 45.0},
         {"action_source": "Selbst", "label_source": "Welt", "weight": 1.0,
@@ -24,9 +26,9 @@ def main() -> None:
          "route": "Griff am Objekt fehlgeschlagen (Aktion)", "relative_wrist_deg": 135.0},
     ]
     summary = credit_summary(records)
-    assert summary["all_records"] == 4
-    assert summary["eligible_records"] == 2
-    assert summary["wrist_bins"] == [0, 2]
+    assert summary["all_records"] == 5
+    assert summary["eligible_records"] == 3
+    assert summary["wrist_bins"] == [0, 1, 2]
     print("D0 training runner: OK")
 
 

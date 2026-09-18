@@ -20,7 +20,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ACT23 = ROOT / "src" / "pc_cvnn" / "pc_act23.py"
-CAUSAL_ROUTES = {"Griff am Objekt fehlgeschlagen (Aktion)", "Griff hielt nicht (Drucksensor)"}
+# Positive delivery is an action outcome too.  Excluding it would count only rare failures and
+# falsely reject a line whose own wrist experiences are mostly successful.
+CAUSAL_ROUTES = {"sicher geliefert", "Griff am Objekt fehlgeschlagen (Aktion)",
+                 "Griff hielt nicht (Drucksensor)"}
 
 
 def sha256(path: Path) -> str:

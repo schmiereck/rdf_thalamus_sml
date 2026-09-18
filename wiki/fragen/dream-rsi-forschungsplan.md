@@ -108,7 +108,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 
 | Paket | Inhalt | Voraussetzung | Status | Befund / Entscheidung |
 |---|---|---|---|---|
-| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | pruefbereit | Formpiloten verworfen; [Wrist-Lernaufgabe](/messungen/dream-rsi-d0-wrist-lernaufgabe.md) v1 fixiert, Audit/Runner gebaut; [L-Preflight](/befunde/dream-rsi-d0-preflight-mutation.md) besteht mit leerem Lernzustands-Diff |
+| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | in Arbeit | Vertrag v1 fixiert und Freeze bestanden; erster Seed-17-Block ist [technische Runner-Validierung](/befunde/dream-rsi-d0-seed17-block60.md), kein Wirkungsbefund |
 | D1 | Beobachtung, Checkpoints, Neustart- und Nichtbeeinflussungsnachweis | D0 | offen | - |
 | D2 | Kleine Bibliothek echter Trainingslinien | D1 | offen | - |
 | D3 | Replay mit Abdeckungs- und Informationspruefung | D2 | offen | - |
