@@ -802,6 +802,30 @@ SOCKEL = os.environ.get("ACT23_SOCKEL", "0") == "1"
 # dort bleiben nur 72 bzw. 62 mm, und der Sockel verschmilzt mit einem Nachbarn.  Der
 # Startcheck rechnet das nach und nennt die beste Stelle fuer die eingestellte Slot-Zahl.
 SOCKEL_XY = [float(v) for v in os.environ.get("ACT23_SOCKEL_XY", "-0.018,0.149").split(",")]
+# =========================================================================================
+# LERNEN, OHNE ZU VERLERNEN -- drei Schalter aus wiki/befunde/policy-lernt-hoehe-als-ort.md.
+# Der erste Lernlauf zum Stapeln hatte zwei Konstruktionsfehler, und beide sind hier behoben:
+#
+# (1) AUFGABEN MISCHEN (ACT23_ZIEL_MISCH=p, Vorgabe aus).  100 % Stapel-Episoden haben alle
+#     Tisch-Erfahrung ausser dem geschuetzten Kern aus dem Puffer verdraengt, und die gewoehnliche
+#     Ablage lag danach 12-15 mm zu hoch.  Mit p wird je Episode gewuerfelt: mit Wahrscheinlichkeit
+#     p "auf den Sockel", sonst die Marker-Ablage.  Ein Kind, das stapeln lernt, hoert nicht auf,
+#     Dinge auf den Tisch zu legen.
+# (2) DER SOCKEL WANDERT (ACT23_SOCKEL_WANDERT=1).  Er stand immer an derselben Stelle, und damit
+#     war die Ablagehoehe vollstaendig mit dem Zielort verwechselt: die Policy lernte "dort hoeher
+#     ablegen", nicht "so hoch wie die Auflage" (+25 mm statt +8 in der kontrafaktischen Probe).
+#     Mit jeder neuen Szene bekommt er eine neue Stelle mit >= 80 mm Freiraum zu den stehenden
+#     Objekten (gemessene Verschmelzungsschranke, wiki/befunde/sockel-braucht-80mm-freiraum.md).
+#     BRAUCHT ACT23_SCENE_N=3: mit vier Objekten bleiben nur +-12 mm Spielraum -- weniger als die
+#     Wahrnehmung ohnehin streut --, mit dreien +-85 mm in x und 100 mm in y.
+# (3) SOCKELHOEHEN (ACT23_SOCKEL_HOEHEN="6,10,14" in mm, Vorgabe "8").  Mit EINER Hoehe kennt die
+#     14. Zustandsspalte nur zwei Werte, Tisch oder Sockel -- sie ist ein Schalter, keine Groesse,
+#     und "Ablagehoehe = Auflagenhoehe" ist als Funktion gar nicht lernbar.  Mit mehreren Hoehen
+#     wird die Probe scharf: gelernt heisst, die Zielhoehe steigt mit Steigung 1 in der Hoehe.
+_zm = os.environ.get("ACT23_ZIEL_MISCH", "").strip()
+ZIEL_MISCH = float(_zm) if _zm else None
+SOCKEL_WANDERT = os.environ.get("ACT23_SOCKEL_WANDERT", "0") == "1"
+SOCKEL_HOEHEN = [float(v) / 1000.0 for v in os.environ.get("ACT23_SOCKEL_HOEHEN", "8").split(",")]
 # LAUT SAGEN, WAS FEHLT -- nicht still mitschalten.  Ein Schalter, der einen zweiten heimlich
 # umlegt, macht jedes A/B mehrdeutig (dieselbe Regel wie bei AUGMENT/NEIGHBOURS und EIG_DIREKT).
 # "auf" braucht DREI fremde Schalter, und ohne sie ist es nicht wirkungslos, sondern STILL FALSCH:
@@ -2422,6 +2446,12 @@ def run_self_learning_steering(headless=False):
         state.ziel_bezug = None
         if state.ziel_modus != "koerper":
             return None
+        if ZIEL_MISCH is not None and ZIEL_RELATION == "auf" and float(crng.random()) >= ZIEL_MISCH:
+            # AUFGABENMISCHUNG (s. ZIEL_MISCH): diese Episode ist eine gewoehnliche Marker-Ablage.
+            # EIGENE Zeile, nicht [Zielwurf] -- das hier ist gewollt und kein gescheiterter Wurf; die
+            # Auswertung muss beides trennen koennen.
+            print("    [Ziel] Marker-Episode (Aufgabenmischung)", flush=True)
+            return None
         _a = state.selected()[1]
         if ZIEL_RELATION == "auf":
             # AUF etwas gestellt wird nur, was tragen kann -- die STUETZEN.  Ein 24-mm-Wuerfel auf
@@ -3307,7 +3337,47 @@ def run_self_learning_steering(headless=False):
         # Sockel" einen Blob, der den Stapel enthaelt.
         print("  [Sockel] Hinweis: ein abgelegtes Objekt bleibt oben liegen; ab dann ist der "
               "Sockel-Blob verschmolzen und die Zieladresse wird mehrdeutig.", flush=True)
-        scene["sockel"] = (_sxy.copy(), 0.004, 0.0)
+        scene["sockel"] = (_sxy.copy(), SOCKEL_HOEHEN[0] / 2.0, 0.0)
+
+    def _sockel_setzen(steht_xy):
+        """Den Sockel fuer eine NEUE SZENE setzen: Stelle und Hoehe (s. SOCKEL_WANDERT/_HOEHEN).
+
+        Ohne die beiden Schalter unveraendert -- dann bleibt er, wo er steht, und behaelt die erste
+        Hoehe.  Mit ihnen: Hoehe aus SOCKEL_HOEHEN gewuerfelt, Stelle aus einem Raster im Arbeitsraum
+        mit >= SOCKEL_FREI zu jedem STEHENDEN Objekt (nicht zu jedem Slot -- was geparkt ist, stoert
+        nicht) und ausserhalb der Sockelfreiheit des Arms.  Findet sich keine Stelle, bleibt die alte
+        und es wird laut gesagt -- ein stiller Rueckfall auf den festen Ort waere genau die
+        Verwechslung, die der Schalter beheben soll.
+        DIE HOEHE AENDERT DIE GEOMETRIE ZUR LAUFZEIT: geom_size[2] und geom_rbound.  Das ist fuer
+        EINEN Einzelkasten zulaessig (set_object_size deformiert nur zusammengesetzte Koerper, s.
+        Invarianten); rbound muss mit, sonst uebersieht die Kollisionsvorpruefung die neue Kante.
+        """
+        if not SOCKEL:
+            return
+        _bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "sockel")
+        _g = int(sim.m.body_geomadr[_bid])
+        _h = SOCKEL_HOEHEN[int(crng.integers(len(SOCKEL_HOEHEN)))] if len(SOCKEL_HOEHEN) > 1 \
+            else SOCKEL_HOEHEN[0]
+        sim.m.geom_size[_g][2] = _h / 2.0
+        sim.m.geom_rbound[_g] = float(np.linalg.norm(sim.m.geom_size[_g]))
+        _xy = np.asarray(scene["sockel"][0], float)
+        if SOCKEL_WANDERT:
+            from pc_cvnn.pc_act14 import REACH_XY as _RX
+            _kand = []
+            for _gx in np.linspace(_RX[0][0] + 0.035, _RX[1][0] - 0.035, 25):
+                for _gy in np.linspace(_RX[0][1] + 0.035, _RX[1][1] - 0.035, 25):
+                    _q = np.array([_gx, _gy])
+                    if float(np.linalg.norm(_q)) < 0.10:
+                        continue
+                    if all(float(np.linalg.norm(_q - np.asarray(s, float))) >= SOCKEL_FREI for s in steht_xy):
+                        _kand.append(_q)
+            if _kand:
+                _xy = _kand[int(crng.integers(len(_kand)))]
+            else:
+                print(f"  [Sockel] KEINE Stelle mit {1000 * SOCKEL_FREI:.0f} mm Freiraum -- bleibt, wo er "
+                      f"war.  Mit ACT23_SCENE_N=4 ist der Arbeitsraum dafuer zu klein.", flush=True)
+        scene["sockel"] = (_xy.copy(), _h / 2.0, 0.0)
+        print(f"  [Sockel] neue Szene: [{_xy[0]:+.3f},{_xy[1]:+.3f}], Hoehe {1000 * _h:.0f} mm", flush=True)
 
     # ERFAHRUNGS-GRUPPE fuer den Block-Bootstrap des Welt-Modells (s. world_model._bootstrap_blocks).
     # Eine Gruppe = eine STEHENDE SZENE innerhalb EINES Laufs.  Genau das ist die Einheit, ueber die
@@ -3404,6 +3474,7 @@ def run_self_learning_steering(headless=False):
         # Wuerfeln.  Ein Kommando auf ein geparktes Objekt stellt es weiterhin hin (keep enthaelt cmd).
         act16.OBJS = list(dict.fromkeys(nm for nm, _m in _steht))   # Koerper, nicht Adressen
         act16.SCENE_N = len(act16.OBJS)
+        _sockel_setzen([scene[nm][0] for nm, _m in _steht])   # Stelle + Hoehe je Szene (s. dort)
         place_all()
         open_set_glance()                                      # lifelong open-set look at the fresh scene
         if panel is not None:                                  # show the placed scene immediately (decide from it)
@@ -3559,7 +3630,8 @@ def run_self_learning_steering(headless=False):
             # Koerpernamen statt 0/1, und bestaetigt ist eine Klasse, wenn DERSELBE Koerper
             # BIND_CONFIRM-mal im Fenster auftaucht.  Ein Koerper, der schon eine Formklasse
             # traegt, kommt nicht in Frage -- sonst ueberschriebe die zweite Klasse die erste.
-            _frei = [o for o in scene if o not in state.SHAPE_KEY]
+            _frei = [o for o in scene if o not in state.SHAPE_KEY
+                     and o not in state.STUETZEN]      # Moebel bekommt keinen Knopf (s. STUETZEN)
             auf = {}
             for d in dets:
                 if d.get("pos") is None or d.get("shape") is None or not _frei:
@@ -3844,7 +3916,12 @@ def run_self_learning_steering(headless=False):
         sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
         schon = {nm for _l, nm, _m in state.OBJECTS}           # Koerper, die bereits einen Knopf haben,
         #   NICHT nochmal eintragen -- ein Doppeleintrag brachte run_combined aus dem Tritt
-        koerper = [nm for nm in scene if nm not in schon]
+        # STUETZEN NICHT UEBEN.  Die Formerkennung gibt der unbekannten 70-mm-Platte eine eigene junge
+        # Klasse, und ohne diese Zeile waehlte die Neugier sie als "namenlose Uebung" -- der Arm
+        # versuchte, den SOCKEL zu greifen (gesehen im Rauchtest 2026-09-19: "[InKlaue] sockel").
+        # Das ist der DRITTE Weg, auf dem Moebel zum Objekt werden koennte; die beiden anderen
+        # (state.OBJECTS, _direkt_adressieren) waren schon dicht.
+        koerper = [nm for nm in scene if nm not in schon and nm not in state.STUETZEN]
         out = []
         for d in dets:
             if d["shape"] not in offen or d["pos"] is None:
