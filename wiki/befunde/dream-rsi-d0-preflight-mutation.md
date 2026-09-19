@@ -29,6 +29,9 @@ sources:
   - id: fovea-fixed
     resource: ../../log/d0-evaluation/seed17/base-seed101-central-freeze-1ep/result.json
     title: Bestandener Gegenlauf nach zentralem Fovea-Freeze
+  - id: fovea-fixed40
+    resource: ../../log/d0-evaluation/seed17/base-seed101-central-freeze-40ep/result.json
+    title: Bestandene 40-Episoden-Freeze-Wiederholung
 ---
 
 # Behauptung
@@ -92,9 +95,10 @@ die der Audit vermutet hatte, und der getrennte Lernzustandsfingerabdruck besteh
 expliziten Wachen. Damit ist die notwendige D0-Voraussetzung fuer eine nichtlernende Kontrolle
 erfuellt.
 
-Die einzelne Episode traegt keinen Lern- oder Wirkungsnachweis. Als naechstes werden fuer die
-Wrist-Lernaufgabe Wiederholungen, Seeds, Budget und Abbruchregel festgelegt; erst dann darf der
-eingefrorene Evaluator als Kontrolle einer Lernserie dienen.
+Die einzelne Episode traegt keinen Lern- oder Wirkungsnachweis. Das Kontrolltor wurde danach
+mit der vorab vorgesehenen 40-Episoden-Familie wiederholt (siehe unten). Der naechste Schritt
+ist die fachliche Auswertung von Basis- und Seed-17-Trainingscheckpoint auf dieser Familie;
+erst dann darf die Wrist-Lernserie einen Wirkungsbefund beanspruchen.
 
 # Fovea-Regression und Reparatur
 
@@ -118,9 +122,18 @@ Der anschliessende echte Gegenlauf auf einer **neuen** Kopie der identischen D0-
 | Pkl-Quelle und -Kopie | beide `ad9d768c...c09b9e` |
 | Vollzustand | `fovea`, `latent_goal`, `runtime`, `self_eval`, `shape_clf`, `world` sichtbar veraendert |
 
-Das ist ein erneuter ein-episodiger Integritaetsnachweis, kein Ersatz fuer die zuvor fehlende
-40-Episoden-Freeze-Wiederholung. Erst diese Wiederholung darf das Kontrolltor fuer die D0-Serie
-wieder oeffnen.[^fovea-fixed]
+Die danach auf genau derselben Basis gefahrene 40-Episoden-Wiederholung besteht ebenfalls:
+
+| Pruefung | Ergebnis |
+|---|---|
+| Szenario | Seed 101, L-Form, FSM, 40 Episoden |
+| Lernzustand | **0 geaenderte Komponenten** |
+| Pkl-Quelle und -Kopie | beide `ad9d768c...c09b9e` |
+| Vollzustand | `bm`, `fovea`, `latent_goal`, `runtime`, `self_eval`, `shape_clf`, `world` sichtbar veraendert |
+
+Damit ist das D0-Freeze-Kontrolltor fuer die Seed-101-Testfamilie wieder offen. Es belegt nur
+Nichtmutation der Kontrolle, keine Wrist-Lernwirkung.[^fovea-fixed40]
 
 [^fovea-regression]: `log/d0-evaluation/seed17/base-seed101-fovea-diagnostic/result.json`
 [^fovea-fixed]: `log/d0-evaluation/seed17/base-seed101-central-freeze-1ep/result.json`
+[^fovea-fixed40]: `log/d0-evaluation/seed17/base-seed101-central-freeze-40ep/result.json`

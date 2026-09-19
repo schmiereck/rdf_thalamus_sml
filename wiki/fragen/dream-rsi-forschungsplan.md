@@ -108,7 +108,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 
 | Paket | Inhalt | Voraussetzung | Status | Befund / Entscheidung |
 |---|---|---|---|---|
-| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | in Arbeit | Vertrag v1 fixiert und Freeze bestanden; erster Seed-17-Block ist [technische Runner-Validierung](/befunde/dream-rsi-d0-seed17-block60.md), kein Wirkungsbefund |
+| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | in Arbeit | Vertrag v1 fixiert; Seed-101-Freeze-Kontrolle besteht nach Fovea-Reparatur ueber 40 Episoden. Seed-17-Training liegt vor, Wirkungsvergleich und Seed 29 fehlen |
 | D1 | Beobachtung, Checkpoints, Neustart- und Nichtbeeinflussungsnachweis | D0 | offen | - |
 | D2 | Kleine Bibliothek echter Trainingslinien | D1 | offen | - |
 | D3 | Replay mit Abdeckungs- und Informationspruefung | D2 | offen | - |

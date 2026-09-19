@@ -34,7 +34,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [D0: Ungebunden ist nicht unbekannt](befunde/dream-rsi-d0-lernaufgabe.md) - gewachsen kein Y-Lernen; frisch schnelle Y-Erkennung mit T-Verwechslung, beide Pilotvarianten ungeeignet; D0-Tor offen
 * [D0: Y/T-Trennbarkeit](befunde/dream-rsi-yt-trennbarkeit.md) - lokales Deskriptorsignal vorhanden, aber 59/64 T-Sichten von einer Dreisicht-Y-Klasse beansprucht; keine geeignete D0-Lernaufgabe
 * [D0-Wrist-Audit](befunde/dream-rsi-d0-wrist-audit.md) - objektrelatives Gitter und kausale Negativkredite vorhanden; D0 braucht einen eigenen nichtmutierenden Evaluator und Selbst-Labels
-* [D0-Preflight: Lernzustand eingefroren](befunde/dream-rsi-d0-preflight-mutation.md) - ein 40er-Audit fand Fovea-Mutation; zentraler Fovea-Freeze besteht den erneuten Ein-Episoden-Gegenlauf, 40er-Wiederholung steht aus
+* [D0-Preflight: Lernzustand eingefroren](befunde/dream-rsi-d0-preflight-mutation.md) - ein 40er-Audit fand Fovea-Mutation; zentraler Fovea-Freeze besteht Ein- und 40-Episoden-Gegenlauf ohne Lernmutation
 * [D0 Seed 17: technische Runner-Validierung](befunde/dream-rsi-d0-seed17-block60.md) - positive Selbst-Lieferungen fehlten im ersten Filter; Rohdaten zeigen Abdeckung, werden aber nicht als Linie gewertet
 * [Exekutionsvarianz](befunde/exekutionsvarianz.md) - ICC 0,61, Obergrenze 82 % gegen Grundrate 54 %; der Deckel sitzt in der Situationsrepraesentation
 * [1109 Episoden ohne Lernfortschritt](befunde/langlauf-ohne-fortschritt.md) - 43 h GUI-Lauf, vier unabhaengige Groessen flach

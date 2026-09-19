@@ -6,7 +6,7 @@
   der gefrorene 40-Episoden-Test fand eine Fovea-Lernmutation (1883 W, 65 V). Der isolierte
   `learn=False`-Test besteht; `HexFovea` erzwingt deshalb im D0-Modus zentral einen
   schreibgeschuetzten Schritt. Ein neuer FSM-L-Form-Gegenlauf auf eigener Pkl-Kopie besteht mit
-  **0 Lernzustandsdifferenzen**. Das 40-Episoden-Kontrolltor ist noch einmal zu wiederholen.
+  **0 Lernzustandsdifferenzen**, auch ueber die volle Seed-101-Familie von 40 Episoden.
 
 ## 2026-09-18
 
