@@ -96,6 +96,12 @@ stammt aus einer fruehen Phase mit fast festem Zielort (y 109 +- 1,6 mm).
 Bei ck100 erholt sich der Tischfehler teilweise (7,9 mm). Ob das eine Stabilisierung ist oder
 Zufall eines Zwischenstands, sagt eine Messung mit vier Punkten nicht.
 
+> **NACHTRAG 2026-09-19:** die Folge fuer die Tischablage ist NICHT sicher belegt. Im gemischten
+> Lauf schwankt derselbe Fehler auf den aktuellen Tischzeilen zwischen 3,0 und 14,6 mm, ohne
+> stetigen Trend ([Gemischt lernen](/befunde/gemischt-lernen-erster-lauf.md)). Die 12-15 mm oben
+> sind auf ALTEN Zustaenden gemessen und koennen ebenso Refit-Unruhe sein. Belegt bleibt die
+> Verdraengung selbst (24000 -> 8095 Tischzeilen).
+
 # Was daraus folgt
 
 Zwei Konstruktionsfehler des Lernlaufs, beide mit klarer Abhilfe:

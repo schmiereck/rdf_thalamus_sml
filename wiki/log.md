@@ -7,6 +7,20 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-19
 
+* **Anlage**: [Gemischt lernen, erster Lauf](/befunde/gemischt-lernen-erster-lauf.md) - nach
+  Nutzervorgabe "auf jeden Fall gemischt": drei neue Schalter (`ACT23_ZIEL_MISCH`,
+  `ACT23_SOCKEL_WANDERT`, `ACT23_SOCKEL_HOEHEN`), 100 Episoden halb Stapeln halb Tisch, Sockel
+  wandernd mit 6/10/14 mm, `SCENE_N=3`. **Die Mischung haelt die alte Aufgabe im Puffer** (16000
+  statt 8095 Tischzeilen). **Die Hoehe wird abgestuft genutzt** (Zielhoehe steigt in jedem Stand
+  monoton mit h), **aber nicht als Funktion**: Steigung 2,2-2,3, dann 1,0 mit +13 mm Versatz,
+  R2 < 0,3. **Die Tischablage schwankt** auf den aktuellen Tischzeilen 14,6 -> 3,0 -> 9,7 mm - kein
+  stetiges Verlernen, sondern ein unruhiger Refit; die "12-15 mm zu hoch" des ersten Laufs sind
+  deshalb auf der alten Seite als nicht sicher belegt nachgetragen. **Der messbare Grund:** nur 10
+  Sockel-Szenen in 100 Episoden (`SCENE_EVERY=10`), die Spalte korreliert noch mit dem Zielort
+  (r = -0,54 / +0,65). Unterwegs zwei weitere Wege dicht gemacht, auf denen Moebel zum Objekt
+  wurde: die namenlose Uebung (im Rauchtest griff der Arm nach dem Sockel, weil die Formerkennung
+  ihm eine junge Klasse gab) und `_try_bind` mit `FREIE_VERGABE`.
+
 * **Anlage**: [Die Policy lernt die Ablagehoehe - als Ort](/befunde/policy-lernt-hoehe-als-ort.md) -
   Frage 2, gemessen. Ein Lauf, 20 + 30 + 50 Episoden, Teacher fahrend mit korrigiertem Etikett,
   offline am Netz geprobt ueber vier Zwischenstaende. **Die Policy reagiert auf die 14. Spalte schon
