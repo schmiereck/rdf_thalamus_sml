@@ -235,13 +235,28 @@ def reactive_subgoal(state):
         lift_thresh = obj_h + 0.014                       # "lifted off the table" relative to its height
     else:
         grasp_z, carry_z, lift_thresh = GRASP_Z, CARRY_Z, 0.028
+    # DIE AUFLAGE AM ZIEL (Stufe 2, ACT16_GOAL_Z).  Der Zustand traegt dann als 14. Wert die
+    # Ablagehoehe tgt_z = GRASP_Z + Oberkante der Auflage.  OHNE DIESE ZEILEN WIDERSPRACH DER TEACHER
+    # SEINER EIGENEN AUSFUEHRUNG: die FSM legte auf der Auflage ab, choreo_log etikettiert aber JEDEN
+    # besuchten Zustand mit dieser Funktion -- und die sagte "auf grasp_z absenken", also auf
+    # Tischhoehe, in den Sockel hinein.  Aus jedem gelungenen Stapel haette die Policy das Gegenteil
+    # gelernt (wiki/befunde/teacher-widerspricht-dem-stapel.md).
+    # NUR UEBER DEM ZIEL: nur dort steht die Auflage.  Die Hoehe verschiebt dort ZWEI Groessen --
+    # die Ablagehoehe, und die Hub-Schwelle: ein Objekt, das auf der Auflage aufsetzt (Mitte 20 mm),
+    # laege sonst unter lift_thresh (26 mm), gaelte als "nicht mehr gehoben", und der Greifzweig
+    # zielte auf grasp_z -- wieder in den Sockel.
+    # VERHALTENSNEUTRAL ohne ACT16_GOAL_Z: dann hat der Zustand 13 Werte und h_auf ist 0.
+    h_auf = max(0.0, float(state[13]) - GRASP_Z) if len(state) >= 14 else 0.0
+    if h_auf > 0.0 and np.linalg.norm(c - t) < NEAR:
+        lift_thresh = lift_thresh + h_auf
+    place_z = grasp_z + h_auf
     grasped = (cz > lift_thresh) and (j5 < J5_CLOSED_TH)  # object lifted off the table AND gripper closed
     if grasped:                                           # CARRY -> place -> release
         if np.linalg.norm(hxy - t) > NEAR:               # carry over the target
             return np.array([tx, ty, carry_z, J5_GRIP])
-        if hz > grasp_z + 0.012:                          # lower onto the target
-            return np.array([tx, ty, grasp_z, J5_GRIP])
-        return np.array([tx, ty, grasp_z, J5_OPEN])       # release
+        if hz > place_z + 0.012:                          # lower onto the target (or its SUPPORT)
+            return np.array([tx, ty, place_z, J5_GRIP])
+        return np.array([tx, ty, place_z, J5_OPEN])       # release
     # (Ein gefuehlter LEERGRIFF -- Backenwinkel + Fingerdruck statt Hub-Hoehe -- stand hier und ist
     #  nach der Messung wieder entfernt: +0.4 Punkte bei p=1.000, s. die TASTDIAG-Notiz oben.)
     # RETRY a MISSED grasp instead of dragging the cube to the foot (obs 4): if the gripper is closed and

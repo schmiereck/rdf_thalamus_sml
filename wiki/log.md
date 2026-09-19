@@ -7,6 +7,27 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-19
 
+* **Anlage**: [Der Teacher widersprach dem Stapel](/befunde/teacher-widerspricht-dem-stapel.md) -
+  **vor** dem Lernlauf fuer Frage 2 geprueft, ob die Policy die Ablagehoehe ueberhaupt lernen KANN.
+  Sie konnte es nicht. `choreo_log` etikettiert jeden besuchten Zustand mit `reactive_subgoal`,
+  **auch in FSM-Laeufen** und ausdruecklich unter Verzicht auf die Aktion der FSM; diese Funktion las
+  aber nur `state[:11]` - die Ablagehoehe an Stelle 14 nie. Das Etikett kommandierte bei jeder
+  Absenkung auf den Sockel **18 mm** (in die Platte hinein) und oeffnete bei 30 mm, waehrend die FSM
+  auf 26 mm zielte. Praezisiert gegen meine erste Formulierung: die Policy haette nicht zwingend
+  "gelernt, den Stapel in den Sockel zu rammen" (die Platte stoppt die Hand physisch), **der strikte
+  Punkt ist, dass `aim_z` im Etikett unabhaengig von der 14. Spalte war** - Frage 2 war in dieser
+  Form unbeantwortbar. **Korrektur:** `place_z = grasp_z + Auflagenhoehe`, und - beim Bauen nicht
+  offensichtlich - auch die Hub-Schwelle wandert mit, aber nur ueber dem Ziel, sonst gilt ein auf
+  der Auflage aufsetzendes Objekt als "nicht mehr gehoben" und der Greifzweig zielt wieder auf
+  Tischhoehe. Der neue Teacher oeffnet 12 mm ueber der Ablagehoehe, **dieselbe Marge wie auf dem
+  Tisch**. Gegen den echten alten Code: **0 Abweichungen auf 36000 echten Pufferzeilen**, auch mit
+  14. Spalte = GRASP_Z. Die Live-Datei ist sauber (alle Stapel-Laeufe auf Kopien), die Messungen
+  der Linie unberuehrt (Teacher folgt der FSM, nicht den Etiketten). Neuer Messplan fuer Frage 2:
+  **kontrafaktische Probe am Netz** statt Freeze - echte Ablagezustaende, nur die 14. Spalte
+  getauscht, `aim_z` vergleichen; vorher ist die Differenz exakt 0. Falle, die trotz Wiki-Eintrag
+  zuschlug: in der `pc_cvnn`-Variante ist `J5_CLOSED_TH = 0,27`, meine erste Probe hielt `j5 = 0,30`
+  fuer geschlossen.
+
 * **Ergaenzung**: [Der Arm stapelt](/befunde/stapeln-gemessen.md) - **das korrigierte A/B**, beide
   Arme mit `EIG_DIREKT` + `EIG_STETIG`, je 100 Episoden, Teacher fahrend. **45 von 100 Episoden enden
   in einem Stapel** (83 % der Ablagen mit Sockelziel, Versatz Median 17 mm), gegen 49 Lieferungen
