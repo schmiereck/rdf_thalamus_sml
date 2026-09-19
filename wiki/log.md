@@ -7,6 +7,24 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-19
 
+## 2026-09-20
+
+* **Anlage**: [Die Policy legt auf jeder Sockelhoehe richtig ab](/befunde/gemischt-lernen-zweiter-lauf.md) -
+  zweiter gemischter Lauf, 200 Episoden, Szenenwechsel alle zwei Episoden und damit **100
+  Kombinationen aus Sockelort und -hoehe** statt 10. **Die Verwechslung mit dem Zielort ist
+  gebrochen:** Korrelation der Hoehenspalte mit dem Ort +0,00 / -0,06 (vorher -0,54 / +0,65),
+  Ortsstreuung +-47 / +-25 mm. **In ihrer eigenen Verteilung trifft die Policy alle drei
+  Sockelhoehen**, und der Fehler faellt stetig: +5/+6/+9 mm nach 50 Episoden, **+0/+4/+2 mm nach
+  200** - so genau wie ihre Tischablage (+5,4 mm). 65 Stapel gelungen, 10 daneben. **Aber es ist
+  keine uebertragbare Funktion:** die kontrafaktische Probe zeigt weiter Steigung ~2 statt 1 bei
+  R2 < 0,32 - an Orten, an denen nie ein Sockel stand, ueberschiesst sie. Ungeprueft, aber
+  naheliegend: die Hoehenspalte ist nicht der einzige Hinweis, die gemessene Objekthoehe traegt
+  dieselbe Information, und die Probe aendert nur eine von beiden. **Die Tischablage haelt** auf
+  aktuellen Zeilen (4,7 -> 9,7 -> 6,7 -> 9,2 -> 6,2 mm); auf dem alten festen Probenset (Szenen mit
+  vier Objekten, die es hier nicht mehr gibt) faellt sie auf 21-31 mm - beide Zahlen stimmen, der
+  Unterschied ist die Aussage. Naechster Schritt: ein `ACT23_CHOREO=netz`-Lauf, also ob die Policy
+  selbst fahrend stapelt.
+
 * **Anlage**: [Gemischt lernen, erster Lauf](/befunde/gemischt-lernen-erster-lauf.md) - nach
   Nutzervorgabe "auf jeden Fall gemischt": drei neue Schalter (`ACT23_ZIEL_MISCH`,
   `ACT23_SOCKEL_WANDERT`, `ACT23_SOCKEL_HOEHEN`), 100 Episoden halb Stapeln halb Tisch, Sockel
