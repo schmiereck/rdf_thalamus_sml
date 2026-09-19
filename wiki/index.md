@@ -24,7 +24,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Wahrnehmungs-Splits](mechanismen/wahrnehmungs-splits.md) - verschmolzene Blobs, drei Reparaturen, der am besten belegte Gewinn der Wahrnehmungslinie
 * [Formklassen-Lebenszyklus](mechanismen/formklassen-lebenszyklus.md) - Geburt, namenloses Fenster, Bindung, Anspruch, Verhungern, Einfrieren
 * [Kredit und Selbst-Urteil](mechanismen/kredit-und-selbsturteil.md) - der Agent beurteilt sich selbst und verteilt die Schuld; drei Regeln aus drei Vergiftungen
-* [D0-Integritaet](mechanismen/dream-rsi-d0-integritaet.md) - Voll- und Lernzustandsfingerabdruck, Kredit-JSONL, Freeze-Preflight und isolierte Trainingslinien
+* [D0-Integritaet](mechanismen/dream-rsi-d0-integritaet.md) - Voll- und Lernzustandsfingerabdruck, vollstaendige Episoden- und Kreditprotokolle, Freeze-Preflight und isolierte Trainingslinien
 * [Fovea und Blicksteuerung](mechanismen/fovea-und-blick.md) - detektorfreier Blick, Drift 38 → 8,5 px; kein Lieferhebel
 * [Eigenschafts-Kommando](mechanismen/eigenschafts-kommando.md) - Farbe + Form + Groesse statt Name; Eindeutigkeit ist nicht Richtigkeit
 * [Ports und Takte](mechanismen/ports-und-takte.md) - der Port-Umbau und die Bitgleichheits-Pruefung; Traegheit nur im Planer

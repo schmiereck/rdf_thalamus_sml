@@ -102,6 +102,11 @@ Szenenliste: gleiche Seedfamilie bedeutet deshalb dieselbe Auto-Schleifen-Initia
 einer frischen, eingefrorenen Kopie, nicht den behaupteten Bit-fuer-Bit-Simulatorzustand.
 Das ist als Pilotgrenze zu berichten, nicht wegzunormieren.
 
+Fuer jede Testepisode muss das getrennte `episodes.jsonl` die ausgefuehrte Aktion enthalten,
+auch wenn die Kreditroute sich enthaelt. Der Anteil ausgerichteter Wahl wird aus **allen 40**
+gefalteten relativen Wrists bestimmt; Kreditzeilen allein sind dafuer unzulaessig, weil sie
+gezielt nicht-kausale Aktionen auslassen.
+
 **Technische Abbruchregel:** Nach 60 Trainingsfolgen wird die Linie als technisch unzureichend
 geschlossen, wenn weniger als 20 primaere Selbst-Kreditzeilen oder weniger als vier belegte
 relative Wrist-Gitterzellen vorliegen. Nach 120 Folgen gilt dasselbe mit 40 Zeilen bzw. vier

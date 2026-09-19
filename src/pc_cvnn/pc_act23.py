@@ -338,6 +338,10 @@ D0_FREEZE = os.environ.get("ACT23_D0_FREEZE", "0") == "1"
 # D0 writes structured credit lines only when an explicit disposable artifact path is supplied.
 # The normal human-readable log and all default behaviour remain unchanged.
 D0_CREDIT_JSONL = os.environ.get("ACT23_D0_CREDIT_JSONL", "")
+# One immutable record per executed D0 episode.  Unlike credit.jsonl this also retains the
+# action for an intentional abstention, so evaluation can measure the selected wrist rather
+# than only the subset that the world model was allowed to learn from.
+D0_EPISODE_JSONL = os.environ.get("ACT23_D0_EPISODE_JSONL", "")
 D0_MANIFEST_DIR = os.environ.get("ACT23_D0_MANIFEST_DIR", "")
 # MuJoCo selbst ist deterministisch: bleibt das Objekt liegen und der Arm kehrt in dieselbe
 # Ruhelage zurueck, wiederholt sich eine Episode BIS AUF DEN MILLIMETER (im Rauchtest gemessen:
@@ -5488,6 +5492,21 @@ def run_self_learning_steering(headless=False):
         else:                                                   # old gate: FSM only, privileged label
             outcome = bool(res.get("ok", False)) if not use_net else None
             route = "FSM" if not use_net else "Netz (aus)"
+        if D0_EPISODE_JSONL and fe is not None and a_exec is not None:
+            # The action trace is deliberately independent of credit eligibility.  A policy
+            # abstention is no world-model training data, but it remains an executed wrist choice
+            # and therefore belongs in the D0 before/after metric.
+            _yaw_trace = 0.5 * np.arctan2(float(fe[3]), float(fe[2]))
+            _rel_trace = abs((np.degrees(wrist_of(a_exec) - _yaw_trace) + 90.0) % 180.0 - 90.0)
+            _d0_append_credit(D0_EPISODE_JSONL, {
+                "schema": "act23-d0-episode-v1", "body": body, "action_source": "Selbst",
+                "label_source": lbl_src, "route": route, "credit_outcome": outcome,
+                "self_delivered": bool(delivered), "world_delivered": bool(res.get("ok", False)),
+                "self_found": bool(s_found), "frozen": bool(EXV_FREEZE or D0_FREEZE),
+                "wrist_deg": float(np.degrees(wrist_of(a_exec)) % 180.0),
+                "relative_wrist_deg": float(_rel_trace), "grip": float(a_exec[4]),
+                "gentle": bool(a_exec[5] > 0.5), "self_distance_m": s_d,
+            })
         if fe is not None and outcome is not None:
             if a_exec is not None:
                 a_obs, src = a_exec, "Selbst"

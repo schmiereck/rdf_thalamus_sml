@@ -76,11 +76,18 @@ def main() -> None:
             "episode": 1, "label_source": "Selbst", "route": "Griff hielt nicht",
             "outcome": False, "wrist_deg": 22.5, "weight": 1.0,
         })
+        append_credit(root / "episodes.jsonl", {
+            "schema": "act23-d0-episode-v1", "route": "nicht gegriffen (Policy)",
+            "credit_outcome": None, "relative_wrist_deg": 45.0,
+        })
         manifest = json.loads((root / "before.json").read_text(encoding="utf-8"))
         credit = json.loads((root / "credit.jsonl").read_text(encoding="utf-8"))
+        episode = json.loads((root / "episodes.jsonl").read_text(encoding="utf-8"))
         assert manifest["context"]["seed"] == 1703
         assert credit["schema"] == "act23-d0-credit-v1"
         assert credit["label_source"] == "Selbst"
+        assert episode["schema"] == "act23-d0-episode-v1"
+        assert episode["credit_outcome"] is None
     print("D0 integrity: OK")
 
 

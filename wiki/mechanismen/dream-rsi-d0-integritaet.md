@@ -55,6 +55,13 @@ Aktions- und Labelquelle, Route, Ausgang, Gewicht, Wrist und relativen Wrist, Gr
 Distanz, Einfrierstatus und Pufferzeilen. Ohne den Schalter wird keine Datei angelegt und der
 Steuerpfad bleibt unveraendert.
 
+`ACT23_D0_EPISODE_JSONL=<wegwerfbarer Pfad>` schreibt davon getrennt genau eine Zeile fuer
+jede D0-Episode mit der **ausgefuehrten** Selbstaktion, gefaltetem relativem Wrist, Selbst- und
+Welturteil sowie Kreditroute. Auch eine Enthaltung (`credit_outcome: null`) bleibt enthalten.
+Diese Zeilen sind kein Lernpuffer und werden nur auf dem wegwerfbaren Evaluationspfad erzeugt.
+Der Runner verlangt ihre Anzahl gleich der Episodenzahl; eine unvollstaendige Auswertung kann
+damit nicht mehr unbemerkt eine Auswahlmetrik nur auf kreditfaehigen Episoden berichten.
+
 # Pruefung
 
 `src/pc_cvnn/test_d0_integrity.py` hat Komponentenfingerabdruck, erkannte Weltmodellmutation,

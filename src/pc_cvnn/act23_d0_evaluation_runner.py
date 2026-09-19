@@ -80,6 +80,7 @@ def main() -> int:
         "ACT23_AUTO_N": str(args.episodes), "ACT23_STATE_PATH": str(copied),
         "ACT23_NO_PERSIST": "1", "ACT23_D0_MANIFEST_DIR": str(manifests),
         "ACT23_D0_CREDIT_JSONL": str(output / "credit.jsonl"),
+        "ACT23_D0_EPISODE_JSONL": str(output / "episodes.jsonl"),
         "ACT23_CHOREO": "fsm", "ACT23_AUTO_CURIOUS": "0", "ACT23_AUTO_OBJ": args.object,
     })
     env.update(dict(args.set))
@@ -93,6 +94,9 @@ def main() -> int:
               "source_sha256": input_hash, "copied_sha256_before": copied_hash_before,
               "copied_sha256_after": sha256(copied), "episodes": args.episodes, "object": args.object,
               "settings": {key: env[key] for key in sorted(env) if key.startswith("ACT23_D0_")}}
+    episode_path = output / "episodes.jsonl"
+    result["episode_record_count"] = (sum(1 for line in episode_path.read_text(encoding="utf-8").splitlines()
+                                           if line.strip()) if episode_path.is_file() else 0)
     try:
         before = json.loads((manifests / "before.json").read_text(encoding="utf-8"))
         after = json.loads((manifests / "after.json").read_text(encoding="utf-8"))
@@ -101,7 +105,8 @@ def main() -> int:
         result["learning_details"] = {"before": before.get("learning_details", {}),
                                       "after": after.get("learning_details", {})}
         result["passed"] = completed.returncode == 0 and not result["changed_learning_components"] and \
-            result["copied_sha256_before"] == result["copied_sha256_after"]
+            result["copied_sha256_before"] == result["copied_sha256_after"] and \
+            result["episode_record_count"] == args.episodes
     except FileNotFoundError as error:
         result["passed"] = False
         result["error"] = f"missing manifest: {error.filename}"

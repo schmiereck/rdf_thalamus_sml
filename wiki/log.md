@@ -2,6 +2,12 @@
 
 ## 2026-09-19
 
+* **Messluecke geschlossen**: [D0-Integritaet](/mechanismen/dream-rsi-d0-integritaet.md) und
+  [D0-Wrist-Lernaufgabe](/messungen/dream-rsi-d0-wrist-lernaufgabe.md) verlangen nun ein
+  getrenntes `episodes.jsonl` fuer alle ausgefuehrten Aktionen. Die erste Seed-17-Auswertung
+  liefert 21/40 wie die Basis, protokollierte aber nur 32 Kreditzeilen und kann daher die
+  primaere Wrist-Auswahlmetrik nicht beantworten. Kein Wirkungsurteil vor der Wiederholung.
+
 * **Reparatur und Preflight**: [D0-Zustandsmutation](/befunde/dream-rsi-d0-preflight-mutation.md) -
   der gefrorene 40-Episoden-Test fand eine Fovea-Lernmutation (1883 W, 65 V). Der isolierte
   `learn=False`-Test besteht; `HexFovea` erzwingt deshalb im D0-Modus zentral einen

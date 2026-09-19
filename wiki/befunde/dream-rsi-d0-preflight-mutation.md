@@ -134,6 +134,19 @@ Die danach auf genau derselben Basis gefahrene 40-Episoden-Wiederholung besteht 
 Damit ist das D0-Freeze-Kontrolltor fuer die Seed-101-Testfamilie wieder offen. Es belegt nur
 Nichtmutation der Kontrolle, keine Wrist-Lernwirkung.[^fovea-fixed40]
 
+# Erste Seed-17-Auswertung: noch kein Wirkungsurteil
+
+Die gefrorene Seed-101-Auswertung des 120-Episoden-Seed-17-Checkpoints besteht ebenfalls ihre
+Integritaetspruefung: 40 Episoden, 0 Lernzustandsdifferenzen und bitgleiche Checkpoint-Kopie.
+Gegen die Basis liefert sie in dieser Familie ebenfalls 21/40. Das Selbsturteil meldet 21 statt
+23 positive Episoden der Basis. Damit liegt kein Liefergewinn vor.
+
+Die damals vorhandene `credit.jsonl` enthaelt aber nur 32 von 40 Episoden, weil acht
+Enthaltungen absichtlich keine Weltmodellzeile erhalten. Ihr Wrist darf nicht still aus der
+primaeren Auswahlquote verschwinden. Deshalb ist dieser Vergleich **kein** Urteil ueber
+ausgerichtete Wahl und kein D0-Wirkungsbefund. Der Evaluator schreibt nun ein getrenntes,
+vollstaendiges Episodenprotokoll; Basis und Checkpoint werden damit erneut gemessen.
+
 [^fovea-regression]: `log/d0-evaluation/seed17/base-seed101-fovea-diagnostic/result.json`
 [^fovea-fixed]: `log/d0-evaluation/seed17/base-seed101-central-freeze-1ep/result.json`
 [^fovea-fixed40]: `log/d0-evaluation/seed17/base-seed101-central-freeze-40ep/result.json`
