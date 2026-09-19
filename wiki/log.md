@@ -7,6 +7,23 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-19
 
+* **Anlage**: [Die Policy lernt die Ablagehoehe - als Ort](/befunde/policy-lernt-hoehe-als-ort.md) -
+  Frage 2, gemessen. Ein Lauf, 20 + 30 + 50 Episoden, Teacher fahrend mit korrigiertem Etikett,
+  offline am Netz geprobt ueber vier Zwischenstaende. **Die Policy reagiert auf die 14. Spalte schon
+  nach 20 Episoden** (vorher exakt 0 - Bauart: konstante Spalte, Gradient 0, Gewichte null) und
+  trifft die Stapelhoehe **in ihrer eigenen Verteilung** auf 4,6 mm (Netz 28,3 gegen Etikett
+  25,6 mm). **Aber die Spalte allein verschiebt die Zielhoehe um +25 statt +8 mm**, das Dreifache.
+  Ursache: der Sockel steht immer an derselben Stelle, Stapelzeilen haben Zielort
+  (-19,8 +- 6,5 | 151,9 +- 8,7) mm - **Spalte und Ort sind vollstaendig verwechselt**, die Policy hat
+  "dort hoeher ablegen" gelernt, nicht "Ablagehoehe = Auflagenhoehe". **Und es kostet die alte
+  Aufgabe:** 100 Stapel-Episoden haben alle Tischzeilen ausser dem geschuetzten Kern aus dem Puffer
+  verdraengt (24000 -> 8095), und die Tisch-Absenkung liegt bei ck020/ck050 **12-15 mm zu hoch**
+  (|Fehler| 4,7 -> 16,8 -> 19,7 -> 7,9 mm). Zwei Abhilfen folgen direkt: **der Sockel muss wandern**
+  (erst dann traegt die Spalte die Hoehe allein) und **Aufgaben mischen statt ersetzen**. Nebenbei
+  geprueft und verworfen: meine Sorge, eine konstante Spalte explodiere nach der Normierung (isd
+  1e-6, Faktor 8000) - sie haelt nicht, weil 8000 mal ein Gewicht von exakt null null ist. Nicht
+  gemessen: das Verhalten, also ob die Policy selbst fahrend stapelt.
+
 * **Anlage**: [Der Teacher widersprach dem Stapel](/befunde/teacher-widerspricht-dem-stapel.md) -
   **vor** dem Lernlauf fuer Frage 2 geprueft, ob die Policy die Ablagehoehe ueberhaupt lernen KANN.
   Sie konnte es nicht. `choreo_log` etikettiert jeden besuchten Zustand mit `reactive_subgoal`,
