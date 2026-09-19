@@ -106,6 +106,13 @@ gezaehlt. Der Sockel wurde auf 1-8 mm wahrgenommen.
 Das ist ein Rauchtest, **keine Quote**: n = 6, ein Seed, Teacher fahrend, und das Stapelurteil
 (`LIEGT DRAUF`) ist privilegiert gemessen (Objektmitte ueber der Auflage, Versatz unter 23 mm).
 
+# NACHTRAG 2026-09-19: ohne die klassenlose Adresse traegt der Bau nicht
+
+Das A/B zeigte, dass `auf` allein in 83 % der Episoden gar keine Adresse bekommt - der Sockel hat
+weder Farb- noch Formklasse. **`ACT23_EIG_DIREKT=1` und `ACT23_EIG_STETIG=1` sind fuer "auf"
+praktisch Pflicht**; damit gelingt der Wurf 20 von 20 und der Stapel 12 von 12. Siehe
+[Der Arm stapelt 19 von 20](/befunde/stapeln-gemessen.md).
+
 # Was als naechstes zu messen ist
 
 1. **Ein A/B gegen die Marker-Ablage** - traegt die Aufgabe ueberhaupt, und was kostet sie?

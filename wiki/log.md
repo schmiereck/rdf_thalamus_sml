@@ -5,6 +5,31 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-19
+
+* **Anlage**: [Der Arm stapelt 19 von 20](/befunde/stapeln-gemessen.md) - das Stapel-A/B (je 100
+  Episoden, Sockel in BEIDEN Armen, nur das Ziel verschieden) und zwei Diagnoselaeufe. **Das A/B
+  sah zuerst leer aus und war es nicht**: Quote 49 gegen 47 % (p = 0,89) und scheinbar 3 von 12
+  Stapeln. Beides falsch gelesen. Nur **17** von 100 Episoden bekamen ueberhaupt eine Adresse, nur
+  **9** loesten auf den Sockel auf - der Quotenvergleich ist also Marker gegen Marker. Und das
+  Stapelurteil war **mein Messfehler, zweifach**: es fiel schon, wenn der WURF gelang, auch wenn der
+  AUFLOESER danach still auf den Marker zurueckfiel (6 von 12 hatten gar nicht auf den Sockel
+  gezielt - losgelassen 6 mm vom Ziel, aber 116 mm vom Sockel), und es verlangte "vollstaendig auf
+  der Platte" (<23 mm) und verwarf stabile Stapel bei 27 und 35 mm. **Richtig gezaehlt: 5 von 6.**
+  Beides im Code korrigiert (Urteil nur bei echter Aufloesung, nach der Hoehe). **Diagnose:** der
+  Wurf lieferte bisher STILL `None`; die neue Zeile `[Zielwurf]` zeigte 37 von 40 mal denselben
+  Grund - **der Sockel hat weder Farb- noch Formklasse**. Die Ursache habe ich selbst gebaut: ich
+  hatte ihm die Farbe mit dem GROESSTEN Abstand zu allen bekannten gegeben, genau deshalb gehoert er
+  zu keiner. **Der Agent kannte den Sockel nicht.** Die Loesung war diese Woche schon gebaut: die
+  [Adresse ohne Klasse](/mechanismen/adresse-ohne-klasse.md). Mit `EIG_DIREKT` + `EIG_STETIG`:
+  Wurf **20 von 20**, Aufloesung 19 von 20, **Stapel 12 von 12**, zehn der Adressen lauten nur
+  `auf ~gesehen` - ohne jede Klasse. Vorher dicht gemacht: `_direkt_adressieren` haette den Sockel
+  sonst als kommandierbares Objekt registriert. **Zusammen 19 von 20 Stapeln**, wo der Sockel das
+  aufgeloeste Ziel war. Offen: die Welt zaehlt nur 7 der 12 Stapel als geliefert (Kriterium misst
+  25 mm zum Zielpunkt statt "liegt auf der Auflage" - bewusst NICHT still umgestellt), und der
+  Selbstrichter sagt bei allen 12 "geliefert", entgegen meiner Vorhersage - ob aus dem richtigen
+  Grund, ist Frage 3. **Kein Lernnachweis**: Teacher fahrend.
+
 ## 2026-09-18
 
 * **Anlage**: [Die Relation "auf", gebaut](/mechanismen/relation-auf-gebaut.md) - **Stufe 2 steht**,

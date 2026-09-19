@@ -2357,6 +2357,7 @@ def run_self_learning_steering(headless=False):
         finally:
             sim.d.mocap_pos[:] = _sm
             mujoco.mj_forward(sim.m, sim.d)
+        bez["aufgeloest"] = False                        # s. Stapel-Urteil in der Ablage-Zeile
         if _p is None or len(_tr) != 1:
             print(f"    [Zieladresse] '{bez['label']}': "
                   f"{'mehrdeutig, ' + str(len(_tr)) + ' Treffer' if _tr else 'nicht gefunden'}"
@@ -2380,6 +2381,7 @@ def run_self_learning_steering(headless=False):
                   f"Oberkante {1000 * _oben:.0f}mm, Handhoehe {1000 * _tz:.0f}mm"
                   + ("" if act16.GOAL_Z else "  [ACT16_GOAL_Z=0: die Hoehe wird VERWORFEN]"),
                   flush=True)
+            bez["aufgeloest"] = True
             return np.array([_p[0], _p[1], _tz], float)
         for _ph in bez["peilungen"]:
             _q = _p + ZIEL_ABSTAND * np.array([np.cos(_ph), np.sin(_ph)])
@@ -2429,8 +2431,16 @@ def run_self_learning_steering(headless=False):
         else:
             _kand = [nm for nm in dict.fromkeys(nm for _l, nm, _m in state.OBJECTS)
                      if nm != _a and not _geparkt_jetzt(nm)]
-        if not _kand:
+        # JEDER RUECKZUG SAGT, WARUM.  Ein Wurf, der still None liefert, laesst die Episode auf
+        # den Marker fallen -- und ist in der Auswertung von einer gewollten Marker-Episode nicht
+        # zu unterscheiden.  Genau das hat das erste Stapel-A/B getroffen: 83 von 100 Episoden
+        # ohne Adresse, und keine Zeile sagte, woran es lag (wiki/befunde/stapeln-gemessen.md).
+        def _kein(grund):
+            print(f"    [Zielwurf] keine Adresse: {grund}", flush=True)
             return None
+        if not _kand:
+            return _kein("kein Bezugskoerper verfuegbar"
+                         + (" (keine Stuetze in der Szene)" if ZIEL_RELATION == "auf" else ""))
         _b = _kand[int(crng.integers(len(_kand)))]
         _sm = sim.d.mocap_pos.copy()
         _ds = [d for d in shape_clf.perceive_all(sim)
@@ -2439,8 +2449,11 @@ def run_self_learning_steering(headless=False):
         _p = sim.obj_pos(_b)[:2]
         _nah = min(_ds, key=lambda d: float(np.linalg.norm(
             np.asarray(d["pos"], float) - _p)), default=None)
-        if _nah is None or float(np.linalg.norm(np.asarray(_nah["pos"], float) - _p)) >= 0.04:
-            return None                                  # nichts Sichtbares auf dem Bezugskoerper
+        if _nah is None:
+            return _kein(f"{_b}: keine Detektion im Bild")
+        _dn = float(np.linalg.norm(np.asarray(_nah["pos"], float) - _p))
+        if _dn >= 0.04:
+            return _kein(f"{_b}: naechste Detektion {1000 * _dn:.0f} mm entfernt (Schranke 40 mm)")
         _f = colours.classify(_nah["chroma"])[0] if _nah.get("chroma") is not None else None
         _fo, _g = _nah.get("shape"), groessen_band(_nah.get("dicke"), _nah.get("span"))
         _mess = (np.asarray(_nah["chroma"], float) if _nah.get("chroma") is not None else None,
@@ -2451,7 +2464,8 @@ def run_self_learning_steering(headless=False):
             _fo = EIG_GESEHEN                            # Formachse ohne Klasse, s. dort
         _tri = _adresse_wuerfeln((_f, _fo, _g), _mess, _p, ident=True)
         if _tri is None:
-            return None
+            return _kein(f"{_b}: keine verfolgbare Achse (Farbe {_f}, Form {_fo}, Groesse {_g}) -- "
+                         f"eine reine Groessenangabe ist keine Adresse")
         _ph0 = float(crng.uniform(0.0, 2.0 * np.pi))     # acht Peilungen ab einem zufaelligen
         _peil = [(_ph0 + 2.0 * np.pi * k / 8.0) for k in range(8)]   # Winkel, s. ZIEL_ADRESSE
         state.ziel_bezug = {"tripel": _tri, "mess": _mess, "peilungen": _peil, "body": _b,
@@ -3638,7 +3652,14 @@ def run_self_learning_steering(headless=False):
         if not EIG_DIREKT:
             return
         _hat_adresse = {nm for _l, nm, _m in state.OBJECTS}
-        _offen = [nm for nm in scene if nm not in _hat_adresse and not _geparkt_jetzt(nm)]
+        # STUETZEN NICHT ALS OBJEKT ADRESSIEREN.  Der Sockel steht in `scene` (damit er platziert
+        # und zurueckgestellt wird), hat aber keinen Eintrag in state.OBJECTS -- fuer diese
+        # Schleife sieht er also aus wie ein unentdeckter Koerper und wuerde als KOMMANDIERBARES
+        # Objekt registriert.  Dann koennte die Neugier ihn zum Greifen auswaehlen: 70 mm breit,
+        # Dichte 3000.  Genau das soll state.STUETZEN verhindern (s. dort).  Seine ZIEL-Adresse
+        # entsteht getrennt davon in _ziel_adresse_wuerfeln.
+        _offen = [nm for nm in scene if nm not in _hat_adresse and not _geparkt_jetzt(nm)
+                  and nm not in state.STUETZEN]
         if not _offen:
             return
         for d in dets:
@@ -5368,7 +5389,12 @@ def run_self_learning_steering(headless=False):
                 if _bz["body"] in snap:
                     _zus += (f" | Bezug verschoben "
                              f"{1000.0 * float(np.linalg.norm(_bp - snap[_bz['body']][0])):.0f}mm")
-                if _bz.get("relation") == "auf":
+                if _bz.get("relation") == "auf" and not _bz.get("aufgeloest"):
+                    # DER WURF GELANG, DIE AUFLOESUNG NICHT -- das Ziel war also der MARKER.
+                    # Diese Ablage gegen den Sockel zu beurteilen, war der Messfehler des ersten
+                    # Stapel-A/B: 6 von 12 "Stapelversuchen" hatten gar nicht auf ihn gezielt.
+                    _zus += " | Stapel: NICHT BEURTEILT (Ziel fiel auf den Marker zurueck)"
+                elif _bz.get("relation") == "auf":
                     # LIEGT ES DRAUF?  Zwei Groessen, und beide braucht man: die HOEHE sagt, ob es
                     # oben liegt, der seitliche VERSATZ, ob es dort auch halten kann.  Die Auflage
                     # traegt, solange der Schwerpunkt ueber ihr steht -- bei 70 mm Platte und
@@ -5378,7 +5404,13 @@ def run_self_learning_steering(headless=False):
                                   + sim.m.geom_size[sim.m.body_geomadr[_sb]][2])
                     _oz = float(sim.obj_pos(body)[2])
                     _vers = 1000.0 * float(np.linalg.norm(_end - _bp))
-                    _drauf = _oz > _ok_h + 0.004 and _vers < 23.0
+                    # URTEIL NACH DER HOEHE, NICHT NACH DEM VERSATZ.  Die erste Fassung verlangte
+                    # zusaetzlich Versatz < 23 mm ("vollstaendig auf der Platte") und verwarf damit
+                    # Stapel, die bei 27 und 35 mm stabil oben lagen -- die Platte ist 35 mm
+                    # halbbreit, die Physik hat laengst entschieden.  Die Schwelle liegt in der Mitte
+                    # zwischen Tisch (Mitte 12 mm) und Auflage (Mitte 20 mm).  Der Versatz bleibt als
+                    # Messwert stehen, er sagt, wie knapp es war.
+                    _drauf = _oz > _ok_h + 0.008
                     _zus += (f" | Stapel: Objektmitte {1000.0 * _oz:.0f}mm (Auflage "
                              f"{1000.0 * _ok_h:.0f}mm), Versatz {_vers:.0f}mm -> "
                              f"{'LIEGT DRAUF' if _drauf else 'nicht drauf'}")
