@@ -98,6 +98,8 @@ def main() -> int:
         after = json.loads((manifests / "after.json").read_text(encoding="utf-8"))
         result["changed_components"] = changed_components(before, after)
         result["changed_learning_components"] = changed_components(before, after, learning_only=True)
+        result["learning_details"] = {"before": before.get("learning_details", {}),
+                                      "after": after.get("learning_details", {})}
         result["passed"] = completed.returncode == 0 and not result["changed_learning_components"] and \
             result["copied_sha256_before"] == result["copied_sha256_after"]
     except FileNotFoundError as error:

@@ -52,6 +52,25 @@ def _pc_net_learning_state(net: Any) -> dict[str, Any]:
     }
 
 
+def _hash_value(value: Any) -> str:
+    return hashlib.sha256(pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)).hexdigest()
+
+
+def learning_details(components: Mapping[str, Any]) -> dict[str, Any]:
+    """Fine-grained diagnostic hashes for a failed learning-state boundary."""
+    fovea = components.get("fovea")
+    if fovea is None:
+        return {"fovea": "absent"}
+    net = getattr(fovea, "net", None)
+    return {"fovea": {
+        "connection_W": {getattr(c, "id", str(i)): _hash_value(getattr(c, "W", None))
+                         for i, c in enumerate(getattr(net, "_connections", []))},
+        "node_V": {node_id: _hash_value(getattr(node, "V", None))
+                   for node_id, node in getattr(net, "_nodes", {}).items()},
+        "selection_head": _hash_value(getattr(fovea, "sel_head", None)),
+    }}
+
+
 def _learning_state(name: str, value: Any) -> Any:
     """Project one component to the state that a D0 freeze promises to preserve."""
     if name == "bm":
@@ -122,6 +141,7 @@ def snapshot(components: Mapping[str, Any], *, context: Mapping[str, Any] | None
         "created_at": datetime.now(timezone.utc).isoformat(),
         "components": component_fingerprints(components),
         "learning_components": component_fingerprints(components, learning_only=True),
+        "learning_details": learning_details(components),
         "context": _json_value(dict(context or {})),
     }
 
