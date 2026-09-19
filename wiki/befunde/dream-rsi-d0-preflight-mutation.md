@@ -1,7 +1,7 @@
 ---
 type: Befund
 title: D0-Preflight - Lernzustand eingefroren, Episodenzustand sichtbar
-description: Die Pkl blieb bitgleich. Nach einem Vollzustands-Audit und expliziten Freeze-Wachen bleibt der definierte Lernzustand einer FSM-L-Form-Episode unveraendert; episodische Inferenzdifferenzen werden weiter protokolliert.
+description: Die Pkl blieb bitgleich. Ein 40-Episoden-Audit fand dennoch eine Fovea-Mutation; nach zentraler Fovea-Freeze-Grenze besteht der erneute FSM-L-Form-Preflight mit unveraendertem Lernzustand.
 tags: [act23, dream-rsi, d0, preflight, zustand, mutation]
 status: stable
 evidenz: einzelmessung
@@ -23,6 +23,12 @@ sources:
   - id: freeze-result
     resource: ../../log/d0-preflight/fsm-l-freeze-learning-1ep/result.json
     title: Bestandener gefrorener L-Form-Preflight
+  - id: fovea-regression
+    resource: ../../log/d0-evaluation/seed17/base-seed101-fovea-diagnostic/result.json
+    title: 40-Episoden-Diagnose der Fovea-Mutation
+  - id: fovea-fixed
+    resource: ../../log/d0-evaluation/seed17/base-seed101-central-freeze-1ep/result.json
+    title: Bestandener Gegenlauf nach zentralem Fovea-Freeze
 ---
 
 # Behauptung
@@ -89,3 +95,32 @@ erfuellt.
 Die einzelne Episode traegt keinen Lern- oder Wirkungsnachweis. Als naechstes werden fuer die
 Wrist-Lernaufgabe Wiederholungen, Seeds, Budget und Abbruchregel festgelegt; erst dann darf der
 eingefrorene Evaluator als Kontrolle einer Lernserie dienen.
+
+# Fovea-Regression und Reparatur
+
+Der erste geplante gefrorene 40-Episoden-Test (`Seed 101`, L-Form, eigene Pkl-Kopie) schlug
+trotz unveraenderter Pkl fehl: Der Lernfingerabdruck nannte ausschliesslich `fovea`; die
+Feindiagnose sah **1883/1883** Verbindungsgewichte W und **65** temporale Knotenmatrizen V
+veraendert. Startup-Warmup und das explizite Klassen-Training liefen nach Log nicht. Ein
+isolierter Realtest mit `HexFovea.step(..., learn=False)` und `step_id(..., learn=False)` hielt
+W, V und Selektionskopf dagegen bitgleich. Der Fehler liegt damit nicht in der PC-Operation
+`learn=False`, sondern in einem im Vollpfad erreichbaren Lernaufruf.[^fovea-regression]
+
+Die Reparatur setzt die D0-Grenze direkt in `HexFovea.step()` und `step_id()`: Bei
+`ACT23_D0_FREEZE=1` werden `learn` und bei `step()` auch `train_sel` immer auf `False`
+gesetzt. Der Test deckt explizit den Fall ab, dass ein Aufrufer `learn=True` uebergibt.
+Der anschliessende echte Gegenlauf auf einer **neuen** Kopie der identischen D0-Basis bestand:
+
+| Pruefung | Ergebnis |
+|---|---|
+| Szenario | Seed 101, L-Form, FSM, 1 Episode |
+| Lernzustand | **0 geaenderte Komponenten** |
+| Pkl-Quelle und -Kopie | beide `ad9d768c...c09b9e` |
+| Vollzustand | `fovea`, `latent_goal`, `runtime`, `self_eval`, `shape_clf`, `world` sichtbar veraendert |
+
+Das ist ein erneuter ein-episodiger Integritaetsnachweis, kein Ersatz fuer die zuvor fehlende
+40-Episoden-Freeze-Wiederholung. Erst diese Wiederholung darf das Kontrolltor fuer die D0-Serie
+wieder oeffnen.[^fovea-fixed]
+
+[^fovea-regression]: `log/d0-evaluation/seed17/base-seed101-fovea-diagnostic/result.json`
+[^fovea-fixed]: `log/d0-evaluation/seed17/base-seed101-central-freeze-1ep/result.json`

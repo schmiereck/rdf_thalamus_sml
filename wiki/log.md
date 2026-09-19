@@ -1,5 +1,13 @@
 # Chronik
 
+## 2026-09-19
+
+* **Reparatur und Preflight**: [D0-Zustandsmutation](/befunde/dream-rsi-d0-preflight-mutation.md) -
+  der gefrorene 40-Episoden-Test fand eine Fovea-Lernmutation (1883 W, 65 V). Der isolierte
+  `learn=False`-Test besteht; `HexFovea` erzwingt deshalb im D0-Modus zentral einen
+  schreibgeschuetzten Schritt. Ein neuer FSM-L-Form-Gegenlauf auf eigener Pkl-Kopie besteht mit
+  **0 Lernzustandsdifferenzen**. Das 40-Episoden-Kontrolltor ist noch einmal zu wiederholen.
+
 ## 2026-09-18
 
 * **Technische Validierung**: [D0 Seed 17](/befunde/dream-rsi-d0-seed17-block60.md) - der erste 60er-Block ist kein Lernbefund: sein neuer Filter liess `sicher geliefert` aus und meldete daher 4 statt 40 gueltige Selbst-Kredite. Die Rohdaten erreichen nach dem getesteten Filter fuenf Wrist-Zellen, bleiben aber nur Werkzeugvalidierung; Seed 17 wird auf neuer Kopie wiederholt.

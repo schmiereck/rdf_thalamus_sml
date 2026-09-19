@@ -1,7 +1,7 @@
 ---
 type: Mechanismus
 title: D0-Integritaet - Fingerabdruck und Kreditprotokoll
-description: Der D0-Helfer erzeugt getrennte Fingerabdruecke fuer Voll- und Lernzustand sowie opt-in JSONL-Kreditzeilen; der gefrorene FSM-L-Preflight besteht.
+description: Der D0-Helfer erzeugt getrennte Fingerabdruecke fuer Voll- und Lernzustand sowie opt-in JSONL-Kreditzeilen; ein zentraler Fovea-Freeze sichert den gefrorenen FSM-L-Preflight gegen alte Aufrufpfade ab.
 tags: [act23, dream-rsi, d0, zustand, kredit, reproduzierbarkeit]
 status: stable
 evidenz: einzelmessung
@@ -20,6 +20,9 @@ sources:
   - id: audit
     resource: /befunde/dream-rsi-d0-wrist-audit.md
     title: Audit, der den Mechanismus verlangt
+  - id: regression
+    resource: /befunde/dream-rsi-d0-preflight-mutation.md
+    title: Fovea-Mutationsdiagnose und Gegenlauf
 ---
 
 # Behauptung
@@ -56,7 +59,9 @@ Steuerpfad bleibt unveraendert.
 
 `src/pc_cvnn/test_d0_integrity.py` hat Komponentenfingerabdruck, erkannte Weltmodellmutation,
 Manifest-Schreiben und JSONL-Kreditzeile in der gemeinsamen venv ausgefuehrt: `D0 integrity:
-OK`. `py_compile` pruefte ausserdem Helfer und `pc_act23.py`.
+OK`. Er prueft nun mit einer realen vektorisierten `HexFovea`, dass `learn=False` W/V und
+Selektionskopf nicht veraendert, und dass ein D0-gesetzter versehentlicher `learn=True`-Aufruf
+ebenso schreibgeschuetzt bleibt. `py_compile` pruefte die geaenderten Python-Dateien.
 
 Das ist ein Werkzeugtest, kein ACT23-Lauf und kein Nachweis, dass die komplette Evaluation
 einfriert. Ein Volltest wird erst nach Abschluss der parallelen Stapelreihe auf einer
@@ -74,9 +79,13 @@ den Hash seiner Zustandskopie und schreibt `result.json`, Log und Kredit-JSONL. 
 ein fehlendes Manifest oder ein geaenderter Pkl-Kopiehash ergibt `FAIL` und Exit-Code 2. Damit ist
 ein stilles `NO_PERSIST`-Ergebnis ausgeschlossen: fehlendes Schreiben genuegt nicht zum Bestehen.
 
-`ACT23_D0_FREEZE=1` sperrt die Update-Stellen fuer Weltmodell, Runtime, Fovea, Form-/Farb-
-Open-Set, Body-Refinement, Latent-Dynamics und SelfEval-Statistik. Die Steuerung und das
-Selbsturteil bleiben lesend aktiv, damit die eingefrorene Kontrolle dieselbe Aufgabe ausfuehrt.
+`ACT23_D0_FREEZE=1` sperrt die Update-Stellen fuer Weltmodell, Runtime, Form-/Farb-Open-Set,
+Body-Refinement, Latent-Dynamics und SelfEval-Statistik. Die Fovea hat zwei Grenzen: ACT23
+uebergibt fuer die bekannten Aufrufstellen `learn=False`; `HexFovea.step()` und `step_id()`
+setzen im D0-Modus jedoch auch zentral `learn=False` (und `train_sel=False`). Damit kann ein
+noch unerkannter oder aelterer Aufrufpfad mit seinem Default `learn=True` weder W noch V oder
+den Selektionskopf veraendern. Die Steuerung und das Selbsturteil bleiben lesend aktiv, damit
+die eingefrorene Kontrolle dieselbe Aufgabe ausfuehrt.
 
 # Isolierte Trainingslinien
 

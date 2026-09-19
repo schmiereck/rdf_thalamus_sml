@@ -558,6 +558,12 @@ class HexFovea:
         """`cmd` is the object NAME (an abstract command); the sel channel is produced by the
         LEARNED head from onehot(cmd).  train_sel=True (warmup) also fits the head to _match_target."""
         import time as _t
+        # D0 evaluations must remain read-only even if an older ACT23 call site still relies on
+        # this method's default ``learn=True``.  The caller-level guards remain useful intent,
+        # while this boundary is the enforceable guarantee for the persisted fovea knowledge.
+        if os.environ.get("ACT23_D0_FREEZE", "0") == "1":
+            learn = False
+            train_sel = False
         _t0 = _t.perf_counter()                              # ZEITKONTO (s. pc_act23 [Zeit]-Zeile):
         #   die Fovea ist der Posten, der bei F/K/RES-Aenderungen als erstes teuer wird -- ohne
         #   eigenen Zaehler waere sie in der Ausfuehrungszeit unsichtbar.
@@ -582,6 +588,8 @@ class HexFovea:
         fovea_gradient drive the gaze toward the agent's OWN self-labelled identity -- the fovea net
         can be pointed at any colour it has a class for, not just the three trained command codes."""
         import time as _t
+        if os.environ.get("ACT23_D0_FREEZE", "0") == "1":
+            learn = False
         _t0 = _t.perf_counter()                              # ZEITKONTO -- step_id ist der Pfad, den
         #   der Fovea-Servo je Frame fahrt (make_shape_track), also der eigentlich teure.
         arr = hex_sample(img, gaze, self._ek())
