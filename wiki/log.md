@@ -7,6 +7,19 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-19
 
+* **Ergaenzung**: [Der Arm stapelt](/befunde/stapeln-gemessen.md) - **das korrigierte A/B**, beide
+  Arme mit `EIG_DIREKT` + `EIG_STETIG`, je 100 Episoden, Teacher fahrend. **45 von 100 Episoden enden
+  in einem Stapel** (83 % der Ablagen mit Sockelziel, Versatz Median 17 mm), gegen 49 Lieferungen
+  im Marker-Arm (p = 0,67) - die Aufgabe kostet nichts Messbares. Zielwurf 100/100, aufgeloest
+  86/100 (erstes A/B: 17 und 9). **Der Kontrollarm ist zeichengenau identisch zum ersten A/B**, alle
+  100 Ausgaenge - die neuen Schalter beruehren ihn nicht. Zwei Befunde darueber hinaus: (1) **die
+  Welt zaehlt nur 26 der 45 Stapel als geliefert** (58 %), weil das Kriterium 25 mm zum Zielpunkt
+  misst statt "liegt auf der Auflage"; die Quote 44 % unterschaetzt die Aufgabe fast um die Haelfte.
+  Nicht still umgestellt - das ist eine Entscheidung. (2) **Der Selbstrichter unterscheidet nicht**:
+  "geliefert" bei 40 von 45 Stapeln UND bei 6 von 9 Ablagen neben dem Sockel (p = 0,12). Er findet
+  vermutlich den Sockel-Blob am Zielort statt des Objekts. Folge, wenn es sich haelt: die
+  Selbst-Imitation lernt misslungene Stapel als gelungen. Erste Zahl zu Frage 3.
+
 * **Anlage**: [Der Arm stapelt 19 von 20](/befunde/stapeln-gemessen.md) - das Stapel-A/B (je 100
   Episoden, Sockel in BEIDEN Armen, nur das Ziel verschieden) und zwei Diagnoselaeufe. **Das A/B
   sah zuerst leer aus und war es nicht**: Quote 49 gegen 47 % (p = 0,89) und scheinbar 3 von 12

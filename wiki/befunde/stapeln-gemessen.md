@@ -1,7 +1,7 @@
 ---
 type: Befund
-title: Der Arm stapelt 19 von 20 - der Engpass war, dass der Agent den Sockel nicht kannte
-description: Das erste Stapel-A/B zeigte scheinbar keinen Unterschied (49 gegen 47 Prozent) und scheinbar 25 Prozent Stapelerfolg. Beides war falsch gelesen. Nur 9 von 100 Episoden zielten ueberhaupt auf den Sockel, und wo sie es taten, stapelte der Teacher. Die Diagnose: 37 von 40 Adressfehlern, weil der Sockel weder Farb- noch Formklasse hat - ich hatte ihm die Farbe mit dem groessten Abstand zu allen bekannten gegeben. Mit der klassenlosen Adresse (EIG_DIREKT + EIG_STETIG) gelingt der Wurf in 20 von 20 Episoden und der Stapel in 12 von 12.
+title: Der Arm stapelt - 45 Stapel in 100 Episoden, und der Engpass war, dass der Agent den Sockel nicht kannte
+description: Das korrigierte A/B, beide Arme identisch bis aufs Ziel. Mit der klassenlosen Adresse enden 45 von 100 Episoden in einem Stapel, 83 Prozent der Ablagen mit Sockelziel - gegen 49 Lieferungen im Marker-Arm (p = 0,67), die Aufgabe kostet also nichts Messbares. Der Kontrollarm ist zeichengenau identisch zum ersten A/B. Zwei Befunde darueber hinaus - der Lieferbegriff zaehlt nur 58 Prozent der Stapel, und der Selbstrichter sagt bei Fehlablagen neben dem Sockel ebenso 'geliefert' wie bei Stapeln. Der Weg dorthin enthielt zwei eigene Messfehler und eine selbst gebaute Ursache: der Sockel hatte keine Klasse, weil ich ihm die fremdeste Farbe gegeben hatte.
 tags: [act23, stapeln, kommando, selbstlernen, ab]
 status: stable
 evidenz: gemessen
@@ -16,7 +16,51 @@ sources:
     title: Warum die Adresse scheitert
 ---
 
-# Das A/B, wie es zuerst aussah
+# Das Ergebnis: das korrigierte A/B
+
+Beide Arme identisch bis aufs Ziel, **beide** mit der klassenlosen Adresse (`EIG_DIREKT` +
+`EIG_STETIG`), je 100 Episoden, Teacher fahrend:
+
+    Arm   Ep   gegriffen  abgelegt  geliefert  Quote
+    ort   100      74        64        49      49,0 %
+    auf   100      68        62        44      44,0 %        Fisher p = 0,57
+
+    auf-Arm:   Zielwurf 100 / 100        (erstes A/B: 17 / 100)
+               aufgeloest auf den Sockel  86 / 100    (erstes A/B:  9 / 100)
+               LIEGT DRAUF                45 von 54 beurteilten Ablagen = 83 %
+               Stapel je Episode          45 / 100
+               Versatz der Stapel         Median 17 mm, max 55 mm
+
+> **Der Arm stapelt: 45 von 100 Episoden enden in einem Stapel.** Gegen 49 Lieferungen im
+> Marker-Arm (p = 0,67) - die neue Aufgabe kostet auf Teacher-Niveau nichts Messbares.
+
+**Der Kontrollarm ist zeichengenau identisch zum ersten A/B** - alle 100 Episodenausgaenge. Die
+neuen Schalter beruehren den Marker-Arm also gar nicht; der einzige wirksame Unterschied ist das
+Ziel.
+
+## Der Lieferbegriff zaehlt Stapel nicht
+
+Die Welt zaehlt nur **26 der 45 Stapel** als geliefert (58 %). Das Kriterium misst 25 mm zum
+ZIELPUNKT, und der ist die wahrgenommene Sockelmitte; ein Objekt, das stabil auf der Platte liegt,
+aber 30 mm von deren Mitte, gilt als nicht geliefert. **Die Quote 44 % unterschaetzt die Aufgabe
+deshalb um fast die Haelfte.** Fuer "auf" waere der ehrliche Begriff "liegt auf der Auflage" - er
+ist bewusst NICHT still umgestellt, weil das den Erfolgsbegriff dieser Aufgabe aendert. Das ist eine
+Entscheidung, keine Korrektur.
+
+## Der Selbstrichter unterscheidet nicht
+
+    Selbstrichter sagt "geliefert"   bei Stapeln                 40 von 45  (89 %)
+                                     bei Ablagen NEBEN dem Sockel  6 von  9  (67 %)   p = 0,12
+
+Er stimmt bei Stapeln fast immer zu - **und bei Fehlablagen neben dem Sockel zu zwei Dritteln
+ebenso.** Die naheliegende Erklaerung: er findet am Zielort den Sockel-Blob, der ohnehin dort liegt,
+statt das abgelegte Objekt. Der Unterschied ist bei n = 9 nicht signifikant, die Richtung aber
+unangenehm: **ueber die Selbst-Imitation wuerde der Agent misslungene Stapel als gelungen lernen.**
+Das ist die erste Zahl zu Frage 3.
+
+# Der Weg dorthin
+
+## Das erste A/B, wie es zuerst aussah
 
     Arm   Ep   gegriffen  abgelegt  geliefert  Quote
     ort   100      74        64        49      49,0 %
@@ -26,7 +70,7 @@ sources:
 
 **Beide Zahlen sagen nichts, und die zweite ist falsch.**
 
-# Warum: nur 9 von 100 Episoden zielten auf den Sockel
+## Warum: nur 9 von 100 Episoden zielten auf den Sockel
 
     Episoden im auf-Arm              100
       Adresse gewuerfelt              17   = 17 %
@@ -59,7 +103,7 @@ Richtig gezaehlt, nur die 6 Episoden, die wirklich auf den Sockel zielten:
 tatsaechlich geliefert hat, und es geht nach der Hoehe (Objektmitte ueber Auflage + 8 mm, die Mitte
 zwischen Tisch 12 mm und Auflage 20 mm). Der Versatz bleibt als Messwert stehen.
 
-# Warum die Adresse scheiterte
+## Warum die Adresse scheiterte
 
 Der Wurf lieferte bei jedem Scheitern bisher still `None`. Jetzt sagt eine Zeile `[Zielwurf]`,
 warum. Diagnoselauf, 40 Episoden:
@@ -76,7 +120,7 @@ Objekt").
 > eine neuartige Form. Die Bloecke, in denen das A/B doch Adressen hatte (Ep 37-39, 61-63,
 > 72-79, 97-99), waren die Zeiten, in denen zufaellig eine Farbklasse in seiner Naehe existierte.
 
-# Die Loesung war schon gebaut
+## Die Loesung war schon gebaut
 
 `ACT23_EIG_DIREKT` + `ACT23_EIG_STETIG` - die [Adresse ohne Klasse](/mechanismen/adresse-ohne-klasse.md),
 aus einer einzigen Sichtung, ueber den gemessenen Formvektor statt ueber einen Klassennamen. Sie
@@ -131,8 +175,6 @@ Messung dieser Linie.
   Konfidenzintervall.
 * **Teacher fahrend.** Machbarkeit auf Teacher-Niveau, nicht Lernerfolg.
 * **Die Quote des A/B ist wertlos** und steht nur hier, damit niemand sie woanders zitiert.
-* **Das korrigierte A/B mit `EIG_DIREKT` + `EIG_STETIG` in BEIDEN Armen ist noch nicht gefahren.**
-  Die Zahlen oben stammen aus dem auf-Arm allein.
 * **`EIG_DIREKT` adressiert auch neue OBJEKTE direkt**, nicht nur den Sockel. In einem A/B muss es
   deshalb in beiden Armen gleich stehen.
 
