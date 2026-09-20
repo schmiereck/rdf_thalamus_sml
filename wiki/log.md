@@ -9,6 +9,24 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Anlage**: [Die Oberkante ohne Privileg](/befunde/oberkante-ohne-privileg.md) - **Stufe 3 ist
+  durch: das letzte Privileg auf dem Stapelpfad ist gefallen.** Drei Laeufe: warm 60 Episoden (der
+  Schaetzer sammelt 32 Zeilen aus 46 Gelegenheiten, 14 verworfen), dann A und B je 40 aus DEMSELBEN
+  warmen Zustand, Unterschied allein `ACT23_HOEHE_SEHEN`. **A (Oberkante aus `geom_size`) 17 von
+  20, B (aus der eigenen Sicht) 15 von 18 - 85 gegen 83 %, p = 1,00.** Der Schalter hat wirklich
+  gewirkt: in B 31 von 31 Episoden mit Schaetzung, **0 Rueckfaelle**, und die Klaue faehrt
+  abgestufte Hoehen von 18 bis 29 mm an, keine Konstante. Der **Schaetzfehler im Lauf ist mit
+  0,7 mm kleiner als die 1,31 mm der Sonde** - kein Widerspruch, sondern ein anderer Zuschnitt
+  (die Sonde hielt jede Stelle heraus, hier sind fruehere Episoden derselben Stelle im Fit; die
+  uebertragbare Zahl ist die der Sonde). Der alte blinde Fleck auf der flachen Auflage ist keiner:
+  6 mm 5 von 7, 10 mm 5 von 6, 14 mm 4 von 4. **Was das wert ist:** nach [Ziel](/ziel.md) nicht
+  die Quote, sondern dass eine Groesse, die der Agent gesagt bekam, jetzt aus seinem eigenen Bild
+  kommt - ohne dass die Aufgabe leidet. **Was es nicht ist:** ein Leistungsfortschritt, und
+  `p = 1,00` heisst nicht "gleich" - erst ein Einbruch auf 9 von 18 (50 %) waere bei dieser
+  Fallzahl signifikant geworden. Das Geruest hat den Schaetzer trainiert (gelabelt mit dem
+  Privileg); die Hoehe aus dem AUSGANG zu lernen ist die naechste, haertere Stufe. Und der
+  Grundriss ist fest - eine zweite Auflage anderen Grundrisses ist die Bewaehrungsprobe.
+
 * **Bau**: der `HoehenSchaetzer` (`ACT23_HOEHE_SEHEN`, Vorgabe 0, main `d6599aa`) - die Oberkante
   der Auflage aus Groessen DERSELBEN Detektion, die die Zieladresse ohnehin aufloest (scheinbare
   Flaeche, Materialdicke, wahrgenommener Ort), gelabelt mit dem Privileg als Geruest. An den
