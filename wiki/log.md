@@ -9,6 +9,31 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Anlage**: [Der Stapel-Selbstrichter](/befunde/selbstrichter-stapel.md) - gebaut und gemessen,
+  `ACT23_SELBST_STAPEL` (Vorgabe 0). Der Agent beurteilt seinen eigenen Stapel ueber die
+  **Farbstreuung** des Auflagen-Blobs gegen seinen EIGENEN Verschmelzungs-Massstab, und trennt
+  "drauf" von "daneben verschmolzen" ueber die Flaeche: zwei nebeneinander liegende Koerper haben
+  die SUMME der Flaechen, ein Stapel die der Auflage allein - beide Bezugswerte kennt der Agent
+  (leere Auflage aus der Adressaufloesung, eigene Objektflaeche aus der Startdetektion), also ohne
+  erfundene Schwelle. **Ergebnis: treffsicher, aber fast blind** - 7 von 7 Positivurteilen richtig,
+  aber nur 7 von 25 Stapeln erkannt (Uebereinstimmung 13/31 = 42 %). **Alle 14 Fehlanzeigen
+  scheitern an derselben Stelle:** Sockel mit Wuerfel liest 0,20, der eigene Massstab liegt bei
+  0,34; der Flaechentest hat keinen einzigen echten Stapel verworfen. Nach Auflagenhoehe 0/6 (6 mm),
+  2/3 (10 mm), 3/10 (14 mm). Die saubere Trennung der Offline-Sonde (kein Ueberlapp) kommt in
+  echten Szenen nicht wieder. Der Massstab ist richtig geeicht, aber fuer eine andere Frage - er
+  beantwortet "was ueberschreitet ein EINZELNES Objekt nie", und ein Blob mit 19 % zweiter Farbe
+  ueberschreitet das nicht.
+
+* **Widerlegung**: [Der Arm stapelt](/befunde/stapeln-gemessen.md), Abschnitt zum Selbstrichter -
+  **entwertet**. Die Aufraeumschleife setzt das kommandierte Objekt nach der Episode auf seine
+  Ruhehoehe vom Anfang zurueck (um gekippte L/U aufzustellen) und **baut damit den Stapel ab, bevor
+  irgendein Selbsturteil die Szene sieht**. Die dortige Beobachtung ("sagt bei 40 von 45 Stapeln
+  geliefert, aber auch bei 6 von 9 Fehlablagen") hat eine aufgeraeumte Welt gemessen. Sichtbar wurde
+  es daran, dass die Welt in ALLEN 15 Urteilszeilen "nicht drauf" meldete, waehrend im selben Lauf
+  10 Stapel gelangen. Korrektur: liegt das Objekt hoeher als seine eigene Ruhehoehe, steht es auf
+  etwas - dann bleibt die Hoehe; ein gekipptes Objekt liegt tiefer, der Aufstell-Fall bleibt
+  unberuehrt. **Die Stapelraten sind nicht betroffen**, sie werden vor dem Aufraeumen gefaellt.
+
 * **Anlage**: [Die Policy stapelt selbst](/befunde/netz-stapelt-selbst.md) - der erste Stapellauf,
   in dem die GELERNTE Choreographie faehrt. Zwei Arme je 50 Episoden aus DERSELBEN Kopie eines
   200-Episoden-Trainingsstands, Unterschied allein `ACT23_CHOREO` netz gegen fsm.

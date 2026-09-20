@@ -47,7 +47,15 @@ deshalb um fast die Haelfte.** Fuer "auf" waere der ehrliche Begriff "liegt auf 
 ist bewusst NICHT still umgestellt, weil das den Erfolgsbegriff dieser Aufgabe aendert. Das ist eine
 Entscheidung, keine Korrektur.
 
-## Der Selbstrichter unterscheidet nicht
+## Der Selbstrichter unterscheidet nicht -- ENTWERTET
+
+> **NACHTRAG 2026-09-20: diese Messung ist ungueltig.** Die Aufraeumschleife setzt das kommandierte
+> Objekt nach der Episode auf seine Ruhehoehe vom Anfang zurueck (um gekippte L/U aufzustellen) --
+> und baut damit den Stapel ab, BEVOR irgendein Selbsturteil die Szene sieht. Die Zahlen unten haben
+> nicht gemessen, wie gut der Richter Stapel erkennt, sondern wie er auf eine Szene reagiert, in der
+> kein Stapel mehr stand. Behoben und neu gemessen in
+> [Der Stapel-Selbstrichter](/befunde/selbstrichter-stapel.md).
+> **Die Stapelraten dieser Seite sind NICHT betroffen** - sie werden vor dem Aufraeumen gefaellt.
 
     Selbstrichter sagt "geliefert"   bei Stapeln                 40 von 45  (89 %)
                                      bei Ablagen NEBEN dem Sockel  6 von  9  (67 %)   p = 0,12

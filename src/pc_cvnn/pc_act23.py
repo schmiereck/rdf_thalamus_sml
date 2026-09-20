@@ -824,6 +824,12 @@ SOCKEL_XY = [float(v) for v in os.environ.get("ACT23_SOCKEL_XY", "-0.018,0.149")
 #     wird die Probe scharf: gelernt heisst, die Zielhoehe steigt mit Steigung 1 in der Hoehe.
 _zm = os.environ.get("ACT23_ZIEL_MISCH", "").strip()
 ZIEL_MISCH = float(_zm) if _zm else None
+# DAS STAPEL-SELBSTURTEIL (ACT23_SELBST_STAPEL, Vorgabe 0).  Der Agent beurteilt seinen eigenen
+# Stapel aus der Farbstreuung des Auflagen-Blobs statt aus einer zweiten Detektion, die es
+# nicht gibt (s. _selbst_stapel).  Vorgabe 0, bis die Uebereinstimmung mit dem privilegierten
+# Urteil gemessen ist -- eine Selbstbewertung, der man zu frueh traut, vergiftet die
+# Selbst-Imitation.
+SELBST_STAPEL = os.environ.get("ACT23_SELBST_STAPEL", "0") == "1"
 SOCKEL_WANDERT = os.environ.get("ACT23_SOCKEL_WANDERT", "0") == "1"
 SOCKEL_HOEHEN = [float(v) / 1000.0 for v in os.environ.get("ACT23_SOCKEL_HOEHEN", "8").split(",")]
 # LAUT SAGEN, WAS FEHLT -- nicht still mitschalten.  Ein Schalter, der einen zweiten heimlich
@@ -2406,6 +2412,12 @@ def run_self_learning_steering(headless=False):
                   + ("" if act16.GOAL_Z else "  [ACT16_GOAL_Z=0: die Hoehe wird VERWORFEN]"),
                   flush=True)
             bez["aufgeloest"] = True
+            # WIE DIE AUFLAGE LEER AUSSIEHT -- der Bezugswert fuer das Stapel-Selbsturteil.
+            # Beides stammt aus DIESER Detektion, also aus der Wahrnehmung des Agenten, und wird
+            # am Episodenende mit dem verglichen, was dann am Zielort steht (s. _selbst_stapel).
+            bez["area0"] = float(_det.get("area")) if _det.get("area") is not None else None
+            bez["cspread0"] = (float(_det["cspread"]) if _det.get("cspread") is not None else None)
+            bez["ziel_xy"] = np.asarray(_p, float).copy()
             return np.array([_p[0], _p[1], _tz], float)
         for _ph in bez["peilungen"]:
             _q = _p + ZIEL_ABSTAND * np.array([np.cos(_ph), np.sin(_ph)])
@@ -2425,6 +2437,55 @@ def run_self_learning_steering(headless=False):
         return None
 
     state.ziel_loeser = _ziel_aufloesen
+
+    def _selbst_stapel(jdets, bez, det0):
+        """DER AGENT BEURTEILT SEINEN EIGENEN STAPEL -- ohne privilegierte Hoehe.
+
+        Das Problem, das dahintersteht: ein gestapelter Koerper ist fuer diese Kamera UNSICHTBAR.
+        Er liegt vollstaendig innerhalb der Silhouette der Auflage, die Flaeche aendert sich um kein
+        Pixel (gemessen 0 von 25, wiki/befunde/sockel-verschluckt-den-stapel.md).  Der gewoehnliche
+        Selbstrichter sucht den Blob AM ABLAGEPUNKT und findet dort die Auflage -- er sagt deshalb
+        auch bei Fehlablagen "geliefert" (6 von 9, wiki/befunde/stapeln-gemessen.md).
+
+        WAS STATTDESSEN TRAEGT: die FARBSTREUUNG des Auflagen-Blobs.  Leer 0,069, belegt 0,149 bis
+        0,397 -- ueber 150 Faelle ohne einen Ueberlapp.  Und der Massstab dafuer ist NICHT von mir
+        gesetzt: `_merge_th()` ist das 0,995-Quantil der Farbstreuung, die der Agent an seinen
+        EIGENEN Einzelobjekt-Sichtungen gemessen hat.  Liegt der Blob darueber, enthaelt er mehr
+        als ein Ding.
+
+        UND WIE MAN "DRAUF" VON "DANEBEN VERSCHMOLZEN" TRENNT, ebenfalls ohne erfundene Schwelle:
+        zwei nebeneinander verschmolzene Koerper haben die SUMME der Flaechen, ein Stapel hat die
+        der Auflage allein.  Beide Bezugswerte kennt der Agent -- die leere Auflage aus der
+        Adressaufloesung (bez["area0"]), die eigene Objektflaeche aus der Startdetektion (det0).
+        Verglichen wird, welcher der beiden naeher liegt.
+
+        Gibt (drauf, grund) zurueck, oder (None, grund) wenn er sich ehrlich enthalten muss.
+        """
+        _mth = shape_clf._merge_th()
+        if _mth is None:
+            return None, "kein eigener Verschmelzungs-Massstab"
+        if bez.get("area0") is None or bez.get("ziel_xy") is None:
+            return None, "Auflage beim Adressieren nicht vermessen"
+        _z = np.asarray(bez["ziel_xy"], float)
+        _k = [d for d in jdets if d.get("pos") is not None and d.get("cspread") is not None
+              and d.get("area") is not None]
+        if not _k:
+            return None, "nichts gesehen"
+        _b = min(_k, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"], float) - _z)))
+        _dz = float(np.linalg.norm(np.asarray(_b["pos"], float) - _z))
+        if _dz > 0.05:
+            return False, f"Auflage nicht wiedergefunden ({1000 * _dz:.0f}mm)"
+        _cs, _a, _a0 = float(_b["cspread"]), float(_b["area"]), float(bez["area0"])
+        _traegt = _cs > _mth
+        _ao = None if det0 is None else det0.get("area")
+        if _ao:
+            _drauf = abs(_a - _a0) <= abs(_a - (_a0 + float(_ao)))
+            _wie = f"Flaeche {_a:.0f} gegen leer {_a0:.0f} / daneben {_a0 + float(_ao):.0f}"
+        else:
+            _drauf, _wie = True, f"Flaeche {_a:.0f} (eigene Flaeche unbekannt)"
+        return (_traegt and _drauf,
+                f"Farbstreuung {_cs:.3f} gegen eigenen Massstab {_mth:.3f} -> "
+                f"{'traegt etwas' if _traegt else 'leer'}; {_wie}")
 
     def _ziel_adresse_wuerfeln():
         """STUFE 1 von "Stapeln als neue Aufgabe": das Ablageziel wird eine ADRESSE.
@@ -5531,7 +5592,18 @@ def run_self_learning_steering(headless=False):
                 # where you SEE it), but stand it UPRIGHT.  A thin, asymmetric L/U gets TORQUED by the claw during
                 # the grasp and can end tilted ("a segment snaps/twists") -- set_object writes a pure z-rotation,
                 # so this un-tips the delivered shape in place.  Cubes/long are already upright -> a no-op for them.
-                cp = sim.obj_pos(nm)[:2].copy(); cz = snap[nm][1]
+                # EINE ABLAGE AUF EINER AUFLAGE DARF NICHT "AUFGERAEUMT" WERDEN.  Die Zeile setzte
+                # das kommandierte Objekt auf seine RUHEHOEHE VOM EPISODENANFANG zurueck -- gedacht
+                # zum Aufstellen gekippter L/U-Formen (set_object schreibt eine reine z-Drehung).
+                # Beim Stapeln baut das den Stapel ab, BEVOR der Selbstrichter die Szene sieht: er
+                # bekam eine aufgeraeumte Welt vorgelegt und meldete folgerichtig "nichts drauf".
+                # Liegt das Objekt HOEHER als seine eigene Ruhehoehe, steht es auf etwas -- dann
+                # bleibt die Hoehe.  Ein GEKIPPTES Objekt liegt tiefer, nicht hoeher, also trifft
+                # die Regel den Aufstell-Fall nicht.  Ohne Auflage in der Szene gibt es nichts, auf
+                # dem ein Koerper nach dem Setzen ruhen koennte -- dort aendert die Zeile nichts.
+                cp = sim.obj_pos(nm)[:2].copy()
+                _zjetzt = float(sim.obj_pos(nm)[2])
+                cz = _zjetzt if _zjetzt > snap[nm][1] + 0.004 else snap[nm][1]
                 sim.set_object(nm, cp, z=cz, yaw=sim.obj_yaw(nm))
         mujoco.mj_forward(sim.m, sim.d); state.sync_active()
         # SELF-JUDGEMENT (before the housekeeping below MOVES a flung object -- the judge must see
@@ -5545,6 +5617,22 @@ def run_self_learning_steering(headless=False):
                                          colours=colours, shape_key=state.SHAPE_KEY.get(body),  # the merge
                                          near_xy=hxy_end, key=body,                             # reference
                                          exp_area=(None if det0 is None else det0.get("area")))
+        # DAS STAPEL-SELBSTURTEIL (ACT23_SELBST_STAPEL).  Es tritt NEBEN das gewoehnliche, nicht an
+        # seine Stelle: "liegt A auf B" ist eine andere Frage als "ist A am Zielort", und nur die
+        # erste ist beim Stapeln die richtige.  Verglichen wird hier gegen das PRIVILEGIERTE Urteil
+        # (Objektmitte ueber der Auflage) -- das ist Messung, keine Entscheidungsgrundlage.
+        _bz = state.ziel_bezug
+        if SELBST_STAPEL and _bz is not None and _bz.get("relation") == "auf" and _bz.get("aufgeloest"):
+            _sd, _grund = _selbst_stapel(jdets, _bz, det0)
+            _sbid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, _bz["body"])
+            _okh = float(sim.obj_pos(_bz["body"])[2] + sim.m.geom_size[sim.m.body_geomadr[_sbid]][2])
+            _wahr = float(sim.obj_pos(body)[2]) > _okh + 0.008      # privilegiert, NUR zum Vergleich
+            if _sd is None:
+                print(f"    [Selbst-Stapel] enthalten -- {_grund}", flush=True)
+            else:
+                print(f"    [Selbst-Stapel] {'liegt drauf' if _sd else 'nicht drauf'}  "
+                      f"{'=' if _sd == _wahr else '!='}  Welt: {'liegt drauf' if _wahr else 'nicht drauf'}"
+                      f"   [{_grund}]", flush=True)
         if s_ok is None:
             print(f"    [Selbst-Urteil] enthalten -- noch keine eigene Klasse für {body}", flush=True)
         else:
