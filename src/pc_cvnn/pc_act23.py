@@ -831,6 +831,13 @@ ZIEL_MISCH = float(_zm) if _zm else None
 # Selbst-Imitation.
 SELBST_STAPEL = os.environ.get("ACT23_SELBST_STAPEL", "0") == "1"
 SOCKEL_WANDERT = os.environ.get("ACT23_SOCKEL_WANDERT", "0") == "1"
+# ZWEI GRUNDRISSE (ACT23_SOCKEL2, Vorgabe 0).  Die 50-mm-Platte `sockel2` kommt dazu, und je
+# Szene steht EINE der beiden in der Welt.  Sie ist die Bewaehrungsprobe fuer den
+# HoehenSchaetzer: der liest die Oberkante aus der scheinbaren Flaeche, und die haengt am
+# Grundriss 7,5-mal so stark wie an der Hoehe (gemessen 685 gegen 91,
+# wiki/befunde/zweiter-grundriss-bricht-die-hoehe.md).  Der globale lineare Schaetzer der
+# ersten Fassung faellt damit auf die Grundrate; der lokale kommt auf 92 %.
+SOCKEL2 = os.environ.get("ACT23_SOCKEL2", "0") == "1"
 SOCKEL_HOEHEN = [float(v) / 1000.0 for v in os.environ.get("ACT23_SOCKEL_HOEHEN", "8").split(",")]
 # LAUT SAGEN, WAS FEHLT -- nicht still mitschalten.  Ein Schalter, der einen zweiten heimlich
 # umlegt, macht jedes A/B mehrdeutig (dieselbe Regel wie bei AUGMENT/NEIGHBOURS und EIG_DIREKT).
@@ -3486,7 +3493,16 @@ def run_self_learning_steering(headless=False):
     # weitesten. Maßgeblich ist der schlechteste Fall.
     SOCKEL_FREI = 0.080
     if SOCKEL:
-        state.STUETZEN = ["sockel"]
+        # ZWEI GRUNDRISSE (ACT23_SOCKEL2=1, Vorgabe 0).  Dann steht je Szene EINE der beiden
+        # Platten in der Welt und die andere geparkt -- nicht beide gleichzeitig.  Grund, und er
+        # ist gemessen: die Groessenachse des Agenten saettigt bei Moebeln (GROESSEN_BAENDER endet
+        # bei 6,5 px, beide Platten lesen "dick"), also koennte eine Adresse die beiden GAR NICHT
+        # auseinanderhalten -- jede Episode fiele mehrdeutig auf den Marker zurueck.  Nacheinander
+        # ist die Adresse eindeutig, und der Schaetzer sieht trotzdem beide Grundrisse.
+        # Das Parken erledigt die Kandidatenwahl von selbst: `_ziel_adresse_wuerfeln` filtert
+        # ueber `_geparkt_jetzt`.  In STUETZEN stehen BEIDE, damit auch die geparkte Platte
+        # niemals als greifbares Objekt in Frage kommt.
+        state.STUETZEN = ["sockel", "sockel2"] if SOCKEL2 else ["sockel"]
         _sxy = np.asarray(SOCKEL_XY, float)
         _mind = min(float(np.linalg.norm(_sxy - np.asarray(s, float))) for s in SLOTS)
         print(f"  [Sockel] steht bei [{_sxy[0]:+.3f},{_sxy[1]:+.3f}], naechster Objekt-Slot "
@@ -3523,6 +3539,11 @@ def run_self_learning_steering(headless=False):
         print("  [Sockel] Hinweis: ein abgelegtes Objekt bleibt oben liegen; ab dann ist der "
               "Sockel-Blob verschmolzen und die Zieladresse wird mehrdeutig.", flush=True)
         scene["sockel"] = (_sxy.copy(), SOCKEL_HOEHEN[0] / 2.0, 0.0)
+        if SOCKEL2:
+            scene["sockel2"] = (np.array(PARK_XY, float), 0.004, 0.0)
+            print("  [Sockel] zweiter Grundriss dabei (sockel2, 50 mm) -- je Szene steht EINE "
+                  "Platte, die andere ist geparkt.  Die Adresse bliebe sonst mehrdeutig: beide "
+                  "lesen im Groessenband 'dick'.", flush=True)
 
     def _sockel_setzen(steht_xy):
         """Den Sockel fuer eine NEUE SZENE setzen: Stelle und Hoehe (s. SOCKEL_WANDERT/_HOEHEN).
@@ -3539,13 +3560,24 @@ def run_self_learning_steering(headless=False):
         """
         if not SOCKEL:
             return
-        _bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "sockel")
+        # WELCHE PLATTE diese Szene traegt (s. SOCKEL2).  Die andere wird geparkt; damit faellt sie
+        # von selbst aus der Kandidatenliste von `_ziel_adresse_wuerfeln` (die filtert ueber
+        # `_geparkt_jetzt`), und die Adresse bleibt eindeutig.
+        _aktiv = "sockel"
+        if SOCKEL2:
+            _aktiv = ("sockel", "sockel2")[int(crng.integers(2))]
+            for _s in ("sockel", "sockel2"):
+                if _s != _aktiv:
+                    scene[_s] = (np.array(PARK_XY, float), 0.004, 0.0)
+        _bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, _aktiv)
         _g = int(sim.m.body_geomadr[_bid])
         _h = SOCKEL_HOEHEN[int(crng.integers(len(SOCKEL_HOEHEN)))] if len(SOCKEL_HOEHEN) > 1 \
             else SOCKEL_HOEHEN[0]
         sim.m.geom_size[_g][2] = _h / 2.0
         sim.m.geom_rbound[_g] = float(np.linalg.norm(sim.m.geom_size[_g]))
-        _xy = np.asarray(scene["sockel"][0], float)
+        _xy = np.asarray(scene.get(_aktiv, (np.asarray(SOCKEL_XY, float),))[0], float)
+        if float(np.linalg.norm(_xy - np.asarray(PARK_XY, float))) < 0.05:
+            _xy = np.asarray(SOCKEL_XY, float)             # kam gerade aus dem Parkhaus
         if SOCKEL_WANDERT:
             from pc_cvnn.pc_act14 import REACH_XY as _RX
             _kand = []
@@ -3561,8 +3593,10 @@ def run_self_learning_steering(headless=False):
             else:
                 print(f"  [Sockel] KEINE Stelle mit {1000 * SOCKEL_FREI:.0f} mm Freiraum -- bleibt, wo er "
                       f"war.  Mit ACT23_SCENE_N=4 ist der Arbeitsraum dafuer zu klein.", flush=True)
-        scene["sockel"] = (_xy.copy(), _h / 2.0, 0.0)
-        print(f"  [Sockel] neue Szene: [{_xy[0]:+.3f},{_xy[1]:+.3f}], Hoehe {1000 * _h:.0f} mm", flush=True)
+        scene[_aktiv] = (_xy.copy(), _h / 2.0, 0.0)
+        print(f"  [Sockel] neue Szene: {_aktiv} "
+              f"({2000 * float(sim.m.geom_size[_g][0]):.0f} mm Grundriss) bei "
+              f"[{_xy[0]:+.3f},{_xy[1]:+.3f}], Hoehe {1000 * _h:.0f} mm", flush=True)
 
     # ERFAHRUNGS-GRUPPE fuer den Block-Bootstrap des Welt-Modells (s. world_model._bootstrap_blocks).
     # Eine Gruppe = eine STEHENDE SZENE innerhalb EINES Laufs.  Genau das ist die Einheit, ueber die
