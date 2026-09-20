@@ -846,6 +846,17 @@ if ZIEL_RELATION == "auf":
     if not act16.ERFOLG_RUHT:
         _fehlt.append("ACT16_ERFOLG_RUHT=1 -- sonst heisst 'geliefert' woertlich 'liegt auf dem "
                       "Tisch' und JEDER gelungene Stapel zaehlt als Fehlschlag")
+    if not EIG_DIREKT:
+        # DER FUENFTE SCHALTER, und er war bis 2026-09-20 nicht in dieser Liste.  Eine STUETZE
+        # steht in state.STUETZEN und NICHT in state.OBJECTS -- die Farbbindung laeuft aber ueber
+        # `bodies` aus OBJECTS, und die Formbindung schliesst STUETZEN ausdruecklich aus (Moebel
+        # bekommt keinen Knopf).  Eine Auflage kann deshalb NIE eine gebundene Klasse bekommen,
+        # und ohne Klasse hat ihre Adresse keine verfolgbare Achse: "keine verfolgbare Achse
+        # (Farbe None, Form None, Groesse dick)" in JEDER Episode, Rueckfall auf den Marker.
+        # Gemessen im Rauchtest: 0 von 4 Adressen ohne den Schalter, 4 von 4 mit ihm.
+        _fehlt.append("ACT23_EIG_DIREKT=1 -- eine STUETZE kann per Bauart keine Klasse bekommen "
+                      "(sie steht nicht in state.OBJECTS), also braucht ihre Adresse den "
+                      "klassenlosen Weg; sonst faellt JEDE Episode auf den Marker zurueck")
     if _fehlt:
         print("  [Ziel-Relation] ACT23_ZIEL_RELATION=auf ist gesetzt, aber es fehlt:", flush=True)
         for _m in _fehlt:
@@ -854,6 +865,36 @@ if ZIEL_RELATION == "auf":
         print("  [Ziel-Relation] ACT23_SOCKEL ist NICHT gesetzt -- dann gibt es keine Stuetze in "
               "der Szene, auf die 'auf' zeigen koennte, und jede Episode faellt auf den Marker "
               "zurueck.", flush=True)
+# =========================================================================================
+# DIE HOEHE SEHEN STATT WISSEN (ACT23_HOEHE_SEHEN, Vorgabe 0).
+#
+# `_ziel_aufloesen` rechnet die Ablagehoehe als GRASP_Z + Oberkante, und die Oberkante kommt
+# heute aus `sim.m.geom_size` -- das LETZTE Privileg auf dem Stapelpfad.  Nach
+# wiki/mechanismen/laufzeit-regeln.md darf ein Geruest die Trainingsdaten stuetzen und muss zur
+# Testzeit verschwinden.
+#
+# DASS ES GEHT, IST GEMESSEN (wiki/befunde/hoehe-steckt-in-der-wahrnehmung.md): die scheinbare
+# FLAECHE der Auflage steigt an 30 von 30 Stellen streng monoton mit der Hoehe.  Allein taugt sie
+# nichts -- der Ort streut 2,7-mal so stark wie der Hoehenhub --, zusammen mit dem wahrgenommenen
+# ORT und der Materialdicke aber: 1,31 mm Fehler und 77 % richtige Stufe gegen 4,00 mm und 33 %
+# Grundrate, stellenweise gehalten.
+#
+#   0 = wie bisher, die Oberkante kommt aus geom_size (der Schaetzer lernt trotzdem mit und
+#       schreibt seinen Fehler in die Zeile -- so misst EIN Lauf, was er koennte)
+#   1 = die Oberkante kommt aus dem Schaetzer.  Solange er zu wenige Zeilen hat, faellt er
+#       LAUT auf das Privileg zurueck; ein stiller Rueckfall waere genau die Verwechslung,
+#       die der Schalter aufdecken soll.
+HOEHE_SEHEN = os.environ.get("ACT23_HOEHE_SEHEN", "0") == "1"
+
+
+# Der Lerner selbst liegt in arm_modules/hoehen_schaetzer.py -- NICHT hier.  Eine Klasse,
+# die in pc_act23.py steht, wird als `__main__.HoehenSchaetzer` gepickelt; jedes andere
+# Skript koennte den Zustand dann nicht mehr laden, und ein Ladefehler schiebt die ganze
+# Datei nach .bak (s. _validate_loaded).  Genau dieselbe Trennung wie bei den vier
+# anderen Lernern.
+from pc_cvnn.arm_modules.hoehen_schaetzer import HoehenSchaetzer
+
+
 # ABSTUFUNG STATT PRIVILEG (ACT23_EIG_ABSTUFUNG, Vorgabe 0 bis gemessen).  Trifft das
 # Eigenschafts-Tripel nichts, griff bisher der PRIVILEGIERTE Rueckfall: die wahre Lage aus dem
 # Simulator.  Das ist der Preis der Groessenachse -- sie traf gemessen 10,0 statt 4,7 % der
@@ -2002,6 +2043,18 @@ def run_self_learning_steering(headless=False):
     else:
         shape_clf = _fresh_shape_clf()
 
+    # DER HOEHENSCHAETZER lebt mit den anderen Lernern im Zustand: er sammelt eine Zeile je
+    # Stapel-Episode, und mit einer Zeile pro Episode dauert es sonst Hunderte Laeufe, bis er
+    # etwas kann.  Ein alter Zustand ohne den Schluessel bekommt einen leeren -- additiv, deshalb
+    # ohne Schema-Bump (s. _validate_loaded: der prueft die PFLICHT-Lerner).
+    hoehen_schaetzer = (_loaded or {}).get("hoehe_schaetzer") or HoehenSchaetzer()
+    if not isinstance(hoehen_schaetzer, HoehenSchaetzer):        # Klasse hat sich geaendert
+        hoehen_schaetzer = HoehenSchaetzer()
+    if HOEHE_SEHEN or len(hoehen_schaetzer.X):
+        print(f"  [Hoehe] Schaetzer mit {len(hoehen_schaetzer.X)} Zeilen"
+              + ("  -- die Oberkante kommt aus der WAHRNEHMUNG (ACT23_HOEHE_SEHEN=1)"
+                 if HOEHE_SEHEN else "  -- lernt nur mit, benutzt wird das Privileg"), flush=True)
+
     # ACT23_UDIAG=1: U-GRASP-POINT diagnosis (mechanism-ID, no fix).  The 746-log showed U fails
     # mostly as "greift ins Leere" (47% nicht-gegriffen, |dyaw|~7).  Hypothesis (code-grounded,
     # shape_classifier:599-603): select() returns grasp_xy = MATERIAL nearest the CENTROID, and a U's
@@ -2402,8 +2455,53 @@ def run_self_learning_steering(headless=False):
             # der Adresse; sie geht ueber tgt_z in die Ablagephase und (mit ACT16_GOAL_Z) in den
             # Zustandsvektor, damit die Policy sie lernen KANN.
             _bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, bez["body"])
-            _oben = float(sim.obj_pos(bez["body"])[2]
-                          + sim.m.geom_size[sim.m.body_geomadr[_bid]][2])
+            _wahr_oben = float(sim.obj_pos(bez["body"])[2]
+                               + sim.m.geom_size[sim.m.body_geomadr[_bid]][2])
+            # ERST SCHAETZEN, DANN MERKEN (s. HoehenSchaetzer).  Andersherum stuende die eben
+            # gemerkte Zeile im eigenen Fit, und der berichtete Fehler waere geschoent.  Ganz
+            # aussen vor ist die Stelle damit nicht -- spaetere Episoden an derselben Stelle
+            # gehen ein; die stellenweise gehaltene Zahl steht in der Sonde, nicht hier.
+            _geschaetzt = hoehen_schaetzer.schaetzen(_det)
+            # GELERNT WIRD NUR VON EINER AUFLAGE, DIE DER AGENT SELBST FUER EIN DING HAELT.
+            # Nach dem ersten gelungenen Stapel bleibt das Objekt oben liegen (die Aufraeumschleife
+            # stellt nur NICHT-kommandierte Koerper zurueck), der Blob ist verschmolzen und seine
+            # Flaeche waere ein FALSCHES Beispiel: groesser, aber die Auflage ist gleich hoch
+            # geblieben.
+            #
+            # DER MASSSTAB IST DIE EINZELFLECK-SKALA, NICHT _merge_th.  Heute gemessen
+            # (wiki/befunde/selbstrichter-stapel.md): `_merge_th` ist das 0,995-Quantil und sitzt
+            # bei 0,339, waehrend eine Auflage MIT Wuerfel im Median nur 0,20 liest -- als Tor
+            # liesse es drei von vier verschmolzenen Bloecken durch.  Richtig ist der uebliche
+            # Bereich eines EINZELNEN Flecks: Median + (95er - Median) der eigenen Bezugswerte,
+            # im gelernten Zustand 0,085 + 0,035 = 0,120, gegen eine leere Auflage bei 0,073-0,079.
+            _cs0 = _det.get("cspread")
+            _ref = getattr(shape_clf, "_cs_ref", None)
+            if _cs0 is None:
+                _eins = True
+            elif _ref is not None and len(_ref) >= 12:
+                _rr = np.asarray(_ref, float)
+                _eins = float(_cs0) <= float(np.quantile(_rr, 0.5)) + float(
+                    np.quantile(_rr, 0.95) - np.quantile(_rr, 0.5))
+            else:
+                _eins = float(_cs0) <= shape_clf._merge_th()      # kein eigener Bezug -> grob
+            if _eins:
+                hoehen_schaetzer.merken(_det, _wahr_oben)
+            else:
+                print(f"    [Hoehe] Auflage sieht belegt aus (Farbstreuung {float(_cs0):.3f}) -- "
+                      f"KEIN Lernbeispiel", flush=True)
+            _oben = _wahr_oben
+            if HOEHE_SEHEN:
+                if _geschaetzt is None:
+                    print(f"    [Hoehe] noch kein Schaetzer ({len(hoehen_schaetzer.X)} von "
+                          f"{HoehenSchaetzer.MIN_ZEILEN} Zeilen) -- RUECKFALL auf das Privileg",
+                          flush=True)
+                else:
+                    _oben = float(_geschaetzt)
+            if _geschaetzt is not None:
+                print(f"    [Hoehe] gesehen {1000 * _geschaetzt:.1f}mm, wahr "
+                      f"{1000 * _wahr_oben:.1f}mm, Fehler {1000 * (_geschaetzt - _wahr_oben):+.1f}mm"
+                      f"  ({len(hoehen_schaetzer.X)} Zeilen"
+                      f"{', BENUTZT' if HOEHE_SEHEN else ', nur mitgelernt'})", flush=True)
             _tz = float(act16.GRASP_Z) + _oben
             _wahr = 1000.0 * float(np.linalg.norm(_p - sim.obj_pos(bez["body"])[:2]))
             print(f"    [Zieladresse] '{bez['label']}' 1 Treffer bei "
@@ -3019,6 +3117,7 @@ def run_self_learning_steering(headless=False):
                     "latent_dynamics": lat_dyn.pack(),
                     "dream_seen": [np.asarray(z) for z in dream_nov.seen],
                     "self_eval": seval,
+                    "hoehe_schaetzer": hoehen_schaetzer,
 
                     # EIGENSCHAFTS-ADRESSEN WERDEN NICHT GESPEICHERT.  Sie sind fluechtig: der
                     # Auto-Lauf schreibt sie in JEDER Episode neu aus der aktuellen Detektion.
