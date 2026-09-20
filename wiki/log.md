@@ -9,6 +9,22 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Anlage**: [Der lokale Hoehenschaetzer haelt im Lauf](/befunde/lokaler-schaetzer-im-lauf.md)
+  - die act23-Bestaetigung zum lokalen Umbau, in einer Welt mit ZWEI Auflagenformen im Wechsel
+  (`ACT23_SOCKEL2=1`). Warm 60 Episoden (51 Adressen, 9 verworfen -> 42 Zeilen), dann A und B je 40
+  aus demselben Zustand. **Die Schaetzung traegt: 0,60 mm auf der 50er und 1,10 mm auf der 70er
+  Platte** - dort, wo der globale Schaetzer auf der Grundrate gelegen haette (Pruefstand 3,38 mm).
+  Das war die Frage des Laufs, und sie ist mit Ja beantwortet. **Nebenbefund:** er ist im Lauf
+  BESSER als die Duennbesetzungs-Leiter der Sonde erwarten liess (42 Zeilen -> laut Sonde 50-60 %),
+  weil ein Lauf wenige Stellen MEHRFACH besucht statt ein Raster gleichmaessig auszuduennen - fuer
+  einen lokalen Schaetzer ist ein Lauf die guenstigere Welt. **Die Quote bleibt unentschieden:**
+  A 16/17 = 94 % gegen B 14/18 = 78 %, p = 0,338, und signifikant waere erst B <= 11/18 = 61 %.
+  16 Punkte nominell, zu gross um zu beruhigen und zu klein um sie zu zeigen. Die Luecke sitzt auf
+  der KLEINEN Platte (7/7 gegen 6/9), wo die Schaetzung mit 0,60 gegen 0,60 mm gleich gut ist -
+  die drei Fehlschlaege haben also keinen Hoehenfehler hinter sich; die kleine Platte ist
+  mechanisch die schwerere (Toleranz 13 statt 23 mm). Das bleibt Erklaerung, nicht Messung.
+  **Nicht vergleichbar mit den 85 % des ersten Stufe-3-A/B:** die XML hat einen Koerper mehr.
+
 * **Umbau**: der `HoehenSchaetzer` rechnet **lokal statt global linear** (`76a0121`), und die Welt
   hat einen zweiten Grundriss (`ACT23_SOCKEL2`). Beim Bauen zeigte sich, dass der auf der Seite
   vorgeschlagene Weg - ein Schaetzer je adressierter Auflage - **gar nicht noetig und ohnehin
