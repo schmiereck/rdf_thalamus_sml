@@ -60,7 +60,7 @@ ist ein "auf"-Lauf ein Teacher-Lauf**, und das ist auf dieser Seite die ehrliche
 Die Hoehe steht bewusst **nicht** in der Adresse und nicht im Ziel-Latent: eine Adresse nennt
 Eigenschaften des Koerpers, und eine Hoehe ist keine.
 
-# Vier fremde Schalter muessen mit - und der Bau sagt, welcher fehlt
+# Fuenf fremde Schalter muessen mit - und der Bau sagt, welcher fehlt
 
 `auf` ist ohne sie nicht wirkungslos, sondern **still falsch**. Deshalb prueft der Start und meldet
 jeden einzeln:
@@ -71,6 +71,24 @@ jeden einzeln:
 | `ACT16_ZIEL_SAEUBERN=0` | `run_combined` schiebt das Ziel um 0,05 m weg, aus "auf" wird "daneben" |
 | `ACT16_ERFOLG_RUHT=1` | "geliefert" heisst woertlich "liegt auf dem Tisch", jeder gelungene Stapel zaehlt als Fehlschlag |
 | `ACT23_SOCKEL=1` | es gibt keine Stuetze, jede Episode faellt auf den Marker zurueck |
+| `ACT23_EIG_DIREKT=1` | die Auflage hat **keine verfolgbare Achse**, jede Episode faellt auf den Marker zurueck |
+
+**Der fuenfte stand bis 2026-09-20 nicht in dieser Liste**, und sein Fehlen sieht aus wie ein
+Zufall der Szene, nicht wie ein fehlender Schalter. Der Grund ist strukturell:
+
+> Eine **Stuetze** steht in `state.STUETZEN` und **nicht** in `state.OBJECTS`. Die Farbbindung
+> laeuft aber ueber `bodies` aus `OBJECTS` (pc_act23:4434), und die Formbindung schliesst
+> `STUETZEN` ausdruecklich aus (*Moebel bekommt keinen Knopf*). **Eine Auflage kann deshalb per
+> Bauart nie eine gebundene Klasse bekommen** - weder eine Farb- noch eine Formklasse.
+
+Ohne Klasse hat ihre Adresse nichts zu nennen: *"keine verfolgbare Achse (Farbe None, Form None,
+Groesse dick) -- eine reine Groessenangabe ist keine Adresse"*, in JEDER Episode. Gemessen im
+Rauchtest: **0 von 4 Adressen ohne den Schalter, 4 von 4 mit ihm.**
+
+Das ist zugleich der erste Fall, in dem
+[die Adresse ohne Klasse](/mechanismen/adresse-ohne-klasse.md) nicht eine Abkuerzung ist, sondern
+**der einzige Weg**. Auf dem gespeicherten Zustand war sie wirkungslos, weil alle sieben Koerper
+vergeben sind; fuer Moebel ist sie notwendig.
 
 Kein Schalter legt einen anderen heimlich um - dieselbe Regel wie bei `AUGMENT`/`NEIGHBOURS` und
 `EIG_DIREKT`: ein Schalter, der einen zweiten mitzieht, macht jedes A/B mehrdeutig.

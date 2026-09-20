@@ -51,7 +51,17 @@ sources:
 * **Beim Aendern der Struktur eines Lerners `STATE_SCHEMA` hochzaehlen** (Aktionsdimensionen,
   Merkmalsdimensionen, neue Felder). Beim Laden laufen ausserdem DOF- und Dimensionspruefungen
   plus ein funktionaler Rauchtest je Lerner; bei Nichtpassung wird die Datei auf `.bak` umbenannt
-  und mit gedruckter Begruendung neu trainiert.
+  und mit gedruckter Begruendung neu trainiert. Ein **zusaetzlicher** Schluessel ist dagegen
+  additiv und braucht keinen Bump: `_validate_loaded` prueft die Pflicht-Lerner, und ein alter
+  Zustand ohne den Schluessel bekommt beim Laden einen leeren (so der `HoehenSchaetzer`).
+* **Ein Lerner, der im Zustand landet, gehoert in ein MODUL - nie in `pc_act23.py`.** Die Datei
+  laeuft als `__main__`, eine dort definierte Klasse wird deshalb als `__main__.<Name>` gepickelt
+  und ist aus jedem anderen Skript heraus **nicht ladbar** (`AttributeError: Can't get attribute`).
+  Schlimmer als der Lesefehler ist die Folge im Startcode: `pickle.load` wirft, bevor
+  `_validate_loaded` ueberhaupt laeuft, und der Ausnahmezweig benennt die **ganze** Zustandsdatei
+  nach `.bak` um und trainiert frisch. Die vier alten Lerner liegen aus diesem Grund in
+  `arm_modules/`; der `HoehenSchaetzer` liegt seit `d6599aa` daneben. Gefunden beim Bauen, nicht
+  im Betrieb - eine Sonde, die den Zustand nachliest, faellt sofort darauf herein.
 * **Gepickelte Module haben spaeter deklarierte Ports nicht** (`__init__` laeuft beim Laden
   nicht) - sonst `KeyError` auf dem Live-Zustand.
 * **Ein gespeicherter Zustand in einem frischen Prozess verhaelt sich anders als derselbe Zustand

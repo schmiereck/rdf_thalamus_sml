@@ -9,6 +9,24 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Bau**: der `HoehenSchaetzer` (`ACT23_HOEHE_SEHEN`, Vorgabe 0, main `d6599aa`) - die Oberkante
+  der Auflage aus Groessen DERSELBEN Detektion, die die Zieladresse ohnehin aufloest (scheinbare
+  Flaeche, Materialdicke, wahrgenommener Ort), gelabelt mit dem Privileg als Geruest. An den
+  Sondendaten reproduziert er die Sonde zifferngenau (1,31 mm, 77 %, stellenweise gehalten). **Drei
+  Dinge beim Bauen gefunden, alle in die Mechanismus-Seiten geschrieben:**
+  (1) **[Invariante](/mechanismen/invarianten.md): ein Lerner im Zustand gehoert in ein MODUL.**
+  `pc_act23.py` laeuft als `__main__`, eine dort definierte Klasse wird als `__main__.<Name>`
+  gepickelt, ist aus jedem anderen Skript unladbar - und der Startcode schiebt bei einem
+  Ladefehler die GANZE Zustandsdatei nach `.bak`.
+  (2) **[`ACT23_EIG_DIREKT` ist der FUENFTE Pflichtschalter fuer `auf`](/mechanismen/relation-auf-gebaut.md)**
+  und stand nicht in der Liste. Eine STUETZE steht nicht in `state.OBJECTS`, kann deshalb **per
+  Bauart nie eine gebundene Klasse bekommen**, und ohne Klasse hat ihre Adresse keine verfolgbare
+  Achse: gemessen **0 von 4 Adressen ohne den Schalter, 4 von 4 mit ihm**. Der Startcheck meldet
+  ihn jetzt mit. Erster Fall, in dem die klassenlose Adresse nicht Abkuerzung, sondern einziger Weg ist.
+  (3) **Das Lerntor ist die Einzelfleck-Skala** (Median + 95er-Median der eigenen Bezugswerte,
+  0,120), nicht `_merge_th` (0,339) - eine Auflage MIT Wuerfel liest im Median 0,20 und kaeme
+  durch das grobe Tor. Direkte Folge der [Selbstrichter-Messung](/befunde/selbstrichter-stapel.md).
+
 * **Anlage**: [Die Hoehe steckt in der Wahrnehmung](/befunde/hoehe-steckt-in-der-wahrnehmung.md)
   - Vorfrage vor dem Abbau des **letzten Privilegs auf dem Stapelpfad**: `_ziel_aufloesen` liest die
   Oberkante aus `sim.m.geom_size`. Sonde mit dem Sockel allein auf dem Tisch, 30 Rasterstellen x
