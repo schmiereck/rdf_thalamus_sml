@@ -9,6 +9,23 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Anlage**: [Die Hoehe steckt in der Wahrnehmung](/befunde/hoehe-steckt-in-der-wahrnehmung.md)
+  - Vorfrage vor dem Abbau des **letzten Privilegs auf dem Stapelpfad**: `_ziel_aufloesen` liest die
+  Oberkante aus `sim.m.geom_size`. Sonde mit dem Sockel allein auf dem Tisch, 30 Rasterstellen x
+  Hoehen 6/10/14 mm, je eine Detektion aus `perceive_all`. **Die scheinbare Flaeche steigt an 30
+  von 30 Stellen streng monoton mit der Hoehe** (+102 px^2 von 6 auf 14 mm) - kein Rauschen, reine
+  Perspektive. Allein taugt sie nichts, weil der Ort 2,7-mal so stark streut wie der Hoehenhub
+  (33 % = Grundrate). Mit dem wahrgenommenen **Ort** und der Materialdicke dazu: **1,31 mm Fehler
+  und 77 % richtige Stufe gegen 4,00 mm und 33 % Grundrate**, stellenweise gehalten, mit einem
+  linearen Modell. Alle vier Groessen stehen in derselben Detektion, die die Zieladresse ohnehin
+  aufloest - **das Privileg kann fallen.** Nebenbefund GEGEN meine Erwartung: der Ortsfehler
+  SINKT mit der Hoehe (0 von 30 positiv), weil die Homographie auf die Hoehe der Kalibrierkoerper
+  (~12 mm) geeicht ist und nicht auf den Tisch; dieselbe Physik wie in
+  [16 mm daneben](/befunde/stapeln-bricht-die-tischebene.md), nur mit verschobenem Nullpunkt. Er
+  ist als Kanal unbrauchbar - ihn zu messen setzt den wahren Ort voraus. `ebene: pruefstand`, sagt
+  also ueber act23 nichts vorher; und die Flaeche traegt die Hoehe nur, solange alle Auflagen
+  denselben Grundriss haben.
+
 * **Ergaenzung**: [Der Stapel-Selbstrichter](/befunde/selbstrichter-stapel.md) - zweiter Anlauf
   mit der **eigenen leeren Auflage** als Bezug statt des globalen Massstabs, und der Massstab fuer
   "deutlich veraendert" aus denselben Bezugswerten gemessen, aus denen `_merge_th()` sein Quantil
