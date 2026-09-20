@@ -1,5 +1,13 @@
 # Chronik
 
+## 2026-09-20
+
+* **Negativer Zwischenbefund**: [D0 Seed 17: Wrist-Evaluation](/befunde/dream-rsi-d0-seed17-wrist-evaluation.md) -
+  nach 120 Trainingsfolgen liefert der Checkpoint auf der vollstaendig protokollierten
+  Seed-101-Familie wie die Basis 21/40. Ausgerichtete Wrist-Wahl steigt nur 6/40 auf 8/40,
+  das Selbsturteil 23/40 auf 21/40. Die zweite festgelegte Testfamilie folgt; kein
+  Wirkungsurteil und kein Nachtraining nach diesem Zwischenstand.
+
 ## 2026-09-19
 
 * **Messluecke geschlossen**: [D0-Integritaet](/mechanismen/dream-rsi-d0-integritaet.md) und

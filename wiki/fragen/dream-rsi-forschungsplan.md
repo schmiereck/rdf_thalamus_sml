@@ -108,7 +108,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 
 | Paket | Inhalt | Voraussetzung | Status | Befund / Entscheidung |
 |---|---|---|---|---|
-| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | in Arbeit | Vertrag v1 fixiert; Seed-101-Freeze-Kontrolle besteht nach Fovea-Reparatur ueber 40 Episoden. Seed-17-Training liegt vor, Wirkungsvergleich und Seed 29 fehlen |
+| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | in Arbeit | Vertrag v1 fixiert; Seed-101-Freeze-Kontrolle besteht. Seed 17 verfehlt auf Seed 101 beide Wirkungstore; die vorab festgelegte Seed-103-Familie steht aus, Seed 29 fehlt |
 | D1 | Beobachtung, Checkpoints, Neustart- und Nichtbeeinflussungsnachweis | D0 | offen | - |
 | D2 | Kleine Bibliothek echter Trainingslinien | D1 | offen | - |
 | D3 | Replay mit Abdeckungs- und Informationspruefung | D2 | offen | - |
