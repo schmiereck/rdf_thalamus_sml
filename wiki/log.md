@@ -2,6 +2,11 @@
 
 ## 2026-09-20
 
+* **Seed-29-Training**: [D0 Seed 29: Wrist-Evaluation](/befunde/dream-rsi-d0-seed29-wrist-evaluation.md) -
+  das unveraenderte 120-Episoden-Rezept besteht mit 92 vollen Selbst-Krediten in fuenf Wrist-
+  Zellen. Die Checkpoint-Kopie ist erwartungsgemaess mutiert, die D0-Basis unveraendert;
+  Wirkungsnachweis erst nach den beiden gefrorenen Testfamilien.
+
 * **Negative Linie geschlossen**: [D0 Seed 17: Wrist-Evaluation](/befunde/dream-rsi-d0-seed17-wrist-evaluation.md) -
   auch auf Seed 103 verschiebt der Checkpoint die Wrist-Wahl Richtung Ausrichtung (3/40 -> 7/40),
   verliert aber Lieferung (26/40 -> 23/40). Gepoolt: Auswahl +10 statt +20 Punkte, Lieferung
