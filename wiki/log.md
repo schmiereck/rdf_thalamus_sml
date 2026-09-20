@@ -2,6 +2,11 @@
 
 ## 2026-09-20
 
+* **Seed-29-Basis bestätigt**: [D0 Seed 29: Wrist-Evaluation](/befunde/dream-rsi-d0-seed29-wrist-evaluation.md) -
+  die gefrorene Seed-101-Familie ist vollständig und integer (40/40 Episoden, keine
+  Lernmutation, Basis-SHA unverändert). Ihre vorregistrierten Zähler reproduzieren die frühere
+  Basisfamilie exakt: Lieferung 21/40, ausgerichtete Wrist 6/40, Enthaltungen 8/40.
+
 * **Seed-29-Training**: [D0 Seed 29: Wrist-Evaluation](/befunde/dream-rsi-d0-seed29-wrist-evaluation.md) -
   das unveraenderte 120-Episoden-Rezept besteht mit 92 vollen Selbst-Krediten in fuenf Wrist-
   Zellen. Die Checkpoint-Kopie ist erwartungsgemaess mutiert, die D0-Basis unveraendert;
