@@ -118,6 +118,52 @@ Hoehe. Aber genau das Zahlenverhaeltnis, das die Hoehe unlesbar macht, macht die
 sicher: **685 gegen 91.** Ein Band, das die Hoehenschwankung von 91 verschluckt und trotzdem 739
 von 1425 trennt, ist bequem zu finden. Was hier schadet, hilft dort.
 
+# NACHTRAG am selben Tag: der Ausweg ist gebaut, und er braucht keine Identitaet
+
+Der Abschnitt oben schliesst mit *"ein Schaetzer je adressierter Auflage"*. Beim Bauen stellte
+sich heraus, dass das **gar nicht noetig** ist - und dass der naheliegende Weg dorthin ohnehin
+versperrt gewesen waere:
+
+> **Die Groessenachse des Agenten saettigt bei Moebeln.** `GROESSEN_BAENDER` endet bei 6,5 px;
+> die 70er Platte liest 13,0, die 50er 10,0 - **beide heissen "dick"**. Die Identitaet, ueber die
+> ein Schaetzer je Auflage haette laufen sollen, ist auf dieser Achse gar nicht vorhanden. (Die
+> andere Achse, die Ausdehnung in mm, saettigt genauso: beide Platten waeren "riesig".)
+
+Der tatsaechliche Ausweg ist kleiner. Die beiden Grundrisse liegen im Merkmalsraum **weit
+auseinander** (Flaeche 740 gegen 1425). Nur der EINE globale lineare Fit zwang sie auf eine
+gemeinsame Ebene. Ein Modell, das seine Ebene nur aus der **Nachbarschaft** legt, wird dadurch von
+selbst zu einem Modell je Grundriss - ohne dass ihm irgendwo steht, dass es zwei gibt.
+
+    stellenweise gehalten          global linear      lokal, k = 10
+    eine Auflage  (90 Zeilen)      1,31 mm /  77 %    0,45 mm / 100 %
+    zwei Auflagen (180 Zeilen)     3,38 mm /  33 %    0,73 mm /  92 %
+
+**Lokal ist auf BEIDEN Welten besser**, nicht nur auf der schweren - und besser als getrennte
+Schaetzer je Grundriss (68 / 77 %), weil dieselbe Lokalitaet auch die Kruemmung ueber den Ort
+mitnimmt.
+
+`k = 10` ist nicht eingestellt, sondern die uebliche Faustregel: doppelt so viele Nachbarn wie
+Parameter (4 Merkmale + Achsenabschnitt). k = 12 ist gleichauf; grosse Nachbarschaften fallen
+wieder ab (k = 45 -> 49 %), weil sie die Grundrisse erneut vermischen.
+
+## Die Kehrseite ist gemessen: er braucht Zeilen
+
+    Zeilen im Schaetzer     24     36     60     90    174
+    lokal k = 10           36 %   46 %   74 %   69 %   93 %
+    global linear          32 %   33 %   33 %   33 %   33 %
+
+Der globale Fit wird von Daten **nie** besser - er kann es nicht. Der lokale schon, und ein
+einzelner 60-Episoden-Lauf liefert rund 32 Zeilen. Deshalb liegt der Schaetzer im **Zustand** und
+sammelt ueber Laeufe hinweg; das ist der Fall, fuer den die Persistenz da ist.
+
+## Und die Welt hat jetzt zwei Platten
+
+`ACT23_SOCKEL2=1` stellt je Szene **eine** der beiden auf, nie beide - aus demselben
+Saettigungsgrund: zwei gleichzeitig waeren als Adresse nicht zu trennen und jede Episode fiele
+mehrdeutig auf den Marker zurueck. Nacheinander ist die Adresse eindeutig, und der Schaetzer sieht
+trotzdem beide Grundrisse. Im Rauchtest wechseln sie sauber, und die Adressen treffen
+(4 bis 19 mm).
+
 # Fallen
 
 * **`ebene: pruefstand`.** Kein act23-Lauf. Die Sonde sagt, welche Information im Bild ist; sie
@@ -130,6 +176,11 @@ von 1425 trennt, ist bequem zu finden. Was hier schadet, hilft dort.
   70er gegen 50er im Lauf misst deshalb die **Mechanik**, nicht die Wahrnehmung. Ein sauberer
   act23-Vergleich muss BEIDE Arme auf DERSELBEN Platte fahren und nur das Wissen des Schaetzers
   unterscheiden.
+* **Der lokale Schaetzer ist NUR auf dem Pruefstand belegt.** Die act23-Bestaetigung steht aus,
+  und nach [Pruefstandsfalle](/mechanismen/pruefstandsfalle.md) sagt das nichts vorher. Der
+  Schutz dagegen ist die Vorgabe: `ACT23_HOEHE_SEHEN` bleibt 0, ohne den Schalter aendert sich
+  im Lauf nichts. Die frueheren act23-Zahlen (85 gegen 83 %) sind mit dem GLOBALEN Schaetzer
+  gemessen und uebertragen sich nicht automatisch.
 * **Zwei Grundrisse sind zwei Punkte.** Dass ein Schaetzer je Auflage traegt, ist an zwei Platten
   gezeigt; ob er auf die dritte uebertraegt - also ob der Agent fuer jede neue Auflage von vorn
   sammeln muss - ist damit nicht beantwortet und ist die naechste Frage.

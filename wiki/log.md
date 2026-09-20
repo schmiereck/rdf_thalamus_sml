@@ -9,6 +9,21 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Umbau**: der `HoehenSchaetzer` rechnet **lokal statt global linear** (`76a0121`), und die Welt
+  hat einen zweiten Grundriss (`ACT23_SOCKEL2`). Beim Bauen zeigte sich, dass der auf der Seite
+  vorgeschlagene Weg - ein Schaetzer je adressierter Auflage - **gar nicht noetig und ohnehin
+  versperrt** war: **die Groessenachse des Agenten saettigt bei Moebeln** (`GROESSEN_BAENDER`
+  endet bei 6,5 px, die Platten lesen 13,0 und 10,0 - beide heissen "dick"; die mm-Achse saettigt
+  genauso). Der tatsaechliche Ausweg braucht keine Identitaet: die Grundrisse liegen im
+  Merkmalsraum weit auseinander, und ein Modell, das seine Ebene nur aus der **Nachbarschaft**
+  legt, wird von selbst zu einem Modell je Grundriss. Stellenweise gehalten: **eine Auflage
+  1,31 mm/77 % -> 0,45 mm/100 %, zwei Auflagen 3,38 mm/33 % -> 0,73 mm/92 %** - lokal ist auf
+  beiden Welten besser, und besser als getrennte Schaetzer (68/77 %). `k = 10` ist nicht
+  eingestellt, sondern doppelt so viele Nachbarn wie Parameter. **Gemessene Kehrseite:** der
+  lokale braucht Zeilen (24 -> 36 %, 60 -> 74 %, 174 -> 93 %), waehrend der globale von Daten NIE
+  besser wird; deshalb liegt der Schaetzer im Zustand und sammelt ueber Laeufe. **Alles davon ist
+  `ebene: pruefstand`** - die act23-Bestaetigung steht aus, und `ACT23_HOEHE_SEHEN` bleibt auf 0.
+
 * **Anlage**: [Die zweite Auflage bricht den Hoehenschaetzer](/befunde/zweiter-grundriss-bricht-die-hoehe.md)
   - die am Vortag angekuendigte Bewaehrungsprobe, **und sie faellt durch.** Zweite Platte in der
   Welt (`sockel2`, 50 x 50 gegen 70 x 70, gleiche Farbe und Bauart, einziger Unterschied der
