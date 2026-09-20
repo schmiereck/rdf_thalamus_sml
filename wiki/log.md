@@ -2,6 +2,11 @@
 
 ## 2026-09-20
 
+* **Negative Linie geschlossen**: [D0 Seed 17: Wrist-Evaluation](/befunde/dream-rsi-d0-seed17-wrist-evaluation.md) -
+  auch auf Seed 103 verschiebt der Checkpoint die Wrist-Wahl Richtung Ausrichtung (3/40 -> 7/40),
+  verliert aber Lieferung (26/40 -> 23/40). Gepoolt: Auswahl +10 statt +20 Punkte, Lieferung
+  -3,75 Punkte. Seed 29 folgt nach unveraendertem Vertrag; kein Nachtraining von Seed 17.
+
 * **Negativer Zwischenbefund**: [D0 Seed 17: Wrist-Evaluation](/befunde/dream-rsi-d0-seed17-wrist-evaluation.md) -
   nach 120 Trainingsfolgen liefert der Checkpoint auf der vollstaendig protokollierten
   Seed-101-Familie wie die Basis 21/40. Ausgerichtete Wrist-Wahl steigt nur 6/40 auf 8/40,

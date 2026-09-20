@@ -108,7 +108,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 
 | Paket | Inhalt | Voraussetzung | Status | Befund / Entscheidung |
 |---|---|---|---|---|
-| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | in Arbeit | Vertrag v1 fixiert; Seed-101-Freeze-Kontrolle besteht. Seed 17 verfehlt auf Seed 101 beide Wirkungstore; die vorab festgelegte Seed-103-Familie steht aus, Seed 29 fehlt |
+| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | in Arbeit | Vertrag v1 fixiert; Seed 17 ist nach beiden Familien negativ geschlossen. Seed 29 mit unveraendertem Rezept und beiden Familien steht aus |
 | D1 | Beobachtung, Checkpoints, Neustart- und Nichtbeeinflussungsnachweis | D0 | offen | - |
 | D2 | Kleine Bibliothek echter Trainingslinien | D1 | offen | - |
 | D3 | Replay mit Abdeckungs- und Informationspruefung | D2 | offen | - |
