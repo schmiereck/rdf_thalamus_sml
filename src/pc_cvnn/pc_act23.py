@@ -2476,16 +2476,41 @@ def run_self_learning_steering(headless=False):
         if _dz > 0.05:
             return False, f"Auflage nicht wiedergefunden ({1000 * _dz:.0f}mm)"
         _cs, _a, _a0 = float(_b["cspread"]), float(_b["area"]), float(bez["area0"])
-        _traegt = _cs > _mth
+        # DER BEZUGSWERT IST DIE EIGENE LEERE AUFLAGE, nicht ein globaler Massstab.
+        # WARUM (gemessen, wiki/befunde/selbstrichter-stapel.md): `_merge_th()` beantwortet die
+        # Frage "was ueberschreitet ein EINZELNES Objekt praktisch nie" und liegt bei 0,34.  Ein
+        # Sockel mit Wuerfel liest 0,20 -- er sieht aus wie ein buntes Einzelobjekt und blieb
+        # darunter, in 14 von 14 Fehlanzeigen.  An DERSELBEN Auflage ist der Sprung dagegen gross:
+        # leer 0,07 gegen belegt 0,20.
+        # DER MASSSTAB FUER "DEUTLICH" IST EBENFALLS GEMESSEN, nicht gesetzt: wie weit die
+        # Farbstreuung eines EINZELNEN Flecks ueblicherweise streut, steht in denselben
+        # Bezugswerten, aus denen _merge_th sein Quantil zieht (`shape_clf._cs_ref`).  Genommen wird
+        # der Abstand vom Mittelwert zum 95er-Quantil -- gestiegen um mehr als das heisst: mehr als
+        # die uebliche Schwankung eines einzelnen Flecks.
+        _ref = getattr(shape_clf, "_cs_ref", None)
+        _spanne = None
+        if _ref is not None and len(_ref) >= 12:
+            _rr = np.asarray(_ref, float)
+            _spanne = float(np.quantile(_rr, 0.95) - np.quantile(_rr, 0.5))
+        _cs0 = bez.get("cspread0")
+        if _cs0 is not None and _spanne is not None:
+            _traegt = _cs > float(_cs0) + _spanne
+            _wieT = (f"Farbstreuung {_cs:.3f} gegen eigene leere Auflage {float(_cs0):.3f} "
+                     f"+ uebliche Schwankung {_spanne:.3f}")
+        else:
+            _traegt = _cs > _mth                         # Rueckfall, solange kein eigener Bezug da ist
+            _wieT = f"Farbstreuung {_cs:.3f} gegen globalen Massstab {_mth:.3f} (kein eigener Bezug)"
         _ao = None if det0 is None else det0.get("area")
         if _ao:
             _drauf = abs(_a - _a0) <= abs(_a - (_a0 + float(_ao)))
             _wie = f"Flaeche {_a:.0f} gegen leer {_a0:.0f} / daneben {_a0 + float(_ao):.0f}"
         else:
             _drauf, _wie = True, f"Flaeche {_a:.0f} (eigene Flaeche unbekannt)"
+        # DAS ALTE KRITERIUM WIRD MITPROTOKOLLIERT, nicht ersetzt: so vergleicht EIN Lauf beide
+        # Massstaebe an denselben Episoden, statt zwei Laeufe gegeneinander stellen zu muessen.
         return (_traegt and _drauf,
-                f"Farbstreuung {_cs:.3f} gegen eigenen Massstab {_mth:.3f} -> "
-                f"{'traegt etwas' if _traegt else 'leer'}; {_wie}")
+                f"{_wieT} -> {'traegt etwas' if _traegt else 'leer'}; {_wie}"
+                f" | global waere: {'ja' if _cs > _mth else 'nein'}")
 
     def _ziel_adresse_wuerfeln():
         """STUFE 1 von "Stapeln als neue Aufgabe": das Ablageziel wird eine ADRESSE.

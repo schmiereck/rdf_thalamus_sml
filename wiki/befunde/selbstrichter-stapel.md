@@ -1,7 +1,7 @@
 ---
 type: Befund
-title: Der Stapel-Selbstrichter ist treffsicher, aber fast blind - und die Aufraeumschleife baute den Stapel ab, bevor er ihn sah
-description: Der Agent beurteilt seinen eigenen Stapel ueber die Farbstreuung des Auflagen-Blobs, mit seinem eigenen Verschmelzungs-Massstab und ohne erfundene Schwelle. Ergebnis aus 40 Episoden - kein einziger Fehlalarm (7 von 7 richtig), aber nur 7 von 25 Stapeln erkannt. Alle 14 Fehlanzeigen scheitern an derselben Stelle: ein Sockel mit Wuerfel liest 0,20, der selbst gemessene Massstab liegt bei 0,34. Auf der 6-mm-Auflage wird kein einziger Stapel erkannt. Davor stand ein Messfehler, der alle frueheren Selbsturteile zum Stapeln entwertet - die Aufraeumschleife setzte das Objekt auf seine Ruhehoehe zurueck, bevor der Richter die Szene sah.
+title: Der Stapel-Selbstrichter - mit der eigenen leeren Auflage als Bezug erkennt er 68 statt 28 Prozent
+description: Der Agent beurteilt seinen eigenen Stapel ueber die Farbstreuung des Auflagen-Blobs, ohne von mir gesetzte Schwelle. Gegen einen globalen Massstab erkennt er nur 7 von 25 Stapeln; gegen die EIGENE leere Auflage derselben Episode, mit der gemessenen ueblichen Schwankung eines Einzelflecks als Mass, sind es 17 von 25 - bei null Fehlalarmen in beiden Faellen. Die verbleibenden Fehlanzeigen sind kein Schwellenproblem mehr: dort steigt die Farbstreuung gar nicht, weil das Objekt ueber den Rand haengt. Davor stand ein Messfehler, der alle frueheren Selbsturteile zum Stapeln entwertet - die Aufraeumschleife setzte das Objekt auf seine Ruhehoehe zurueck, bevor der Richter die Szene sah.
 tags: [act23, stapeln, selbsturteil, wahrnehmung]
 status: stable
 evidenz: gemessen
@@ -101,28 +101,76 @@ bis 0,397, ohne einen Ueberlapp - aber in einer aufgeraeumten Szene mit einem ei
 Lauf ueberlappen die Verteilungen deutlich (belegt 0,071-0,460, leer 0,063-0,282). Nachbarn, Arm und
 Schatten tragen mit; ein Wuerfel, dessen Farbe der Platte naeher liegt, hebt die Streuung kaum.
 
-# Der naechste Schritt, und er braucht keine neue Schwelle
+# Der zweite Anlauf: die eigene leere Auflage als Bezug
 
-Der Richter vergleicht heute gegen einen **globalen** Massstab. Er hat aber einen **eigenen** zur
-Hand: `cspread0`, die Farbstreuung DERSELBEN Auflage beim Adressieren derselben Episode. Leer 0,07
-gegen belegt 0,20 ist ein Faktor von fast drei an demselben Blob, waehrend der globale Massstab
-beide unterschreitet.
+Der Richter verglich gegen einen **globalen** Massstab. Er hat aber einen **eigenen** zur Hand:
+`cspread0`, die Farbstreuung DERSELBEN Auflage, gemessen beim Adressieren DERSELBEN Episode.
 
-Was dafuer fehlt, ist der Massstab fuer "deutlich veraendert" - und den koennte der Agent messen,
-statt ihn gesetzt zu bekommen: die Streuung wiederholter Messungen desselben Blobs ueber Frames. Das
-ist die naechste Messung dieser Linie.
+Und der Massstab fuer "deutlich veraendert" steckt in denselben Bezugswerten, aus denen
+`_merge_th()` sein Quantil zieht (`shape_clf._cs_ref`, 400 Werte im gelernten Zustand):
+
+    Median 0,085    95er-Quantil 0,120    0,995er-Quantil 0,339  (= der alte Massstab)
+    uebliche Schwankung eines Einzelflecks := 95er - Median = 0,035
+
+**Damit ist auch erklaert, warum der alte Massstab so grob war:** sein Quantil sitzt in einem
+langen Auslaeufer, waehrend das Gros der Einzelsichtungen bei 0,085 liegt. Fuer seine
+urspruengliche Aufgabe - Verschmelzungen sperren, lieber zu selten - ist er richtig geeicht; fuer
+"liegt etwas drauf" ist er viermal zu hoch.
+
+Das neue Kriterium, weiterhin ohne eine von mir gesetzte Zahl:
+
+    traegt etwas  :=  Farbstreuung jetzt  >  Farbstreuung der leeren Auflage + uebliche Schwankung
+
+## Beide Massstaebe an denselben Episoden
+
+Beide laufen in derselben Episode mit; das alte Kriterium steht als `global waere: ja/nein`
+daneben. So vergleicht EIN Lauf beide, statt zwei Laeufe gegeneinander zu stellen, die nach der
+ersten abweichenden Entscheidung ohnehin auseinanderlaufen.
+
+    Bezug                          erkannt             Fehlalarm    Uebereinstimmung
+    eigene leere Auflage      17 von 25 = 68 %        0 von 6            74 %
+    globaler Massstab          7 von 25 = 28 %        0 von 6            42 %
+
+**Zweieinhalbmal so empfindlich, und kein Fehlalarm mehr als zuvor.**
+
+## Die verbleibenden Fehlanzeigen sind kein Schwellenproblem
+
+Je Episode gepaart (19 Episoden mit Ablage- und Urteilszeile: 16 erkannt, 3 uebersehen):
+
+    Anstieg der Farbstreuung gegenueber der eigenen leeren Auflage
+      erkannt      Median +0,134
+      uebersehen   Median +0,003        (noetig waeren 0,037)
+    Versatz   uebersehen 23 mm  |  erkannt 10 mm
+    Fehlanzeige wegen Flaechentest: 0 - er verwirft weiterhin keinen einzigen echten Stapel
+
+Bei den uebersehenen Faellen steigt die Farbstreuung **gar nicht**. Das Objekt ist dann nicht im
+Blob der Auflage - es haengt ueber den Rand und bildet einen eigenen Fleck. Eine niedrigere
+Schwelle wuerde daran nichts aendern; das ist eine andere Frage (wo endet die Auflage) und
+braucht eine andere Messgroesse.
+
+Die Abhaengigkeit von der Auflagenhoehe hat sich dabei **umgekehrt**: 14 mm jetzt 10 von 10,
+10 mm 2 von 3, 6 mm 4 von 6. Der flache Sockel ist nicht mehr der blinde Fleck - die frueheren
+0 von 6 lagen am globalen Massstab, nicht an der Geometrie.
+
+# Der erste Anlauf, und warum er zu grob war
+
+Leer 0,07 gegen belegt 0,20 ist ein Faktor von fast drei an demselben Blob, waehrend der globale
+Massstab beide unterschreitet. Genau das ist im Abschnitt darueber umgesetzt und gemessen.
 
 # Fallen
 
-* **Die Empfindlichkeit haengt an der Auflagenhoehe** (0 von 6 bei 6 mm). Warum, ist nicht geklaert;
-  naheliegend ist, dass ein flacher Sockel den Wuerfel weniger aus seiner Silhouette heraustreten
-  laesst.
+* ~~**Die Empfindlichkeit haengt an der Auflagenhoehe**~~ - mit dem eigenen Bezug kehrt sich das
+  um (14 mm 10 von 10, 6 mm 4 von 6). Die Hoehe war nicht die Ursache, der Massstab war es.
 * **Ein Lauf, 31 Urteile.** Die Treffsicherheit von 7 aus 7 ist bei n = 7 kein Beweis fuer null
   Fehlalarme.
 * **Die Objektfarbe wechselt je Episode** (`FARB_MISCHUNG`). Ein Wuerfel in Sockelnaehe der Farbe
   hebt die Streuung kaum - der Anteil solcher Faelle ist nicht ausgezaehlt.
-* **Vorgabe bleibt 0.** Ein Urteil mit 28 % Empfindlichkeit taugt als Tor fuer die
-  Selbst-Imitation (es laesst nur Sicheres durch), aber nicht als Erfolgsmass.
+* **Vorgabe bleibt 0.** Auch mit 68 % Empfindlichkeit ist es ein Tor fuer die Selbst-Imitation
+  (es laesst nur Sicheres durch), kein Erfolgsmass - ein Drittel der Stapel bliebe ungezaehlt.
+* **Zwei Auszaehlungen, zwei Nenner.** Die Quoten oben zaehlen alle 31 Urteilszeilen (25 davon mit
+  Welt-Urteil "liegt drauf"); die Ursachenanalyse nur die 19 Episoden, in denen AUCH die
+  Ablage-Zeile mit Versatz und Auflagenhoehe steht. Nicht jede beurteilte Episode hat eine
+  Ablage-Zeile. Die Ursachen sind also an einer Teilmenge ausgezaehlt.
 
 # Verwandt
 

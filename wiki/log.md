@@ -9,6 +9,21 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Ergaenzung**: [Der Stapel-Selbstrichter](/befunde/selbstrichter-stapel.md) - zweiter Anlauf
+  mit der **eigenen leeren Auflage** als Bezug statt des globalen Massstabs, und der Massstab fuer
+  "deutlich veraendert" aus denselben Bezugswerten gemessen, aus denen `_merge_th()` sein Quantil
+  zieht: 400 Werte, Median 0,085, 95er 0,120, 0,995er 0,339 - **die uebliche Schwankung eines
+  Einzelflecks ist 0,035**, und das erklaert zugleich, warum der alte Massstab viermal zu hoch war
+  (sein Quantil sitzt im langen Auslaeufer). Beide Kriterien laufen in DERSELBEN Episode mit, das
+  alte als "global waere" danebengeschrieben - so vergleicht ein Lauf beide.
+  **Ergebnis: 17 von 25 erkannt statt 7 von 25, bei null Fehlalarmen in beiden Faellen**
+  (Uebereinstimmung 74 statt 42 %). **Die verbleibenden Fehlanzeigen sind kein Schwellenproblem:**
+  dort steigt die Farbstreuung um +0,003 statt +0,134 - das Objekt haengt ueber den Rand und ist
+  gar nicht im Blob der Auflage (Versatz 23 gegen 10 mm). Der Flaechentest verwirft weiterhin
+  keinen einzigen echten Stapel, und die vermeintliche Blindheit auf dem flachen Sockel kehrt sich
+  um (14 mm 10 von 10, 6 mm 4 von 6) - die Hoehe war nie die Ursache. Vorgabe bleibt 0: als Tor
+  fuer die Selbst-Imitation brauchbar, als Erfolgsmass nicht.
+
 * **Anlage**: [Der Stapel-Selbstrichter](/befunde/selbstrichter-stapel.md) - gebaut und gemessen,
   `ACT23_SELBST_STAPEL` (Vorgabe 0). Der Agent beurteilt seinen eigenen Stapel ueber die
   **Farbstreuung** des Auflagen-Blobs gegen seinen EIGENEN Verschmelzungs-Massstab, und trennt
