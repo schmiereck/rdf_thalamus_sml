@@ -203,6 +203,24 @@
                         friction="1.6 0.05 0.001"/>
     </body>
 
+    <!-- DIE ZWEITE AUFLAGE, ANDERER GRUNDRISS (50 x 50 mm gegen 70 x 70).  Sie ist die
+         Bewaehrungsprobe fuer den HoehenSchaetzer: der liest die Oberkante aus der scheinbaren
+         FLAECHE, und die haengt am Grundriss genauso wie an der Hoehe.  Ein Schaetzer, der nur
+         70er Platten gesehen hat, MUSS eine 50er fuer niedriger halten -- das ist die
+         Vorhersage, die diese Platte falsifizierbar macht
+         (wiki/befunde/oberkante-ohne-privileg.md, Abschnitt "Fallen").
+         GLEICHE FARBE wie sockel, mit Absicht: die beiden sollen sich in der GROESSE
+         unterscheiden und in nichts sonst.  Eine zweite Farbe waere ein zweiter Unterschied
+         und machte jede Aussage mehrdeutig.
+         KLEINER HEISST MECHANISCH SCHWERER: die geometrische Toleranz faellt von 23 auf 13 mm,
+         die gemessene Ablagegenauigkeit liegt bei 20-25 mm.  Ein Quotenvergleich 70er gegen 50er
+         misst deshalb die MECHANIK, nicht die Wahrnehmung -- s. die Seite zum Messaufbau. -->
+    <body name="sockel2" pos="0.75 -0.75 0.004">
+      <freejoint/>
+      <geom type="box" size="0.025 0.025 0.004" rgba="0.05 0.05 1.0 1" density="3000"
+                        friction="1.6 0.05 0.001"/>
+    </body>
+
     <!-- target marker: a flat disk on the table (mocap = kinematic, moved per episode),
          no collision so it never disturbs the cubes; also a visible cue for the camera.
          target_marker is the ACTIVE-goal disk run_combined snaps onto the committed goal each episode.

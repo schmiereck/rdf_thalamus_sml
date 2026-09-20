@@ -117,10 +117,12 @@ Die Oberkante kann aus der Wahrnehmung kommen. Was jetzt zu bauen ist:
   und ab dem ersten Stapel ist der Blob ohnehin verschmolzen
   ([0 von 25](/befunde/sockel-verschluckt-den-stapel.md)). Eine verschmolzene Flaeche ist groesser
   und wuerde als "hoeher" gelesen. Genau das ist die naechste Messung, nicht diese.
-* **Der Grundriss ist fest.** Die Flaeche traegt die Hoehe nur, weil ALLE Sockel 70 x 70 mm haben.
-  Eine kleinere Auflage in derselben Hoehe liest wie eine tiefere - das Modell koennte sie nicht
-  auseinanderhalten. Die Uebertragung auf eine **zweite Auflage anderen Grundrisses** ist damit die
-  eigentliche Bewaehrungsprobe und ausdruecklich ungemessen.
+* **Der Grundriss ist fest, und das ist inzwischen gemessen.** Die Flaeche traegt die Hoehe nur,
+  weil ALLE Sockel 70 x 70 mm haben. **Die Bewaehrungsprobe ist gelaufen und faellt durch**
+  ([Die zweite Auflage bricht den Hoehenschaetzer](/befunde/zweiter-grundriss-bricht-die-hoehe.md)):
+  eine 50-mm-Platte wird 6,0 mm zu niedrig gelesen, und beide Grundrisse zu zeigen hilft NICHT -
+  der Grundriss hebt die Flaeche um 685, die Hoehe nur um 91. Je Grundriss einzeln bleibt es bei
+  68-77 %. **Alle Zahlen dieser Seite gelten fuer EINE Auflagenform.**
 * **Drei Stufen, 4 mm auseinander.** 77 % richtige Stufe heisst nicht 77 % in einer Welt mit
   feineren oder weiteren Hoehen.
 * **Die Dicke bringt nur mit dem Ort etwas** (38 % allein, aber 62 -> 77 % als Zugabe). Sie ist

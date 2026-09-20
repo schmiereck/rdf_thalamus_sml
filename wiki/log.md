@@ -9,6 +9,24 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Anlage**: [Die zweite Auflage bricht den Hoehenschaetzer](/befunde/zweiter-grundriss-bricht-die-hoehe.md)
+  - die am Vortag angekuendigte Bewaehrungsprobe, **und sie faellt durch.** Zweite Platte in der
+  Welt (`sockel2`, 50 x 50 gegen 70 x 70, gleiche Farbe und Bauart, einziger Unterschied der
+  Grundriss), 180 Sondenzeilen. **(a)** Ein Schaetzer, der nur 70er kennt, liest eine 50er um
+  **-6,00 mm** zu niedrig und faellt auf die Grundrate (33 %); auf 70ern bleibt er bei 81 %.
+  **(b) Und beide zu sehen hilft NICHT** - 33 %, also ebenfalls Grundrate: in einem Topf sind
+  Grundriss und Hoehe in der Flaeche ununterscheidbar vermengt. **(c)** Keine aufgezeichnete
+  Bildgroesse trennt sie; der beste Kandidat `Flaeche/Dicke^2` (vergroesserungsfrei) reagiert auf
+  Hoehe und Grundriss **gleich stark** (-0,24 gegen +0,26). Der Befund in zwei Zahlen: **der
+  Grundriss hebt die Flaeche um 685, die Hoehe um 91.** ABER je Grundriss einzeln ist alles beim
+  Alten (68 und 77 %), und die Reihe 33 -> 49 (Grundriss als Eingabe) -> 59 (Flaeche/Grundriss^2)
+  -> 68/77 (je Auflage ein Schaetzer) zeigt den Ausweg: **die Hoehe ist keine Funktion des Bildes,
+  sondern des Bildes GEGEBEN die Identitaet der Auflage.** Die hat der Agent, weil er sie in
+  derselben Episode adressiert hat - und der befuerchtete Zirkelschluss ist gemessen keiner:
+  dasselbe Verhaeltnis 685 zu 91, das die Hoehe unlesbar macht, macht die Identitaet sicher.
+  [Die Oberkante ohne Privileg](/befunde/oberkante-ohne-privileg.md) ist damit nicht widerlegt,
+  sondern auf eine Welt mit EINER Auflagenform eingegrenzt - eine Grenze, die sie selbst benannt hatte.
+
 * **Anlage**: [Die Oberkante ohne Privileg](/befunde/oberkante-ohne-privileg.md) - **Stufe 3 ist
   durch: das letzte Privileg auf dem Stapelpfad ist gefallen.** Drei Laeufe: warm 60 Episoden (der
   Schaetzer sammelt 32 Zeilen aus 46 Gelegenheiten, 14 verworfen), dann A und B je 40 aus DEMSELBEN

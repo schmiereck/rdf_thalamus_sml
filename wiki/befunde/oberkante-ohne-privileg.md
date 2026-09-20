@@ -90,9 +90,12 @@ geschaetzte Hoehe kann bestenfalls so gut sein wie die wahre.
   aus dem Pfad, im Training nicht - und ein Agent, der nie einen privilegierten Lauf gesehen
   haette, haette diesen Schaetzer nicht. Die Hoehe aus dem **Ausgang** zu lernen (ein Stapel haelt
   oder nicht) ist die naechste, haertere Stufe und ist nicht gemessen.
-* **Der Grundriss ist fest.** Alle Auflagen sind 70 x 70 mm. Die Flaeche traegt die Hoehe nur
-  deshalb; eine kleinere Platte derselben Hoehe laese wie eine tiefere. **Die zweite Auflage
-  anderen Grundrisses ist die eigentliche Bewaehrungsprobe** und ausdruecklich ungemessen.
+* **Der Grundriss ist fest - und das ist die harte Grenze dieses Befundes.** Alle Auflagen sind
+  70 x 70 mm. **GEMESSEN am selben Tag: die Bewaehrungsprobe faellt durch**
+  ([Die zweite Auflage bricht den Hoehenschaetzer](/befunde/zweiter-grundriss-bricht-die-hoehe.md)).
+  Dieser Schaetzer liest eine 50-mm-Platte um 6,0 mm zu niedrig, und auch einer, der beide
+  Grundrisse gesehen hat, faellt auf die Grundrate. **Alles auf dieser Seite gilt damit fuer eine
+  Welt mit EINER Auflagenform.** Der Ausweg steht dort: ein Schaetzer je adressierter Auflage.
 * **Das Lerntor ist entschieden, nicht gemessen.** Von 46 Gelegenheiten im warmen Lauf sind 14
   verworfen worden, weil die Auflage belegt aussah (Farbstreuung ueber der Einzelfleck-Skala).
   Streng gegen lax ist ein eigenes A/B, das nicht gelaufen ist; die Begruendung fuer streng ist,
