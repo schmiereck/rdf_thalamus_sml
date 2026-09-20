@@ -9,6 +9,21 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Anlage**: [Die Policy stapelt selbst](/befunde/netz-stapelt-selbst.md) - der erste Stapellauf,
+  in dem die GELERNTE Choreographie faehrt. Zwei Arme je 50 Episoden aus DERSELBEN Kopie eines
+  200-Episoden-Trainingsstands, Unterschied allein `ACT23_CHOREO` netz gegen fsm.
+  **16 von 19 beurteilten Ablagen liegen auf dem Sockel, gegen 18 von 20 beim Teacher**
+  (p = 0,66; je Episode 16/50 gegen 18/50, p = 0,83). Objektmitte in BEIDEN Armen +11 mm ueber der
+  Auflage (Soll +12), Lieferquote 46 gegen 44 %. **Beide Arme loesen die Zieladresse in 100 % der
+  Stapelauftraege auf** (0 Rueckfaelle, gegen 86/100 im Lauf davor) - der Sockel ist dem Agenten
+  vertraut geworden. Die Policy laesst hoeher los (23 gegen 15 mm) und legt etwas weiter aus der
+  Mitte ab (16 gegen 12 mm), beides ohne Folge. **Damit ist die AUSFUEHRUNG des Teachers
+  entbehrlich** - aber ausdruecklich nicht das Privileg: die Auflagenhoehe steht weiter im Zustand
+  und stammt aus dem Simulator. Gezeigt ist, dass die Policy auf die Hoehe HANDELN kann, nicht dass
+  sie sie SEHEN kann; das ist Stufe 3 (Farbstreuung). Eigener Fehler im Ablauf: den trainierten
+  Stand hatte ich beim Aufraeumen geloescht und musste ihn neu erzeugen - deterministisch
+  reproduziert, aber nicht bitweise gegen den dokumentierten geprueft.
+
 * **Anlage**: [Die Policy legt auf jeder Sockelhoehe richtig ab](/befunde/gemischt-lernen-zweiter-lauf.md) -
   zweiter gemischter Lauf, 200 Episoden, Szenenwechsel alle zwei Episoden und damit **100
   Kombinationen aus Sockelort und -hoehe** statt 10. **Die Verwechslung mit dem Zielort ist
