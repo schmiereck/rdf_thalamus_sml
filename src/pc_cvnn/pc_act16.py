@@ -586,6 +586,13 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                         servo_lost += 1
                         if servo_lost >= SERVO_LOST and perceive_fn is not None and reacquires < MAX_REACQ:
                             fresh, _, _ = perceive_fn(cmd)             # saccadic RE-ACQUIRE ("stochern")
+                            # DERSELBE DRITTE WERT WIE OBEN.  perceive_fn darf mit ACT16_GRIFF_Z
+                            # eine Greifhoehe mitliefern; dieser Pfad hat sie nicht abgeschnitten
+                            # und der Vergleich mit einer 2er-Lage brach die Episode ab.  Die
+                            # Hoehe wird hier NICHT neu gesetzt: sie gilt fuer die Episode, und
+                            # ein Wiederfinden mitten im Griff soll sie nicht verschieben.
+                            if fresh is not None:
+                                fresh = np.asarray(fresh, float)[:2]
                             if fresh is not None:
                                 obj_belief = np.asarray(fresh, float)
                             servo_lost = 0; reacquires += 1           # bounded: then hold the belief

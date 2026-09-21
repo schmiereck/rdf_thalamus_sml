@@ -9,6 +9,27 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Anlage**: [Stufe 4 gemessen](/befunde/stufe4-abstapeln-gemessen.md) - das A/B zur Relation in
+  der Adresse, und es ist ein **Negativ mit praeziser Ursache**. **Die Sprache traegt:**
+  *"nimm das, was auf Y liegt"* loest in 27 von 38 Versuchen auf (Fehler Median 6 mm, 90 %-Wert
+  12 mm), und der Arm hebt den gestapelten Koerper in **23 von 23** Ablagen wirklich herunter
+  (15 mm ueber Ruhelage) - im Vergleichsarm ohne Relation 17 Ablagen mit 6-mal "nie getragen".
+  **Geliefert wird trotzdem nichts: 0 von 30 und 0 von 24.** Zwei bezifferte Ursachen, **keine
+  davon in der Sprache:** (1) der Arm verliert den getragenen Koerper aus dem GLAUBEN (28-45 mm
+  daneben statt der sonst 5-18) und legt 29 mm neben dem Ziel ab; (2) der Hoehenschaetzer liest
+  die Auflage voellig falsch - wahr 6/10/14 mm, geschaetzt 11,1/6,0/9,2, **die Reihenfolge ist
+  zerstoert**, also schlechter als raten. **Die Ursache dafuer habe ich selbst erzeugt:** der
+  Schaetzer hat auf Detektionen der LEEREN Auflage gelernt (~1400 px), gefragt wird er nach der
+  BELEGTEN - und die zerfaellt durch den Konzentrisch-Schnitt, die Auflage ist dann nur noch der
+  groessere Rest (738-1543 px). **Der Schnitt, der Stufe 4 erst moeglich macht, zerstoert die
+  Eingabe des Hoehenschaetzers** - zwei Bausteine, jeder fuer sich gemessen gut, die sich
+  gegenseitig untergraben. Naechster Schritt: der Schaetzer muss auf dem lernen, was er im
+  Einsatz bekommt (das Tasten liefert das Etikett ohnehin an der belegten Auflage).
+  **Zwei Programmierfehler haben den Lauf zweimal gekostet**, beide im Messaufbau: eine
+  Hilfsfunktion, die ihre Schalter SETZTE statt sie auszugeben (alle Laeufe fuhren mit Vorgaben,
+  erkannt nur an "0 Tastwerte"), und ein zweiter `perceive_fn`-Aufruf im Wiederfind-Pfad, dem die
+  dritte Rueckgabe die Episode brach.
+
 * **Anlage**: [Der Stapel wird sichtbar](/befunde/stapel-wird-sichtbar.md) - **Stufe 4 begonnen**,
   und ihre Voraussetzung ist geloest. Stufe 4 ist die Relation auch in der ADRESSE
   (`ADRESSE := ... | RELATION ADRESSE`, also *"nimm das, was auf Y liegt"*) - derselbe
