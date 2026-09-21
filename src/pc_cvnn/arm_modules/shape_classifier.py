@@ -195,6 +195,20 @@ CHROMA_TIEFE = int(os.environ.get("ACT_SHAPE_CHROMA_TIEFE", "3"))
 # Schwerpunktabstand der Teile, relativ zum groesseren Teilradius -- trennt "zwei
 # Koerper nebeneinander" von "Deckflaeche gegen Seitenflaeche desselben Koerpers".
 CHROMA_TRENNUNG = float(os.environ.get("ACT_SHAPE_CHROMA_TRENNUNG", "1.0"))
+# KONZENTRISCHE KOERPER (ACT_SHAPE_CHROMA_KONZENTRISCH, Vorgabe 0).
+# Die raeumliche Wache oben verwirft Teile, deren Schwerpunkte zusammenfallen -- sie ist dafuer
+# gebaut, SCHICHTEN eines schattierten Einzelkoerpers abzuweisen.  Ein GESTAPELTER Koerper faellt
+# in dieselbe Falle: er sitzt mitten auf seiner Auflage, die Schwerpunkte fallen zusammen, und
+# genau daran scheitert die Wahrnehmung eines Stapels
+# (wiki/befunde/sockel-verschluckt-den-stapel.md: 0 von 25).
+# GEMESSEN, welcher Riegel es wirklich ist: leere Platte -> zwei tragende Teile kommen gar nicht
+# zustande; Platte mit Wuerfel -> Chroma-Abstand 0,805 (gegen TH 0,12), Deckung 1,00, beide Tore
+# offen, und die raeumliche Wache mit 0,29 gegen 1,0 weist ab.
+# DIE AUSNAHME BRAUCHT KEINE NEUE ZAHL: die Farbstreuung des Flecks sagt bereits, ob dort mehr als
+# ein Ding ist, und ihr Massstab ist gemessen (Median + uebliche Schwankung der eigenen
+# Einzelobjekt-Sichtungen, wiki/befunde/selbstrichter-stapel.md).  Leere Platte 0,068, Platte mit
+# Wuerfel 0,329, Massstab 0,120.  Liegt der Fleck darueber, wird die Wache ausgesetzt.
+CHROMA_KONZENTRISCH = os.environ.get("ACT_SHAPE_CHROMA_KONZENTRISCH", "0") != "0"
 STARVE_MIN_EX = int(os.environ.get("ACT_OPEN_STARVE_EX", "6"))
 # DIE GROESSEN-AUSNAHME FAELLT BEI HOHEM ALTER.  Sie schuetzt junge, ECHTE Klassen davor, wegen einer
 # Durststrecke geloescht zu werden -- ab einem gewissen Alter schuetzt sie aber nur noch Leichen.
@@ -1255,6 +1269,24 @@ class ShapeClassifierModule(ArmModule):
                         "split": True})                        # marks a colour-split detection (diagnostics)
         return out
 
+    @staticmethod
+    def _chroma_pix(img, comp):
+        """Pixel-Chromatizitaet einer Komponente -- dieselbe Rechnung wie fuer `cspread`."""
+        ys, xs = np.nonzero(comp)
+        _pix = img[ys, xs].astype(float)
+        return _pix / (_pix.sum(1, keepdims=True) + 1e-6)
+
+    def _einzel_massstab(self):
+        """Wie weit die Farbe in EINEM Fleck ueblicherweise streut -- aus den eigenen
+        Bezugswerten, nicht gesetzt.  Median + (95er - Median) der Einzelobjekt-Sichtungen; das
+        ist derselbe Massstab, mit dem das Stapel-Selbsturteil arbeitet.  Ohne genug Bezugswerte
+        faellt es auf die Verschmelzungsschwelle zurueck (grober, aber vorhanden)."""
+        _ref = getattr(self, "_cs_ref", None)
+        if _ref is None or len(_ref) < 12:
+            return self._merge_th()
+        _r = np.asarray(_ref, float)
+        return float(np.quantile(_r, 0.5) + (np.quantile(_r, 0.95) - np.quantile(_r, 0.5)))
+
     def _chroma_teile(self, img, comp, min_area, tiefe=None):
         """Eine Komponente PIXELWEISE nach Chroma zerlegen -- unsupervised, OHNE Farbklassen.
 
@@ -1333,6 +1365,15 @@ class ShapeClassifierModule(ArmModule):
         _weit = max(float(np.linalg.norm(_z[i] - _z[j]))
                     > CHROMA_TRENNUNG * max(_r[i], _r[j])
                     for i in range(len(teile)) for j in range(i + 1, len(teile)))
+        if not _weit and CHROMA_KONZENTRISCH:
+            # EIN KOERPER AUF EINEM ANDEREN ist konzentrisch, nicht nebeneinander -- die Wache
+            # oben kann ihn nicht von einer Schattierungsschicht unterscheiden (s. Schalterkopf).
+            # Die Farbstreuung kann es: sie misst, wie weit die Pixel-Chromatizitaet im Fleck
+            # streut, und ein Fleck mit zwei Farbpopulationen ueberschreitet den Massstab des
+            # Einzelobjekts.  Derselbe Massstab wie beim Stapel-Selbsturteil, drittverwendet.
+            _pc = self._chroma_pix(img, comp)
+            _cs = float(np.sqrt(((_pc - _pc.mean(0)) ** 2).sum(1).mean()))
+            _weit = _cs > self._einzel_massstab()
         if not _weit:
             return []                                      # Schichten desselben Koerpers
         # REKURSION: der Schnitt ist binaer, ein Blob aus DREI Koerpern bliebe sonst halb

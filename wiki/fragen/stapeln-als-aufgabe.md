@@ -148,6 +148,39 @@ Der kleinste Schnitt, der das nicht zur Grossbaustelle macht:
 | 2 | Sockel in die Welt, `BEZUG := auf ADRESSE`, Ziel dreidimensional | **vorbereitet**, s. [Stufe 2 vorbereitet](/mechanismen/stufe2-vorbereitet.md): Sockel, `ACT16_GOAL_Z`, `ACT16_ERFOLG_RUHT` stehen. Offen bleiben die Relation selbst, woher die Hoehe kommt, der Selbstrichter - und zuerst der Transport zu einem besetzten Ziel |
 | 3 | ~~Hoehe aus dem Widerspruch Ort/Groesse lesen~~ -> **die Oberkante SEHEN statt wissen** | **gebaut und gemessen**, s. [Die Oberkante ohne Privileg](/befunde/oberkante-ohne-privileg.md): der `HoehenSchaetzer` liest sie aus Flaeche, Dicke und Ort derselben Detektion, die die Adresse aufloest. 85 gegen 83 % Stapel, p = 1,00 - **das letzte Privileg auf dem Pfad ist gefallen, ohne messbaren Verlust.** Die Relation aus der Farbstreuung traegt den SELBSTRICHTER, s. [dort](/befunde/selbstrichter-stapel.md) |
 
+| 4 | **RELATION auch in der ADRESSE**: `ADRESSE := (Farbe?, Form?, Groesse?) \| RELATION ADRESSE` - *"nimm das, was auf Y liegt"* | **angefangen.** Voraussetzung war, den gestapelten Koerper ueberhaupt zu FINDEN; das ist [gemessen geloest](/befunde/stapel-wird-sichtbar.md) (24 von 25 statt 0 von 25). Damit wird die Sprache **rekursiv** - dieselbe Relation im Subjekt wie im Ziel -, und Umstapeln wird moeglich |
+
+# Stufe 4: die Relation gehoert auch in die Adresse
+
+Bis Stufe 3 darf die Relation nur im **Ziel** stehen:
+
+    BEFEHL   := ADRESSE AKTION BEZUG
+    BEZUG    := ORT | RELATION ADRESSE          <- hier
+    ADRESSE  := (Farbklasse?, Formachse?, Groessenband?)
+
+Der naechste Schnitt ist derselbe Gedanke eine Ebene weiter - **derselbe Typ auch im Subjekt**:
+
+    ADRESSE  := (Farbklasse?, Formachse?, Groessenband?) | RELATION ADRESSE
+
+Damit ist *"nimm das, was auf dem Sockel liegt"* sagbar, und die Sprache wird **rekursiv**. Das ist
+der eigentliche Beleg, dass es eine Sprache ist und kein Sonderfall: derselbe Bauplan traegt an
+beiden Stellen, und aus ihm faellt das **Umstapeln** ohne ein weiteres Verb.
+
+**Die Voraussetzung ist geloest.** Ein gestapelter Koerper war nicht adressierbar, weil er keine
+eigene Detektion bekam. Die Ursache ist lokalisiert (die raeumliche Wache des Chroma-Schnitts, nicht
+sein Klassentor) und behoben: [Der Stapel wird sichtbar](/befunde/stapel-wird-sichtbar.md), 24 von
+25 gegen vorher 0 von 25, ohne dass die leere Platte zerfaellt.
+
+**Was noch fehlt**, und in dieser Reihenfolge:
+
+1. Die Aufloesung der Adresse muss die Relation lesen koennen - heute nimmt
+   `finde_nach_eigenschaften` nur ein Eigenschafts-Tripel.
+2. Der gefundene Koerper liegt **hoch**, nicht auf Greifhoehe. Der Griff braucht die dritte
+   Dimension genauso wie die Ablage sie in Stufe 2 bekommen hat - und die Hoehe kommt aus dem
+   [Hoehenschaetzer](/befunde/oberkante-ohne-privileg.md) oder aus dem
+   [Ertasten](/mechanismen/hoehe-ertasten.md), die dafuer schon stehen.
+3. Erst dann das A/B: Umstapeln gegen den heutigen Sonderfall.
+
 > **UMSORTIERT 2026-09-17.** Stufe 1 bei KLEINEM Abstand ist keine Vorstufe von Stufe 2, sondern
 > die haertere Aufgabe. Gemessen: der Arm kommt nicht unter ~37 mm an einen Koerper heran, und die
 > Ursache ist die Klauenmechanik - sie muss NEBEN einem Hindernis absenken

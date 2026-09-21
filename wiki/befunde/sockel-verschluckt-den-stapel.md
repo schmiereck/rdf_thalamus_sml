@@ -39,14 +39,31 @@ Die zweite Erwartung hat sich erledigt, bevor sie geprueft werden konnte.
 innerhalb der der Platte; aus Sicht der Kamera ist da nichts Neues. Die Frage nach dem
 Lokalisierungsfehler stellt sich damit gar nicht - es gibt nichts zu lokalisieren.
 
-**Der Chroma-Schnitt rettet es nicht** (`ACT_SHAPE_CHROMA_SPLIT=1`: ebenfalls 0 von 25). Er ist
-seiner Bauart nach auf den Verdachtsfall *"Deskriptor trifft KEINE Klasse"* verriegelt - und der
-Sockel-Blob loest sauber als `U` auf. Das Werkzeug waere das richtige, sein Tor ist das falsche.
+**Der Chroma-Schnitt rettet es nicht** (`ACT_SHAPE_CHROMA_SPLIT=1`: ebenfalls 0 von 25). Das
+Werkzeug waere das richtige, sein Tor ist das falsche.
+
+> **BERICHTIGT 2026-09-21: es ist ein ANDERES Tor als hier stand.** Die Begruendung lautete, der
+> Chroma-Schnitt sei auf *"Deskriptor trifft KEINE Klasse"* verriegelt. Diese Sperre sitzt am
+> **Erosions**-Split, nicht am Chroma-Schnitt. Einzeln nachgerechnet faellt in Wahrheit jedes Tor
+> bis auf die **raeumliche Wache**: Chroma-Abstand 0,805 gegen eine Schwelle von 0,12, Deckung
+> 1,00 - und dann Trennung 0,29 gegen geforderte 1,0. Die Wache verwirft Teile mit
+> zusammenfallenden Schwerpunkten, weil das Schattierungsschichten EINES Koerpers sind; ein
+> gestapelter Koerper sitzt konzentrisch und sieht fuer sie genauso aus.
+> Setzt man sie aus, sobald die Farbstreuung sagt, dass mehr als ein Ding im Fleck ist, trifft die
+> Detektion den Wuerfel in **24 von 25** Stellen, ohne dass die leere Platte zerfaellt.
+> Gemessen in [Der Stapel wird sichtbar](/befunde/stapel-wird-sichtbar.md).
 
 > **Verallgemeinert:** fuer diese Kamera ist ein Koerper, der auf einem GROESSEREN Koerper liegt,
-> unsichtbar. Das gilt nicht nur fuer den Sockel; es ist die Eigenschaft einer
+> in der SILHOUETTE unsichtbar. Das gilt nicht nur fuer den Sockel; es ist die Eigenschaft einer
 > Ein-Ansichten-Silhouette. Eine Auflage, die KLEINER ist als das getragene Objekt, kehrt das um -
 > kauft aber die Toleranz zurueck, um die es beim Sockel ging.
+>
+> **EINGESCHRAENKT 2026-09-21.** Hier stand "unsichtbar" ohne den Zusatz "in der Silhouette", und
+> das war zu weit. Die Flaechenmessung oben steht; die FARBE traegt aber, was die Umrisslinie
+> nicht hergibt - und dieselbe Seite misst das weiter unten selbst (0,069 leer gegen 0,149-0,397
+> belegt, ohne Ueberlapp). Ich hatte es als ANZEIGE gelesen und nicht als LOKALISIERUNG. Mit dem
+> Chroma-Schnitt und ausgesetzter raeumlicher Wache wird der Koerper in **24 von 25** Stellen
+> gefunden: [Der Stapel wird sichtbar](/befunde/stapel-wird-sichtbar.md).
 
 # Was ihn doch verraet
 

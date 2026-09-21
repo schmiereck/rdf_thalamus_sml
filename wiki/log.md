@@ -9,6 +9,27 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Anlage**: [Der Stapel wird sichtbar](/befunde/stapel-wird-sichtbar.md) - **Stufe 4 begonnen**,
+  und ihre Voraussetzung ist geloest. Stufe 4 ist die Relation auch in der ADRESSE
+  (`ADRESSE := ... | RELATION ADRESSE`, also *"nimm das, was auf Y liegt"*) - derselbe
+  "Typ statt Verb"-Schnitt eine Ebene weiter, womit die Sprache **rekursiv** wird und das
+  Umstapeln ohne ein weiteres Verb herausfaellt. Dafuer muss der gestapelte Koerper gefunden
+  werden, und das ging bisher nicht (0 von 25). **Die Ursache ist berichtigt:** auf
+  [Der Sockel verschluckt den Stapel](/befunde/sockel-verschluckt-den-stapel.md) stand, der
+  Chroma-Schnitt sei auf "Deskriptor trifft keine Klasse" verriegelt - diese Sperre sitzt aber am
+  EROSIONS-Split. Einzeln nachgerechnet faellt jedes Tor bis auf die **raeumliche Wache**
+  (Chroma-Abstand 0,805 gegen Schwelle 0,12, Deckung 1,00, dann Trennung 0,29 gegen 1,0). Sie
+  verwirft Teile mit zusammenfallenden Schwerpunkten, weil das Schattierungsschichten EINES
+  Koerpers sind - **ein gestapelter Koerper sitzt konzentrisch und sieht fuer sie genauso aus.**
+  **Abhilfe ohne neue Zahl:** die Wache wird ausgesetzt, sobald die Farbstreuung des Flecks den
+  Einzelobjekt-Massstab ueberschreitet (leer 0,068, belegt 0,329, Massstab 0,120) - derselbe
+  gemessene Massstab wie beim Selbstrichter und beim Lerntor, **dritte Verwendung**. Ergebnis:
+  **24 von 25 getroffen statt 0 von 25, und 0 von 25 falsche Zerfaelle auf der leeren Platte.**
+  Damit ist auch die Verallgemeinerung der alten Seite eingeschraenkt: ein Koerper auf einem
+  groesseren ist in der SILHOUETTE unsichtbar, nicht in der Wahrnehmung - die Farbe traegt, was
+  die Umrisslinie nicht hergibt, und die alte Seite hatte das selbst gemessen, aber als Anzeige
+  statt als Lokalisierung gelesen. `ACT_SHAPE_CHROMA_KONZENTRISCH`, Vorgabe 0.
+
 * **Anlage**: [Weniger Teacher kostet Genauigkeit und der Aufgabe nichts](/befunde/tastetikett-gegen-privileg.md)
   - das A/B zum Nutzerprinzip. Zwei Schaetzer, einer aus ERTASTETEN Etiketten (14 Zeilen), einer
   aus `geom_size` (22 Zeilen); danach wird **nur der Schaetzer** in denselben Basiszustand
