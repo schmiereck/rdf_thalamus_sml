@@ -113,6 +113,14 @@ sources:
 
 # Betriebsarten und Auswertung
 
+* **`ACT23_POLICY` und `ACT23_CHOREO` sind zwei verschiedene Dinge, und ich habe sie verwechselt.**
+  `ACT23_POLICY=teacher` waehlt nur den **Greifer** (Teacher-Griffparameter statt der selbst
+  gelernten). Wer faehrt, entscheidet `ACT23_CHOREO` - und dessen **Vorgabe ist `netz`**, also
+  die gelernte Policy. `ACT23_CHOREO=fsm` holt die gescriptete Choreographie zurueck.
+  **Ein Lauf, der nur `ACT23_POLICY=teacher` setzt, wird vom NETZ gefahren, nicht vom Teacher.**
+  Aufgefallen ist es erst, als eine neue Zeile im FSM-Zweig der Ablagephase (`ACT16_TASTEN`) in
+  keinem einzigen Lauf ansprang: der Zweig wird unter `netz` gar nicht betreten.
+
 * **Der Steuerungslauf braucht `ACT23_VIZ=1` und `ACT23_VIZ_HEADLESS=1`** (plus `ACT14_DOF=4`,
   `ACT23_HOME_Z_MIN=0`); ohne die VIZ-Flags landet man in der Diagnose-Betriebsart.
 * **`ACT23_CHOREO` ist per Vorgabe `fsm`, nicht `netz`.** Wer den Netzpfad rauchtesten will

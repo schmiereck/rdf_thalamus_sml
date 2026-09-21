@@ -9,7 +9,7 @@ ebene: act23-ab
 generated: { by: claude/opus-5, at: 2026-09-20T00:00:00Z }
 sources:
   - id: lauf
-    resource: "Ein kopfloser Lauf, 40 Episoden auf einer Kopie von act23_state.pkl (ad9d768c), Seed 7001, ACT23_SELBST_STAPEL=1 ACT23_ZIEL_MISCH=0.8 ACT23_SOCKEL_WANDERT=1 ACT23_SOCKEL_HOEHEN=6,10,14 ACT23_SCENE_N=3 ACT23_SCENE_EVERY=2, Teacher fahrend"
+    resource: "Ein kopfloser Lauf, 40 Episoden auf einer Kopie von act23_state.pkl (ad9d768c), Seed 7001, ACT23_SELBST_STAPEL=1 ACT23_ZIEL_MISCH=0.8 ACT23_SOCKEL_WANDERT=1 ACT23_SOCKEL_HOEHEN=6,10,14 ACT23_SCENE_N=3 ACT23_SCENE_EVERY=2, **vom NETZ gefahren** (`ACT23_CHOREO` nicht gesetzt = Vorgabe `netz`; das zuvor hier stehende 'Teacher fahrend' war falsch, s. Invarianten)"
     title: Stapel-Selbsturteil gegen das privilegierte Urteil
   - id: sonde
     resource: /befunde/sockel-verschluckt-den-stapel.md

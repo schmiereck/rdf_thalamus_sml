@@ -9,7 +9,7 @@ ebene: act23-ab
 generated: { by: claude/opus-5, at: 2026-09-21T00:00:00Z }
 sources:
   - id: ab
-    resource: "Drei kopflose Laeufe nacheinander auf Kopien von act23_state.pkl (ad9d768c), Seed 7001, Teacher fahrend: warm 60 Episoden (49 Zieladressen, 12 Lernbeispiele verworfen -> 37 Zeilen ueber drei Platten), dann A und B je 40 aus DEMSELBEN warmen Zustand. Rezept identisch zur Zwei-Grundriss-Reihe, einziger Unterschied ACT23_SOCKEL_N=3 statt ACT23_SOCKEL2=1; Unterschied zwischen den Armen allein ACT23_HOEHE_SEHEN=0 gegen =1"
+    resource: "Drei kopflose Laeufe nacheinander auf Kopien von act23_state.pkl (ad9d768c), Seed 7001, **vom NETZ gefahren** (`ACT23_CHOREO` nicht gesetzt = Vorgabe `netz`; das zuvor hier stehende 'Teacher fahrend' war falsch, s. Invarianten): warm 60 Episoden (49 Zieladressen, 12 Lernbeispiele verworfen -> 37 Zeilen ueber drei Platten), dann A und B je 40 aus DEMSELBEN warmen Zustand. Rezept identisch zur Zwei-Grundriss-Reihe, einziger Unterschied ACT23_SOCKEL_N=3 statt ACT23_SOCKEL2=1; Unterschied zwischen den Armen allein ACT23_HOEHE_SEHEN=0 gegen =1"
     title: Das Drei-Grundriss-A/B
   - id: sonde
     resource: /befunde/dritte-auflage-bricht-die-nachbarschaft.md
@@ -96,6 +96,16 @@ sauber benennbar und er ist nicht die Genauigkeit:
   Welt drei Auflagenformen hat.
 * **Kein Ertrag:** Genauigkeit. Zwischen 0,8 und 2,2 mm Schaetzfehler liegt fuer die Aufgabe
   nichts.
+
+# BERICHTIGUNG 2026-09-21: es war das NETZ, nicht der Teacher
+
+In der Quellenzeile stand "Teacher fahrend". **Das war falsch.** `ACT23_POLICY=teacher` waehlt nur
+den Greifer; wer die Teilziele faehrt, entscheidet `ACT23_CHOREO`, und dessen Vorgabe ist `netz`.
+Diese Laeufe hat also die **gelernte Policy** gefahren.
+
+Am A/B aendert das nichts - beide Arme hatten dieselbe Einstellung. Es aendert die **Lesart**, und
+zwar zugunsten des Befundes: die Quoten stammen nicht von der gescripteten Choreographie, sondern
+von der Policy.
 
 # Fallen
 

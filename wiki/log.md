@@ -9,6 +9,37 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Anlage**: [Die Auflagenhoehe ertasten](/mechanismen/hoehe-ertasten.md) - Nutzerprinzip
+  **"weniger Teacher ist immer besser"**, umgesetzt fuer die letzte privilegiert gelabelte Groesse.
+  **Der Ausgang "Stapel haelt oder nicht" taugt dafuer nachweislich NICHT:** der Hoehenfehler ist
+  bei gelungenen und misslungenen Stapeln gleich gross (2,20 gegen 2,30 mm), was kippt, ist der
+  seitliche Versatz - darauf zu lernen hiesse, auf Rauschen zu lernen. **Das Ausgangssignal muss
+  koerperlich und ABGESTUFT sein**, und das ist die uebertragbare Form des Befundes. Was traegt,
+  ist die **Beruehrung**: die Hand senkt das getragene Objekt `TAST_TIEF` unter die Schaetzung und
+  haelt an, sobald sie fuehlt, dass es nicht mehr sinkt; die Aufsetzhoehe IST die gesuchte Groesse,
+  gemessen an `site_xpos` (Vorwaertskinematik, Propriozeption - kein Simulatorwissen, kein
+  Objektmass). Gegen die Wahrheit, die nirgends eingeht: **7 Tastwerte, Median -0,50 mm, |Median|
+  1,10 mm** - so genau wie der Schaetzer, den es trainieren soll (0,7-2,2 mm). **Zwei
+  Konstruktionsfehler gemessen und behoben:** (1) ohne das UEBERTASTEN waere das Signal einseitig
+  (Beruehrung entstuende nur bei zu tiefer Schaetzung) und der Lerner driftete; (2) die
+  Aufsetzhoehe ist die beim BEGINN des Stillstands, nicht am Ende - waehrend der
+  Bestaetigungsschritte kriecht die Hand weiter und las die Oberkante systematisch zu tief
+  (Median -2,65 -> -0,50 mm). **Offen:** ob ein aus Tastwerten gelernter Schaetzer im Lauf so gut
+  ankommt wie einer aus dem Privileg - das ist der naechste Lauf. `ACT16_TASTEN` und
+  `ACT23_HOEHE_TASTEN`, beide Vorgabe 0.
+
+* **Berichtigung**: in den Quellenzeilen mehrerer Stapel-Befunde stand **"Teacher fahrend" - das
+  war falsch.** `ACT23_POLICY=teacher` waehlt nur den GREIFER; wer die Teilziele faehrt,
+  entscheidet `ACT23_CHOREO`, und dessen **Vorgabe ist `netz`**. Die Laeufe zu
+  [Oberkante ohne Privileg](/befunde/oberkante-ohne-privileg.md),
+  [lokaler Schaetzer](/befunde/lokaler-schaetzer-im-lauf.md),
+  [drei Auflagen](/befunde/drei-auflagen-im-lauf.md) und
+  [Selbstrichter](/befunde/selbstrichter-stapel.md) hat also die **gelernte Policy** gefahren. Am
+  A/B aendert das nichts (beide Arme gleich), an der Lesart schon - und zwar zugunsten der
+  Befunde. Aufgefallen ist es erst, als eine neue Zeile im FSM-Zweig in keinem Lauf ansprang.
+  Als Invariante abgelegt; drei aeltere Seiten, deren Rezept ich nicht nachweisen kann, tragen
+  jetzt einen Vorbehalt statt einer Behauptung.
+
 * **Anlage**: [Drei Auflagenformen im Lauf](/befunde/drei-auflagen-im-lauf.md) - die
   act23-Gegenprobe zur dritten Auflage, auf Wunsch des Nutzers gefahren, nachdem ich sie fuer
   nicht lohnend erklaert hatte. **Meine Begruendung war zu pauschal:** sie galt fuer die

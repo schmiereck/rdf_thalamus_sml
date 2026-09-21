@@ -9,7 +9,7 @@ ebene: pruefstand
 generated: { by: claude/opus-5, at: 2026-09-20T00:00:00Z }
 sources:
   - id: lauf
-    resource: "Ein kopfloser Lauf auf einer Kopie von act23_state.pkl (ad9d768c), 4 x 50 Episoden (Seeds 5242-5245), ACT23_ZIEL_MISCH=0.5 ACT23_SOCKEL_WANDERT=1 ACT23_SOCKEL_HOEHEN=6,10,14 ACT23_SCENE_N=3 ACT23_SCENE_EVERY=2, Teacher fahrend"
+    resource: "Ein kopfloser Lauf auf einer Kopie von act23_state.pkl (ad9d768c), 4 x 50 Episoden (Seeds 5242-5245), ACT23_ZIEL_MISCH=0.5 ACT23_SOCKEL_WANDERT=1 ACT23_SOCKEL_HOEHEN=6,10,14 ACT23_SCENE_N=3 ACT23_SCENE_EVERY=2, Teacher fahrend -- UNGEPRUEFT, s. Invarianten: nur mit ACT23_CHOREO=fsm zutreffend, sonst faehrt das Netz"
     title: Zweiter gemischter Lernlauf
   - id: vorher
     resource: /befunde/gemischt-lernen-erster-lauf.md

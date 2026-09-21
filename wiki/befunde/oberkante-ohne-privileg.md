@@ -9,7 +9,7 @@ ebene: act23-ab
 generated: { by: claude/opus-5, at: 2026-09-20T00:00:00Z }
 sources:
   - id: ab
-    resource: "Drei kopflose Laeufe nacheinander auf Kopien von act23_state.pkl (ad9d768c), Seed 7001, Teacher fahrend: warm 60 Episoden (der Schaetzer sammelt), dann A und B je 40 Episoden aus DEMSELBEN warmen Zustand. ACT23_SOCKEL=1 ACT23_ZIEL_ADRESSE=1 ACT23_ZIEL_RELATION=auf ACT23_EIG_DIREKT=1 ACT23_EIG_STETIG=1 ACT16_GOAL_Z=1 ACT16_ZIEL_SAEUBERN=0 ACT16_ERFOLG_RUHT=1 ACT23_SOCKEL_WANDERT=1 ACT23_SOCKEL_HOEHEN=6,10,14 ACT23_SCENE_N=3 ACT23_SCENE_EVERY=2 ACT23_ZIEL_MISCH=0.8 ACT23_SELBST_STAPEL=1; Unterschied allein ACT23_HOEHE_SEHEN=0 gegen =1"
+    resource: "Drei kopflose Laeufe nacheinander auf Kopien von act23_state.pkl (ad9d768c), Seed 7001, **vom NETZ gefahren** (`ACT23_CHOREO` nicht gesetzt = Vorgabe `netz`; das zuvor hier stehende 'Teacher fahrend' war falsch, s. Invarianten): warm 60 Episoden (der Schaetzer sammelt), dann A und B je 40 Episoden aus DEMSELBEN warmen Zustand. ACT23_SOCKEL=1 ACT23_ZIEL_ADRESSE=1 ACT23_ZIEL_RELATION=auf ACT23_EIG_DIREKT=1 ACT23_EIG_STETIG=1 ACT16_GOAL_Z=1 ACT16_ZIEL_SAEUBERN=0 ACT16_ERFOLG_RUHT=1 ACT23_SOCKEL_WANDERT=1 ACT23_SOCKEL_HOEHEN=6,10,14 ACT23_SCENE_N=3 ACT23_SCENE_EVERY=2 ACT23_ZIEL_MISCH=0.8 ACT23_SELBST_STAPEL=1; Unterschied allein ACT23_HOEHE_SEHEN=0 gegen =1"
     title: Das Stufe-3-A/B
   - id: sonde
     resource: /befunde/hoehe-steckt-in-der-wahrnehmung.md
@@ -79,6 +79,16 @@ die Aufgabe leidet nicht darunter.** Das ist der Ertrag, nicht die 83 %.
 
 Es ist ausdruecklich **kein** Fortschritt in der Leistung, und es war keiner zu erwarten: die
 geschaetzte Hoehe kann bestenfalls so gut sein wie die wahre.
+
+# BERICHTIGUNG 2026-09-21: es war das NETZ, nicht der Teacher
+
+In der Quellenzeile stand "Teacher fahrend". **Das war falsch.** `ACT23_POLICY=teacher` waehlt nur
+den Greifer; wer die Teilziele faehrt, entscheidet `ACT23_CHOREO`, und dessen Vorgabe ist `netz`.
+Diese Laeufe hat also die **gelernte Policy** gefahren.
+
+Am A/B aendert das nichts - beide Arme hatten dieselbe Einstellung. Es aendert die **Lesart**, und
+zwar zugunsten des Befundes: die Quoten stammen nicht von der gescripteten Choreographie, sondern
+von der Policy.
 
 # Fallen
 

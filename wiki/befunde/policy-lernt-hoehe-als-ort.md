@@ -9,7 +9,7 @@ ebene: pruefstand
 generated: { by: claude/opus-5, at: 2026-09-19T00:00:00Z }
 sources:
   - id: lauf
-    resource: "Ein kopfloser Lauf auf einer Kopie von act23_state.pkl (ad9d768c), 20 + 30 + 50 Episoden mit Seeds 4242/4243/4244, Teacher fahrend mit korrigiertem Etikett (409f7cc), ACT23_ZIEL_RELATION=auf, ACT23_EIG_DIREKT=1 ACT23_EIG_STETIG=1, Zwischenstaende ck000/020/050/100"
+    resource: "Ein kopfloser Lauf auf einer Kopie von act23_state.pkl (ad9d768c), 20 + 30 + 50 Episoden mit Seeds 4242/4243/4244, Teacher fahrend -- UNGEPRUEFT, s. Invarianten: nur mit ACT23_CHOREO=fsm zutreffend, sonst faehrt das Netz mit korrigiertem Etikett (409f7cc), ACT23_ZIEL_RELATION=auf, ACT23_EIG_DIREKT=1 ACT23_EIG_STETIG=1, Zwischenstaende ck000/020/050/100"
     title: Lernlauf Ablagehoehe
   - id: probe
     resource: "Offline am Netz: 470 echte Tisch-Absenkzustaende aus dem Originalpuffer als festes Probenset, 14. Spalte getauscht; dazu die eigenen Stapelzeilen jedes Zwischenstands"

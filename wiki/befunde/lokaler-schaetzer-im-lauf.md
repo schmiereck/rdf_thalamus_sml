@@ -9,7 +9,7 @@ ebene: act23-ab
 generated: { by: claude/opus-5, at: 2026-09-20T00:00:00Z }
 sources:
   - id: ab
-    resource: "Drei kopflose Laeufe nacheinander auf Kopien von act23_state.pkl (ad9d768c), Seed 7001, Teacher fahrend: warm 60 Episoden (51 Zieladressen, 9 Lernbeispiele verworfen -> 42 Zeilen), dann A und B je 40 aus DEMSELBEN warmen Zustand. Wie das erste Stufe-3-A/B, zusaetzlich ACT23_SOCKEL2=1; Unterschied allein ACT23_HOEHE_SEHEN=0 gegen =1"
+    resource: "Drei kopflose Laeufe nacheinander auf Kopien von act23_state.pkl (ad9d768c), Seed 7001, **vom NETZ gefahren** (`ACT23_CHOREO` nicht gesetzt = Vorgabe `netz`; das zuvor hier stehende 'Teacher fahrend' war falsch, s. Invarianten): warm 60 Episoden (51 Zieladressen, 9 Lernbeispiele verworfen -> 42 Zeilen), dann A und B je 40 aus DEMSELBEN warmen Zustand. Wie das erste Stufe-3-A/B, zusaetzlich ACT23_SOCKEL2=1; Unterschied allein ACT23_HOEHE_SEHEN=0 gegen =1"
     title: Das Zwei-Grundriss-A/B
   - id: bruch
     resource: /befunde/zweiter-grundriss-bricht-die-hoehe.md
@@ -73,6 +73,16 @@ Was sich dazu sagen laesst, ohne zu ueberziehen:
   einer gemessenen Ablagegenauigkeit von 20-25 mm. Dass sie mehr Fehlschlaege traegt, ist zu
   erwarten - in A ist sie mit 7/7 nur nicht dazu gekommen, es zu zeigen.
 * Beides bleibt eine Erklaerung, keine Messung. **n = 7 und n = 9 tragen sie nicht.**
+
+# BERICHTIGUNG 2026-09-21: es war das NETZ, nicht der Teacher
+
+In der Quellenzeile stand "Teacher fahrend". **Das war falsch.** `ACT23_POLICY=teacher` waehlt nur
+den Greifer; wer die Teilziele faehrt, entscheidet `ACT23_CHOREO`, und dessen Vorgabe ist `netz`.
+Diese Laeufe hat also die **gelernte Policy** gefahren.
+
+Am A/B aendert das nichts - beide Arme hatten dieselbe Einstellung. Es aendert die **Lesart**, und
+zwar zugunsten des Befundes: die Quoten stammen nicht von der gescripteten Choreographie, sondern
+von der Policy.
 
 # Fallen
 
