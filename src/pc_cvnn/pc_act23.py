@@ -850,6 +850,27 @@ ADR_REL_KLEINER = float(os.environ.get("ACT23_ADR_REL_KLEINER", "1.5"))
 # herunter.  Das ist die Aufgabe, an der Stufe 4 gemessen wird -- ohne sie gaebe es nie einen
 # gestapelten Koerper zu adressieren, weil die Episode ihn erst am ENDE erzeugt.
 ABSTAPELN = os.environ.get("ACT23_ABSTAPELN", "0") == "1"
+# DEN SCHAETZER AUCH AUF DER BELEGTEN AUFLAGE LERNEN (ACT23_HOEHE_BELEGT, Vorgabe 0).
+#
+# WARUM, und es ist gemessen: der Hoehenschaetzer lernt beim Adressieren, also an der LEEREN
+# Auflage (Flaeche rund 1424 px).  Gefragt wird er beim Abstapeln nach der BELEGTEN -- und die
+# zerfaellt durch den Konzentrisch-Schnitt, die Auflage ist dann nur noch der groessere Rest
+# (1160 px).  Der Versatz ist 264 px, der Hoehenhub nur 127-145: die Eingabe liegt weit
+# ausserhalb von allem, was er kennt, und seine staerkste Achse ist ausgerechnet die Flaeche.
+# Im Stufe-4-Lauf las er deshalb 6/10/14 mm als 11,1/6,0/9,2 -- die Reihenfolge zerstoert.
+#
+#     trainiert auf   geprueft auf   |Fehler|   richtige Stufe
+#     NUR leer        leer            0,57 mm       96 %
+#     NUR leer        belegt          6,00 mm       34 %   <- der Fall aus dem Lauf
+#     NUR belegt      belegt          0,95 mm       74 %
+#     beiden          leer            0,60 mm       97 %
+#     beiden          belegt          0,91 mm       78 %
+#
+# Auf BEIDEN zu lernen ist also die Abhilfe und kostet auf der leeren Auflage nichts.  Dafuer
+# braucht es keine zweite Messung: die Episode legt den Koerper ohnehin auf die Auflage, und das
+# Tast-Etikett gilt unveraendert weiter -- die Oberkante der Auflage aendert sich nicht dadurch,
+# dass etwas darauf steht.  Es ist dieselbe Zahl, nur ein zweites Aussehen dazu.
+HOEHE_BELEGT = os.environ.get("ACT23_HOEHE_BELEGT", "0") == "1"
 
 # DER SOCKEL IN DIE SZENE (ACT23_SOCKEL, Vorgabe 0).  Eine 70-mm-Platte als Stapelziel: die
 # geometrische Toleranz (35 - 12 = 23 mm) passt damit zur gemessenen Ablagegenauigkeit von
@@ -2125,6 +2146,13 @@ def run_self_learning_steering(headless=False):
     hoehen_schaetzer = (_loaded or {}).get("hoehe_schaetzer") or HoehenSchaetzer()
     if not isinstance(hoehen_schaetzer, HoehenSchaetzer):        # Klasse hat sich geaendert
         hoehen_schaetzer = HoehenSchaetzer()
+    # WAS DIE LETZTE EPISODE ERTASTET HAT, fuer das belegte Aussehen (s. HOEHE_BELEGT).
+    # Warum ueber Episoden hinweg: am ENDE einer Episode steht der Arm ueber der Auflage und
+    # verdeckt sie -- der Rauchtest fand dort nur 1 von 7 Stapeln.  Am ANFANG der naechsten ist
+    # er zu Hause, und der Stapel steht noch (die Aufraeumschleife laesst ein Objekt oben liegen,
+    # seit wiki/befunde/selbstrichter-stapel.md).  Das Etikett gilt unveraendert: die Oberkante
+    # der Auflage aendert sich nicht dadurch, dass etwas darauf steht.
+    _tast_stand = {}
     if HOEHE_SEHEN or len(hoehen_schaetzer.X):
         print(f"  [Hoehe] Schaetzer mit {len(hoehen_schaetzer.X)} Zeilen"
               + ("  -- die Oberkante kommt aus der WAHRNEHMUNG (ACT23_HOEHE_SEHEN=1)"
@@ -2582,7 +2610,32 @@ def run_self_learning_steering(headless=False):
                                          else np.asarray(_det["pos"], float).copy())}
             bez["_eins"] = bool(_eins)
             bez["_wahr_oben"] = float(_wahr_oben)
-            if _eins and not HOEHE_TASTEN:
+            if (not _eins) and HOEHE_BELEGT and _tast_stand.get(bez["body"]) is not None:
+                # DAS BELEGTE AUSSEHEN, mit dem Etikett der Episode, in der es ertastet wurde.
+                # Genau diese Verteilung bekommt der Schaetzer beim Abstapeln vorgelegt, und nur
+                # sie fehlte ihm (gemessen: auf leer gelernt -> auf belegt 34 %, also Grundrate).
+                # PRUEFSTEIN: die belegte Auflage ist dieselbe Silhouette plus der Koerper, ihre
+                # Flaeche darf also nicht deutlich KLEINER sein als die leere.  Sonst war der
+                # Blob ein anderes Ding.
+                _st = _tast_stand[bez["body"]]
+                # DIE ADRESSE TRIFFT BEI BELEGTER AUFLAGE OFT DEN KLEINEN TEIL -- gemessen 239 px,
+                # wo die leere Auflage 1236 hatte: `finde_nach_eigenschaften` waehlt nach dem
+                # Eigenschafts-Tripel, und nach dem Schnitt passt der obere Koerper mitunter
+                # besser.  Fuer den Schaetzer ist aber die AUFLAGE gemeint, also der groessere
+                # Teil des Paares.  Hier steht der Arm zu Hause, das Paar ist also sichtbar.
+                _dl = _det
+                _pb, _ = _stapel_paar()
+                if _pb is not None:
+                    _dl = _pb[0]
+                _af = _dl.get("area")
+                if _af is not None and _st.get("area") and _af < 0.5 * float(_st["area"]):
+                    print(f"    [Hoehe] belegtes Aussehen VERWORFEN: {_af:.0f}px gegen leer "
+                          f"{float(_st['area']):.0f}px -- nicht dieselbe Auflage", flush=True)
+                elif hoehen_schaetzer.merken(_dl, float(_st["oben"])):
+                    print(f"    [Hoehe] belegtes Aussehen gelernt: {_af:.0f}px (leer war "
+                          f"{float(_st['area']):.0f}px), Etikett {1000 * _st['oben']:.1f}mm "
+                          f"aus der Tast-Episode ({len(hoehen_schaetzer.X)} Zeilen)", flush=True)
+            elif _eins and not HOEHE_TASTEN:
                 hoehen_schaetzer.merken(_det, _wahr_oben)
             elif not _eins:
                 print(f"    [Hoehe] Auflage sieht belegt aus (Farbstreuung {float(_cs0):.3f}) -- "
@@ -4745,47 +4798,56 @@ def run_self_learning_steering(headless=False):
             return det["grasp_dense"]
         return det["grasp_xy"]
 
-    def _auf_etwas_finden():
-        """"das, was auf etwas liegt" -- aus der Wahrnehmung, ohne Namen und ohne Privileg.
+    def _stapel_paar(dets=None):
+        """Das Paar (Auflage, was darauf liegt) aus der Wahrnehmung, oder None.
 
-        Zwei Detektionen naeher als ADR_REL_NAH beieinander sind kein Nebeneinander, sondern ein
-        UEBEREINANDER: nebeneinander verschmelzen Bloebe laengst zu EINEM (gemessen ab 60 mm
-        axial, 80 mm diagonal, wiki/befunde/sockel-braucht-80mm-freiraum.md).  Was der Chroma-
-        Schnitt in zwei nahe Teile zerlegt, ist deshalb ein Stapel -- und die GROESSERE Flaeche
-        ist die Auflage.
-
-        Zurueck kommt (Stelle des oberen Koerpers, Greifhoehe der Hand) oder None.
+        Ein gestapelter Koerper liegt nicht NEBEN der Auflage, sondern INNERHALB ihrer
+        Umrisslinie -- genau deshalb verwirft ihn die raeumliche Wache des Chroma-Schnitts
+        (wiki/befunde/stapel-wird-sichtbar.md).  Das Kriterium ist ihr Gegenstueck und wie sie
+        massstabsrelativ: Schwerpunktabstand gemessen an der Halbspanne des groesseren Teils,
+        plus ein Groessenunterschied (was getragen wird, ist kleiner als das, was traegt).
+        Mehrdeutig ist nicht gefunden -- dieselbe Regel wie bei der Zieladresse.
         """
-        _sm = sim.d.mocap_pos.copy()
-        try:
-            _ds = [d for d in shape_clf.perceive_all(sim)
-                   if d.get("pos") is not None and d.get("area") is not None]
-        finally:
-            sim.d.mocap_pos[:] = _sm
-            mujoco.mj_forward(sim.m, sim.d)
+        if dets is None:
+            _sm = sim.d.mocap_pos.copy()
+            try:
+                dets = shape_clf.perceive_all(sim)
+            finally:
+                sim.d.mocap_pos[:] = _sm
+                mujoco.mj_forward(sim.m, sim.d)
+        _ds = [d for d in dets if d.get("pos") is not None and d.get("area") is not None]
         _paare = []
         for _i in range(len(_ds)):
             for _j in range(_i + 1, len(_ds)):
                 _a, _b = _ds[_i], _ds[_j]
                 _gr, _kl = (_a, _b) if _a["area"] >= _b["area"] else (_b, _a)
                 if _kl["area"] <= 0 or _gr["area"] / _kl["area"] < ADR_REL_KLEINER:
-                    continue                               # etwa gleich gross -> kein Stapel
+                    continue
                 _sp = _gr.get("span")
                 if _sp is None:
                     continue
                 _d = float(np.linalg.norm(np.asarray(_a["pos"], float)
                                           - np.asarray(_b["pos"], float)))
-                if _d < ADR_REL_ANTEIL * float(_sp):       # INNERHALB der groesseren Umrisslinie
+                if _d < ADR_REL_ANTEIL * float(_sp):
                     _paare.append((_d, _gr, _kl))
-        if not _paare:
-            print("    [Adresse auf] kein Stapel im Bild -- kein Teil liegt innerhalb eines "
-                  "groesseren", flush=True)
+        if len(_paare) != 1:
+            return None, ("kein Teil liegt innerhalb eines groesseren" if not _paare
+                          else f"mehrdeutig: {len(_paare)} Stapel im Bild")
+        return _paare[0][1:], None
+
+    def _auf_etwas_finden():
+        """"das, was auf etwas liegt" -- aus der Wahrnehmung, ohne Namen und ohne Privileg.
+
+        Das Paar findet `_stapel_paar` (dort steht die Regel).  Hier kommt die HOEHE dazu:
+        die Oberkante der Auflage, geschaetzt auf der Detektion der Auflage selbst.
+
+        Zurueck kommt (Stelle des oberen Koerpers, Greifhoehe der Hand) oder None.
+        """
+        _paar, _grund = _stapel_paar()
+        if _paar is None:
+            print(f"    [Adresse auf] {_grund}", flush=True)
             return None
-        if len(_paare) > 1:
-            # MEHRDEUTIG IST NICHT GEFUNDEN -- dieselbe Regel wie bei der Zieladresse.
-            print(f"    [Adresse auf] mehrdeutig: {len(_paare)} Stapel im Bild", flush=True)
-            return None
-        _, _unten, _oben_d = _paare[0]
+        _unten, _oben_d = _paar
         # DIE GREIFHOEHE aus derselben Quelle wie die Ablagehoehe in Stufe 2: die Oberkante der
         # AUFLAGE.  Der gegriffene Koerper steht mit seiner Unterseite darauf, seine Mitte also
         # eine Objekt-Halbhoehe darueber -- und genau das ist GRASP_Z, die Greifhoehe fuer einen
@@ -5914,6 +5976,13 @@ def run_self_learning_steering(headless=False):
                                   f"{1000.0 * _bz['_wahr_oben']:.1f}mm, Abweichung "
                                   f"{1000.0 * (_ot - _bz['_wahr_oben']):+.1f}mm "
                                   f"({len(hoehen_schaetzer.X)} Zeilen)", flush=True)
+                            if HOEHE_BELEGT:
+                                # NICHT HIER LERNEN, sondern beim naechsten Adressieren: der Arm
+                                # steht jetzt ueber der Auflage und verdeckt sie (Rauchtest: 1
+                                # von 7 Stapeln erkannt).  Gemerkt wird nur, WAS ertastet wurde.
+                                _tast_stand[_bz["body"]] = {
+                                    "oben": float(_ot),
+                                    "area": (_bz.get("_det_hoehe") or {}).get("area")}
                     _drauf = _oz > _ok_h + 0.008
                     _zus += (f" | Stapel: Objektmitte {1000.0 * _oz:.0f}mm (Auflage "
                              f"{1000.0 * _ok_h:.0f}mm), Versatz {_vers:.0f}mm -> "
