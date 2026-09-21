@@ -9,6 +9,29 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Anlage**: [Weniger Teacher kostet Genauigkeit und der Aufgabe nichts](/befunde/tastetikett-gegen-privileg.md)
+  - das A/B zum Nutzerprinzip. Zwei Schaetzer, einer aus ERTASTETEN Etiketten (14 Zeilen), einer
+  aus `geom_size` (22 Zeilen); danach wird **nur der Schaetzer** in denselben Basiszustand
+  verpflanzt, damit im Test nicht Policy, Puffer und Welt-Modell mitverglichen werden. Getestet
+  mit ABGESCHALTETEM Tasten, eine Auflagenform. **Ergebnis: der ertastete Schaetzer ist 3,7-mal
+  ungenauer (2,20 gegen 0,60 mm) und stapelt genauso gut - 15/16 gegen 17/19, p = 1,00.** Die
+  Fehlschlaege sind in beiden Armen seitlich (Versatz 94 und 156 mm gegen 12 und 23 mm), in P
+  haben sie sogar den kleineren Hoehenfehler. **Der Preis des Etiketts ist unabhaengig beziffert:**
+  Tastetikett gegen die Wahrheit Median -0,60 mm / Streuung 2,60 mm, und dieses Rauschen kostet
+  einen Lerner rund **20 Punkte** (86 -> 69 % richtige Stufe bei 20 Zeilen).
+  **Ein Fehler, der fast durchgegangen waere:** die Ablagephase beginnt, sobald die Hand SEITLICH
+  am Ziel ist - sie kann dann noch zentimeterweit darueber stehen, und jeder Stillstand auf dem
+  Weg nach unten galt als Beruehrung. Einzelne Etiketten lagen **17,9 mm** daneben (Streuung 5,79
+  statt 2,60), was die Genauigkeit des Lerners halbierte (52 statt 69 %). Abhilfe: ein Fenster um
+  die Schaetzung.
+  **Und eine Methode, die ich ab jetzt immer anwende:** die erste Fassung dieses A/B war schon bis
+  zu den Warmlaeufen durch; der Vergleich der verpflanzten Schaetzer gegen 270 vorhandene
+  Sondenzeilen zeigte alle drei auf der Grundrate - die 105 Minuten Testlauf haetten drei gleich
+  unbrauchbare Schaetzer verglichen. **Vor jedem teuren A/B beide Artefakte an einem vorhandenen
+  Pruefsatz gegeneinanderhalten; sind sie dort ununterscheidbar, kann es der Lauf auch nicht.**
+  Der Check taugt zum AUSSORTIEREN, nicht zum Vorhersagen: im Lauf lagen beide deutlich besser als
+  auf dem Pruefsatz (T 2,20 gegen 4,26 mm), weil ein Lauf wenige Stellen mehrfach besucht.
+
 * **Anlage**: [Die Auflagenhoehe ertasten](/mechanismen/hoehe-ertasten.md) - Nutzerprinzip
   **"weniger Teacher ist immer besser"**, umgesetzt fuer die letzte privilegiert gelabelte Groesse.
   **Der Ausgang "Stapel haelt oder nicht" taugt dafuer nachweislich NICHT:** der Hoehenfehler ist
