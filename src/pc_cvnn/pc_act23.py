@@ -817,6 +817,40 @@ HOEHE_SEHEN = os.environ.get("ACT23_HOEHE_SEHEN", "0") == "1"
 # Der Schalter zieht ACT16_TASTEN NICHT heimlich mit -- der Start sagt, wenn es fehlt.
 HOEHE_TASTEN = os.environ.get("ACT23_HOEHE_TASTEN", "0") == "1"
 
+# =========================================================================================
+# STUFE 4: DIE RELATION AUCH IN DER ADRESSE (ACT23_ADR_RELATION, Vorgabe 0).
+#
+#     bis Stufe 3   BEZUG   := ORT | RELATION ADRESSE
+#     Stufe 4       ADRESSE := (Farbe?, Form?, Groesse?) | RELATION ADRESSE
+#
+# Damit ist "nimm das, was auf Y liegt" sagbar und die Sprache wird REKURSIV -- derselbe
+# "Typ statt Verb"-Schnitt wie in Stufe 1, nur eine Ebene weiter.  Das Umstapeln faellt daraus
+# heraus, ohne dass ein Verb dazukommt.
+#
+# WIE AUFGELOEST WIRD, ohne Privileg: `perceive_all` liefert mit
+# ACT_SHAPE_CHROMA_KONZENTRISCH=1 fuer einen Stapel ZWEI Detektionen statt einer
+# (wiki/befunde/stapel-wird-sichtbar.md, 24 von 25).  Zwei Detektionen naeher als
+# ADR_REL_NAH beieinander sind ein Stapel; die GROESSERE ist die Auflage, die kleinere das,
+# was darauf liegt.  Die Greifhoehe kommt aus derselben Quelle wie die Ablagehoehe in Stufe 2.
+#
+# ER ZIEHT CHROMA_KONZENTRISCH NICHT HEIMLICH MIT -- der Start sagt, wenn es fehlt.
+ADR_RELATION = os.environ.get("ACT23_ADR_RELATION", "0") == "1"
+# WANN LIEGT ETWAS AUFEINANDER?  Nicht "nah beieinander" -- das war die erste Fassung mit einem
+# festen 45-mm-Abstand, und sie meldete in einer vollen Szene FUENF Stapel.  Ein gestapelter
+# Koerper liegt nicht neben der Auflage, sondern INNERHALB ihrer Umrisslinie; genau deshalb
+# verwirft ihn die raeumliche Wache des Chroma-Schnitts (wiki/befunde/stapel-wird-sichtbar.md).
+# Das Kriterium ist also das exakte GEGENSTUECK dieser Wache und wie sie MASSSTABSRELATIV: der
+# Abstand der beiden Schwerpunkte, gemessen an der Halbspanne des GROESSEREN Teils.  Keine Laenge
+# in Millimetern, die an eine Plattengroesse gebunden waere.
+ADR_REL_ANTEIL = float(os.environ.get("ACT23_ADR_REL_ANTEIL", "0.5"))
+# UND DER GROESSENUNTERSCHIED: was getragen wird, ist kleiner als das, was traegt.  Zwei etwa
+# gleich grosse Teile sind eher ein schattierter Einzelkoerper als ein Stapel.
+ADR_REL_KLEINER = float(os.environ.get("ACT23_ADR_REL_KLEINER", "1.5"))
+# ABSTAPELN (ACT23_ABSTAPELN, Vorgabe 0): die Szene baut den Stapel, der Befehl holt ihn
+# herunter.  Das ist die Aufgabe, an der Stufe 4 gemessen wird -- ohne sie gaebe es nie einen
+# gestapelten Koerper zu adressieren, weil die Episode ihn erst am ENDE erzeugt.
+ABSTAPELN = os.environ.get("ACT23_ABSTAPELN", "0") == "1"
+
 # DER SOCKEL IN DIE SZENE (ACT23_SOCKEL, Vorgabe 0).  Eine 70-mm-Platte als Stapelziel: die
 # geometrische Toleranz (35 - 12 = 23 mm) passt damit zur gemessenen Ablagegenauigkeit von
 # 21-25 mm, waehrend ein Wuerfel auf einem Wuerfel unter 12 mm verlangt.
@@ -898,6 +932,15 @@ if ZIEL_RELATION == "auf":
         _fehlt.append("ACT16_TASTEN=1 -- ACT23_HOEHE_TASTEN labelt aus der ERTASTETEN "
                       "Aufsetzhoehe, und die entsteht nur, wenn die Ablagephase wirklich tastet; "
                       "sonst faellt kein einziges Lernbeispiel")
+    if ADR_RELATION:
+        from pc_cvnn.arm_modules import shape_classifier as _sc
+        if not _sc.CHROMA_SPLIT or not _sc.CHROMA_KONZENTRISCH:
+            _fehlt.append("ACT_SHAPE_CHROMA_SPLIT=1 ACT_SHAPE_CHROMA_KONZENTRISCH=1 -- ohne sie "
+                          "bekommt ein gestapelter Koerper KEINE eigene Detektion (gemessen 0 von "
+                          "25), und die Relation in der Adresse findet nie etwas")
+        if not act16.GRIFF_Z:
+            _fehlt.append("ACT16_GRIFF_Z=1 -- sonst wird die Greifhoehe verworfen und die Klaue "
+                          "faehrt auf Tischhoehe UNTER den gestapelten Koerper")
     if not EIG_DIREKT:
         # DER FUENFTE SCHALTER, und er war bis 2026-09-20 nicht in dieser Liste.  Eine STUETZE
         # steht in state.STUETZEN und NICHT in state.OBJECTS -- die Farbbindung laeuft aber ueber
@@ -2260,11 +2303,26 @@ def run_self_learning_steering(headless=False):
     # jeder alten Episode GRASP_Z: die Ablagephase zielte auf genau diese Konstante.  Die alten
     # Zeilen bekommen also ihren wahren Wert, nicht einen erfundenen, und brauchen kein Flag.
     _n_tz = (runtime.ensure_state_dim(14, neutral=(act16.GRASP_Z,))
-             if act16.GOAL_Z and hasattr(runtime, "ensure_state_dim") else 0)
+             if (act16.GOAL_Z or act16.GRIFF_Z) and hasattr(runtime, "ensure_state_dim") else 0)
     if _n_tz:
         print(f"  [Schema] Ablagehoehe in der Runtime-Policy ergaenzt: {_n_tz} Zeilen migriert "
               f"(Wert {act16.GRASP_Z}, der in ihren Episoden GALT), Netz verhaltensneutral auf "
               f"14 Eingaenge verbreitert", flush=True)
+    # GREIFHOEHE-Migration (Stufe 4, ACT16_GRIFF_Z).  Dieselbe Begruendung wie bei der
+    # Ablagehoehe: in JEDER alten Episode wurde auf GRASP_Z gegriffen, die alten Zeilen bekommen
+    # also ihren wahren Wert und brauchen kein Gueltigkeits-Flag.
+    # DIE ZIELBREITE HAENGT AN GOAL_Z: mit ihm ist die Greifhoehe die 15., ohne ihn die 14. Spalte.
+    # Der Zustandsvektor wird in derselben Reihenfolge gebaut (erst tgt_z, dann griff_z), also
+    # muss die Migration hier genauso rechnen -- sonst landet die Greifhoehe in der Spalte der
+    # Ablagehoehe und die Policy liest eine Groesse als die andere.
+    _breit = 15                    # s. den Kommentar im Zustandsvektor: GRIFF_Z zieht die
+    #   Ablagespalte immer mit, damit die Anordnung eindeutig bleibt
+    _n_gz = (runtime.ensure_state_dim(_breit, neutral=(act16.GRASP_Z,))
+             if act16.GRIFF_Z and hasattr(runtime, "ensure_state_dim") else 0)
+    if _n_gz:
+        print(f"  [Schema] Greifhoehe in der Runtime-Policy ergaenzt: {_n_gz} Zeilen migriert "
+              f"(Wert {act16.GRASP_Z}, der in ihren Episoden GALT), Netz verhaltensneutral auf "
+              f"{_breit} Eingaenge verbreitert", flush=True)
 
     # STAGE 3 (user request): OPEN-SET COLOURS -- fully self-labelled, no teacher colour set anywhere.
     # Scene glances feed component CHROMATICITIES; classes are self-named ("farbe-N") and bound to the
@@ -4687,8 +4745,77 @@ def run_self_learning_steering(headless=False):
             return det["grasp_dense"]
         return det["grasp_xy"]
 
+    def _auf_etwas_finden():
+        """"das, was auf etwas liegt" -- aus der Wahrnehmung, ohne Namen und ohne Privileg.
+
+        Zwei Detektionen naeher als ADR_REL_NAH beieinander sind kein Nebeneinander, sondern ein
+        UEBEREINANDER: nebeneinander verschmelzen Bloebe laengst zu EINEM (gemessen ab 60 mm
+        axial, 80 mm diagonal, wiki/befunde/sockel-braucht-80mm-freiraum.md).  Was der Chroma-
+        Schnitt in zwei nahe Teile zerlegt, ist deshalb ein Stapel -- und die GROESSERE Flaeche
+        ist die Auflage.
+
+        Zurueck kommt (Stelle des oberen Koerpers, Greifhoehe der Hand) oder None.
+        """
+        _sm = sim.d.mocap_pos.copy()
+        try:
+            _ds = [d for d in shape_clf.perceive_all(sim)
+                   if d.get("pos") is not None and d.get("area") is not None]
+        finally:
+            sim.d.mocap_pos[:] = _sm
+            mujoco.mj_forward(sim.m, sim.d)
+        _paare = []
+        for _i in range(len(_ds)):
+            for _j in range(_i + 1, len(_ds)):
+                _a, _b = _ds[_i], _ds[_j]
+                _gr, _kl = (_a, _b) if _a["area"] >= _b["area"] else (_b, _a)
+                if _kl["area"] <= 0 or _gr["area"] / _kl["area"] < ADR_REL_KLEINER:
+                    continue                               # etwa gleich gross -> kein Stapel
+                _sp = _gr.get("span")
+                if _sp is None:
+                    continue
+                _d = float(np.linalg.norm(np.asarray(_a["pos"], float)
+                                          - np.asarray(_b["pos"], float)))
+                if _d < ADR_REL_ANTEIL * float(_sp):       # INNERHALB der groesseren Umrisslinie
+                    _paare.append((_d, _gr, _kl))
+        if not _paare:
+            print("    [Adresse auf] kein Stapel im Bild -- kein Teil liegt innerhalb eines "
+                  "groesseren", flush=True)
+            return None
+        if len(_paare) > 1:
+            # MEHRDEUTIG IST NICHT GEFUNDEN -- dieselbe Regel wie bei der Zieladresse.
+            print(f"    [Adresse auf] mehrdeutig: {len(_paare)} Stapel im Bild", flush=True)
+            return None
+        _, _unten, _oben_d = _paare[0]
+        # DIE GREIFHOEHE aus derselben Quelle wie die Ablagehoehe in Stufe 2: die Oberkante der
+        # AUFLAGE.  Der gegriffene Koerper steht mit seiner Unterseite darauf, seine Mitte also
+        # eine Objekt-Halbhoehe darueber -- und genau das ist GRASP_Z, die Greifhoehe fuer einen
+        # Koerper auf dem Tisch.  Also: Greifhoehe = GRASP_Z + Oberkante.
+        _ob = hoehen_schaetzer.schaetzen(_unten)
+        if _ob is None:
+            print(f"    [Adresse auf] Auflage gefunden ({_unten['area']:.0f}px), aber der "
+                  f"Hoehenschaetzer hat erst {len(hoehen_schaetzer.X)} Zeilen -- "
+                  f"RUECKFALL auf Tischhoehe", flush=True)
+            _ob = 0.0
+        _gz = float(act16.GRASP_Z) + float(_ob)
+        _p = np.asarray(_oben_d["pos"], float)
+        print(f"    [Adresse auf] oberer Koerper bei [{_p[0]:+.3f},{_p[1]:+.3f}] "
+              f"({_oben_d['area']:.0f}px auf {_unten['area']:.0f}px), Oberkante der Auflage "
+              f"{1000 * _ob:.1f}mm -> Greifhoehe {1000 * _gz:.1f}mm", flush=True)
+        return _p, _gz
+
     def perceive(cmd):
         _l, body, method = state.selected()
+        if ADR_RELATION:
+            # STUFE 4: die Adresse ist eine RELATION, kein Eigenschafts-Tripel (s. ADR_RELATION).
+            # Der Koerpername wird hier nur fuer die MESSUNG benutzt, nicht fuer das Finden.
+            _r = _auf_etwas_finden()
+            if _r is not None:
+                _p, _gz = _r
+                _wahr = float(np.linalg.norm(_p - sim.obj_pos(body)[:2]))
+                print(f"    [Adresse auf] wahr {1000 * _wahr:.0f} mm daneben", flush=True)
+                return np.array([_p[0], _p[1], _gz], float), None, "grasp"
+            print("    [Adresse auf] nicht aufgeloest -- Rueckfall auf den gewoehnlichen Weg",
+                  flush=True)
         if method == "eigenschaft":
             # LOKALISIERUNG UEBER EIGENSCHAFTEN: kein Klassenname, kein Objektname -- nur was die
             # Kamera je Detektion liefert (Farbklasse, Formklasse, Groessenband).  Damit ist ein
@@ -5613,6 +5740,25 @@ def run_self_learning_steering(headless=False):
             lgoal.set_in("goal_xy", g)
             agent.step(["LatentGoal"])
 
+        if ABSTAPELN and state.STUETZEN:
+            # STUFE 4, die Aufgabe: die SZENE baut den Stapel, der BEFEHL holt ihn herunter.
+            # Ohne das gaebe es nie einen gestapelten Koerper zu adressieren -- die Episode
+            # erzeugt ihn sonst erst an ihrem ENDE.
+            # Das ist Aufbau, kein Privileg im Steuerpfad: die Adresse muss den Koerper danach
+            # selbst FINDEN (s. _auf_etwas_finden), sie bekommt nur eine Welt, in der es
+            # ueberhaupt etwas zu finden gibt.
+            _st = [n for n in state.STUETZEN if not _geparkt_jetzt(n)]
+            if _st:
+                _sn = _st[0]
+                _sb = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, _sn)
+                _so = float(sim.obj_pos(_sn)[2] + sim.m.geom_size[sim.m.body_geomadr[_sb]][2])
+                _cb = state.selected()[1]
+                _ch = float(sim.m.geom_size[sim.m.body_geomadr[
+                    mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, _cb)]][2])
+                sim.set_object(_cb, sim.obj_pos(_sn)[:2].tolist(), z=_so + _ch)
+                sim.step(40)                               # setzen lassen, sonst faellt er im Bild
+                print(f"  [Abstapeln] {_cb} steht auf {_sn} "
+                      f"(Oberkante {1000 * _so:.0f}mm) -- Aufgabe: herunterholen", flush=True)
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_fn,
                            policy_fn=(_policy_ueber_ports if use_net else None),

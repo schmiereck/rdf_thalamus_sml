@@ -118,6 +118,14 @@ ZIEL_SAEUBERN = os.environ.get("ACT16_ZIEL_SAEUBERN", "1") == "1"
 # EINBAHNSTRASSE: ein Lauf MIT Schalter migriert den Puffer der Zustandsdatei dauerhaft auf 14
 # Spalten.  Deshalb nur auf Kopien fahren.
 GOAL_Z = os.environ.get("ACT16_GOAL_Z", "0") == "1"
+# DIE GREIFHOEHE (ACT16_GRIFF_Z, Vorgabe 0) -- das Spiegelbild von GOAL_Z.
+# Stufe 2 hat dem ZIEL eine dritte Dimension gegeben, damit der Arm AUF etwas ablegen kann.
+# Stufe 4 braucht dasselbe fuer das OBJEKT: "nimm das, was auf Y liegt" heisst, den Griff
+# TIEFER anzusetzen waere falsch -- der Koerper liegt eine Auflagenhoehe hoeher.
+# Die Hoehe kommt wie beim Ziel aus perceive_fn: liefert es einen DRITTEN Wert, ist das die
+# Handhoehe, bei der gegriffen wird.  Ohne Schalter oder ohne dritten Wert bleibt sie GRASP_Z
+# und alle Zeilen sind Zeichen fuer Zeichen die alten.
+GRIFF_Z = os.environ.get("ACT16_GRIFF_Z", "0") == "1"
 # ERFOLGSBEGRIFF "RUHT" STATT "LIEGT TIEF" (ACT16_ERFOLG_RUHT, Vorgabe 0 bis gemessen).
 # Stufe 2 von wiki/fragen/stapeln-als-aufgabe.md: `rested = cz < half + 0,010` heisst woertlich
 # "liegt auf dem Tisch" und verbucht damit jeden GELUNGENEN Stapel als Fehlschlag.  Der Schalter
@@ -260,8 +268,12 @@ def reactive_subgoal(state):
     hxy = np.array([hx, hy]); c = np.array([cx, cy]); t = np.array([tx, ty])
     if obj_fp > GRASP_MAX_HALF:                           # AFFORDANCE: too wide to grasp -> push
         return _push_subgoal(hxy, hz, c, t)
+    # GREIFHOEHE AUS DEM ZUSTAND (Spalte 15, s. ACT16_GRIFF_Z).  Ohne sie zielte der Teacher auf
+    # Tischhoehe, waehrend der Koerper eine Auflage hoeher liegt -- das Etikett waere per Bauart
+    # falsch, genau wie es die Ablagehoehe bis 2026-09-19 war (s. teacher-widerspricht-dem-stapel).
+    h_griff = max(0.0, float(state[14]) - GRASP_Z) if len(state) >= 15 else 0.0
     if SIZE_ADAPT:
-        grasp_z = obj_h + GRASP_OFFSET                    # grasp at the object's centre (cube -> 0.014)
+        grasp_z = obj_h + GRASP_OFFSET + h_griff          # grasp at the object's centre (cube -> 0.014)
         carry_z = max(CARRY_Z, 2.0 * obj_h + 0.02)        # lift high enough to clear a TALL object
         lift_thresh = obj_h + 0.014                       # "lifted off the table" relative to its height
     else:
@@ -280,7 +292,15 @@ def reactive_subgoal(state):
     h_auf = max(0.0, float(state[13]) - GRASP_Z) if len(state) >= 14 else 0.0
     if h_auf > 0.0 and np.linalg.norm(c - t) < NEAR:
         lift_thresh = lift_thresh + h_auf
-    place_z = grasp_z + h_auf
+    # DIE AUFLAGE UNTER DEM OBJEKT (Stufe 4, ACT16_GRIFF_Z) verschiebt dieselbe Schwelle, nur am
+    # anderen Ende: ein Koerper, der auf einer 14-mm-Platte steht, hat seine Mitte bei 26 mm und
+    # laege damit SCHON UEBER lift_thresh -- der Teacher hielte ihn fuer laengst gegriffen und
+    # spraenge sofort in die Ablage, ohne ihn je angefasst zu haben.  Dieselbe Klasse Fehler wie
+    # oben, nur gespiegelt; die Ablageseite hat sie 2026-09-19 einen ganzen Lernlauf gekostet.
+    # NUR UEBER DEM OBJEKT: nur dort steht diese Auflage.
+    if h_griff > 0.0 and np.linalg.norm(hxy - c) < NEAR:
+        lift_thresh = lift_thresh + h_griff
+    place_z = grasp_z - h_griff + h_auf                   # abgelegt wird OHNE die Griff-Auflage
     grasped = (cz > lift_thresh) and (j5 < J5_CLOSED_TH)  # object lifted off the table AND gripper closed
     if grasped:                                           # CARRY -> place -> release
         if np.linalg.norm(hxy - t) > NEAR:               # carry over the target
@@ -443,9 +463,15 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             tgt = _rand_xy(rng)
         sim.set_target_marker(tgt); sim.step(40)
         tgt_true = tgt.copy(); cube_plan = None; mode_perc = None  # perceive cube + target + mode
+        griff_z = GRASP_Z                                     # GREIFHOEHE der Hand; s. GRIFF_Z oben
         if perceive_fn:
             cube_plan, tgt_perc, mode_perc = perceive_fn(cmd)
+            if cube_plan is not None and GRIFF_Z and len(np.asarray(cube_plan, float)) == 3:
+                # DRITTER WERT = GREIFHOEHE.  Verhaltensneutral ohne Schalter (dann wird ein
+                # dritter Wert gar nicht erst gelesen) und ohne dritten Wert.
+                griff_z, cube_plan = float(np.asarray(cube_plan, float)[2]), np.asarray(cube_plan, float)[:2]
             if cube_plan is not None:
+                cube_plan = np.asarray(cube_plan, float)[:2]
                 perr_sum += float(np.linalg.norm(cube_plan - sim.obj_pos(cmd)[:2])); perr_n += 1
             if tgt_perc is not None:
                 terr_sum += float(np.linalg.norm(tgt_perc - tgt_true)); terr_n += 1; tgt = tgt_perc
@@ -591,14 +617,14 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                     if np.linalg.norm(hxy - c) < NEAR:
                         phase = "lower"
                 elif phase == "lower":
-                    j5, aim = J5_OPEN, np.array([c[0], c[1], GRASP_Z])
-                    if hz < GRASP_Z + 0.010:
+                    j5, aim = J5_OPEN, np.array([c[0], c[1], griff_z])
+                    if hz < griff_z + 0.010:
                         phase, dwell = "close", 0
                 elif phase == "close":
                     dwell += 1                                    # close SLOWLY (ramp) so the
                     frac = min(1.0, dwell / 60.0)                 # claws don't shove the cube
                     j5 = J5_OPEN + (gclose - J5_OPEN) * frac
-                    aim = np.array([c[0], c[1], GRASP_Z])
+                    aim = np.array([c[0], c[1], griff_z])
                     if dwell > 90:
                         phase = "lift"
                 elif phase == "lift":
@@ -762,7 +788,14 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             state = np.array([h[0], h[1], h[2], c_st[0], c_st[1], cz_st, tgt_eff[0], tgt_eff[1],
                               _j5q, obj_h, obj_fp,
                               1.0 if press >= 0 else 0.0, max(press, 0.0)]
-                             + ([tgt_z] if GOAL_Z else []), float)
+                             # DIE ANORDNUNG MUSS EINDEUTIG SEIN.  Mit GRIFF_Z ohne GOAL_Z
+                             # laege die GREIFhoehe auf Platz 14 -- genau dort, wo
+                             # reactive_subgoal die ABLAGEhoehe liest.  Die Policy bekaeme die
+                             # eine Groesse als die andere.  Deshalb zieht GRIFF_Z die
+                             # Ablagespalte immer mit; ohne ACT16_GOAL_Z bleibt sie auf GRASP_Z
+                             # stehen und ist damit verhaltensneutral.
+                             + ([tgt_z] if (GOAL_Z or GRIFF_Z) else [])
+                             + ([griff_z] if GRIFF_Z else []), float)
             if GLAUBDIAG:
                 # GLAUBENS-DIAGNOSE: wo genau geht der Zustand kaputt, den die Policy sieht?
                 # ZERLEGT in die drei Stellen, an denen er entstehen kann -- eine Gesamtabweichung
