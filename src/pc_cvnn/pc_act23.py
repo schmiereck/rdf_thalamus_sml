@@ -841,10 +841,14 @@ SOCKEL2 = os.environ.get("ACT23_SOCKEL2", "0") == "1"
 # WIE VIELE AUFLAGENFORMEN im Wechsel (ACT23_SOCKEL_N, Vorgabe 1).  2 ist gleichbedeutend mit
 # ACT23_SOCKEL2=1 (der aeltere Schalter bleibt, die Rezepte im Wiki nennen ihn).  3 nimmt die
 # 60-mm-Platte dazu.
-# WARNUNG, GEMESSEN (wiki/befunde/dritte-auflage-bricht-die-nachbarschaft.md): mit DREI Formen
-# faellt der HoehenSchaetzer auf 62 % und auf der neuen Platte auf 48 %, und eigene Zeilen fuer
-# sie helfen NICHT -- die Ursache sind fremde Nachbarn, nicht fehlende Daten.  ACT23_HOEHE_SEHEN
-# sollte mit SOCKEL_N=3 nicht benutzt werden.
+# GEMESSEN (wiki/befunde/dritte-auflage-bricht-die-nachbarschaft.md): mit DREI Formen faellt die
+# SCHAETZUNG auf 62 % richtige Stufe und auf der neuen Platte auf 48 %, und eigene Zeilen fuer sie
+# helfen NICHT -- die Ursache sind fremde Nachbarn, nicht fehlende Daten.
+# ABER DIE AUFGABE MERKT ES NICHT (wiki/befunde/drei-auflagen-im-lauf.md): im act23-Lauf 85 gegen
+# 88 % gestapelt, die neue Platte 7 von 7.  Die Fehlschlaege sind SEITLICH (Versatz 65 gegen
+# 15 mm), der Hoehenfehler ist bei gelungenen und misslungenen Stapeln gleich gross.  Von
+# ACT23_HOEHE_SEHEN wird deshalb NICHT abgeraten -- ein frueherer Entwurf tat das, gestuetzt allein
+# auf die Sonde.
 SOCKEL_N = max(1, min(3, int(os.environ.get("ACT23_SOCKEL_N", "2" if SOCKEL2 else "1"))))
 SOCKEL_FORMEN = ["sockel", "sockel2", "sockel3"][:SOCKEL_N]
 SOCKEL_HOEHEN = [float(v) / 1000.0 for v in os.environ.get("ACT23_SOCKEL_HOEHEN", "8").split(",")]
@@ -3556,10 +3560,10 @@ def run_self_learning_steering(headless=False):
                   f"geparkt.  Die Adresse bliebe sonst mehrdeutig: alle lesen im Groessenband "
                   f"'dick'.", flush=True)
             if len(SOCKEL_FORMEN) >= 3 and HOEHE_SEHEN:
-                print("  [Hoehe] WARNUNG: mit drei Auflagenformen faellt der Schaetzer gemessen "
-                      "auf 62 % (neue Platte 48 %), und eigene Zeilen helfen nicht -- fremde "
-                      "Nachbarn, nicht fehlende Daten.  s. wiki/befunde/"
-                      "dritte-auflage-bricht-die-nachbarschaft.md", flush=True)
+                print("  [Hoehe] Hinweis: mit drei Auflagenformen ist die SCHAETZUNG gemessen "
+                      "schlechter (45-62 % richtige Stufe statt 92 %), die Stapelquote aber "
+                      "nicht (85 gegen 88 %) -- die Fehlschlaege sind seitlich, nicht senkrecht. "
+                      " s. wiki/befunde/drei-auflagen-im-lauf.md", flush=True)
 
     def _sockel_setzen(steht_xy):
         """Den Sockel fuer eine NEUE SZENE setzen: Stelle und Hoehe (s. SOCKEL_WANDERT/_HOEHEN).

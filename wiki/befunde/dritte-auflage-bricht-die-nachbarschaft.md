@@ -133,8 +133,11 @@ Die Messungen dort bleiben gueltig; die **Verallgemeinerung** war meine, nicht d
 gleichbedeutend mit 2). Der Rauchtest zeigt sauberen Wechsel und Adressen, die auf 4-6 mm treffen -
 die **Adressierung** der dritten Platte ist kein Problem, nur ihre Hoehe.
 
-`ACT23_HOEHE_SEHEN` sollte mit drei Formen **nicht** benutzt werden; der Start sagt das jetzt laut.
-Die Vorgabe bleibt 0.
+`ACT23_HOEHE_SEHEN` mit drei Formen: **diese Warnung habe ich zurueckgenommen.** Sie stand hier
+zuerst als "sollte nicht benutzt werden", gestuetzt allein auf die 48 % dieser Sonde. Der
+[act23-Lauf](/befunde/drei-auflagen-im-lauf.md) zeigt, dass die Aufgabe das nicht merkt (85 gegen
+88 % gestapelt, die neue Platte 7/7). Der Start meldet jetzt die Verschlechterung der SCHAETZUNG,
+ohne vom Schalter abzuraten. Die Vorgabe bleibt 0.
 
 # Fallen
 
