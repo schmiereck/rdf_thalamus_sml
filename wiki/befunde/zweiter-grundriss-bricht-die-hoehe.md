@@ -131,8 +131,17 @@ versperrt gewesen waere:
 
 Der tatsaechliche Ausweg ist kleiner. Die beiden Grundrisse liegen im Merkmalsraum **weit
 auseinander** (Flaeche 740 gegen 1425). Nur der EINE globale lineare Fit zwang sie auf eine
-gemeinsame Ebene. Ein Modell, das seine Ebene nur aus der **Nachbarschaft** legt, wird dadurch von
-selbst zu einem Modell je Grundriss - ohne dass ihm irgendwo steht, dass es zwei gibt.
+gemeinsame Ebene. Ein Modell, das seine Ebene nur aus der **Nachbarschaft** legt, wird dadurch zu
+einem Modell je Grundriss - ohne dass ihm irgendwo steht, dass es zwei gibt.
+
+> **EINGESCHRAENKT 2026-09-21, und es war meine Verallgemeinerung, nicht die der Daten.** Der Satz
+> stand hier zuerst als *"wird von selbst zu einem Modell je Grundriss"*, also als Prinzip. Er gilt
+> nur, **solange die Formen weit auseinanderliegen**. Bei diesen zwei Platten war die Nachbarschaft
+> zu 100 % grundrissrein; mit einer DRITTEN Form (60 mm, zwischen den beiden) sind es nur noch
+> 88 %, und diese 12 % fremden Nachbarn genuegen, um den Schaetzer von 92 auf 62 % zu druecken -
+> auf der neuen Platte auf 48 %, und eigene Zeilen fuer sie helfen NICHT.
+> Gemessen in [Die dritte Auflage bricht die Nachbarschaft](/befunde/dritte-auflage-bricht-die-nachbarschaft.md).
+> Die Zahlen auf dieser Seite bleiben gueltig; die Reichweite nicht.
 
     stellenweise gehalten          global linear      lokal, k = 10
     eine Auflage  (90 Zeilen)      1,31 mm /  77 %    0,45 mm / 100 %

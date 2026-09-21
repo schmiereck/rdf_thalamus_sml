@@ -85,8 +85,11 @@ Was sich dazu sagen laesst, ohne zu ueberziehen:
   [Invarianten](/mechanismen/invarianten.md) ist die Renderung dadurch nicht mehr zeichengenau
   dieselbe; die 94 % hier und die 85 % dort sind **nicht** direkt vergleichbar. Innerhalb dieses
   Laufs ist der Vergleich sauber, beide Arme teilen die XML.
-* **Zwei Grundrisse, nicht drei.** Ob der lokale Schaetzer eine DRITTE Auflagenform aufnimmt, ohne
-  fuer sie von vorn sammeln zu muessen, ist die naechste Frage und ungemessen.
+* **Zwei Grundrisse, nicht drei - und das ist inzwischen gemessen.** Eine DRITTE Auflagenform
+  (60 mm, zwischen den beiden) drueckt den Schaetzer von 92 auf 62 %, auf der neuen Platte auf
+  48 %, und **eigene Zeilen fuer sie helfen nicht**: die Ursache sind fremde Nachbarn, nicht
+  fehlende Daten ([Die dritte Auflage bricht die Nachbarschaft](/befunde/dritte-auflage-bricht-die-nachbarschaft.md)).
+  **Alles auf dieser Seite gilt fuer ZWEI weit auseinanderliegende Auflagenformen.**
 * **Das Geruest steht weiter.** Gelabelt wird mit dem Privileg; nur zur Laufzeit ist es aus dem
   Pfad. Unveraendert gegenueber dem [ersten A/B](/befunde/oberkante-ohne-privileg.md).
 

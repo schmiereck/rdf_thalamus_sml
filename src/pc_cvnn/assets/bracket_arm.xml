@@ -221,6 +221,21 @@
                         friction="1.6 0.05 0.001"/>
     </body>
 
+    <!-- DIE DRITTE AUFLAGE, 60 x 60 mm -- ZWISCHEN den beiden anderen, und das mit Absicht.
+         Offene Frage nach wiki/befunde/lokaler-schaetzer-im-lauf.md: nimmt der lokale Schaetzer
+         eine dritte Form auf, ohne fuer sie von vorn zu sammeln?
+         60 mm ist der SCHARFE Fall, nicht der bequeme.  Ein lokales Modell holt seine Ebene aus
+         den naechsten Nachbarn; bei 60 mm sind das Zeilen der 50er UND der 70er Platte, also
+         genau die MISCHUNG zweier Grundrisse, an der der globale Schaetzer zerbrochen ist
+         (wiki/befunde/zweiter-grundriss-bricht-die-hoehe.md).  Eine 90er oder 35er Platte haette
+         nur die eine Nachbarschaft und waere die leichtere Frage.
+         Vorhersage, damit sie falsifizierbar ist: die Uebertragung ohne eigene Zeilen SCHEITERT. -->
+    <body name="sockel3" pos="0.75 -0.9 0.004">
+      <freejoint/>
+      <geom type="box" size="0.030 0.030 0.004" rgba="0.05 0.05 1.0 1" density="3000"
+                        friction="1.6 0.05 0.001"/>
+    </body>
+
     <!-- target marker: a flat disk on the table (mocap = kinematic, moved per episode),
          no collision so it never disturbs the cubes; also a visible cue for the camera.
          target_marker is the ACTIVE-goal disk run_combined snaps onto the committed goal each episode.

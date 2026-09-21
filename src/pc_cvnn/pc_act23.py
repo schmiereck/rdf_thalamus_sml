@@ -838,6 +838,15 @@ SOCKEL_WANDERT = os.environ.get("ACT23_SOCKEL_WANDERT", "0") == "1"
 # wiki/befunde/zweiter-grundriss-bricht-die-hoehe.md).  Der globale lineare Schaetzer der
 # ersten Fassung faellt damit auf die Grundrate; der lokale kommt auf 92 %.
 SOCKEL2 = os.environ.get("ACT23_SOCKEL2", "0") == "1"
+# WIE VIELE AUFLAGENFORMEN im Wechsel (ACT23_SOCKEL_N, Vorgabe 1).  2 ist gleichbedeutend mit
+# ACT23_SOCKEL2=1 (der aeltere Schalter bleibt, die Rezepte im Wiki nennen ihn).  3 nimmt die
+# 60-mm-Platte dazu.
+# WARNUNG, GEMESSEN (wiki/befunde/dritte-auflage-bricht-die-nachbarschaft.md): mit DREI Formen
+# faellt der HoehenSchaetzer auf 62 % und auf der neuen Platte auf 48 %, und eigene Zeilen fuer
+# sie helfen NICHT -- die Ursache sind fremde Nachbarn, nicht fehlende Daten.  ACT23_HOEHE_SEHEN
+# sollte mit SOCKEL_N=3 nicht benutzt werden.
+SOCKEL_N = max(1, min(3, int(os.environ.get("ACT23_SOCKEL_N", "2" if SOCKEL2 else "1"))))
+SOCKEL_FORMEN = ["sockel", "sockel2", "sockel3"][:SOCKEL_N]
 SOCKEL_HOEHEN = [float(v) / 1000.0 for v in os.environ.get("ACT23_SOCKEL_HOEHEN", "8").split(",")]
 # LAUT SAGEN, WAS FEHLT -- nicht still mitschalten.  Ein Schalter, der einen zweiten heimlich
 # umlegt, macht jedes A/B mehrdeutig (dieselbe Regel wie bei AUGMENT/NEIGHBOURS und EIG_DIREKT).
@@ -3502,7 +3511,7 @@ def run_self_learning_steering(headless=False):
         # Das Parken erledigt die Kandidatenwahl von selbst: `_ziel_adresse_wuerfeln` filtert
         # ueber `_geparkt_jetzt`.  In STUETZEN stehen BEIDE, damit auch die geparkte Platte
         # niemals als greifbares Objekt in Frage kommt.
-        state.STUETZEN = ["sockel", "sockel2"] if SOCKEL2 else ["sockel"]
+        state.STUETZEN = list(SOCKEL_FORMEN)
         _sxy = np.asarray(SOCKEL_XY, float)
         _mind = min(float(np.linalg.norm(_sxy - np.asarray(s, float))) for s in SLOTS)
         print(f"  [Sockel] steht bei [{_sxy[0]:+.3f},{_sxy[1]:+.3f}], naechster Objekt-Slot "
@@ -3539,11 +3548,18 @@ def run_self_learning_steering(headless=False):
         print("  [Sockel] Hinweis: ein abgelegtes Objekt bleibt oben liegen; ab dann ist der "
               "Sockel-Blob verschmolzen und die Zieladresse wird mehrdeutig.", flush=True)
         scene["sockel"] = (_sxy.copy(), SOCKEL_HOEHEN[0] / 2.0, 0.0)
-        if SOCKEL2:
-            scene["sockel2"] = (np.array(PARK_XY, float), 0.004, 0.0)
-            print("  [Sockel] zweiter Grundriss dabei (sockel2, 50 mm) -- je Szene steht EINE "
-                  "Platte, die andere ist geparkt.  Die Adresse bliebe sonst mehrdeutig: beide "
-                  "lesen im Groessenband 'dick'.", flush=True)
+        if len(SOCKEL_FORMEN) > 1:
+            for _s in SOCKEL_FORMEN[1:]:
+                scene[_s] = (np.array(PARK_XY, float), 0.004, 0.0)
+            print(f"  [Sockel] {len(SOCKEL_FORMEN)} Auflagenformen im Wechsel "
+                  f"({', '.join(SOCKEL_FORMEN)}) -- je Szene steht EINE Platte, die anderen sind "
+                  f"geparkt.  Die Adresse bliebe sonst mehrdeutig: alle lesen im Groessenband "
+                  f"'dick'.", flush=True)
+            if len(SOCKEL_FORMEN) >= 3 and HOEHE_SEHEN:
+                print("  [Hoehe] WARNUNG: mit drei Auflagenformen faellt der Schaetzer gemessen "
+                      "auf 62 % (neue Platte 48 %), und eigene Zeilen helfen nicht -- fremde "
+                      "Nachbarn, nicht fehlende Daten.  s. wiki/befunde/"
+                      "dritte-auflage-bricht-die-nachbarschaft.md", flush=True)
 
     def _sockel_setzen(steht_xy):
         """Den Sockel fuer eine NEUE SZENE setzen: Stelle und Hoehe (s. SOCKEL_WANDERT/_HOEHEN).
@@ -3563,12 +3579,10 @@ def run_self_learning_steering(headless=False):
         # WELCHE PLATTE diese Szene traegt (s. SOCKEL2).  Die andere wird geparkt; damit faellt sie
         # von selbst aus der Kandidatenliste von `_ziel_adresse_wuerfeln` (die filtert ueber
         # `_geparkt_jetzt`), und die Adresse bleibt eindeutig.
-        _aktiv = "sockel"
-        if SOCKEL2:
-            _aktiv = ("sockel", "sockel2")[int(crng.integers(2))]
-            for _s in ("sockel", "sockel2"):
-                if _s != _aktiv:
-                    scene[_s] = (np.array(PARK_XY, float), 0.004, 0.0)
+        _aktiv = SOCKEL_FORMEN[int(crng.integers(len(SOCKEL_FORMEN)))]
+        for _s in SOCKEL_FORMEN:
+            if _s != _aktiv:
+                scene[_s] = (np.array(PARK_XY, float), 0.004, 0.0)
         _bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, _aktiv)
         _g = int(sim.m.body_geomadr[_bid])
         _h = SOCKEL_HOEHEN[int(crng.integers(len(SOCKEL_HOEHEN)))] if len(SOCKEL_HOEHEN) > 1 \

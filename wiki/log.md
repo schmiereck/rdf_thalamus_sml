@@ -9,6 +9,27 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Anlage**: [Die dritte Auflage bricht die Nachbarschaft](/befunde/dritte-auflage-bricht-die-nachbarschaft.md)
+  - die offene Frage des Vortags, beantwortet und **negativ**. Dritte Platte 60 x 60 mm, bewusst
+  ZWISCHEN den bekannten 50 und 70 (der schwere Fall: die Nachbarschaft enthaelt dann beide).
+  **Ihr eigenes Signal ist perfekt** (allein trainiert 100 %, 0,41 mm - leichter als die anderen
+  beiden). **Im Topf mit allen dreien faellt alles:** 62 % gesamt statt 92 % bei zweien, die neue
+  Platte 48 %, und die alten verlieren mit. **Eigene Zeilen helfen NICHT** (0/3/6/12/24/45 Zeilen
+  -> 33-42 %) und verschlechtern die alten (90 -> 77 %). **Ursache beziffert:** der naechste eigene
+  Nachbar liegt bei 0,11-0,16, der naechste fremde bei 0,80-0,92 - fuenf- bis achtmal weiter -,
+  und trotzdem sind 12 % der zehn Nachbarn fremd (bei zwei Platten waren es 0 %). **Ein einziger
+  ferner Punkt unter zehn genuegt**, weil eine Ausgleichsrechnung mit fuenf Parametern gegen
+  Hebelwirkung keinen Schutz hat. Orakel mit grundrissreinen Nachbarn: **86/98/98 %** - die
+  Information ist vollstaendig da, es fehlt die AUSWAHL. **Vier Abhilfen gemessen, keine
+  uebernommen:** "Aussehen zuerst" (55 %) und robustes Nachfitten (56 %) sind schlechter als der
+  Ist-Zustand, kleinere Nachbarschaft und tricube-Gewichtung (69 %) helfen nur im schwersten Fall
+  und verschlechtern die einfacheren - das zu nehmen hiesse, an 270 Sondenzeilen anzupassen und
+  die act23-Messung des Vortags zu entwerten. **Der Code bleibt.** Und: meine Verallgemeinerung
+  vom Vortag ("wird von selbst zu einem Modell je Grundriss") gilt nur bei weit auseinander
+  liegenden Formen; sie ist auf der [Zwei-Grundriss-Seite](/befunde/zweiter-grundriss-bricht-die-hoehe.md)
+  entsprechend eingeschraenkt. `ACT23_SOCKEL_N=3` stellt alle drei im Wechsel auf (Vorgabe 1);
+  die ADRESSIERUNG der dritten Platte ist kein Problem (Rauchtest 4-6 mm), nur ihre Hoehe.
+
 * **Anlage**: [Der lokale Hoehenschaetzer haelt im Lauf](/befunde/lokaler-schaetzer-im-lauf.md)
   - die act23-Bestaetigung zum lokalen Umbau, in einer Welt mit ZWEI Auflagenformen im Wechsel
   (`ACT23_SOCKEL2=1`). Warm 60 Episoden (51 Adressen, 9 verworfen -> 42 Zeilen), dann A und B je 40
