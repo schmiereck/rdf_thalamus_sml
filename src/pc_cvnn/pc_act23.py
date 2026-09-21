@@ -789,6 +789,34 @@ ZIEL_ABSTAND = float(os.environ.get("ACT23_ZIEL_ABSTAND", "0.05"))
 ZIEL_RELATION = os.environ.get("ACT23_ZIEL_RELATION", "an").strip().lower()
 if ZIEL_RELATION not in ("an", "auf"):
     raise SystemExit(f"ACT23_ZIEL_RELATION muss 'an' oder 'auf' sein, nicht {ZIEL_RELATION!r}")
+# =========================================================================================
+# DIE HOEHE SEHEN STATT WISSEN (ACT23_HOEHE_SEHEN, Vorgabe 0).
+#
+# `_ziel_aufloesen` rechnet die Ablagehoehe als GRASP_Z + Oberkante, und die Oberkante kommt
+# heute aus `sim.m.geom_size` -- das LETZTE Privileg auf dem Stapelpfad.  Nach
+# wiki/mechanismen/laufzeit-regeln.md darf ein Geruest die Trainingsdaten stuetzen und muss zur
+# Testzeit verschwinden.
+#
+# DASS ES GEHT, IST GEMESSEN (wiki/befunde/hoehe-steckt-in-der-wahrnehmung.md): die scheinbare
+# FLAECHE der Auflage steigt an 30 von 30 Stellen streng monoton mit der Hoehe.  Allein taugt sie
+# nichts -- der Ort streut 2,7-mal so stark wie der Hoehenhub --, zusammen mit dem wahrgenommenen
+# ORT und der Materialdicke aber: 1,31 mm Fehler und 77 % richtige Stufe gegen 4,00 mm und 33 %
+# Grundrate, stellenweise gehalten.
+#
+#   0 = wie bisher, die Oberkante kommt aus geom_size (der Schaetzer lernt trotzdem mit und
+#       schreibt seinen Fehler in die Zeile -- so misst EIN Lauf, was er koennte)
+#   1 = die Oberkante kommt aus dem Schaetzer.  Solange er zu wenige Zeilen hat, faellt er
+#       LAUT auf das Privileg zurueck; ein stiller Rueckfall waere genau die Verwechslung,
+#       die der Schalter aufdecken soll.
+HOEHE_SEHEN = os.environ.get("ACT23_HOEHE_SEHEN", "0") == "1"
+# DIE HOEHE ERTASTEN STATT SIE GESAGT ZU BEKOMMEN (ACT23_HOEHE_TASTEN, Vorgabe 0).
+# Nutzerwunsch 2026-09-21: "weniger Teacher ist immer besser".  Mit diesem Schalter labelt der
+# HoehenSchaetzer NICHT mehr mit `sim.m.geom_size`, sondern mit der Hoehe, bei der die Hand das
+# getragene Objekt hat AUFSETZEN fuehlen (ACT16_TASTEN, dort steht die Mechanik).  Damit faellt
+# das letzte Privileg auch aus dem TRAINING, nicht nur aus der Laufzeit.
+# Der Schalter zieht ACT16_TASTEN NICHT heimlich mit -- der Start sagt, wenn es fehlt.
+HOEHE_TASTEN = os.environ.get("ACT23_HOEHE_TASTEN", "0") == "1"
+
 # DER SOCKEL IN DIE SZENE (ACT23_SOCKEL, Vorgabe 0).  Eine 70-mm-Platte als Stapelziel: die
 # geometrische Toleranz (35 - 12 = 23 mm) passt damit zur gemessenen Ablagegenauigkeit von
 # 21-25 mm, waehrend ein Wuerfel auf einem Wuerfel unter 12 mm verlangt.
@@ -866,6 +894,10 @@ if ZIEL_RELATION == "auf":
     if not act16.ERFOLG_RUHT:
         _fehlt.append("ACT16_ERFOLG_RUHT=1 -- sonst heisst 'geliefert' woertlich 'liegt auf dem "
                       "Tisch' und JEDER gelungene Stapel zaehlt als Fehlschlag")
+    if HOEHE_TASTEN and not act16.TASTEN:
+        _fehlt.append("ACT16_TASTEN=1 -- ACT23_HOEHE_TASTEN labelt aus der ERTASTETEN "
+                      "Aufsetzhoehe, und die entsteht nur, wenn die Ablagephase wirklich tastet; "
+                      "sonst faellt kein einziges Lernbeispiel")
     if not EIG_DIREKT:
         # DER FUENFTE SCHALTER, und er war bis 2026-09-20 nicht in dieser Liste.  Eine STUETZE
         # steht in state.STUETZEN und NICHT in state.OBJECTS -- die Farbbindung laeuft aber ueber
@@ -885,26 +917,6 @@ if ZIEL_RELATION == "auf":
         print("  [Ziel-Relation] ACT23_SOCKEL ist NICHT gesetzt -- dann gibt es keine Stuetze in "
               "der Szene, auf die 'auf' zeigen koennte, und jede Episode faellt auf den Marker "
               "zurueck.", flush=True)
-# =========================================================================================
-# DIE HOEHE SEHEN STATT WISSEN (ACT23_HOEHE_SEHEN, Vorgabe 0).
-#
-# `_ziel_aufloesen` rechnet die Ablagehoehe als GRASP_Z + Oberkante, und die Oberkante kommt
-# heute aus `sim.m.geom_size` -- das LETZTE Privileg auf dem Stapelpfad.  Nach
-# wiki/mechanismen/laufzeit-regeln.md darf ein Geruest die Trainingsdaten stuetzen und muss zur
-# Testzeit verschwinden.
-#
-# DASS ES GEHT, IST GEMESSEN (wiki/befunde/hoehe-steckt-in-der-wahrnehmung.md): die scheinbare
-# FLAECHE der Auflage steigt an 30 von 30 Stellen streng monoton mit der Hoehe.  Allein taugt sie
-# nichts -- der Ort streut 2,7-mal so stark wie der Hoehenhub --, zusammen mit dem wahrgenommenen
-# ORT und der Materialdicke aber: 1,31 mm Fehler und 77 % richtige Stufe gegen 4,00 mm und 33 %
-# Grundrate, stellenweise gehalten.
-#
-#   0 = wie bisher, die Oberkante kommt aus geom_size (der Schaetzer lernt trotzdem mit und
-#       schreibt seinen Fehler in die Zeile -- so misst EIN Lauf, was er koennte)
-#   1 = die Oberkante kommt aus dem Schaetzer.  Solange er zu wenige Zeilen hat, faellt er
-#       LAUT auf das Privileg zurueck; ein stiller Rueckfall waere genau die Verwechslung,
-#       die der Schalter aufdecken soll.
-HOEHE_SEHEN = os.environ.get("ACT23_HOEHE_SEHEN", "0") == "1"
 
 
 # Der Lerner selbst liegt in arm_modules/hoehen_schaetzer.py -- NICHT hier.  Eine Klasse,
@@ -2504,9 +2516,17 @@ def run_self_learning_steering(headless=False):
                     np.quantile(_rr, 0.95) - np.quantile(_rr, 0.5))
             else:
                 _eins = float(_cs0) <= shape_clf._merge_th()      # kein eigener Bezug -> grob
-            if _eins:
+            # DIE MERKMALE AUFHEBEN.  Beim Tasten faellt das Etikett erst am Episodenende, die
+            # Detektion gibt es aber nur JETZT (danach steht das Objekt auf der Auflage und der
+            # Blob ist verschmolzen).  Also hier merken, dort lernen.
+            bez["_det_hoehe"] = {"area": _det.get("area"), "dicke": _det.get("dicke"),
+                                 "pos": (None if _det.get("pos") is None
+                                         else np.asarray(_det["pos"], float).copy())}
+            bez["_eins"] = bool(_eins)
+            bez["_wahr_oben"] = float(_wahr_oben)
+            if _eins and not HOEHE_TASTEN:
                 hoehen_schaetzer.merken(_det, _wahr_oben)
-            else:
+            elif not _eins:
                 print(f"    [Hoehe] Auflage sieht belegt aus (Farbstreuung {float(_cs0):.3f}) -- "
                       f"KEIN Lernbeispiel", flush=True)
             _oben = _wahr_oben
@@ -5724,6 +5744,30 @@ def run_self_learning_steering(headless=False):
                     # halbbreit, die Physik hat laengst entschieden.  Die Schwelle liegt in der Mitte
                     # zwischen Tisch (Mitte 12 mm) und Auflage (Mitte 20 mm).  Der Versatz bleibt als
                     # Messwert stehen, er sagt, wie knapp es war.
+                    # AUS DER BERUEHRUNG LERNEN (s. HOEHE_TASTEN).  Das Etikett ist die
+                    # Handhoehe beim Aufsetzen minus GRASP_Z -- propriozeptiv, ohne geom_size.
+                    # Es faellt hier und nicht bei der Adressierung, weil es die Episode braucht.
+                    if HOEHE_TASTEN and _bz.get("_det_hoehe") is not None:
+                        _tst = getattr(act16.run_combined, "_tast", None)
+                        _hk = None if _tst is None else _tst.get("hz_kontakt")
+                        if _hk is None:
+                            print(f"    [Tasten] kein Aufsetzen gefuehlt -- kein Lernbeispiel"
+                                  + ("" if _tst is None else
+                                     f"  [Ziel {1000*_tst['tgt_z']:.1f}mm, tiefste Hand "
+                                     f"{1000*_tst['hz_min']:.1f}mm, {_tst['schritte']} Schritte, "
+                                     f"laengster Stillstand {_tst['still_max']}, kleinstes Sinken "
+                                     f"{1000*_tst['sink_min']:.2f}mm]"), flush=True)
+                        elif not _bz.get("_eins"):
+                            print("    [Tasten] Auflage sah belegt aus -- kein Lernbeispiel",
+                                  flush=True)
+                        else:
+                            _ot = float(_hk) - float(act16.GRASP_Z)
+                            hoehen_schaetzer.merken(_bz["_det_hoehe"], _ot)
+                            print(f"    [Tasten] aufgesetzt bei Handhoehe {1000.0 * _hk:.1f}mm "
+                                  f"-> Oberkante ertastet {1000.0 * _ot:.1f}mm, wahr "
+                                  f"{1000.0 * _bz['_wahr_oben']:.1f}mm, Abweichung "
+                                  f"{1000.0 * (_ot - _bz['_wahr_oben']):+.1f}mm "
+                                  f"({len(hoehen_schaetzer.X)} Zeilen)", flush=True)
                     _drauf = _oz > _ok_h + 0.008
                     _zus += (f" | Stapel: Objektmitte {1000.0 * _oz:.0f}mm (Auflage "
                              f"{1000.0 * _ok_h:.0f}mm), Versatz {_vers:.0f}mm -> "

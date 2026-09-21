@@ -128,6 +128,37 @@ GOAL_Z = os.environ.get("ACT16_GOAL_Z", "0") == "1"
 # Begriffe erst gemessen werden muss.
 ERFOLG_RUHT = os.environ.get("ACT16_ERFOLG_RUHT", "0") == "1"
 RUHT_V = float(os.environ.get("ACT16_RUHT_V", "0.005"))   # m/s, darunter gilt ein Koerper als ruhend
+# =========================================================================================
+# DIE AUFLAGE ERTASTEN (ACT16_TASTEN, Vorgabe 0).  Nutzerwunsch 2026-09-21: "weniger Teacher ist
+# immer besser" -- die Ablagehoehe soll aus dem AUSGANG kommen, nicht aus `sim.m.geom_size`.
+#
+# WAS NICHT GEHT, und das ist gemessen: der Ausgang "Stapel haelt oder nicht" traegt die Hoehe
+# NICHT.  Bei gelungenen Stapeln liegt der Hoehenfehler bei 2,20 mm, bei misslungenen bei 2,30 --
+# die Fehlschlaege sind seitlich (Versatz 65 gegen 15 mm), s.
+# wiki/befunde/drei-auflagen-im-lauf.md.  Auf Erfolg/Misserfolg zu lernen hiesse, auf Rauschen zu
+# lernen.  Das Ausgangssignal muss KOERPERLICH und ABGESTUFT sein.
+#
+# WAS GEHT: die Hand senkt das getragene Objekt, bis es AUFSETZT, und merkt sich, WO das war.
+# `sim.grasp_pos()` ist `site_xpos`, also die tatsaechliche Handstelle aus der Vorwaertskinematik
+# -- Propriozeption, die ein echter Roboter aus seinen Gelenkgebern hat, kein Simulatorwissen.
+# Die Aufsetzhoehe IST die gesuchte Groesse: genau bei ihr ruht das Objekt auf der Auflage.
+# Kein Objektmass noetig, keine Geometrie, kein Etikett von aussen.
+#
+# ZWEISEITIG WIRD DAS SIGNAL ERST DURCH DAS UEBERTASTEN.  Ohne es kaeme eine Beruehrung nur
+# zustande, wenn die Schaetzung zu TIEF lag -- der Lerner bekaeme nur einseitige Beispiele und
+# driftete.  Deshalb zielt die Ablagephase TAST_TIEF unter die Schaetzung und haelt an, sobald
+# sie Widerstand fuehlt.  Das ist ein Reflex, kein Plan: gestoppt wird auf ein Sinnessignal hin.
+# Er darf zur Testzeit abgeschaltet werden -- dann steht die gelernte Schaetzung allein.
+TASTEN = os.environ.get("ACT16_TASTEN", "0") == "1"
+TAST_TIEF = float(os.environ.get("ACT16_TAST_TIEF", "0.008"))   # m unter die Schaetzung hinaus
+TAST_STILL = float(os.environ.get("ACT16_TAST_STILL", "0.0004"))  # m je Schritt = "sinkt nicht mehr"
+TAST_N = int(os.environ.get("ACT16_TAST_N", "6"))               # so viele Schritte in Folge
+# WANN GILT EIN STILLSTAND ALS WIDERSTAND UND NICHT ALS ANKUNFT?  Dicht am befohlenen Ziel wird
+# der Regler von selbst langsam -- dort ist Stillstand nichtssagend.  TAST_RAND trennt beides und
+# ist zugleich die Austrittsschwelle, damit kein toter Bereich dazwischen bleibt: DARUEBER zaehlt
+# ein Stillstand als Beruehrung, DARUNTER gilt die Phase als durchgetastet.  Der Wert ist die
+# Groessenordnung des bleibenden Regelfehlers, nicht eingestellt auf ein Ergebnis.
+TAST_RAND = float(os.environ.get("ACT16_TAST_RAND", "0.002"))
 SOFT_RELEASE = os.environ.get("ACT16_SOFT_RELEASE", "1") == "1"   # place: RAMP the claw open (mirror of the
 #   close ramp) + retreat UP open, and never grasp-reflex onto an object already AT the goal -- the old
 #   instant snap-open at grasp height FLICKED the just-placed object off the target (user-observed in the
@@ -478,6 +509,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         run_combined._inclaw = None                          # (quer, tief) mm des Objekts relativ zur
         #   Backenmitte beim Zufassen; None = die Klaue hat nie tief am Objekt geschlossen
         run_combined._release = None       # release snapshot (see the step loop)
+        run_combined._tast = None          # Tast-Ergebnis der Ablage (s. TASTEN)
         run_combined._grip = {}            # Fingerdruck-Streifen: Messreihe JE PHASE (N).
         #   Ein realer Streifen liefert durchgehend -- also wird er auch durchgehend aufgezeichnet und
         #   nach Phase getrennt ausgewertet.  Der reine Spitzenwert ueber die Episode trennte Erfolg
@@ -585,20 +617,75 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 elif phase == "place":
                     # ABLAGEHOEHE: tgt_z statt der Konstanten GRASP_Z.  Ohne dritten Wert aus
                     # goal_fn ist tgt_z == GRASP_Z, und diese Zeilen sind Zeichen fuer Zeichen die alten.
-                    j5, aim = gclose, np.array([tgt[0], tgt[1], tgt_z])
-                    if hz < tgt_z + 0.012:
-                        phase, dwell = "release", 0
+                    if not TASTEN:
+                        j5, aim = gclose, np.array([tgt[0], tgt[1], tgt_z])
+                        if hz < tgt_z + 0.012:
+                            phase, dwell = "release", 0
+                    else:
+                        # ERTASTEN (s. TASTEN oben): TAST_TIEF unter die Schaetzung zielen und
+                        # anhalten, sobald die Hand nicht mehr sinkt, obwohl sie es soll.  Die
+                        # Hoehe, bei der sie stehen bleibt, ist die Aufsetzhoehe -- das Etikett.
+                        _zt = tgt_z - TAST_TIEF
+                        j5, aim = gclose, np.array([tgt[0], tgt[1], _zt])
+                        _st = run_combined._tast
+                        if _st is None:
+                            _st = run_combined._tast = {"hz_vor": float(hz), "still": 0,
+                                                        "hz_kontakt": None, "tgt_z": float(tgt_z),
+                                                        "hz_min": float(hz), "still_max": 0,
+                                                        "sink_min": 9.9, "schritte": 0}
+                        _st["schritte"] += 1
+                        _st["hz_min"] = min(_st["hz_min"], float(hz))
+                        # SINKT SIE NOCH?  Verglichen wird die GEFUEHLTE Handhoehe mit sich selbst,
+                        # nicht mit dem Befehl -- ein Stillstand bei noch tieferem Ziel heisst
+                        # Widerstand.  Erst ueber TAST_N Schritte, damit ein einzelner ruhiger
+                        # Regelschritt nicht als Beruehrung durchgeht.
+                        _sink = _st["hz_vor"] - hz
+                        if hz > _zt + TAST_RAND:
+                            _st["sink_min"] = min(_st["sink_min"], float(_sink))
+                        if hz > _zt + TAST_RAND and _sink < TAST_STILL:
+                            if _st["still"] == 0:
+                                # DIE HOEHE BEIM BEGINN DES STILLSTANDS ist die Aufsetzhoehe --
+                                # nicht die am Ende des Fensters.  Gemessen: waehrend der TAST_N
+                                # Bestaetigungsschritte kriecht die Hand noch bis zu TAST_N *
+                                # TAST_STILL weiter (je Schritt unter der Schwelle, in Summe
+                                # nicht), und das las die Oberkante systematisch 0 bis 4 mm ZU
+                                # TIEF.  Der Beginn ist der Augenblick der Beruehrung, das Ende
+                                # nur der Augenblick, in dem ich ihr glaube.
+                                _st["hz_still0"] = float(hz + _sink)
+                            _st["still"] += 1
+                        else:
+                            _st["still"] = 0
+                        _st["still_max"] = max(_st["still_max"], _st["still"])
+                        _st["hz_vor"] = float(hz)
+                        if _st["still"] >= TAST_N:
+                            _st["hz_kontakt"] = float(_st["hz_still0"])   # AUFGESETZT -- die Messung
+                            _st["z_rel"] = float(hz)                      # losgelassen wird HIER
+                            phase, dwell = "release", 0
+                        elif hz < _zt + TAST_RAND:
+                            _st["z_rel"] = float(hz)           # durchgetastet ohne Widerstand
+                            phase, dwell = "release", 0
+                        # `tgt_z` wird NICHT angefasst.  Es ist das ZIEL, steht (mit ACT16_GOAL_Z)
+                        # im Zustandsvektor der Policy und labelt ueber reactive_subgoal die
+                        # DAgger-Zeilen.  Es mitten in der Episode zu verschieben hiesse, den
+                        # Lernstoff mit dem Tastergebnis zu vermischen -- die Ablagehoehe stuende
+                        # dann in den Etiketten schon, bevor der Schaetzer sie gelernt hat.
                 else:  # release
                     if SOFT_RELEASE:
                         dwell += 1
                         frac = min(1.0, dwell / 40.0)         # open SLOWLY (the mirror of the close ramp:
                         j5 = gclose + (J5_OPEN - gclose) * frac   # an instant snap-open FLICKS the placed
-                        zr = tgt_z if dwell <= 40 else OVER_Z   # object); then retreat UP already open
+                        _zr0 = tgt_z
+                        if TASTEN and run_combined._tast is not None:
+                            _zr0 = float(run_combined._tast.get("z_rel", tgt_z))
+                        zr = _zr0 if dwell <= 40 else OVER_Z   # object); then retreat UP already open
                         aim = np.array([tgt[0], tgt[1], zr])
                         if dwell > 65:
                             break
                     else:
-                        j5, aim, dwell = J5_OPEN, np.array([tgt[0], tgt[1], tgt_z]), dwell + 1
+                        _zr0 = tgt_z
+                        if TASTEN and run_combined._tast is not None:
+                            _zr0 = float(run_combined._tast.get("z_rel", tgt_z))
+                        j5, aim, dwell = J5_OPEN, np.array([tgt[0], tgt[1], _zr0]), dwell + 1
                         if dwell > 50:
                             break
             else:  # PUSH: get behind the object (OVER it, since the arm can't go through), push
