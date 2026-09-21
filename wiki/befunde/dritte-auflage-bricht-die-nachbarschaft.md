@@ -138,11 +138,14 @@ Die Vorgabe bleibt 0.
 
 # Fallen
 
-* **`ebene: pruefstand`, und diesmal ohne act23-Gegenprobe.** Ich habe den Lauf nicht gefahren:
-  das [vorige A/B](/befunde/lokaler-schaetzer-im-lauf.md) konnte 94 gegen 78 % nicht aufloesen,
-  also koennte ein Lauf dieser Groesse den hier erwarteten Einbruch erst recht nicht zeigen. Das
-  ist eine Begruendung, kein Ersatz - **die Wirkung auf act23 ist ungemessen**, und nach
-  [Pruefstandsfalle](/mechanismen/pruefstandsfalle.md) gilt das in beide Richtungen.
+* **`ebene: pruefstand` - und die act23-Gegenprobe ist inzwischen gefahren, auf Wunsch des
+  Nutzers.** Meine Begruendung, sie lohne nicht, war zu pauschal: sie galt fuer die Stapelquote,
+  nicht fuer den Schaetzfehler. **Das Ergebnis:
+  [die Vorhersage trifft zifferngenau ein und ist folgenlos](/befunde/drei-auflagen-im-lauf.md)** -
+  45 % richtige Stufe gegen die hier vorhergesagten 48 %, und die Stapelquote bleibt bei 85 gegen
+  88 %. Die Fehlschlaege sind seitlich (Versatz 65 gegen 15 mm), der Hoehenfehler ist bei
+  gelungenen und misslungenen Stapeln gleich gross. **Die Messgroesse dieser Seite loest feiner
+  auf als die Aufgabe.**
 * **60 mm ist der schwerste Fall, nicht der typische.** Eine Form weit ausserhalb der bekannten
   haette nur eine Nachbarschaft. Wie stark der Bruch von der LAGE der neuen Form abhaengt, ist
   nicht gemessen.

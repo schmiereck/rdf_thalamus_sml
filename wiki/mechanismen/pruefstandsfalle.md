@@ -16,8 +16,10 @@ sources:
 # Behauptung
 
 Ein Ergebnis aus einem isolierten Teilaufbau sagt den vollen act23-Lauf **in keiner Richtung**
-vorher. Das ist hier dreimal aufgetreten, jedesmal mit derselben Struktur: der Prueftstand zeigt
-einen klaren, oft grossen Effekt, das saubere act23-A/B zeigt nichts.
+vorher. Das ist hier viermal aufgetreten - dreimal mit derselben Struktur (der Pruefstand zeigt
+einen klaren, oft grossen Effekt, das saubere act23-A/B zeigt nichts) und einmal mit einer
+**anderen**, die der Tabelle unten angehaengt ist: dort traf die Pruefstands-Vorhersage sogar
+zifferngenau ein und war trotzdem folgenlos.
 
 # Zahlen
 
@@ -26,6 +28,7 @@ einen klaren, oft grossen Effekt, das saubere act23-A/B zeigt nichts.
 | **Nagelneigung** (57,3 Grad -> 20 Grad) | der Nagel traegt 95 % der Griffkraft | -2,0 Punkte, p = 0,76 |
 | **Dicken-Wache** (Groesse dominiert Form) | Wache feuert: Ansprueche -36 %, Neuheit x3 | Engpass unberuehrt - er sitzt bei der Klassen-**Geburt**, nicht am Anspruch |
 | **Fingerdruck als Schliess-Signal** | Kontaktsignal ist vorhanden | dreifach gemessen: traegt die Entscheidung nicht |
+| **Dritte Auflagenform** (Hoehenschaetzer) | Schaetzer faellt auf 48 % richtige Stufe | **trifft ein** (45 %) - und die Stapelquote bleibt gleich (85 gegen 88 %) |
 
 # Bewertung
 
@@ -36,6 +39,21 @@ misst einen **Engpass**. Ein Mechanismus, der nicht der Engpass ist, wirkt nicht
 Das heisst **nicht**, dass Pruefstaende wertlos sind. Sie sind gut darin, eine Ursache zu
 lokalisieren und eine Hypothese zu toeten. Sie sind untauglich, eine Wirkung auf die Lieferquote
 oder die Selbst-Aneignung zu **behaupten**.
+
+## Der vierte Fall hat eine andere Ursache - und sie ist die gefaehrlichere
+
+Bei der dritten Auflagenform war der Pruefstand **nicht falsch**: er sagte 48 % richtige Stufe
+vorher, gemessen wurden 45 %. Folgenlos war er trotzdem, weil seine Messgroesse **feiner
+aufloest als die Aufgabe**. "Richtige Stufe von dreien" verlangt den Hoehenfehler unter 2 mm; ob
+ein Wuerfel auf einer Platte liegen bleibt, entscheidet der SEITLICHE Versatz (gemessen: 15 mm bei
+gelungenen, 65 mm bei misslungenen Stapeln), waehrend der Hoehenfehler bei beiden gleich gross ist.
+
+> **Nicht nur fragen "misst der Pruefstand den Engpass?", sondern auch "misst er in der
+> Aufloesung, in der die Aufgabe ueberhaupt unterscheidet?"** Ein zu feines Mass meldet einen
+> Zusammenbruch, wo keiner ist - und kostet dann eine Reihe von Umbauten gegen ein Problem, das
+> die Aufgabe nicht hat.
+
+Voll: [Drei Auflagenformen im Lauf](/befunde/drei-auflagen-im-lauf.md).
 
 # Fallen
 

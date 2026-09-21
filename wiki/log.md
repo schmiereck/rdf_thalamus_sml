@@ -9,6 +9,23 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Anlage**: [Drei Auflagenformen im Lauf](/befunde/drei-auflagen-im-lauf.md) - die
+  act23-Gegenprobe zur dritten Auflage, auf Wunsch des Nutzers gefahren, nachdem ich sie fuer
+  nicht lohnend erklaert hatte. **Meine Begruendung war zu pauschal:** sie galt fuer die
+  Stapelquote, nicht fuer den Schaetzfehler (stetig, ~30 Messwerte je Arm). **Die Sonde hatte
+  recht: 45 % richtige Stufe gegen die vorhergesagten 48 %**, Schaetzfehler von 0,8 auf 2,2 mm.
+  **Und es ist folgenlos: 17 von 20 gestapelt gegen 15 von 17 mit dem Privileg** (85 gegen 88 %,
+  p = 1,00), die neue 60-mm-Platte sogar **7 von 7** - ausgerechnet die, fuer die 48 %
+  vorhergesagt waren. **Der Grund ist gemessen:** die Fehlschlaege sind SEITLICH, nicht senkrecht
+  (Versatz 65 gegen 15 mm), und der Hoehenfehler ist bei gelungenen und misslungenen Stapeln
+  gleich gross (2,20 gegen 2,30 mm; in Arm A haben die Fehlschlaege sogar den kleineren).
+  **Neue Spielart der [Pruefstandsfalle](/mechanismen/pruefstandsfalle.md), als vierter Fall
+  dort eingetragen:** der Pruefstand war nicht falsch, seine Messgroesse loest nur **feiner auf
+  als die Aufgabe**. "Richtige Stufe von dreien" verlangt den Fehler unter 2 mm; ob ein Wuerfel
+  liegen bleibt, entscheidet der seitliche Versatz. **Rueckwirkend fuer die ganze Stufe-3-Linie:**
+  der Ertrag ist das gefallene Privileg, nicht die Genauigkeit - zwischen 0,8 und 2,2 mm liegt
+  fuer die Aufgabe nichts.
+
 * **Anlage**: [Die dritte Auflage bricht die Nachbarschaft](/befunde/dritte-auflage-bricht-die-nachbarschaft.md)
   - die offene Frage des Vortags, beantwortet und **negativ**. Dritte Platte 60 x 60 mm, bewusst
   ZWISCHEN den bekannten 50 und 70 (der schwere Fall: die Nachbarschaft enthaelt dann beide).
