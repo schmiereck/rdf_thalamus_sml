@@ -9,6 +9,27 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Anlage**: [Der Schaetzer auf der belegten Auflage](/befunde/schaetzer-auf-der-belegten-auflage.md)
+  - die Ursache des Stufe-4-Fehlschlags ist **offline reproduziert, beziffert und behoben**.
+  Sonde mit 180 Zeilen (leere gegen belegte Auflage an denselben Stellen und Hoehen):
+  **auf leer gelernt und auf belegt geprueft ergibt 34 %, also Grundrate** - genau der Lauf-Fall.
+  Auf beidem gelernt: **97 % (leer) und 78 % (belegt)**, und die leere Auflage kostet es nichts
+  (96 -> 97 %). Der Versatz ist **264 px** (leer 1424, belegt 1160) bei einem Hoehenhub von nur
+  127-145, also rund doppelt so gross wie das Signal - und die Flaeche ist die staerkste Achse
+  des Schaetzers. Bemerkenswert die Symmetrie: auch andersherum bricht es zusammen (nur belegt
+  gelernt, leer geprueft: 33 %) - es geht nicht um "schwerer", sondern um **dieselbe Verteilung**.
+  **Gebaut** (`ACT23_HOEHE_BELEGT`, Vorgabe 0): dieselbe Episode liefert zwei Aussehen mit EINEM
+  Etikett, denn die Oberkante aendert sich nicht dadurch, dass etwas darauf steht.
+  **Drei Dinge hat erst der Rauchtest erzwungen:** (1) aufgenommen wird beim NAECHSTEN
+  Adressieren, nicht am Episodenende - dort verdeckt der Arm die Auflage (1 von 7 erkannt);
+  (2) die Adresse trifft bei belegter Auflage oft den KLEINEN Teil (239 px gegen 1236 leer),
+  gemeint ist der groessere; (3) ein Pruefstein aus derselben Episode - die belegte Auflage ist
+  dieselbe Silhouette plus der Koerper, ihre Flaeche darf also nicht deutlich kleiner sein als die
+  leere; er hat prompt ein Beispiel mit 227 gegen 990 px verworfen. **Ehrlich:** die Ausbeute ist
+  duenn (1 belegtes Beispiel auf 6 Tastwerte, vier Bedingungen hintereinander), es ist
+  `ebene: pruefstand`, und die ZWEITE Ursache des Stufe-4-Fehlschlags - der Arm verliert den
+  getragenen Koerper aus dem Glauben - ist damit nicht behoben.
+
 * **Anlage**: [Stufe 4 gemessen](/befunde/stufe4-abstapeln-gemessen.md) - das A/B zur Relation in
   der Adresse, und es ist ein **Negativ mit praeziser Ursache**. **Die Sprache traegt:**
   *"nimm das, was auf Y liegt"* loest in 27 von 38 Versuchen auf (Fehler Median 6 mm, 90 %-Wert
