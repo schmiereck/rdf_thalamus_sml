@@ -640,9 +640,20 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                         # Widerstand.  Erst ueber TAST_N Schritte, damit ein einzelner ruhiger
                         # Regelschritt nicht als Beruehrung durchgeht.
                         _sink = _st["hz_vor"] - hz
-                        if hz > _zt + TAST_RAND:
+                        # NUR IM TASTFENSTER HORCHEN.  Die Ablagephase beginnt, sobald die Hand
+                        # seitlich am Ziel ist -- sie kann dann noch zentimeterweit darueber
+                        # stehen, und JEDER Stillstand auf dem Weg nach unten galt als Beruehrung.
+                        # GEMESSEN (20 Tastwerte): dadurch lagen einzelne Etiketten bis +17,9 mm
+                        # daneben, die Streuung war 5,79 mm bei einem Median von +0,40 -- und
+                        # dieses Rauschen halbierte die Genauigkeit des Lerners (87 -> 53 %
+                        # richtige Stufe auf denselben Sondenzeilen).  Das Fenster ist symmetrisch
+                        # um die Schaetzung: so weit, wie sie selbst danebenliegen kann.
+                        _im_fenster = hz < _st["tgt_z"] + TAST_TIEF
+                        if not _im_fenster:
+                            _st["still"] = 0
+                        if _im_fenster and hz > _zt + TAST_RAND:
                             _st["sink_min"] = min(_st["sink_min"], float(_sink))
-                        if hz > _zt + TAST_RAND and _sink < TAST_STILL:
+                        if _im_fenster and hz > _zt + TAST_RAND and _sink < TAST_STILL:
                             if _st["still"] == 0:
                                 # DIE HOEHE BEIM BEGINN DES STILLSTANDS ist die Aufsetzhoehe --
                                 # nicht die am Ende des Fensters.  Gemessen: waehrend der TAST_N
