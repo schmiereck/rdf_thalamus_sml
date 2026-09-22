@@ -1,8 +1,8 @@
 ---
 type: Befund
-title: Stufe 4 belegt - die Relation in der Adresse hebt das Abstapeln von 14 auf 49 Prozent
-description: Der saubere Durchgang, nachdem vier Maengel behoben waren. Die relationale Adresse liefert 17 von 35 gegen 5 von 35 mit der gewoehnlichen Adresse, also 49 gegen 14 Prozent bei Fisher p = 0,004 - die erste signifikante Wirkung dieser Linie. Im Vorlauf ohne die Reparaturen waren es 32 Prozent; der Vergleichsarm blieb bei genau 14, die Reparaturen wirken also dort, wo sie sollen. Die Adresse loest in 28 von 31 Versuchen auf (6 mm Median, nur noch 3 mehrdeutig statt 11), und der Glaube liegt mit 19 mm fast wieder im gewoehnlichen Bereich. Damit ist die Sprache rekursiv und das Umstapeln faellt heraus, ohne dass ein Verb dazukommt.
-tags: [act23, stapeln, sprache, rekursion, erfolg]
+title: Stufe 4 auf EINEM Seed - 49 gegen 14 Prozent, im gepaarten Sweep NICHT reproduziert
+description: Der Einzelseed-Durchgang nach vier Reparaturen: 17 von 35 gegen 5 von 35, also 49 gegen 14 Prozent bei Fisher p = 0,004. EINGESCHRAENKT 2026-09-22 - der gepaarte Sweep ueber acht Seeds reproduziert das nicht (38 gegen 33 Prozent, Vorzeichentest p = 0,69), und dieser Seed war in BEIDEN Armen ein Ausreisser in entgegengesetzte Richtungen. Die Wirkungsaussage faellt; die Sprachzahlen und der Mechanismus bleiben.
+tags: [act23, stapeln, sprache, rekursion, eingeschraenkt]
 status: stable
 evidenz: gemessen
 ebene: act23-ab
@@ -15,6 +15,21 @@ sources:
     resource: /befunde/stufe4-abstapeln-gemessen.md
     title: Der erste Durchgang und seine Berichtigung
 ---
+
+# EINGESCHRAENKT 2026-09-22: der gepaarte Sweep reproduziert das nicht
+
+Alles auf dieser Seite steht auf **einem Seed**. Der
+[gepaarte Sweep ueber acht Seeds](/befunde/stufe4-sweep-widerlegt.md) sagt etwas anderes:
+
+    gepoolt ueber 8 Seeds    A 66/200 = 33 %    B 76/200 = 38 %
+    Vorzeichentest           B besser 4, A besser 2, gleich 2   ->   p = 0,69
+
+**Dieser Seed war in BEIDEN Armen ein Ausreisser, und zwar in entgegengesetzte Richtungen:** A mit
+14 % unter der Sweep-Spanne von 20-60 %, B mit 49 % ueber der von 28-44 %. Die 35 Punkte waren
+nicht der Effekt, sondern die Summe zweier Zufaelle.
+
+**Die Wirkungsaussage unten faellt.** Was bleibt, sind die Sprachzahlen (aus anderen Zeilen
+gezaehlt) und der Mechanismus selbst.
 
 # Ergebnis
 
@@ -74,9 +89,11 @@ Groessen kommt aus dem Simulator.
 
 # Fallen
 
-* **Ein Seed, ein Lauf je Arm.** `p = 0,004` ist ein Fisher-Test ueber 70 Episoden, kein
-  gepaarter Sweep ueber Seeds. Nach [Messvorschrift](/messungen/act23-headless-ab.md) waere das
-  die belastbarere Form; sie steht aus.
+* **Ein Seed, ein Lauf je Arm -- und der Sweep ist inzwischen gelaufen.** `p = 0,004` war ein
+  Fisher-Test ueber 70 Episoden eines einzigen Seeds. Der gepaarte Sweep ueber acht Seeds
+  **reproduziert die Wirkung nicht** (38 gegen 33 %, p = 0,69), s.
+  [dort](/befunde/stufe4-sweep-widerlegt.md). Die Streuung zwischen den Seeds ist riesig (Arm A
+  20-60 %); ueber sie hinweg sind 10 Punkte mit acht Seeds nicht aufzuloesen.
 * **Die Reparaturen sind zusammen gemessen, nicht einzeln.** Welche der vier den Sprung von 32 auf
   49 % traegt, ist offen - moeglich ist auch, dass es nur eine ist.
 * **Das belegte Aussehen bleibt duenn:** 1 von 23 Tastwerten. Der Schaetzer arbeitet also

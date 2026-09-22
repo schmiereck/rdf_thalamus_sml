@@ -9,6 +9,23 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Anlage**: [Der gepaarte Sweep widerlegt die Stufe-4-Wirkung](/befunde/stufe4-sweep-widerlegt.md)
+  - **meine Wirkungsaussage von heute Mittag faellt.** Gepaarter Sweep ueber acht Seeds (8101-8108),
+  je Arm 25 Ep aus demselben Zustand, A und B parallel, ein gemeinsamer Hoehenschaetzer:
+  **B gewinnt in 4 Seeds, A in 2, zwei gleich -> Vorzeichentest p = 0,69**; gepoolt 76 von 200
+  gegen 66 von 200, also **38 gegen 33 %** bei Fisher p = 0,35. **Der Einzelseed war in BEIDEN
+  Armen ein Ausreisser, und zwar in entgegengesetzte Richtungen:** A mit 14 % unter der
+  Sweep-Spanne von 20-60 %, B mit 49 % ueber der von 28-44 %. Die 35 Punkte Abstand waren nicht
+  der Effekt, sondern die Summe zweier Zufaelle. **Die Streuung zwischen den Seeds ist riesig**
+  (Arm A 20 bis 60 %); ueber sie hinweg sind 10 Punkte mit acht Seeds nicht aufzuloesen.
+  **Was bleibt:** alle Sprachzahlen (28 von 31 aufgeloest, 6 mm) und der Mechanismus -- die
+  Adresse loest auf, der Arm findet den gestapelten Koerper, greift auf der richtigen Hoehe und
+  traegt ihn fort. **Was faellt:** "die erste signifikante Wirkung dieser Linie" und "die
+  relationale Adresse verdoppelt das Abstapeln". Die Einzelmessungs-Seite ist entsprechend
+  eingeschraenkt. Der eingebaute Gegencheck der beiden Urteilszeilen hat in zwei Seeds
+  angeschlagen; nachgesehen fehlte dort je einmal die Selbst-Urteil-Zeile ganz (kein Widerspruch
+  im Urteil) -- er sollte kuenftig nur vergleichen, wo beide Zeilen existieren.
+
 * **Anlage**: [Stufe 4 belegt](/befunde/stufe4-abstapeln-belegt.md) - der saubere Durchgang,
   nachdem vier Maengel behoben waren. **17 von 35 gegen 5 von 35, also 49 gegen 14 %, Fisher
   p = 0,004 - die erste signifikante Wirkung dieser Linie.** Zur Einordnung: die gewoehnliche
