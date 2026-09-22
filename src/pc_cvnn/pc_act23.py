@@ -4830,6 +4830,17 @@ def run_self_learning_steering(headless=False):
                                           - np.asarray(_b["pos"], float)))
                 if _d < ADR_REL_ANTEIL * float(_sp):
                     _paare.append((_d, _gr, _kl))
+        # DIE AUFLAGE IST MOEBEL -- also das GROESSTE Ding im Bild.  Ohne diese Schranke nimmt das
+        # Kriterium zwei BRUCHSTUECKE desselben Objekts fuer einen Stapel: gemessen eine "Auflage"
+        # von 263 px mit 90 px darauf, wo die 70-mm-Platte 1400 px hat.  Groessenverhaeltnis und
+        # Konzentrizitaet allein erfuellt ein zerfallener Einzelkoerper genauso.  Danach griff die
+        # Klaue irgendwo zu (3,32 N) und verlor sofort wieder.
+        # Sie ist zugleich der Massstab, der die Mehrdeutigkeit aufloest: nicht "irgendeines von
+        # zweien" (das waere der 152-mm-Fehlgriff der Objektadresse), sondern "das grosse, und nur
+        # wenn es EINDEUTIG das groesste ist".
+        if _ds:
+            _max = max(float(d["area"]) for d in _ds)
+            _paare = [q for q in _paare if float(q[1]["area"]) >= 0.9 * _max]
         if len(_paare) != 1:
             return None, ("kein Teil liegt innerhalb eines groesseren" if not _paare
                           else f"mehrdeutig: {len(_paare)} Stapel im Bild")
@@ -4863,7 +4874,7 @@ def run_self_learning_steering(headless=False):
         print(f"    [Adresse auf] oberer Koerper bei [{_p[0]:+.3f},{_p[1]:+.3f}] "
               f"({_oben_d['area']:.0f}px auf {_unten['area']:.0f}px), Oberkante der Auflage "
               f"{1000 * _ob:.1f}mm -> Greifhoehe {1000 * _gz:.1f}mm", flush=True)
-        return _p, _gz
+        return _oben_d, _gz
 
     def perceive(cmd):
         _l, body, method = state.selected()
@@ -4872,10 +4883,31 @@ def run_self_learning_steering(headless=False):
             # Der Koerpername wird hier nur fuer die MESSUNG benutzt, nicht fuer das Finden.
             _r = _auf_etwas_finden()
             if _r is not None:
-                _p, _gz = _r
-                _wahr = float(np.linalg.norm(_p - sim.obj_pos(body)[:2]))
-                print(f"    [Adresse auf] wahr {1000 * _wahr:.0f} mm daneben", flush=True)
-                return np.array([_p[0], _p[1], _gz], float), None, "grasp"
+                _det4, _gz = _r
+                # DREI DINGE, DIE JEDER ANDERE ADRESSPFAD TUT und die diesem Zweig gefehlt
+                # haben -- es war der GLAUBENSFEHLER aus wiki/befunde/stufe4-abstapeln-gemessen.md
+                # (Glaube 28-45 mm daneben statt der sonst 5-18):
+                #
+                # (a) DEN KEIM VEROEFFENTLICHEN.  Ohne ihn startet der Fovea-Tracker blind auf dem
+                #     wahrscheinlichsten gleichklassigen Blob -- "bei mehreren Kandidaten ein
+                #     Muenzwurf", und mit dem Konzentrisch-Schnitt liegen jetzt MEHR Bloebe im
+                #     Bild als vorher.  Genau die Lage, in der ein fehlender Keim teuer ist.
+                # (b) DEN GREIFPUNKT nehmen, nicht den Schwerpunkt: `grasp_xy` ist das Material
+                #     naechst dem Schwerpunkt, und es ist der Bezugspunkt, auf den run_one seine
+                #     Kandidaten-Offsets rechnet.  Der rohe Schwerpunkt war ein zweiter Fehler.
+                # (c) `_off` addieren, den selbst gewaehlten Klauenversatz -- sonst zielt der Arm
+                #     systematisch neben das, was er gelernt hat.
+                _grp = _gp(_det4, body)
+                perception.publish_seed(f"auf:{body}", np.asarray(_det4["pos"], float),
+                                       np.asarray(_det4["px"], float),
+                                       np.asarray(_off(_grp), float))
+                perception.seed_priv = False       # ehrlich wahrgenommen, kein Privileg
+                _pz = _off(_grp)
+                _wahr = float(np.linalg.norm(np.asarray(_det4["pos"], float)
+                                             - sim.obj_pos(body)[:2]))
+                print(f"    [Adresse auf] wahr {1000 * _wahr:.0f} mm daneben, Greifziel "
+                      f"[{_pz[0]:+.3f},{_pz[1]:+.3f}]", flush=True)
+                return np.array([_pz[0], _pz[1], _gz], float), None, "grasp"
             print("    [Adresse auf] nicht aufgeloest -- Rueckfall auf den gewoehnlichen Weg",
                   flush=True)
         if method == "eigenschaft":
