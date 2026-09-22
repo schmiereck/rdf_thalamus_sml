@@ -9,6 +9,22 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Anlage**: [Stufe 4 belegt](/befunde/stufe4-abstapeln-belegt.md) - der saubere Durchgang,
+  nachdem vier Maengel behoben waren. **17 von 35 gegen 5 von 35, also 49 gegen 14 %, Fisher
+  p = 0,004 - die erste signifikante Wirkung dieser Linie.** Zur Einordnung: die gewoehnliche
+  Transportaufgabe liefert auf demselben Zustand 40-66 %, das Abstapeln liegt damit im Bereich des
+  gewoehnlichen Transports. **Die Vorhersage vor dem Lauf ist eingetroffen:** alle Reparaturen
+  zielen auf den relationalen Zweig, und der Vergleichsarm bleibt bei GENAU 5 von 35 - sie wirken
+  armspezifisch. Ohne sie waren es 32 %. Die Zwischenschritte sagen dasselbe: Adresse 28 von 31
+  aufgeloest statt 27 von 38, mehrdeutig 3 statt 6, kein Stapel 0 statt 5, Adressfehler
+  unveraendert 6 mm (die Moebel-Schranke verwirft also Falsches, nicht Richtiges), und der Glaube
+  liegt mit 19 mm fast wieder im gewoehnlichen Bereich (5-18), nachdem der Tracker seinen Keim
+  bekommt. **Belegt ist damit die REKURSION der Sprache** (`ADRESSE := ... | RELATION ADRESSE`):
+  der Agent adressiert einen Koerper ueber seine Lage zu einem anderen, findet ihn im eigenen
+  Bild, greift auf der richtigen Hoehe und traegt ihn fort - keine dieser Groessen kommt aus dem
+  Simulator. **Offen:** ein Seed und ein Lauf je Arm statt eines gepaarten Sweeps; welche der vier
+  Reparaturen den Sprung traegt; das belegte Aussehen bleibt mit 1 von 23 Tastwerten duenn.
+
 * **BERICHTIGUNG**: [Stufe 4 gemessen](/befunde/stufe4-abstapeln-gemessen.md) stand auf einem
   **Zaehlfehler von mir**, und die Seite sagte das Gegenteil des Gemessenen. Die Erfolgszeile des
   Laufs heisst `[Auto N] GELIEFERT` in GROSSBUCHSTABEN; mein fallunterscheidendes `grep geliefert`
