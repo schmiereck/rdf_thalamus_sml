@@ -108,7 +108,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 
 | Paket | Inhalt | Voraussetzung | Status | Befund / Entscheidung |
 |---|---|---|---|---|
-| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | in Arbeit | Vertrag v1 fixiert; Seed 17 ist negativ geschlossen. Seed 29 besteht die Trainingsabdeckung, verfehlt auf dem integeren Seed-101-Vergleich Lieferung und Wrist-Gewinn; Seed 103 steht aus |
+| D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | in Arbeit | Vertrag v1 fixiert; Seed 17 ist negativ geschlossen. Seed 29 besteht die Trainingsabdeckung, verfehlt auf dem integeren Seed-101-Vergleich Lieferung und Wrist-Gewinn; dessen Seed-103-Basis ist integer, Checkpointvergleich steht aus |
 | D1 | Beobachtung, Checkpoints, Neustart- und Nichtbeeinflussungsnachweis | D0 | offen | - |
 | D2 | Kleine Bibliothek echter Trainingslinien | D1 | offen | - |
 | D3 | Replay mit Abdeckungs- und Informationspruefung | D2 | offen | - |

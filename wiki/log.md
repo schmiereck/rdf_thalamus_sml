@@ -2,6 +2,11 @@
 
 ## 2026-09-22
 
+* **Seed-29-Basis Seed 103 bestätigt**: [D0 Seed 29: Wrist-Evaluation](/befunde/dream-rsi-d0-seed29-wrist-evaluation.md) -
+  die zweite gefrorene Basisfamilie ist vollständig und integer (40/40 Episoden, keine
+  Lernmutation, Basis-SHA unverändert) und liefert 26/40 Welt-Lieferungen, 3/40 ausgerichtete
+  Wrist-Wahlen sowie 9/40 Enthaltungen. Der Checkpointvergleich folgt.
+
 * **Seed-29-Zwischenbefund negativ**: [D0 Seed 29: Wrist-Evaluation](/befunde/dream-rsi-d0-seed29-wrist-evaluation.md) -
   der eingefrorene Checkpointvergleich auf Seed 101 ist integer, verändert aber die ausgerichtete
   Wahl nicht (6/40 -> 6/40), senkt Lieferung (21/40 -> 19/40) und Selbsturteil (23/40 -> 20/40).

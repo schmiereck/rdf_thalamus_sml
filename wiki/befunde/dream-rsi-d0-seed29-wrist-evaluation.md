@@ -29,6 +29,12 @@ sources:
   - id: trained101-episodes
     resource: ../../log/d0-evaluation/seed29/trained-seed101-episodes-40ep/episodes.jsonl
     title: Eingefrorenes Seed-29-Checkpoint-Episodenprotokoll, Seed 101
+  - id: base103-result
+    resource: ../../log/d0-evaluation/seed29/base-seed103-episodes-40ep/result.json
+    title: Eingefrorener Seed-103-Integritätsnachweis
+  - id: base103-episodes
+    resource: ../../log/d0-evaluation/seed29/base-seed103-episodes-40ep/episodes.jsonl
+    title: Eingefrorenes Seed-103-Episodenprotokoll
 ---
 
 # Trainingsabdeckung
@@ -89,8 +95,24 @@ Steigerung der Ausrichtung, Lieferung nicht um +10 Punkte und ein Rückgang des 
 Der Vertrag verlangt dennoch die zweite, unabhängige Familie Seed 103, bevor die Linie
 geschlossen wird. Die Fisher-Werte sind wegen 40 Episoden pro Arm nur deskriptiv.
 
+# Eingefrorene Basisfamilie Seed 103
+
+Die zweite Basisfamilie ist ebenfalls vollständig und integer: Rückgabecode 0, 40/40
+Episodenzeilen, keine geänderte Lernkomponente sowie bitgleicher Quell- und Arbeitskopiehash
+(`ad9d768c...c09b9e`). Ihre Kennzahlen reproduzieren die frühere Seed-17-Basisfamilie mit Seed
+103 exakt.
+
+| Metrik | Seed-29-Basis, Seed 103 |
+|---|---:|
+| Welt-Lieferung | 26/40 (65 %) |
+| Selbst-Lieferung (Selbsturteil) | 25/40 (62,5 %) |
+| Selbst gefunden | 40/40 (100 %) |
+| ausgerichtete relative Wrist <= 30° | 3/40 (7,5 %) |
+| Enthaltungen | 9/40 (22,5 %) |
+
 # Nächster Schritt
 
 Die Kreditabdeckung belegt nur, dass der Seed ausreichend eigene, kausal zugeordnete Erfahrung
-erhalten hat. Sie ist kein Wirkungsnachweis. Seed 101 liefert nun einen negativen Zwischenbefund.
-Als Nächstes folgt die vorab fixierte Familie Seed 103, erst danach die Linienentscheidung.
+erhalten hat. Sie ist kein Wirkungsnachweis. Seed 101 liefert einen negativen Zwischenbefund;
+die Seed-103-Basis liegt nun integer vor. Als Nächstes folgt der Seed-29-Checkpoint auf dieser
+vorab fixierten Familie, erst danach die Linienentscheidung.

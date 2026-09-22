@@ -37,7 +37,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [D0-Preflight: Lernzustand eingefroren](befunde/dream-rsi-d0-preflight-mutation.md) - ein 40er-Audit fand Fovea-Mutation; zentraler Fovea-Freeze besteht Ein- und 40-Episoden-Gegenlauf ohne Lernmutation
 * [D0 Seed 17: technische Runner-Validierung](befunde/dream-rsi-d0-seed17-block60.md) - positive Selbst-Lieferungen fehlten im ersten Filter; Rohdaten zeigen Abdeckung, werden aber nicht als Linie gewertet
 * [D0 Seed 17: Wrist-Evaluation](befunde/dream-rsi-d0-seed17-wrist-evaluation.md) - 120 Trainingsfolgen: ueber beide Familien +10 statt +20 Punkte ausgerichtete Wahl, Lieferung -3,75 Punkte; Linie negativ geschlossen
-* [D0 Seed 29: Wrist-Evaluation](befunde/dream-rsi-d0-seed29-wrist-evaluation.md) - Trainingsabdeckung besteht mit 92 vollen Selbst-Krediten und fünf Wrist-Zellen; auf eingefrorenem Seed 101 bleiben ausgerichtete Wrist 6/40 und Lieferung fällt 21/40 auf 19/40, Seed 103 steht aus
+* [D0 Seed 29: Wrist-Evaluation](befunde/dream-rsi-d0-seed29-wrist-evaluation.md) - Trainingsabdeckung besteht mit 92 vollen Selbst-Krediten und fünf Wrist-Zellen; auf eingefrorenem Seed 101 bleiben ausgerichtete Wrist 6/40 und Lieferung fällt 21/40 auf 19/40, Seed-103-Basis ist vollständig und integer, Checkpointvergleich steht aus
 * [Exekutionsvarianz](befunde/exekutionsvarianz.md) - ICC 0,61, Obergrenze 82 % gegen Grundrate 54 %; der Deckel sitzt in der Situationsrepraesentation
 * [1109 Episoden ohne Lernfortschritt](befunde/langlauf-ohne-fortschritt.md) - 43 h GUI-Lauf, vier unabhaengige Groessen flach
 * [Selbst-Aneignung stockt](befunde/selbstaneignung-stockt.md) - 17/17 und 14/14 selbst geborene Klassen verhungern, keine je kommandiert
