@@ -2,7 +2,7 @@
 type: Befund
 title: Stufe 4 gemessen - die relationale Adresse verdoppelt das Abstapeln (BERICHTIGT: die erste Fassung stand auf einem Zaehlfehler)
 description: Das A/B zur Relation in der Adresse. BERICHTIGT 2026-09-22 - die erste Fassung meldete 0 von 30 gegen 0 von 24 und schloss daraus, die Aufgabe sei nicht geloest. Das war ein Zaehlfehler von mir: die Erfolgszeile heisst GELIEFERT in Grossbuchstaben, mein fallunterscheidendes grep traf nur das kleingeschriebene 'NICHT geliefert' und zaehlte damit JEDEN Erfolg als Misserfolg. Richtig gezaehlt: 5 von 35 ohne die Relation gegen 11 von 34 mit ihr, also 14 gegen 32 Prozent bei p = 0,093. Die relationale Adresse verdoppelt das Abstapeln. Die Sprachzahlen und die Hoehenschaetzer-Diagnose der ersten Fassung bleiben gueltig; die Schlussfolgerung war falsch.
-tags: [act23, stapeln, sprache, negativ, hoehe, wahrnehmung]
+tags: [act23, stapeln, sprache, hoehe, wahrnehmung, berichtigt]
 status: stable
 evidenz: gemessen
 ebene: act23-ab
@@ -73,7 +73,7 @@ Stufe 4 unmoeglich war.
 
 Im Vergleichsarm ohne die Relation: 17 Ablagen und 6-mal "nie getragen".
 
-# Was nicht funktioniert
+# Was schlechter laeuft als die gewoehnliche Aufgabe
 
     FALSCH GEZAEHLT (erste Fassung):
     A  gewoehnliche Adresse    0 von 30 geliefert
@@ -92,9 +92,9 @@ misslungene Episoden, und die misslungenen dominieren.
     Glaube (wo der Agent das Objekt vermutet)   28 bis 45 mm daneben
 
 Zum Vergleich: in den gewoehnlichen Stapellaeufen liegt der Glaube bei 5 bis 18 mm. Der Arm
-greift richtig, traegt richtig - und legt dann 29 mm neben dem Ziel ab, weil er waehrend des
-Tragens nicht mehr weiss, was er traegt. Bei einer Liefertoleranz in dieser Groessenordnung
-faellt damit jede Episode durch.
+greift richtig, traegt richtig - und legt dann im Median 29 mm neben dem Ziel ab, weil er waehrend
+des Tragens ungenauer weiss, was er traegt. Bei einer Liefertoleranz in dieser Groessenordnung
+kostet das Episoden; **es erklaert die 68 %, die fehlen, nicht die Quote insgesamt.**
 
 ## Ursache 2: der Hoehenschaetzer liest die Auflage falsch, und ich habe es verursacht
 
@@ -122,17 +122,18 @@ gegenseitig untergraben.
 
 * **Die Sprachaussage steht.** Die Relation in der Adresse loest auf und fuehrt zu einem
   gegriffenen, getragenen Koerper. Das ist der Teil, der Stufe 4 ausmacht, und er ist belegt.
-* **Die Aufgabe ist nicht geloest.** Abstapeln liefert nicht, und keine der beiden Ursachen liegt
-  in der Sprache.
+* **Die Aufgabe ist angefangen, nicht geloest.** 32 % gegen 14 % ohne die Relation, bei 40-66 %
+  auf der gewoehnlichen Transportaufgabe. Was fehlt, liegt nicht in der Sprache, sondern in den
+  beiden Maengeln darueber.
 * **Der Schaetzer muss auf dem sehen, was er im Einsatz bekommt.** Entweder lernt er auf der
   belegten Auflage (das Tasten liefert das Etikett ohnehin genau dann), oder er bekommt ein
   Merkmal, das der Schnitt nicht veraendert. Das ist die naechste Messung, nicht diese.
 
 # Fallen
 
-* **Der Vergleich A gegen B ist als QUOTE wertlos** - beide sind 0. Was ihn traegt, sind die
-  Zwischenschritte: Adresse aufgeloest (27 gegen 0) und getragen (23 von 23 gegen 17 mit 6-mal
-  "nie getragen").
+* **`p = 0,093` traegt keine Wirkungsbehauptung.** Die Richtung ist stark (14 -> 32 %), die
+  Fallzahl klein. Was den Befund zusaetzlich stuetzt, sind die Zwischenschritte: Adresse
+  aufgeloest (27 gegen 0) und getragen (23 von 23 gegen 17 mit 6-mal "nie getragen").
 * **Nicht alle 35 Episoden zaehlen mit.** A hat 30 Auto-Zeilen, B 24 - der Rest bricht vorher ab.
   Warum, ist nicht untersucht.
 * **Der Glaubensfehler ist nicht zerlegt.** 28 bis 45 mm koennten vom Chroma-Schnitt kommen (der
