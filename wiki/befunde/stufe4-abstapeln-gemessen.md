@@ -1,7 +1,7 @@
 ---
 type: Befund
-title: Stufe 4 gemessen - die Sprache traegt, das Abstapeln nicht. Und der Hoehenschaetzer scheitert an einer Verteilungsverschiebung
-description: Das A/B zur Relation in der Adresse. Die Sprache funktioniert - "nimm das, was auf Y liegt" wird in 27 von 38 Versuchen aufgeloest, mit 6 mm Median-Fehler, und der Arm hebt den gestapelten Koerper in 23 von 23 Ablagen wirklich herunter. Geliefert wird trotzdem NICHTS, in beiden Armen 0 von 30 und 0 von 24. Zwei Ursachen sind beziffert: der Arm verliert den getragenen Koerper aus dem Glauben (28 bis 45 mm statt der sonst 5 bis 18) und legt 29 mm neben dem Ziel ab, und der Hoehenschaetzer liest die Auflage voellig falsch - wahr 6/10/14 mm, geschaetzt 11,1/6,0/9,2, die Reihenfolge ist zerstoert. Die Ursache dafuer ist eine Verteilungsverschiebung, die ich selbst erzeugt habe.
+title: Stufe 4 gemessen - die relationale Adresse verdoppelt das Abstapeln (BERICHTIGT: die erste Fassung stand auf einem Zaehlfehler)
+description: Das A/B zur Relation in der Adresse. BERICHTIGT 2026-09-22 - die erste Fassung meldete 0 von 30 gegen 0 von 24 und schloss daraus, die Aufgabe sei nicht geloest. Das war ein Zaehlfehler von mir: die Erfolgszeile heisst GELIEFERT in Grossbuchstaben, mein fallunterscheidendes grep traf nur das kleingeschriebene 'NICHT geliefert' und zaehlte damit JEDEN Erfolg als Misserfolg. Richtig gezaehlt: 5 von 35 ohne die Relation gegen 11 von 34 mit ihr, also 14 gegen 32 Prozent bei p = 0,093. Die relationale Adresse verdoppelt das Abstapeln. Die Sprachzahlen und die Hoehenschaetzer-Diagnose der ersten Fassung bleiben gueltig; die Schlussfolgerung war falsch.
 tags: [act23, stapeln, sprache, negativ, hoehe, wahrnehmung]
 status: stable
 evidenz: gemessen
@@ -15,6 +15,48 @@ sources:
     resource: /befunde/stapel-wird-sichtbar.md
     title: Die Voraussetzung, die vorher geloest wurde
 ---
+
+# BERICHTIGUNG 2026-09-22: diese Seite stand auf einem Zaehlfehler
+
+Die erste Fassung meldete **0 von 30 gegen 0 von 24 geliefert** und schloss daraus: *"die Sprache
+traegt, die Aufgabe nicht"*. **Beides war falsch gezaehlt.**
+
+Die Erfolgszeile des Laufs heisst `[Auto 7] GELIEFERT` - in **Grossbuchstaben**. Mein
+fallunterscheidendes `grep` suchte nach `geliefert` und traf damit ausschliesslich die
+kleingeschriebene Variante in `NICHT geliefert`. **Jeder Erfolg wurde als Misserfolg gezaehlt**,
+und weil das jeden Arm gleich traf, sah es wie ein durchgaengiges Null aus statt wie ein Fehler.
+
+Richtig gezaehlt, und zwar ueber beide unabhaengigen Zeilen, die im Protokoll stehen
+(`[Auto N] GELIEFERT` und `Welt: geliefert` - sie stimmen Episode fuer Episode ueberein):
+
+    A  gewoehnliche Adresse     5 von 35 = 14 %
+    B  relationale Adresse     11 von 34 = 32 %      Fisher p = 0,093
+
+**Die relationale Adresse verdoppelt das Abstapeln.** Zur Einordnung die gewoehnliche
+Transportaufgabe auf demselben Zustand, am selben Tag gemessen: 40 bis 66 % je nach
+Choreographie - das Abstapeln ist also die deutlich schwerere Aufgabe, und 32 % sind dafuer kein
+schlechter Wert.
+
+`p = 0,093` ist nicht signifikant. Die Richtung ist stark, die Fallzahl klein; es ist ein Hinweis,
+kein Beleg.
+
+## Was von der ersten Fassung bleibt
+
+* **Alle Sprachzahlen** - Adresse aufgeloest 27 von 38 mit 6 mm Median, getragen 23 von 23. Die
+  wurden aus anderen Zeilen gezaehlt und sind vom Fehler nicht beruehrt.
+* **Die Hoehenschaetzer-Diagnose** (wahr 6/10/14 mm, geschaetzt 11,1/6,0/9,2) und ihre Ursache,
+  die Verteilungsverschiebung - eigenstaendig gemessen und inzwischen
+  [beziffert und behoben](/befunde/schaetzer-auf-der-belegten-auflage.md).
+* **Der Glaubensfehler** (28-45 mm statt 5-18) als MESSWERT.
+
+## Was faellt
+
+* Die Schlussfolgerung *"die Aufgabe ist nicht geloest"*.
+* Die Zuschreibung, der Glaubensfehler und der Schaetzer seien die **Ursache** eines
+  Totalausfalls - es gab keinen Totalausfall. Beide bleiben Maengel, aber sie erklaeren jetzt den
+  Abstand zwischen 32 und 100 %, nicht den zwischen 0 und irgendetwas.
+* Der Satz, keine der Ursachen liege in der Sprache, war richtig - nur nicht aus dem genannten
+  Grund.
 
 # Was funktioniert
 
@@ -33,10 +75,16 @@ Im Vergleichsarm ohne die Relation: 17 Ablagen und 6-mal "nie getragen".
 
 # Was nicht funktioniert
 
-    A  gewoehnliche Adresse    0 von 30 geliefert    Endabstand Median 148 mm
-    B  relationale Adresse     0 von 24 geliefert    Endabstand Median 118 mm
+    FALSCH GEZAEHLT (erste Fassung):
+    A  gewoehnliche Adresse    0 von 30 geliefert
+    B  relationale Adresse     0 von 24 geliefert
 
-**Null.** Die Sprache traegt, die Aufgabe nicht.
+    RICHTIG (s. Berichtigung oben):
+    A  gewoehnliche Adresse    5 von 35 = 14 %
+    B  relationale Adresse    11 von 34 = 32 %      p = 0,093
+
+Der Endabstand-Median (148 und 118 mm) ist ebenfalls irrefuehrend: er mittelt ueber gelungene und
+misslungene Episoden, und die misslungenen dominieren.
 
 ## Ursache 1: der Arm verliert den Koerper aus dem Glauben
 
@@ -91,8 +139,9 @@ gegenseitig untergraben.
   Tracker sieht jetzt mehr Bloebe), von der falschen Greifhoehe, oder vom Tragen eines Koerpers,
   der zu Beginn hoch stand. Drei Kandidaten, keine Messung.
 * **Eine Auflagenform, ein Seed, ein Lauf je Arm.**
-* **Zwei Programmierfehler haben diesen Lauf zweimal gekostet**, beide im Messaufbau und nicht im
-  Gegenstand: eine Hilfsfunktion, die ihre Schalter setzte statt sie auszugeben (alle Laeufe
+* **DREI Fehler im Messaufbau, keiner im Gegenstand.** Der schwerste ist der Zaehlfehler oben --
+  er hat aus einem positiven Ergebnis ein negatives gemacht und mich danach einen halben Tag
+  Ursachensuche fuer einen Ausfall gekostet, den es nicht gab. Die anderen zwei: eine Hilfsfunktion, die ihre Schalter setzte statt sie auszugeben (alle Laeufe
   fuhren mit Vorgaben, erkannt nur an "0 Tastwerte"), und ein zweiter `perceive_fn`-Aufruf im
   Wiederfind-Pfad, dem die dritte Rueckgabe die Episode brach. Beide sind behoben.
 

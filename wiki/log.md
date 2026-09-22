@@ -9,6 +9,26 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **BERICHTIGUNG**: [Stufe 4 gemessen](/befunde/stufe4-abstapeln-gemessen.md) stand auf einem
+  **Zaehlfehler von mir**, und die Seite sagte das Gegenteil des Gemessenen. Die Erfolgszeile des
+  Laufs heisst `[Auto N] GELIEFERT` in GROSSBUCHSTABEN; mein fallunterscheidendes `grep geliefert`
+  traf ausschliesslich das kleingeschriebene `NICHT geliefert` und **zaehlte damit jeden Erfolg als
+  Misserfolg**. Weil es jeden Arm gleich traf, sah es nicht nach Fehler aus, sondern nach einem
+  durchgaengigen Null -- und ueberlebte so ein ganzes A/B. **Richtig gezaehlt, ueber beide
+  unabhaengigen Protokollzeilen, die Episode fuer Episode uebereinstimmen: A (gewoehnliche
+  Adresse) 5 von 35 = 14 %, B (relationale Adresse) 11 von 34 = 32 %, Fisher p = 0,093. Die
+  relationale Adresse VERDOPPELT das Abstapeln.** Zur Einordnung am selben Tag gemessen: die
+  gewoehnliche Transportaufgabe liefert auf demselben Zustand 40 bis 66 % je nach Choreographie.
+  **Was faellt:** die Schlussfolgerung "die Aufgabe ist nicht geloest" und die Zuschreibung, der
+  Glaubensfehler und der Hoehenschaetzer seien die Ursache eines Totalausfalls -- es gab keinen.
+  **Was bleibt:** alle Sprachzahlen (aus anderen Zeilen gezaehlt), die Hoehenschaetzer-Diagnose
+  und der Glaubensfehler als Messwert. **Zwei Eintraege in der
+  [Messvorschrift](/messungen/act23-headless-ab.md):** die Gross-/Kleinschreibung samt der Regel,
+  beide Zeilen zu zaehlen und zu vergleichen -- und **eine Quote von exakt 0 ist ein
+  Verdachtsfall, kein Ergebnis**; erst die Grundlinie mit demselben Befehl nachmessen.
+  Der Fehler hat mich einen halben Tag Ursachensuche fuer einen Ausfall gekostet, den es nicht gab
+  (Glaubensfehler, Chroma-Schnitt, Choreographie, Einsprungpunkt -- alle unschuldig).
+
 * **Anlage**: [Der Schaetzer auf der belegten Auflage](/befunde/schaetzer-auf-der-belegten-auflage.md)
   - die Ursache des Stufe-4-Fehlschlags ist **offline reproduziert, beziffert und behoben**.
   Sonde mit 180 Zeilen (leere gegen belegte Auflage an denselben Stellen und Hoehen):

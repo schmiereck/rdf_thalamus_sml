@@ -51,6 +51,24 @@ Formenlauf).
 
 # Fallen
 
+* **`GELIEFERT` steht in GROSSBUCHSTABEN, `NICHT geliefert` klein.** Die Erfolgszeile lautet
+  `[Auto 7] GELIEFERT | Abstand 22 mm`, die Misserfolgszeile `[Auto 8] NICHT geliefert`. Ein
+  fallunterscheidendes `grep geliefert` trifft damit **ausschliesslich die Misserfolge** und
+  zaehlt jeden Erfolg als Fehlschlag. Das sieht nicht wie ein Fehler aus, sondern wie ein
+  durchgaengiges Null -- und weil es jeden Arm gleich trifft, ueberlebt es auch ein A/B.
+  **Es hat mich am 2026-09-22 einen halben Tag Ursachensuche fuer einen Ausfall gekostet, den es
+  nicht gab, und ein positives Stufe-4-Ergebnis als negatives ins Wiki gebracht**
+  ([dort berichtigt](/befunde/stufe4-abstapeln-gemessen.md)).
+  **Zwei unabhaengige Zeilen zaehlen dasselbe** und stimmen Episode fuer Episode ueberein --
+  `[Auto N] GELIEFERT` und `[Selbst-Urteil] ... = Welt: geliefert`. Wer eine Quote meldet, zaehlt
+  beide und vergleicht sie; weichen sie ab, stimmt die Auswertung nicht.
+* **Eine Quote von exakt 0 ist ein Verdachtsfall, kein Ergebnis.** Die gewoehnliche
+  Transportaufgabe liefert auf dem gespeicherten Zustand 40 bis 66 % (gemessen 2026-09-22:
+  `netz` 66 %, `fsm` 40 %). Wer 0 misst, hat mit hoher Wahrscheinlichkeit die Auswertung
+  kaputt und nicht den Agenten. **Erst die Grundlinie mit demselben Befehl nachmessen, dann
+  Ursachen suchen.**
+
+
 * **Gleicher Seed erzwingt in act23 keine gleiche Objektfolge** - das gilt fuer zwei
   **verschiedene** Konfigurationen: die Arme laufen identisch, bis der Schalter zum ersten Mal
   eine Entscheidung aendert, und danach voellig auseinander (gemessen: identisch bis Episode 18,
