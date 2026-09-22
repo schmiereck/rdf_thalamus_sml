@@ -2,6 +2,11 @@
 
 ## 2026-09-22
 
+* **D0 negativ geschlossen**: [D0 Seed 29: Wrist-Evaluation](/befunde/dream-rsi-d0-seed29-wrist-evaluation.md) -
+  auch der zweite unabhängige Trainingsseed besteht den Wrist-Pilotvertrag nicht. Seed 101
+  verliert Lieferung und Selbsturteil, Seed 103 gewinnt Lieferung, aber nur +7,5 statt +20
+  Punkte Ausrichtung; gepoolt betragen beide primären Gewinne +3,75 Punkte. Kein Nachtraining.
+
 * **Seed-29-Basis Seed 103 bestätigt**: [D0 Seed 29: Wrist-Evaluation](/befunde/dream-rsi-d0-seed29-wrist-evaluation.md) -
   die zweite gefrorene Basisfamilie ist vollständig und integer (40/40 Episoden, keine
   Lernmutation, Basis-SHA unverändert) und liefert 26/40 Welt-Lieferungen, 3/40 ausgerichtete

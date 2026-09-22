@@ -1,10 +1,10 @@
 ---
 type: Befund
-title: D0 Seed 29 - Seed-101-Checkpoint verfehlt beide Lernmetriken
-description: Der unveränderte 120-Episoden-Vertrag liefert 92 volle Selbst-Kredite in fünf Wrist-Zellen. Gegen die valide Seed-101-Basis sinkt Lieferung von 21/40 auf 19/40, die ausgerichtete Wrist-Wahl bleibt 6/40 und das Selbsturteil sinkt; Seed 103 steht noch aus.
+title: D0 Seed 29 - 120 Episoden verfehlen den Wrist-Lernvertrag
+description: Der unveränderte 120-Episoden-Vertrag liefert 92 volle Selbst-Kredite in fünf Wrist-Zellen. Seed 101 verliert Lieferung und Selbsturteil, Seed 103 gewinnt Lieferung, aber nur +7,5 statt +20 Punkte Ausrichtung. Gepoolt steigen Lieferung und Ausrichtung jeweils nur +3,75 Punkte; die Linie ist negativ geschlossen.
 tags: [act23, dream-rsi, d0, wrist, evaluation, seed29]
-status: draft
-evidenz: einzelmessung
+status: stable
+evidenz: gemessen
 ebene: act23-ab
 generated: { by: codex, at: 2026-09-20T18:00:00Z }
 sources:
@@ -35,6 +35,12 @@ sources:
   - id: base103-episodes
     resource: ../../log/d0-evaluation/seed29/base-seed103-episodes-40ep/episodes.jsonl
     title: Eingefrorenes Seed-103-Episodenprotokoll
+  - id: trained103-result
+    resource: ../../log/d0-evaluation/seed29/trained-seed103-episodes-40ep/result.json
+    title: Eingefrorener Seed-29-Checkpoint, Seed 103, Integritätsnachweis
+  - id: trained103-episodes
+    resource: ../../log/d0-evaluation/seed29/trained-seed103-episodes-40ep/episodes.jsonl
+    title: Eingefrorenes Seed-29-Checkpoint-Episodenprotokoll, Seed 103
 ---
 
 # Trainingsabdeckung
@@ -110,7 +116,43 @@ Episodenzeilen, keine geänderte Lernkomponente sowie bitgleicher Quell- und Arb
 | ausgerichtete relative Wrist <= 30° | 3/40 (7,5 %) |
 | Enthaltungen | 9/40 (22,5 %) |
 
-# Nächster Schritt
+# Seed-29-Checkpoint, Familie Seed 103
+
+Der letzte Vergleichslauf ist ebenfalls technisch gültig: Rückgabecode 0, 40/40 Episodenzeilen,
+leerer Lernzustands-Diff und bitgleicher Checkpointhash vor/nach der Evaluation
+(`d041348e...88e3`).
+
+| Metrik | Basis | Seed 29 nach Training | Differenz | Fisher, zweiseitig |
+|---|---:|---:|---:|---:|
+| Welt-Lieferung | 26/40 (65 %) | 31/40 (77,5 %) | +12,5 Punkte | 0,323 |
+| Selbst-Lieferung (Selbsturteil) | 25/40 (62,5 %) | 31/40 (77,5 %) | +15 Punkte | 0,222 |
+| Selbst gefunden | 40/40 (100 %) | 39/40 (97,5 %) | -2,5 Punkte | - |
+| ausgerichtete relative Wrist <= 30° | 3/40 (7,5 %) | 6/40 (15 %) | +7,5 Punkte | 0,481 |
+| Enthaltungen | 9/40 (22,5 %) | 3/40 (7,5 %) | -15 Punkte | - |
+
+Seed 103 erfüllt die Lieferschwelle und verschlechtert sein Selbsturteil nicht, erreicht aber
+nicht die notwendige Ausrichtungssteigerung von mindestens +20 Punkten. Die Fisher-Werte sind
+bei 40 Episoden pro Arm rein deskriptiv.
+
+# Abschluss Seed 29 und D0
+
+| Metrik | Basis, beide Familien | Seed 29 nach Training | Differenz | Fisher, zweiseitig |
+|---|---:|---:|---:|---:|
+| Welt-Lieferung | 47/80 (58,75 %) | 50/80 (62,5 %) | +3,75 Punkte | 0,746 |
+| Selbst-Lieferung (Selbsturteil) | 48/80 (60 %) | 51/80 (63,75 %) | +3,75 Punkte | 0,745 |
+| ausgerichtete relative Wrist <= 30° | 9/80 (11,25 %) | 12/80 (15 %) | +3,75 Punkte | 0,640 |
+
+Der gepoolte Vergleich ist nur beschreibend; der Vertrag fordert den Effekt ohnehin in **beiden**
+unabhängigen Trainingslinien. Seed 17 war bereits negativ geschlossen (Ausrichtung +10 statt
++20 Punkte, Lieferung -3,75 Punkte). Seed 29 verfehlt Seed 101 bei Lieferung, Selbsturteil und
+Ausrichtung; auf Seed 103 bleibt die Ausrichtung unter der Schwelle. Damit besteht keine der
+beiden Linien den D0-Pilotvertrag.
+
+D0 ist als negativer Pilot geschlossen. Das widerlegt weder die Dream-RSI-Idee noch spätere
+Trainingssteuerung, aber es widerlegt für diese Basis und dieses unveränderte 120-Episoden-Rezept
+einen belastbaren Nachweis, dass Selbst-Kredit die objektrelative Wrist-Auswahl verbessert.
+Es folgt kein Nachtraining, Pooling als positiver Ersatzschluss oder Parametertuning. Eine
+Wiederaufnahme benötigt einen neuen D0-Kandidaten samt vor dem Lauf festgelegtem Vertrag.
 
 Die Kreditabdeckung belegt nur, dass der Seed ausreichend eigene, kausal zugeordnete Erfahrung
 erhalten hat. Sie ist kein Wirkungsnachweis. Seed 101 liefert einen negativen Zwischenbefund;
