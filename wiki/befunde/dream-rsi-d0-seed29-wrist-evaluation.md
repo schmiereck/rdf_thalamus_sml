@@ -1,7 +1,7 @@
 ---
 type: Befund
-title: D0 Seed 29 - Trainingsabdeckung besteht, Seed-101-Basis validiert
-description: Der unveränderte 120-Episoden-Vertrag liefert 92 volle Selbst-Kredite in fünf Wrist-Zellen. Die eingefrorene Seed-101-Basisfamilie besteht Integrität und reproduziert die festgelegte Referenz exakt; der trainierte Arm und Seed 103 stehen noch aus.
+title: D0 Seed 29 - Seed-101-Checkpoint verfehlt beide Lernmetriken
+description: Der unveränderte 120-Episoden-Vertrag liefert 92 volle Selbst-Kredite in fünf Wrist-Zellen. Gegen die valide Seed-101-Basis sinkt Lieferung von 21/40 auf 19/40, die ausgerichtete Wrist-Wahl bleibt 6/40 und das Selbsturteil sinkt; Seed 103 steht noch aus.
 tags: [act23, dream-rsi, d0, wrist, evaluation, seed29]
 status: draft
 evidenz: einzelmessung
@@ -23,6 +23,12 @@ sources:
   - id: base101-episodes
     resource: ../../log/d0-evaluation/seed29/base-seed101-episodes-40ep/episodes.jsonl
     title: Eingefrorenes Seed-101-Episodenprotokoll
+  - id: trained101-result
+    resource: ../../log/d0-evaluation/seed29/trained-seed101-episodes-40ep/result.json
+    title: Eingefrorener Seed-29-Checkpoint, Seed 101, Integritätsnachweis
+  - id: trained101-episodes
+    resource: ../../log/d0-evaluation/seed29/trained-seed101-episodes-40ep/episodes.jsonl
+    title: Eingefrorenes Seed-29-Checkpoint-Episodenprotokoll, Seed 101
 ---
 
 # Trainingsabdeckung
@@ -63,8 +69,28 @@ Basisfamilie überein. Das ist ein enger Reproduzierbarkeitsbefund für diesen e
 Evaluator und diese konkrete Basis; es ist noch kein Lernvergleich und keine Aussage über den
 Seed-29-Checkpoint.
 
+# Seed-29-Checkpoint, Familie Seed 101
+
+Der Checkpoint wird getrennt in eine Wegwerfkopie geladen und mit demselben Freeze getestet.
+Auch dieser Lauf besteht die technische Kontrolle: Rückgabecode 0, 40/40 Episodenzeilen,
+leerer Lernzustands-Diff und bitgleicher Hash der Checkpointkopie vor/nach der Evaluation
+(`d041348e...88e3`). Der Vergleich ist daher auswertbar.
+
+| Metrik | Basis | Seed 29 nach Training | Differenz | Fisher, zweiseitig |
+|---|---:|---:|---:|---:|
+| Welt-Lieferung | 21/40 (52,5 %) | 19/40 (47,5 %) | -5 Punkte | 0,823 |
+| Selbst-Lieferung (Selbsturteil) | 23/40 (57,5 %) | 20/40 (50 %) | -7,5 Punkte | 0,654 |
+| Selbst gefunden | 39/40 (97,5 %) | 40/40 (100 %) | +2,5 Punkte | - |
+| ausgerichtete relative Wrist <= 30° | 6/40 (15 %) | 6/40 (15 %) | 0 Punkte | 1,000 |
+| Enthaltungen | 8/40 (20 %) | 10/40 (25 %) | +5 Punkte | - |
+
+Damit verfehlt Seed 29 schon auf der ersten Testfamilie alle positiven D0-Schwellen: keine
+Steigerung der Ausrichtung, Lieferung nicht um +10 Punkte und ein Rückgang des Selbsturteils.
+Der Vertrag verlangt dennoch die zweite, unabhängige Familie Seed 103, bevor die Linie
+geschlossen wird. Die Fisher-Werte sind wegen 40 Episoden pro Arm nur deskriptiv.
+
 # Nächster Schritt
 
 Die Kreditabdeckung belegt nur, dass der Seed ausreichend eigene, kausal zugeordnete Erfahrung
-erhalten hat. Sie ist kein Wirkungsnachweis. Als Nächstes folgt der Seed-29-Checkpoint gegen
-diese feststehende Seed-101-Referenz, anschließend die vorab fixierte Familie Seed 103.
+erhalten hat. Sie ist kein Wirkungsnachweis. Seed 101 liefert nun einen negativen Zwischenbefund.
+Als Nächstes folgt die vorab fixierte Familie Seed 103, erst danach die Linienentscheidung.

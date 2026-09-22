@@ -1,5 +1,12 @@
 # Chronik
 
+## 2026-09-22
+
+* **Seed-29-Zwischenbefund negativ**: [D0 Seed 29: Wrist-Evaluation](/befunde/dream-rsi-d0-seed29-wrist-evaluation.md) -
+  der eingefrorene Checkpointvergleich auf Seed 101 ist integer, verändert aber die ausgerichtete
+  Wahl nicht (6/40 -> 6/40), senkt Lieferung (21/40 -> 19/40) und Selbsturteil (23/40 -> 20/40).
+  Die vorab festgelegte Familie Seed 103 bleibt offen.
+
 ## 2026-09-20
 
 * **Seed-29-Basis bestätigt**: [D0 Seed 29: Wrist-Evaluation](/befunde/dream-rsi-d0-seed29-wrist-evaluation.md) -
