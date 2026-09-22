@@ -38,10 +38,11 @@ gezaehlt) und der Mechanismus selbst.
 
     Fisher p = 0,004
 
-**Die erste signifikante Wirkung dieser Linie.** Zur Einordnung: die gewoehnliche
-Transportaufgabe liefert auf demselben Zustand 40 bis 66 % - **das Abstapeln liegt damit im
-Bereich des gewoehnlichen Transports**, obwohl es den Koerper erst finden, hoeher greifen und von
-einer Auflage herunterholen muss.
+So sah es auf diesem Seed aus. **Der Sweep oben zeigt, dass es ein Ausreisser war** -- beide
+Zahlen liegen ausserhalb der Spanne, die acht Seeds fuer ihren jeweiligen Arm ergeben.
+Was standhaelt: das Abstapeln liegt mit 33 bis 38 % in derselben Groessenordnung wie die
+gewoehnliche Transportaufgabe (40-66 %), obwohl es den Koerper erst finden, hoeher greifen und
+von einer Auflage herunterholen muss.
 
 # Die Reparaturen wirken dort, wo sie sollen
 
@@ -51,6 +52,10 @@ einer Auflage herunterholen muss.
 **Der Vergleichsarm bleibt bei genau 5 von 35.** Das war die Vorhersage vor dem Lauf: alle vier
 Reparaturen zielen auf den relationalen Zweig, ein Mitsteigen von A haette geheissen, dass etwas
 davon nicht armspezifisch ist. Es steigt nicht.
+
+> **Der Sweep relativiert auch das.** Dass A auf DIESEM Seed zweimal exakt 5 von 35 ergab, ist
+> richtig beobachtet -- aber A schwankt ueber die Seeds zwischen 20 und 60 %, und 5 von 35 = 14 %
+> ist sein unteres Ende. Die Stabilitaet war die des Seeds, nicht die des Arms.
 
 Behoben waren:
 
@@ -76,7 +81,10 @@ Behoben waren:
 Adressfehler zu veraendern - sie verwirft also Falsches, nicht Richtiges. Und der Glaube liegt mit
 19 mm fast wieder im gewoehnlichen Bereich (5-18 mm), nachdem der Tracker seinen Keim bekommt.
 
-# Was damit belegt ist
+# Was damit belegt ist -- und was nicht
+
+**Nicht belegt ist die Wirkung auf die Quote** (s. die Einschraenkung oben). Belegt bleibt der
+Mechanismus:
 
 > **Die Sprache ist rekursiv.** `ADRESSE := (Farbe?, Form?, Groesse?) | RELATION ADRESSE` -
 > dieselbe Relation im Subjekt wie im Ziel, und aus ihr faellt das **Umstapeln**, ohne dass ein
