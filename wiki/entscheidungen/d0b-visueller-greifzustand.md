@@ -96,9 +96,7 @@ noch Servo werden vorab als Wirkung ausgegeben.
 
 # Nächster konkreter Schritt
 
-F0/D0b beginnt mit einem reinen Daten- und Portaudit: Welche Fovea-Zustände, Handkoordinaten,
-Kamerabilder und Zeitstempel existieren bereits rund um `grip_close` und die Hubphase; ob die
-Hand das potenziell getragene Objekt in mindestens zwei gültigen Blicken sieht; und ob diese
-Messung ohne zusätzlichen Simulatorzugriff in den Lernpfad geschrieben werden kann. Ein
-Rauchtest speichert ausschließlich Wegwerfprotokolle. Erst dessen Befund legt Metriken, Budget,
-Seeds und Abbruchregel fest.
+Der [Portaudit](/befunde/d0b-fovea-portaudit.md) bestätigt die reine Instrumentierung auf einer
+eingefrorenen Kopie. Die einzelne Wegwerfepisode enthielt jedoch keinen Hub. Nächster Schritt ist
+eine kleine Abdeckungserhebung; erst deren Verhältnis gültiger Hubfolgen zu Enthaltungen legt
+Metriken, Budget, Seeds und Abbruchregel für einen Lernvergleich fest.

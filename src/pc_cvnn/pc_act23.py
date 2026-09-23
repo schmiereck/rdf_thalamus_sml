@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import os
 import sys
+import json
 import time as _time_mod
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -343,6 +344,9 @@ D0_CREDIT_JSONL = os.environ.get("ACT23_D0_CREDIT_JSONL", "")
 # than only the subset that the world model was allowed to learn from.
 D0_EPISODE_JSONL = os.environ.get("ACT23_D0_EPISODE_JSONL", "")
 D0_MANIFEST_DIR = os.environ.get("ACT23_D0_MANIFEST_DIR", "")
+# D0b stores only the agent-visible Fovea/hand time series.  It never reads simulator pose,
+# contact or weld state; those remain an external evaluation channel.
+D0B_TRACE_JSONL = os.environ.get("ACT23_D0B_TRACE_JSONL", "")
 # MuJoCo selbst ist deterministisch: bleibt das Objekt liegen und der Arm kehrt in dieselbe
 # Ruhelage zurueck, wiederholt sich eine Episode BIS AUF DEN MILLIMETER (im Rauchtest gemessen:
 # 63+-0 mm ueber drei Laeufe).  Der einzige natuerliche Streukanal ist die ARMSTELLUNG beim Start
@@ -4406,6 +4410,7 @@ def run_self_learning_steering(headless=False):
         #   with a net obs / a detector obs, and |net - detector| mm where both exist (shadow metric)
 
         def _track():
+            vc._d0b_frame = None                              # trace only a frame sampled on THIS call
             _kkey = key if (seed_key is _WIE_KEY or not KEIM_FIX) else seed_key
             if mem["px"] is None and (_sd := perception.seed_for(_kkey)) is not None:
                 mem["xy"], mem["px"] = _sd[0], _sd[1]                              # lazy: perceive() runs
@@ -4503,6 +4508,21 @@ def run_self_learning_steering(headless=False):
                     arr = vc.fovea.step_id(img, gaze, id_mu, not D0_FREEZE)
                 else:
                     arr = vc.fovea.step(img, gaze, vc._P["state"]["cmd"], not D0_FREEZE)
+                # D0b trace payload before any consumer interprets it.  `px` and `gaze` stay in
+                # image coordinates: above the table, the homography is deliberately invalid.
+                # The callback in run_combined adds only phase and proprioception after this real
+                # camera observation.  No simulator truth enters this structure.
+                _top_d0b = np.asarray(vc.fovea.net.node("top").mu)
+                vc._d0b_frame = {
+                    "gaze_px": [float(x) for x in np.asarray(gaze, float)],
+                    "follow_px": None if mem.get("px") is None else
+                                 [float(x) for x in np.asarray(mem["px"], float)],
+                    "sensor_error": float((vc.fovea.last_diag or {}).get("sensor_error", 0.0)),
+                    "top_re": [float(x) for x in np.real(_top_d0b)],
+                    "top_im": [float(x) for x in np.imag(_top_d0b)],
+                    "id_conditioned": bool(id_mu is not None),
+                    "frozen": bool(D0_FREEZE),
+                }
                 if FOVEA_NET:
                     ctr = (HEX_F - 1) / 2.0
                     sel = np.real(arr[:, :, 0]) if id_mu is not None else None
@@ -5016,6 +5036,32 @@ def run_self_learning_steering(headless=False):
                 return xy, 0.0                                 # gehalten: nicht noch einmal ziehen
             return xy, c
 
+        def _d0b_track_log(_inner_ep, phase, tr):
+            """Append an agent-visible D0b frame after a real camera track step.
+
+            This is instrumentation only.  It neither changes the track return nor writes an
+            outcome into any learner.  The later self-label is constructed offline from valid
+            image-space sequences and own hand movement, not here.
+            """
+            if not D0B_TRACE_JSONL:
+                return
+            frame = getattr(vc, "_d0b_frame", None)
+            if frame is None:
+                return
+            try:
+                h = np.asarray(sim.grasp_pos(), float)
+                q = np.asarray(sim.arm_angles_full(), float)
+                rec = {"schema": "act23-d0b-fovea-frame-v1", "phase": str(phase),
+                       "hand_xyz": [float(x) for x in h],
+                       "joint_angles": [float(x) for x in q],
+                       "track_confidence": float(tr[1]) if isinstance(tr, tuple) and len(tr) > 1 else 0.0,
+                       **frame}
+                with open(D0B_TRACE_JSONL, "a", encoding="utf-8") as fh:
+                    fh.write(json.dumps(rec, sort_keys=True) + "\n")
+            except Exception as _e:
+                if os.environ.get("ACT23_DEBUG", "0") == "1":
+                    print(f"    [D0b-Trace] uebersprungen: {_e}", flush=True)
+
         track_fn = _wahrnehmung_ueber_ports
         if a_exec is not None:                                 # SELF: the model's grip + gentle dims
             grip_exec = float(np.clip(a_exec[4], 0.0, 0.45)); gentle_exec = bool(a_exec[5] > 0.5)
@@ -5133,7 +5179,7 @@ def run_self_learning_steering(headless=False):
                            servo=(method in ("color", "shape") or eig_servo),
                            rescatter=False, episode_end_fn=ep_end,
                            lifelong=not D0_FREEZE, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
-                           arm_reset=False)
+                           arm_reset=False, track_log_fn=_d0b_track_log if D0B_TRACE_JSONL else None)
         _T["nach_ausfuehrung"] = _time.perf_counter()
         if _dir_ref_orig is not None:
             bm.body.dir_ref = _dir_ref_orig                    # Neigung galt nur fuer diese Episode

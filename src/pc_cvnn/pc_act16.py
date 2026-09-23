@@ -270,7 +270,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                  episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None,
                  ood_rate=0.0, ood_rng=None, tol=None, carry_target_fn=None,
                  post_goal_fn=None, macro_log_fn=None, servo=False, rescatter=True, orient_fn=None,
-                 carry_gentle=False, grip_close=None, wrist_fn=None, arm_reset=True, policy_log_fn=None):
+                 carry_gentle=False, grip_close=None, wrist_fn=None, arm_reset=True, policy_log_fn=None,
+                 track_log_fn=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
     for the grasp approach, the target for the place, instead of the privileged sim values.
@@ -500,6 +501,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             # the tracker returns None and we keep the last estimate (memory) — the act11 pattern.
             if track_fn is not None and k % 4 == 0:           # follow live: drives the gaze + viz +
                 tr = track_fn()                              # lifelong net learning, and SHOWS the
+                if track_log_fn is not None:                  # read-only observation hook: receives the
+                    track_log_fn(ep, phase, tr)               # current FSM phase after the real camera read
                 #   real-view occlusion.  WITHOUT servo it does NOT overwrite the grasp estimate (the
                 #   agent acts on the clean up-front perception as MEMORY, the act11 pattern).  WITH
                 #   servo the SAME observation CLOSES THE LOOP: it corrects the grasp-target belief.
