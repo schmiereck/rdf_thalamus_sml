@@ -850,6 +850,33 @@ ADR_REL_KLEINER = float(os.environ.get("ACT23_ADR_REL_KLEINER", "1.5"))
 # herunter.  Das ist die Aufgabe, an der Stufe 4 gemessen wird -- ohne sie gaebe es nie einen
 # gestapelten Koerper zu adressieren, weil die Episode ihn erst am ENDE erzeugt.
 ABSTAPELN = os.environ.get("ACT23_ABSTAPELN", "0") == "1"
+# =========================================================================================
+# DIE SZENE JE EPISODE AUS (SEED, EPISODENNUMMER) (ACT23_SZENE_JE_EPISODE, Vorgabe 0).
+#
+# WARUM, gemessen im gepaarten Sweep (wiki/befunde/stufe4-sweep-widerlegt.md): zwei Arme mit
+# demselben Seed sahen nur in 88 von 200 Episoden dieselbe Szene, meist trennten sie sich ab
+# Episode 2 oder 3.  Die ganze Streuung zwischen den Szenen landete damit im Vergleich -- Arm A
+# schwankte ueber die Seeds zwischen 20 und 60 %, und ein Unterschied von 10 Punkten war mit
+# acht Seeds nicht aufzuloesen.
+#
+# DREI QUELLEN, und der Schalter behebt die zwei, die zur Szene gehoeren:
+#   (1) DER GENERATOR.  `crng` laeuft ueber alle Episoden durch; jede abweichende Entscheidung
+#       verschiebt alle spaeteren Ziehungen.  -> wird zu Beginn jeder Episode auf
+#       default_rng([SEED, ep]) zurueckgesetzt (im Platz, damit alle Closures es sehen).
+#   (2) DER WELTZUSTAND.  Zwischen zwei Szenenneubauten bleibt das kommandierte Objekt dort
+#       liegen, wo der jeweilige Arm es hingelegt hat.  -> die Szene wird JEDE Episode neu
+#       gebaut.  Das ist keine heimliche Nebenwirkung, sondern die Bedeutung des Schalters:
+#       "jede Episode bekommt ihre Szene aus Seed und Episodennummer".
+#   (3) DIE NEUGIER.  `curious_pick()` waehlt das Objekt nach GELERNTEN Werten, und die
+#       unterscheiden sich zwischen den Armen.  Das ist Verhalten des Agenten, nicht Szene --
+#       es wird NICHT umgeschaltet, sondern der Start meldet es.  Fuer eine gepaarte Messung
+#       ACT23_AUTO_CURIOUS=0 setzen.
+#
+# DAS MESSINSTRUMENT: mit dem Schalter schreibt jede Episode einen [Szenen-Abdruck] -- eine
+# Pruefsumme ueber Objektwahl, Ziel, alle Koerperlagen, Farben und Sockel.  Zwei Arme sind genau
+# dann episodenweise gepaart, wenn ihre Abdruecke Zeile fuer Zeile uebereinstimmen.  Behauptet
+# wird die Paarung nicht, sie wird nachgezaehlt.
+SZENE_JE_EPISODE = os.environ.get("ACT23_SZENE_JE_EPISODE", "0") == "1"
 # DEN SCHAETZER AUCH AUF DER BELEGTEN AUFLAGE LERNEN (ACT23_HOEHE_BELEGT, Vorgabe 0).
 #
 # WARUM, und es ist gemessen: der Hoehenschaetzer lernt beim Adressieren, also an der LEEREN
@@ -5853,6 +5880,35 @@ def run_self_learning_steering(headless=False):
                 sim.step(40)                               # setzen lassen, sonst faellt er im Bild
                 print(f"  [Abstapeln] {_cb} steht auf {_sn} "
                       f"(Oberkante {1000 * _so:.0f}mm) -- Aufgabe: herunterholen", flush=True)
+        if SZENE_JE_EPISODE:
+            # DER SZENEN-ABDRUCK -- das Messinstrument fuer die Paarung.  Genommen NACH allem, was
+            # die Szene festlegt (Objektwahl, Ziel, Neubau, Farben, Abstapel-Aufbau) und VOR der
+            # ersten Entscheidung.  Gerundet auf 1 mm und 0,01 rad: MuJoCo ist deterministisch,
+            # aber das Setzen einer Lage laeuft durch einen Physikschritt.
+            import hashlib as _hl
+            _teile = [f"cmd={state.selected()[1]}", f"ziel={state.target_idx}"]
+            try:
+                _mx = state.marker_xy(state.target_idx)
+                _teile.append(f"mk={int(round(1000*_mx[0]))},{int(round(1000*_mx[1]))}")
+            except Exception:
+                pass
+            for _nm in sorted(set(list(scene.keys()) + list(state.STUETZEN))):
+                try:
+                    _q = sim.obj_pos(_nm)
+                    _teile.append(f"{_nm}={int(round(1000*_q[0]))},{int(round(1000*_q[1]))},"
+                                  f"{int(round(1000*_q[2]))}")
+                except Exception:
+                    pass
+            for _st in state.STUETZEN:
+                try:
+                    _bs = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, _st)
+                    _teile.append(f"{_st}_h={int(round(2000*sim.m.geom_size[sim.m.body_geomadr[_bs]][2]))}")
+                except Exception:
+                    pass
+            _teile.append("farben=" + ",".join(f"{k}:{v}" for k, v in sorted(colour_of_body.items())))
+            _abdruck = _hl.sha1("|".join(_teile).encode()).hexdigest()[:12]
+            print(f"  [Szenen-Abdruck] {_abdruck}  cmd={state.selected()[1]} ziel={state.target_idx}",
+                  flush=True)
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_fn,
                            policy_fn=(_policy_ueber_ports if use_net else None),
@@ -6556,6 +6612,14 @@ def run_self_learning_steering(headless=False):
     # already practiced (coverage, act21's dreamed goals -- no reward anywhere, both signals are the
     # agent's own: model disagreement + visit history).  ACT23_AUTO_CURIOUS=0 restores the random pick.
     AUTO_CURIOUS = os.environ.get("ACT23_AUTO_CURIOUS", "1") == "1"
+    if SZENE_JE_EPISODE and AUTO_CURIOUS:
+        # (3) aus dem Schalterkopf: die Neugier waehlt das Objekt nach GELERNTEN Werten, und die
+        # unterscheiden sich zwischen zwei Armen.  Nicht heimlich abgeschaltet -- es ist Verhalten
+        # des Agenten --, aber laut gesagt, denn die Paarung haelt dann nur bis zur ersten
+        # abweichenden Wahl.
+        print("  [Szene je Episode] ACT23_AUTO_CURIOUS=1 -- die Objektwahl haengt am GELERNTEN "
+              "Zustand und laeuft zwischen zwei Armen auseinander.  Fuer eine gepaarte Messung "
+              "ACT23_AUTO_CURIOUS=0 setzen.", flush=True)
     tgt_visited = [state.marker_xy(i) for i in range(len(state.MARKERS))]
     sig_hist = {}                                              # label -> recent sigma readings (progress signal)
 
@@ -6707,9 +6771,16 @@ def run_self_learning_steering(headless=False):
         #   per-object trends.  ACT23_AUTO_PLACE=0 keeps the scene AS THE LAST EPISODE LEFT IT (the
         #   inheritance probe: failures shove/wedge the object and the next episode starts from that).
         for ep in range(N):
+            if SZENE_JE_EPISODE:
+                # (1) GENERATOR IM PLATZ zuruecksetzen -- `crng` ist in Dutzenden Closures
+                # gebunden; ein neues Objekt unter demselben Namen saehen sie nicht.
+                crng.bit_generator.state = np.random.default_rng(
+                    [int(os.environ.get("ACT23_SEED", "7")), ep]).bit_generator.state
             if NOVEL_EVERY > 0 and ep > 0 and ep % NOVEL_EVERY == 0:
                 spawn_novel_shape()                            # neue FORM einfuehren (ohne Label)
-            if SCENE_EVERY > 0 and ep > 0 and ep % SCENE_EVERY == 0:
+            if SZENE_JE_EPISODE or (SCENE_EVERY > 0 and ep > 0 and ep % SCENE_EVERY == 0):
+                # (2) mit SZENE_JE_EPISODE JEDE Episode, auch die erste: sonst truege Episode 0
+                # die Szene des Programmstarts, und die haengt am Bootstrap-Verbrauch von crng.
                 randomize_objects()          # neue Szene + ROTATION, welche Objekte stehen (s. SCENE_N)
             _farbe_wuerfeln()                                  # VOR der Wahrnehmung, s. Docstring
             if force_list:
