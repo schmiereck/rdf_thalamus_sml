@@ -187,8 +187,9 @@ Nach dem [Sweep](/befunde/stufe4-sweep-widerlegt.md) ist das Hindernis nicht der
 sondern die **Messbarkeit**: Arm A streut ueber Seeds zwischen 20 und 60 %, und die Arme sehen
 nach zwei, drei Episoden verschiedene Szenen. In der Reihenfolge des Nutzens:
 
-1. **Szenen-Zufall von den Entscheidungen entkoppeln** - die Szene je Episode aus
-   `(Seed, Episodennummer)` ableiten statt aus dem laufenden `crng`. Dann sehen beide Arme in
+1. **ERLEDIGT (`322972b`): Szenen-Zufall von den Entscheidungen entkoppeln** - die Szene je
+   Episode aus `(Seed, Episodennummer)` ableiten statt aus dem laufenden `crng`
+   (`ACT23_SZENE_JE_EPISODE`, geprueft: 10 von 10 Szenen-Abdruecken identisch). Dann sehen beide Arme in
    JEDER Episode dieselbe Welt, und der Vergleich wird ein McNemar-Test auf den abweichenden
    Paaren statt eines Vorzeichentests ueber acht Seeds. Das hilft jedem A/B im Projekt, nicht
    nur diesem.

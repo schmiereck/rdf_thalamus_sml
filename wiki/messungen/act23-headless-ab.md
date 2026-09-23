@@ -40,6 +40,34 @@ Der Einsprungpunkt entscheidet sich in `pc_act23.py:4820`:
 `ACT23_VIZ=1` -> Steuer-GUI, sonst `ACT23_MODE` (`diag` ist Vorgabe, `shapes` fuer den
 Formenlauf).
 
+# Gepaart je EPISODE, nicht nur je Seed (seit 2026-09-23)
+
+Zwei Arme mit demselben Seed sehen ohne weitere Massnahme **nicht** dieselben Szenen: im
+gepaarten Stufe-4-Sweep waren es 88 von 200 Episoden, meist trennten sie sich ab Episode 2-3.
+Die gesamte Streuung zwischen den Szenen landete damit im Vergleich (Arm A: 20-60 % ueber
+Seeds). Drei Quellen:
+
+| Quelle | Abhilfe |
+|---|---|
+| `crng` laeuft ueber alle Episoden durch | `ACT23_SZENE_JE_EPISODE=1`: je Episode auf `default_rng([SEED, ep])` zurueckgesetzt |
+| das kommandierte Objekt bleibt liegen, wo der Arm es hinlegte | derselbe Schalter baut die Szene jede Episode neu |
+| die Neugier waehlt nach GELERNTEN Werten | `ACT23_AUTO_CURIOUS=0` - bewusst NICHT vom Schalter mitgezogen, der Start meldet es |
+
+**Pruefen statt behaupten:** mit dem Schalter schreibt jede Episode einen `[Szenen-Abdruck]`,
+eine Pruefsumme ueber Objektwahl, Ziel, alle Koerperlagen, Farben und Sockel. Zwei Arme sind
+episodenweise gepaart, wenn ihre Abdruecke Zeile fuer Zeile uebereinstimmen. Gemessen auf Seed
+8103 (im Sweep 5 von 25): **10 von 10 identisch**, bei nachweislich verschieden fahrenden Armen.
+
+**Auswertung dann mit McNemar** auf den abweichenden Paaren (A geliefert / B nicht, und
+umgekehrt) statt mit Fisher ueber zwei unabhaengige Stichproben. Gleich ausgehende Paare tragen
+keine Information ueber den Unterschied und fallen heraus - genau das macht den Test scharf.
+
+**Was die Paarung NICHT festhaelt:** den gelernten Zustand. Beide Arme lernen waehrend des Laufs
+weiter, und zwar verschieden - das ist der Behandlungseffekt, der sich fortpflanzt, und gehoert
+zur Frage "was tut der Schalter ueber die Zeit". Wer den reinen Momenteffekt will, braucht
+zusaetzlich eine eingefrorene Auswertung (Codex hat fuer D0 eine gebaut, mit nachweislich leeren
+Lernzustands-Diffs).
+
 # Kriterium
 
 * Zielgroesse: **gelieferte Episoden / Episoden**. Nebengroessen: Median-Endabstand,

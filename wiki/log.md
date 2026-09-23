@@ -9,6 +9,22 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Bau + Messvorschrift**: [Gepaart je Episode](/messungen/act23-headless-ab.md) -
+  `ACT23_SZENE_JE_EPISODE` (Vorgabe 0, `322972b`). Im Stufe-4-Sweep sahen zwei Arme mit demselben
+  Seed nur 88 von 200 Episoden in derselben Szene. **Drei Divergenzquellen**, zwei davon behebt der
+  Schalter, weil sie zur Szene gehoeren: (1) `crng` lief ueber alle Episoden durch -> wird je
+  Episode auf `default_rng([SEED, ep])` zurueckgesetzt, und zwar IM PLATZ, weil Dutzende Closures
+  ihn gebunden haben; (2) das kommandierte Objekt blieb liegen, wo der jeweilige Arm es hinlegte
+  -> die Szene wird jede Episode neu gebaut. (3) Die NEUGIER waehlt das Objekt nach gelernten
+  Werten -- das ist Verhalten des Agenten, bewusst nicht mitgeschaltet, der Start meldet es
+  (`ACT23_AUTO_CURIOUS=0` fuer gepaarte Messungen). **Messinstrument:** ein `[Szenen-Abdruck]` je
+  Episode, eine Pruefsumme ueber Objektwahl, Ziel, Koerperlagen, Farben und Sockel. **Geprueft
+  auf Seed 8103**, im Sweep der am schlechtesten gepaarte (5 von 25): **10 von 10 Abdruecken
+  identisch**, bei nachweislich verschieden fahrenden Armen (B loest 7-mal relational auf, A nie).
+  **Erste Beobachtung, noch kein Befund:** alle 10 Episodenpaare gingen GLEICH aus -- auf
+  identischer Szene hat die Adressart in keiner dieser zehn das Ergebnis geaendert. Auswertung
+  kuenftig mit McNemar auf den abweichenden Paaren.
+
 * **Nachtrag**: [Der gepaarte Sweep](/befunde/stufe4-sweep-widerlegt.md) - zwei Befunde aus den
   vorhandenen Protokollen. (1) **Die Arme sind nur je Seed gepaart, nicht je Episode:** nur 88 von
   200 Episodenpaaren sahen dieselbe Szene, meist weichen sie ab Episode 2-3 ab, weil Szenenwahl und
