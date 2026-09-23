@@ -9,6 +9,21 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Anlage**: [Drei Arme je Episode gepaart](/befunde/stufe4-drei-arme-gepaart.md) - nach dem
+  Speicherabbruch mit hoechstens zwei Prozessen neu gefahren. **Die Paarung haelt: 89 von 90
+  Episoden in allen drei Armen szenengleich**, auch zwischen K0 und K1, die verschieden
+  wahrnehmen. **Ergebnis: K0 (ohne Chroma-Schnitt) 34 %, K1 (Schnitt) 37 %, K2 (Schnitt +
+  relationale Adresse) 43 % -- kein paarweiser Unterschied signifikant** (McNemar 0,65 / 0,38 /
+  0,20, Bonferroni 0,0167). **Meine vorher aufgeschriebene Erwartung war falsch:** der Sprung liegt
+  NICHT bei der Sichtbarkeit (3 Punkte). Der Trichter zeigt warum: **auch K0 greift den
+  gestapelten Koerper in 51 von 90 Episoden**, obwohl er fuer diesen Arm keine eigene Detektion hat.
+  **Vermutung, nicht gemessen:** der Abstapel-Aufbau stellt den Koerper genau in die Plattenmitte,
+  der Schwerpunkt des verschmolzenen Flecks liegt also auf ihm -- der Test macht die Relation
+  ueberfluessig. Pruefbar mit einem Stapel ausserhalb der Mitte (bei 20 mm Versatz zielte K0 etwa
+  16 mm daneben). Nebenbei: auf identischer Szene kippt eine Wahrnehmungsaenderung den Ausgang in
+  rund einem Fuenftel der Episoden, in beide Richtungen fast gleich oft -- die 10 von 10 gleichen
+  Paare der ersten Pruefung waren Zufall.
+
 * **Abbruch**: die Drei-Arme-Reihe (K0 ohne Chroma-Schnitt | K1 mit | K2 mit + relationale
   Adresse) wurde vom System **wegen kritischen Speichers gestoppt** -- drei parallele act23-Prozesse
   drueckten den Rechner auf 2,9 von 11,8 GB frei. **Ergebnis: keine einzige Episode**, die Arme

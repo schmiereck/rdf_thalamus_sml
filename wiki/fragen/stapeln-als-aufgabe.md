@@ -193,7 +193,10 @@ nach zwei, drei Episoden verschiedene Szenen. In der Reihenfolge des Nutzens:
    JEDER Episode dieselbe Welt, und der Vergleich wird ein McNemar-Test auf den abweichenden
    Paaren statt eines Vorzeichentests ueber acht Seeds. Das hilft jedem A/B im Projekt, nicht
    nur diesem.
-2. **Die richtige Kontrolle fuer Stufe 4:** drei Arme - ohne Chroma-Schnitt | mit Schnitt,
+2. **ERLEDIGT, s. [Drei Arme je Episode gepaart](/befunde/stufe4-drei-arme-gepaart.md): weder
+   Sichtbarkeit noch Relation traegt messbar (34 / 37 / 43 %), und der Test war fuer die
+   Kontrolle zu leicht -- der Koerper steht genau in der Plattenmitte.** Naechster Schritt: ein
+   Stapel AUSSERHALB der Mitte. Urspruenglich: **Die richtige Kontrolle fuer Stufe 4:** drei Arme - ohne Chroma-Schnitt | mit Schnitt,
    Eigenschafts-Adresse | mit Schnitt, relationale Adresse. Der Sweep hat nur die letzten beiden
    verglichen; der grosse Schritt (Sichtbarkeit) steckte in beiden.
 3. **Danach die Richtungsfrage:** Umstapeln mit der Relation auf BEIDEN Seiten ("nimm das, was
