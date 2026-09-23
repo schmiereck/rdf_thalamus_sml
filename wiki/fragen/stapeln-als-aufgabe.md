@@ -181,6 +181,24 @@ sein Klassentor) und behoben: [Der Stapel wird sichtbar](/befunde/stapel-wird-si
    [Ertasten](/mechanismen/hoehe-ertasten.md), die dafuer schon stehen.
 3. Erst dann das A/B: Umstapeln gegen den heutigen Sonderfall.
 
+# Wie es weitergehen kann (Stand 2026-09-23)
+
+Nach dem [Sweep](/befunde/stufe4-sweep-widerlegt.md) ist das Hindernis nicht der Mechanismus,
+sondern die **Messbarkeit**: Arm A streut ueber Seeds zwischen 20 und 60 %, und die Arme sehen
+nach zwei, drei Episoden verschiedene Szenen. In der Reihenfolge des Nutzens:
+
+1. **Szenen-Zufall von den Entscheidungen entkoppeln** - die Szene je Episode aus
+   `(Seed, Episodennummer)` ableiten statt aus dem laufenden `crng`. Dann sehen beide Arme in
+   JEDER Episode dieselbe Welt, und der Vergleich wird ein McNemar-Test auf den abweichenden
+   Paaren statt eines Vorzeichentests ueber acht Seeds. Das hilft jedem A/B im Projekt, nicht
+   nur diesem.
+2. **Die richtige Kontrolle fuer Stufe 4:** drei Arme - ohne Chroma-Schnitt | mit Schnitt,
+   Eigenschafts-Adresse | mit Schnitt, relationale Adresse. Der Sweep hat nur die letzten beiden
+   verglichen; der grosse Schritt (Sichtbarkeit) steckte in beiden.
+3. **Danach die Richtungsfrage:** Umstapeln mit der Relation auf BEIDEN Seiten ("nimm das, was
+   auf X liegt, und lege es auf Y") - oder zurueck zum belegten Engpass
+   Klassenkonsolidierung, der naeher am [Projektziel](/ziel.md) liegt.
+
 > **UMSORTIERT 2026-09-17.** Stufe 1 bei KLEINEM Abstand ist keine Vorstufe von Stufe 2, sondern
 > die haertere Aufgabe. Gemessen: der Arm kommt nicht unter ~37 mm an einen Koerper heran, und die
 > Ursache ist die Klauenmechanik - sie muss NEBEN einem Hindernis absenken

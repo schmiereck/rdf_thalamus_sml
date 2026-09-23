@@ -73,6 +73,39 @@ zwei sind exakt gleich.
 * **"Die relationale Adresse verdoppelt das Abstapeln."** Ueber acht Seeds sind es 5 Punkte, und
   die sind nicht von null zu trennen.
 
+# Was die Protokolle nebenbei zeigen (nachgereicht 2026-09-23)
+
+## Die Arme sind nur je Seed gepaart, nicht je Episode
+
+    Seed   gleiche Szene in A und B   erste Abweichung bei Episode
+    8101          17 von 25                    8
+    8102          22 von 25                    1
+    8103           5 von 25                    3
+    8104           7 von 25                    2
+    8105           6 von 25                    2
+    8106          15 von 25                   14
+    8107           5 von 25                    3
+    8108          11 von 25                    8
+    gesamt        88 von 200
+
+Szenenwahl und Entscheidungen ziehen aus DEMSELBEN Zufallsgenerator (`crng`); sobald ein Arm
+einmal anders entscheidet, verschiebt sich die Szenenfolge. **Nach zwei, drei Episoden sehen
+die Arme verschiedene Welten** - der "gepaarte" Sweep ist also nur auf Seed-Ebene gepaart, und
+die Streuung zwischen den Szenen landet vollstaendig im Vergleich.
+
+## Der Vergleichsarm findet den Stapel ebenfalls
+
+    Arm   relational aufgeloest   gehoben (>1 N)   losgelassen   geliefert
+    A              0                  99              116            66
+    B            140                 112              128            76
+
+**Arm A hebt den gestapelten Koerper in 99 von 200 Episoden** - ohne die relationale Adresse.
+Der Grund: der Chroma-Schnitt mit Konzentrisch-Ausnahme lief in BEIDEN Armen, der Stapel war
+also auch fuer die gewoehnliche Eigenschafts-Adresse sichtbar. **Verglichen wurde damit nur die
+Adresse, nicht Stufe 4 als Ganzes** - der groesste Schritt, die Sichtbarkeit (vorher 0 von 25),
+steckt in beiden Armen. Die richtige Kontrolle fuer "was bringt Stufe 4" waere ein Arm OHNE den
+Schnitt.
+
 # Fallen
 
 * **Ein gemeinsamer Hoehenschaetzer fuer alle Seeds.** Das war Absicht - gefragt war die Adresse,

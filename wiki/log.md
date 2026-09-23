@@ -9,6 +9,15 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Nachtrag**: [Der gepaarte Sweep](/befunde/stufe4-sweep-widerlegt.md) - zwei Befunde aus den
+  vorhandenen Protokollen. (1) **Die Arme sind nur je Seed gepaart, nicht je Episode:** nur 88 von
+  200 Episodenpaaren sahen dieselbe Szene, meist weichen sie ab Episode 2-3 ab, weil Szenenwahl und
+  Entscheidungen aus demselben `crng` ziehen. (2) **Der Vergleichsarm findet den Stapel ebenfalls**
+  - A hebt ihn in 99 von 200 Episoden, weil der Chroma-Schnitt in BEIDEN Armen lief. Verglichen
+  wurde also nur die Adresse, nicht Stufe 4 als Ganzes. Daraus drei naechste Schritte auf
+  [Stapeln als Aufgabe](/fragen/stapeln-als-aufgabe.md): Szenen-Zufall entkoppeln (Episoden-
+  Paarung, McNemar), ein Arm ohne Schnitt als echte Kontrolle, dann die Richtungsfrage.
+
 * **Anlage**: [Der gepaarte Sweep widerlegt die Stufe-4-Wirkung](/befunde/stufe4-sweep-widerlegt.md)
   - **meine Wirkungsaussage von heute Mittag faellt.** Gepaarter Sweep ueber acht Seeds (8101-8108),
   je Arm 25 Ep aus demselben Zustand, A und B parallel, ein gemeinsamer Hoehenschaetzer:
