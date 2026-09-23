@@ -9,6 +9,15 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-20
 
+* **Abbruch**: die Drei-Arme-Reihe (K0 ohne Chroma-Schnitt | K1 mit | K2 mit + relationale
+  Adresse) wurde vom System **wegen kritischen Speichers gestoppt** -- drei parallele act23-Prozesse
+  drueckten den Rechner auf 2,9 von 11,8 GB frei. **Ergebnis: keine einzige Episode**, die Arme
+  steckten noch im Start. Erhalten ist der Warmlauf (23 Tastwerte, verpflanzter Schaetzer), ein
+  Neustart ueberspringt ihn. Beim Aufraeumen liefen die Python-Kinder verwaist weiter, und die noch
+  lebende Schleife startete nach dem Beenden der Kinder sofort den naechsten Seed; erst das Beenden
+  ihrer Wurzel hat es gestoppt. **In die [Messvorschrift](/messungen/act23-headless-ab.md): hoechstens
+  zwei Prozesse gleichzeitig, und beim Aufraeumen zuerst die Wurzel.**
+
 * **Bau + Messvorschrift**: [Gepaart je Episode](/messungen/act23-headless-ab.md) -
   `ACT23_SZENE_JE_EPISODE` (Vorgabe 0, `322972b`). Im Stufe-4-Sweep sahen zwei Arme mit demselben
   Seed nur 88 von 200 Episoden in derselben Szene. **Drei Divergenzquellen**, zwei davon behebt der

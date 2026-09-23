@@ -90,6 +90,13 @@ Lernzustands-Diffs).
   **Zwei unabhaengige Zeilen zaehlen dasselbe** und stimmen Episode fuer Episode ueberein --
   `[Auto N] GELIEFERT` und `[Selbst-Urteil] ... = Welt: geliefert`. Wer eine Quote meldet, zaehlt
   beide und vergleicht sie; weichen sie ab, stimmt die Auswertung nicht.
+* **Hoechstens ZWEI act23-Prozesse gleichzeitig auf diesem Rechner.** Ein act23-Lauf braucht
+  ~0,6 GB. Zwei parallele Arme liefen am 2026-09-22 acht Seeds lang sauber durch; **drei** brachten
+  den Rechner am 2026-09-23 schon in der Startphase auf 2,9 von 11,8 GB frei, und Claude Code hat
+  die Laufreihe wegen kritischen Speichers gestoppt. **Dabei liefen die Python-Kinder verwaist
+  weiter**, und weil das Beenden ihrer Kinder das `wait` der Schleife freigab, startete die noch
+  lebende Schleife sofort den naechsten Seed. Aufraeumen heisst deshalb: **zuerst die Wurzel
+  der Schleife beenden, dann die Kinder**, und danach pruefen, dass nichts nachstartet.
 * **Eine Quote von exakt 0 ist ein Verdachtsfall, kein Ergebnis.** Die gewoehnliche
   Transportaufgabe liefert auf dem gespeicherten Zustand 40 bis 66 % (gemessen 2026-09-22:
   `netz` 66 %, `fsm` 40 %). Wer 0 misst, hat mit hoher Wahrscheinlichkeit die Auswertung
