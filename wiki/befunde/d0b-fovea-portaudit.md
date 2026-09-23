@@ -1,7 +1,7 @@
 ---
 type: Befund
-title: D0b-Portaudit - eingefrorene Fovea-Frames sind erfassbar, Hubdaten fehlen noch
-description: Eine eingefrorene Wegwerfepisode schreibt 200 vollständige agentensichtbare Fovea-/Hand-Frames ohne Lernmutation. Sie erreicht jedoch weder Schließen noch Hub; damit ist die Instrumentierung, nicht das Objekt-im-Greifer-Signal, geprüft.
+title: D0b-Portaudit - eingefrorene Fovea-Frames und Hubabdeckung sind erfassbar
+description: Zwölf eingefrorene Wegwerfepisoden schreiben 3.329 vollständige agentensichtbare Fovea-/Hand-Frames ohne Lernmutation, darunter 358 Hub- und 338 Trageframes. Der Trace trägt nun auch eine äußere Episoden-ID; ein Selbstetikett ist noch nicht bewertet.
 tags: [act23, dream-rsi, d0b, fovea, instrumentation]
 status: stable
 evidenz: einzelmessung
@@ -14,6 +14,12 @@ sources:
   - id: integrity
     resource: ../../log/d0b-smoke/seed101-1ep/result.json
     title: Eingefrorener Rauchtest
+  - id: coverage
+    resource: ../../log/d0b-coverage/seed101-12ep/fovea_frames.jsonl
+    title: Eingefrorene Hub-Abdeckung, zwölf Episoden
+  - id: coverage-integrity
+    resource: ../../log/d0b-coverage/seed101-12ep/result.json
+    title: Integritätsnachweis der Abdeckungserhebung
 ---
 
 # Auditbefund
@@ -45,8 +51,39 @@ Die Instrumentierung und der Freeze sind bestätigt. Die Episode schloss jedoch 
 keinen Hubabschnitt. Das ist kein negatives D0b-Ergebnis: Ohne zwei gültige Blicke über eine
 eigene Hubbewegung existiert weder ein Mitbewegungs- noch ein Nicht-Mitbewegungs-Etikett.
 
+# Abdeckungserhebung
+
+Die anschließende, ebenfalls eingefrorene Erhebung mit zwölf Episoden besteht die Integritäts-
+prüfung: Rückgabecode 0, 12/12 Episodenprotokolle, keine geänderte Lernkomponente und bitgleiche
+Basisquelle/-kopie (`ad9d768c...c09b9e`). Sie liefert ausreichende Beobachtungsereignisse für die
+nächste, noch rein diagnostische Prüfung:
+
+| Größe | Wert |
+|---|---:|
+| Fovea-Frames | 3.329 |
+| sichtbare Trackbeobachtungen | 3.175 (95,4 %) |
+| Schließframes | 501 |
+| Hubframes | 358 |
+| Trageframes | 338 |
+| Frames mit vollständigem 10D-Re/Im-Topzustand | 3.329 |
+| Frames mit `frozen=true` | 3.329 |
+
+Das widerlegt die Befürchtung aus dem ersten Rauchtest, die Hubphase sei für die Fovea nicht
+beobachtbar. Es zeigt jedoch noch nicht, dass Sichtbarkeit Mitbewegung oder tatsächliches Tragen
+trennt.
+
+# Protokollkorrektur
+
+`run_combined` startet seinen inneren Episodenzähler für jeden ACT23-Autoaufruf bei null. Deshalb
+erhielten die ersten Trace-Zeilen keine unterscheidbare äußere Trajektorie. Der Trace trägt nun
+eine monotone äußere `episode_id`; ein eingefrorener Zwei-Episoden-Rauchtest schreibt bereits die
+IDs 1 und 2 ohne Lücke und enthält Hubframes. Damit kann der spätere Split nach ganzen
+Trajektorien erfolgen, statt Beinah-Duplikate einer Szene auf Training und Test zu verteilen.
+
 # Nächster Schritt
 
-Eine kleine, eingefrorene Abdeckungserhebung zählt zuerst gültige `close`-/`lift`-Bildfolgen und
-Enthaltungen. Erst dann werden Split, Selbstetikett, Metriken und Budget für einen Lernvergleich
-vorab festgelegt. Die Sonde bleibt ein Wegwerfprotokoll und kein Laufzeitverbraucher.
+Auf diesen Gruppen wird nun **offline und ohne Lernupdate** ein Kandidatenetikett geprüft: zwei
+sichtbare, aufeinanderfolgende Bildraum-Positionen müssen sich zusammen mit der eigenen Hand
+bewegen; unzureichende Sicht bleibt Enthaltung. Erst die Gegenprüfung dieses Selbstetiketts gegen
+getrennte Simulatorgrundwahrheit legt Sensitivität, Präzision, Kalibrierung und eine mögliche
+Lernaufgabe fest. Die Sonde bleibt ein Wegwerfprotokoll und kein Laufzeitverbraucher.

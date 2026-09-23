@@ -6,6 +6,10 @@
   rein agentensichtbare Bildraum-/Topzustands-/Hand-Frames, keine Lernmutation. Die Wegwerfepisode
   hatte keinen Hub; damit ist nur die Sonde, nicht ein Greifzustandssignal belegt.
 
+* **D0b-Hubabdeckung**: [Portaudit](/befunde/d0b-fovea-portaudit.md) - zwölf eingefrorene Episoden
+  liefern 3.329 vollständige Frames, darunter 358 Hub- und 338 Trageframes bei 95,4 % sichtbaren
+  Beobachtungen. Der Trace erhält eine äußere Episoden-ID für gruppierte Auswertung.
+
 * **Neue D0-Entscheidung**: [D0b: visueller Greifzustand](/entscheidungen/d0b-visueller-greifzustand.md) -
   nach dem negativen Wrist-Pilot folgt kein Tuning, sondern die Vorprüfung eines selbstbeobachteten
   Objekt-im-Greifer-Signals aus Fovea-Bildfolge und eigener Hubbewegung. Servopfad und höhere

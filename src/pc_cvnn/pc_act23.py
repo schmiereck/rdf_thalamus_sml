@@ -4699,8 +4699,14 @@ def run_self_learning_steering(headless=False):
             from PIL import Image
             Image.fromarray(sim.render(CAM)).save(os.path.join(_dbgimg, f"stage_{tag}.png"))
 
+    # `run_combined` receives one inner episode per outer AUTO episode and restarts its own
+    # counter at zero.  D0b needs the outer trajectory identity for a scene/trajectory split.
+    d0b_trace_episode = [0]
+
     def run_one():
         import time as _time
+        d0b_trace_episode[0] += 1
+        _d0b_episode_id = d0b_trace_episode[0]
         # ZEITKONTO je Episode (Nutzerwunsch 2026-08-02: sehen, wann die CPU nicht mehr reicht).
         # Grob nach BLOECKEN, nicht nach Funktionen -- die Frage ist "welcher Teil wird teuer", und
         # genau auf dieser Ebene kann man handeln (Fovea-Aufloesung, Trainings-Epochen, Episodenlaenge).
@@ -5051,7 +5057,8 @@ def run_self_learning_steering(headless=False):
             try:
                 h = np.asarray(sim.grasp_pos(), float)
                 q = np.asarray(sim.arm_angles_full(), float)
-                rec = {"schema": "act23-d0b-fovea-frame-v1", "phase": str(phase),
+                rec = {"schema": "act23-d0b-fovea-frame-v1", "episode_id": int(_d0b_episode_id),
+                       "phase": str(phase),
                        "hand_xyz": [float(x) for x in h],
                        "joint_angles": [float(x) for x in q],
                        "track_confidence": float(tr[1]) if isinstance(tr, tuple) and len(tr) > 1 else 0.0,

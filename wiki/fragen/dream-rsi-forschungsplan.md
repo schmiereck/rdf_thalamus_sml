@@ -109,7 +109,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 | Paket | Inhalt | Voraussetzung | Status | Befund / Entscheidung |
 |---|---|---|---|---|
 | D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | verworfen | Beide getrennten 120-Episoden-Linien verfehlen den Wrist-Pilotvertrag; Seed 29 bestätigt auf Seed 103 zwar Lieferung, aber nicht die erforderliche Ausrichtung. Neuer Kandidat nur mit neuem, vorab fixiertem Vertrag |
-| D0b | Selbstbeobachteter visueller Greifzustand | D0 geschlossen; F0-Portaudit | in Arbeit | [Portaudit](/befunde/d0b-fovea-portaudit.md): gefrorene agentensichtbare Frames vollständig, aber erste Episode ohne Hub; nun Abdeckung vor Lernvergleich erheben |
+| D0b | Selbstbeobachteter visueller Greifzustand | D0 geschlossen; F0-Portaudit | in Arbeit | [Portaudit](/befunde/d0b-fovea-portaudit.md): zwölf gefrorene Episoden liefern Hub-/Trageframes und gruppierbare Trajektorien; nun Mitbewegungs-Selbstetikett gegen getrennte Grundwahrheit prüfen |
 | D1 | Beobachtung, Checkpoints, Neustart- und Nichtbeeinflussungsnachweis | D0 | offen | - |
 | D2 | Kleine Bibliothek echter Trainingslinien | D1 | offen | - |
 | D3 | Replay mit Abdeckungs- und Informationspruefung | D2 | offen | - |

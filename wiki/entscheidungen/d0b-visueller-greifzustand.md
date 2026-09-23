@@ -96,7 +96,8 @@ noch Servo werden vorab als Wirkung ausgegeben.
 
 # Nächster konkreter Schritt
 
-Der [Portaudit](/befunde/d0b-fovea-portaudit.md) bestätigt die reine Instrumentierung auf einer
-eingefrorenen Kopie. Die einzelne Wegwerfepisode enthielt jedoch keinen Hub. Nächster Schritt ist
-eine kleine Abdeckungserhebung; erst deren Verhältnis gültiger Hubfolgen zu Enthaltungen legt
-Metriken, Budget, Seeds und Abbruchregel für einen Lernvergleich fest.
+Der [Portaudit](/befunde/d0b-fovea-portaudit.md) bestätigt Instrumentierung und Hubabdeckung auf
+eingefrorenen Kopien (358 Hub- und 338 Trageframes in zwölf Episoden). Er trägt jetzt eine äußere
+Trajektorien-ID für gruppierte Splits. Nächster Schritt ist die offline Gegenprüfung eines
+Mitbewegungs-Selbstetiketts; erst deren Präzision, Sensitivität und Enthaltungen legen Metriken,
+Budget, Seeds und Abbruchregel für einen Lernvergleich fest.
