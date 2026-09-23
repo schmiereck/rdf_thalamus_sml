@@ -38,6 +38,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [D0 Seed 17: technische Runner-Validierung](befunde/dream-rsi-d0-seed17-block60.md) - positive Selbst-Lieferungen fehlten im ersten Filter; Rohdaten zeigen Abdeckung, werden aber nicht als Linie gewertet
 * [D0 Seed 17: Wrist-Evaluation](befunde/dream-rsi-d0-seed17-wrist-evaluation.md) - 120 Trainingsfolgen: ueber beide Familien +10 statt +20 Punkte ausgerichtete Wahl, Lieferung -3,75 Punkte; Linie negativ geschlossen
 * [D0 Seed 29: Wrist-Evaluation](befunde/dream-rsi-d0-seed29-wrist-evaluation.md) - 120 Trainingsfolgen: Seed 101 verliert Lieferung, Seed 103 erreicht nur +7,5 statt +20 Punkte Wrist-Ausrichtung; gepoolt +3,75 Punkte, Linie negativ geschlossen
+* [D0b: visueller Greifzustand](entscheidungen/d0b-visueller-greifzustand.md) - neuer Kandidat nach D0: Fovea-Bildfolge und eigene Hubbewegung sollen Objekt-im-Greifer ohne Simulatoretikett sichtbar machen; erst danach ein Handlungsverbraucher
 * [Exekutionsvarianz](befunde/exekutionsvarianz.md) - ICC 0,61, Obergrenze 82 % gegen Grundrate 54 %; der Deckel sitzt in der Situationsrepraesentation
 * [1109 Episoden ohne Lernfortschritt](befunde/langlauf-ohne-fortschritt.md) - 43 h GUI-Lauf, vier unabhaengige Groessen flach
 * [Selbst-Aneignung stockt](befunde/selbstaneignung-stockt.md) - 17/17 und 14/14 selbst geborene Klassen verhungern, keine je kommandiert

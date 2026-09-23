@@ -1,5 +1,12 @@
 # Chronik
 
+## 2026-09-23
+
+* **Neue D0-Entscheidung**: [D0b: visueller Greifzustand](/entscheidungen/d0b-visueller-greifzustand.md) -
+  nach dem negativen Wrist-Pilot folgt kein Tuning, sondern die Vorprüfung eines selbstbeobachteten
+  Objekt-im-Greifer-Signals aus Fovea-Bildfolge und eigener Hubbewegung. Servopfad und höhere
+  Auflösung bleiben getrennte, nachgelagerte Entscheidungen.
+
 ## 2026-09-22
 
 * **D0 negativ geschlossen**: [D0 Seed 29: Wrist-Evaluation](/befunde/dream-rsi-d0-seed29-wrist-evaluation.md) -
