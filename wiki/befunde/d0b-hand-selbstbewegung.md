@@ -1,7 +1,7 @@
 ---
 type: Befund
-title: D0b-Handlandmark - Eigenbewegung ist sichtbar, doch Punkt- und lokale Maskenauslese scheitern
-description: Fingerimpulse erzeugen zuverlässig ein eigenes Kamerasignal. Weder ihr Schwerpunkt noch ein auf zurückgehaltenen Posen gelernter, räumlich geteilter Bildpatch-Ausleser lokalisieren die Klaue ausreichend; D0b braucht eine räumlich gebundene Repräsentation.
+title: D0b-Handlandmark - Eigenbewegung ist sichtbar, doch auch die eingefrorene Fovea bindet die Finger nicht ausreichend
+description: Fingerimpulse erzeugen zuverlässig ein eigenes Kamerasignal. Schwerpunkt, lokaler Maskenausleser und der komplexe Topzustand der eingefrorenen Fovea verfehlen auf zurückgehaltenen Posen die Klaue; eine neue Fovea-Aufgabe braucht einen eigenen, isolierten Lernvertrag.
 tags: [act23, dream-rsi, d0b, fovea, hand, selbstbewegung]
 status: stable
 evidenz: einzelmessung
@@ -26,6 +26,12 @@ sources:
   - id: mask-evaluation
     resource: ../../log/d0b-hand-mask/seed101-96pose/linear-mask-audit/result.json
     title: Getrennte Positionsauswertung des gelernten Maskenauslesers
+  - id: fovea-tool
+    resource: ../../src/pc_cvnn/act23_d0b_fovea_binding_audit.py
+    title: Eingefrorener Fovea-Topzustand auf Selbstbewegungs-Sakkaden
+  - id: fovea-evaluation
+    resource: ../../log/d0b-fovea-binding/seed101-96pose/result.json
+    title: Positionsgetrennter Audit der Fovea-Sakkadenwahl
 ---
 
 # Behauptung
@@ -108,14 +114,37 @@ Geometrie nicht binden. Seine Landmark-Ausgabe ist deutlich schlechter als der g
 gemessene Differenzschwerpunkt; dieser Unterschied ist erwartbar, weil der Schwerpunkt die
 zweite, aktiv erzeugte Ansicht kennt, der Ausleser aber nur das offene Bild erhält.
 
+# Eingefrorener Fovea-Zustand
+
+Der dritte Audit liest die persistierte `HexFovea` aus `base.pkl` nur aus einer serialisierten
+Arbeitskopie. Für jede Position startet sie wieder im gleichen Zustand und bleibt über
+`ACT23_D0_FREEZE=1` ohne Lernupdate. Neun feste, zulässige Sakkaden decken den inneren
+240×240-Bildraum ab. Ein kleiner Ridge-Ausleser sieht ausschließlich Real- und Imaginärteile des
+zehndimensionalen Fovea-Topzustands und lernt aus dem eigenen Bewegungsfeld, welche Sakkade die
+Fingerbewegung enthält. Testpositionen (`pose_id % 3 == 0`) bleiben vollständig zurückgehalten.
+Erst nach Auswahl der Sakkade wird sie gegen das getrennt gerenderte Klauenzentrum bewertet.
+Die gelesene Basisdatei behielt SHA-256 `ad9d768c...c09b9e`.
+
+| Größe | Wert |
+|---|---:|
+| Trainings- / Testpositionen | 64 / 32 |
+| sichtbare, gepaarte Testpositionen | 29 |
+| Fovea-Sakkadenfehler, Median | 53,5 px |
+| feste Bildmitte, Median | 80,5 px |
+| Fovea-Sakkaden ≤ 24 px | 4 / 29 |
+
+Der eingefrorene Zustand trägt demnach schwache räumliche Information: seine Wahl ist besser als
+eine konstante Bildmitte. Sie erreicht aber nicht annähernd die für eine Handreferenz nötige
+Abdeckung. Der kleine Gewinn rechtfertigt weder einen Greifzustandskopf noch nachträgliches
+Tuning des linearen Auslesers. Er zeigt nur, dass die Fovea-Aufgabe nicht informationsleer ist.
+
 # Folgen
 
-D0b/F0 bleibt vor einem Greifzustandskopf gesperrt. Der nächste Kandidat ist ein kleiner
-**räumlich gebundener** Ausleser einer verteilten Selbstbewegungsmaske. Der gerade verworfene
-lokale Patch-Ausleser darf nicht durch mehr Epochen oder eine andere Schwelle nachgetunt werden.
-Zuerst wird geprüft, ob der vorhandene Fovea-Zustand bei einer durch Selbstbewegung gesetzten
-Sakkade die Fingerregion räumlich bindet; erst ein vorab formulierter, auf ganzen Posen
-zurückgehaltener Vergleich gegen die lokale Baseline kann einen reicheren Kopf rechtfertigen.
-Der Bildunterschied bleibt nur sein selbst erzeugtes Trainingsziel, nie ein Laufzeitlabel. Erst
-nach einem bestandenen Landmark-Audit darf seine Bildraumreferenz zusammen mit `selection_px` das
+D0b/F0 bleibt vor einem Greifzustandskopf gesperrt. Der nächste Kandidat ist keine Änderung am
+Teacher, sondern ein **neuer, isolierter Fovea-Lernzweig für Selbstbewegung**. Sein einziges
+Trainingsziel ist das vom eigenen Fingerimpuls erzeugte Bewegungsfeld; bestehende Fovea-Gewichte,
+die D0-Basis und der ACT23-Steuerpfad bleiben unangetastet. Vor der ersten Lernzeile muss sein
+Vertrag ganze Positionssplits, einen frischen Checkpoint, die getrennte Klauen-Evaluation und
+eine vorab festgelegte Landmark-/Enthaltungsmetrik enthalten. Erst nach bestandenem
+Landmark-Audit darf seine Bildraumreferenz zusammen mit `selection_px` das
 Mitbewegungs-Selbstetikett versuchen.

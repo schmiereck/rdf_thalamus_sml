@@ -2,6 +2,12 @@
 
 ## 2026-09-24
 
+* **D0b-Fovea-Raumbindung negativ**: [Selbstbewegung](/befunde/d0b-hand-selbstbewegung.md) -
+  auf 64/32 ganzen Trainings-/Testpositionen verbessert der eingefrorene komplexe Fovea-Topzustand
+  die Sakkadenwahl gegenüber der Bildmitte (Median 53,5 statt 80,5 px), erreicht aber nur 4/29
+  sichtbare Klauen innerhalb 24 px. Kein Kopf; ein neuer Selbstbewegungs-Fovea-Zweig braucht
+  einen getrennten Lernvertrag.
+
 * **D0b-Handmaske, lokaler Ausleser negativ**: [Selbstbewegung](/befunde/d0b-hand-selbstbewegung.md) -
   auf 64/32 ganzen Trainings-/Testpositionen senkt der ausschließlich visuell trainierte
   Patch-Ausleser die Masken-MSE um 10,1 %, verfehlt aber den Landmark-Ort (Median 57,8 px,
