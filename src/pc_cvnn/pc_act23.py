@@ -787,8 +787,36 @@ ZIEL_ABSTAND = float(os.environ.get("ACT23_ZIEL_ABSTAND", "0.05"))
 # GRASP_Z + h.  Alle Koerper dieser Welt sind 24 mm hoch (0,012 Halbmass), der Aufschlag ist
 # deshalb fuer alle derselbe.
 ZIEL_RELATION = os.environ.get("ACT23_ZIEL_RELATION", "an").strip().lower()
-if ZIEL_RELATION not in ("an", "auf"):
-    raise SystemExit(f"ACT23_ZIEL_RELATION muss 'an' oder 'auf' sein, nicht {ZIEL_RELATION!r}")
+if ZIEL_RELATION not in ("an", "auf", "richtung"):
+    raise SystemExit(f"ACT23_ZIEL_RELATION muss 'an', 'auf' oder 'richtung' sein, "
+                     f"nicht {ZIEL_RELATION!r}")
+# =========================================================================================
+# RICHTUNGS-RELATIONEN (ACT23_ZIEL_RELATION=richtung).  Nutzeridee 2026-09-24,
+# wiki/fragen/richtungs-relationen.md: "lege es LINKS / RECHTS / VOR / HINTER Y".
+#
+# DAS BEZUGSSYSTEM IST DAS KAMERABILD (Nutzerentscheidung): "links" heisst links im Bild, das
+# der Agent sieht.  Das Wort ist die Sprache selbst und muss von aussen kommen -- die einzige
+# Vorgabe.  Was es in der Welt bedeutet, in der der Arm handelt, gibt es auf zwei Wegen:
+#
+#   kamera   GERUEST.  Die Bildachse wird an der Stelle des Bezugs ueber die EIGENE Homographie
+#            der Wahrnehmung in eine Weltrichtung uebersetzt.  Kein Simulator-Wissen, aber eine
+#            gerechnete Bedeutung.
+#   gelernt  Die Weltrichtung, die der Agent aus seinen EIGENEN Ablagen gesammelt hat: nach jeder
+#            Ablage neben einem Bezug (auch bei "an" mit zufaelliger Peilung, also beim Spielen)
+#            sieht er, in welcher Bildrichtung sein Koerper vom Bezug liegt, und merkt sich die
+#            Weltverschiebung unter DIESEM Wort (Etikett im Nachhinein, wie beim Tastetikett).
+#            Solange ein Wort weniger als RICHTUNG_MIN Beispiele hat: Rueckfall auf kamera, laut.
+#
+# Gemessen vor dem Bau (Sonde, 9 Stellen): die vier Bildachsen liegen hier auf Weltachsen, bis
+# 3 Grad genau -- links = +y, rechts = -y, hinter = +x (weg von der Kamera), vor = -x.
+RICHTUNG_QUELLE = os.environ.get("ACT23_RICHTUNG_QUELLE", "kamera").strip().lower()
+if RICHTUNG_QUELLE not in ("kamera", "gelernt"):
+    raise SystemExit(f"ACT23_RICHTUNG_QUELLE muss 'kamera' oder 'gelernt' sein, "
+                     f"nicht {RICHTUNG_QUELLE!r}")
+RICHTUNG_MIN = int(os.environ.get("ACT23_RICHTUNG_MIN", "3"))
+# Wort -> Richtung im BILD (px: x nach rechts, y nach unten, wie shape_clf "px").
+RICHTUNGS_WOERTER = {"links": (-1.0, 0.0), "rechts": (1.0, 0.0),
+                     "hinter": (0.0, -1.0), "vor": (0.0, 1.0)}
 # =========================================================================================
 # DIE HOEHE SEHEN STATT WISSEN (ACT23_HOEHE_SEHEN, Vorgabe 0).
 #
@@ -1016,6 +1044,9 @@ if ZIEL_RELATION == "auf":
         print("  [Ziel-Relation] ACT23_SOCKEL ist NICHT gesetzt -- dann gibt es keine Stuetze in "
               "der Szene, auf die 'auf' zeigen koennte, und jede Episode faellt auf den Marker "
               "zurueck.", flush=True)
+if ZIEL_RELATION == "richtung" and not ZIEL_ADRESSE:
+    print("  [Ziel-Relation] ACT23_ZIEL_RELATION=richtung ohne ACT23_ZIEL_ADRESSE=1 -- ohne "
+          "Zieladresse gibt es keinen Bezugskoerper, jede Episode legt am Marker ab.", flush=True)
 
 
 # Der Lerner selbst liegt in arm_modules/hoehen_schaetzer.py -- NICHT hier.  Eine Klasse,
@@ -1568,7 +1599,7 @@ class CommandState23:
         zl = " (latent)" if self.goalmode == "latent" else ""
         if self.ziel_bezug is not None:
             # das Label traegt die Relation schon ("auf ..."), fuer "an" steht sie hier davor
-            _r = self.ziel_bezug.get("relation", "an")
+            _r = self.ziel_bezug.get("relation", "an")         # "richtung": "links von ..."
             zt = f"Ziel: {'an ' if _r == 'an' else ''}{self.ziel_bezug['label']}"
         elif self.ziel_modus == "koerper":
             zt = f"Ziel: {ZIEL_RELATION} <kein Bezug>"
@@ -2181,6 +2212,35 @@ def run_self_learning_steering(headless=False):
     hoehen_schaetzer = (_loaded or {}).get("hoehe_schaetzer") or HoehenSchaetzer()
     if not isinstance(hoehen_schaetzer, HoehenSchaetzer):        # Klasse hat sich geaendert
         hoehen_schaetzer = HoehenSchaetzer()
+    # DIE GELERNTEN WORTBEDEUTUNGEN (s. RICHTUNG_QUELLE): Wort -> Liste von Welt-Einheitsvektoren,
+    # je einer pro eigener Ablage, die der Agent im Nachhinein unter diesem Wort gesehen hat.
+    # Ein schlichtes dict aus Listen -- pickelbar ohne Klasse, additiv wie der Hoehenschaetzer.
+    wort_bedeutung = dict((_loaded or {}).get("wort_bedeutung") or {})
+    for _w in RICHTUNGS_WOERTER:
+        wort_bedeutung.setdefault(_w, [])
+
+    def _wort_richtung(wort, p, laut=True):
+        """Einheitsvektor in der WELT fuer ein Richtungswort am Bezugsort p, und die Quelle."""
+        if RICHTUNG_QUELLE == "gelernt":
+            _v = wort_bedeutung.get(wort) or []
+            if len(_v) >= RICHTUNG_MIN:
+                _m = np.mean(np.asarray(_v, float), axis=0)
+                if float(np.linalg.norm(_m)) > 1e-6:
+                    return _m / float(np.linalg.norm(_m)), f"gelernt aus {len(_v)}"
+            if laut:
+                print(f"    [Richtung] '{wort}': erst {len(_v)} eigene Beispiele "
+                      f"(braucht {RICHTUNG_MIN}) -- RUECKFALL auf die Kamera-Achse", flush=True)
+        if shape_clf.H is None:
+            return None, "keine Homographie"
+        _q = shape_clf._world_to_px(np.asarray(p, float))[0]
+        _w1 = shape_clf._px_to_world(_q + 10.0 * np.asarray(RICHTUNGS_WOERTER[wort], float))[0]
+        _d = _w1 - np.asarray(p, float)
+        return _d / float(np.linalg.norm(_d)), "kamera"
+
+    def _wort_gesehen(px_obj, px_ref):
+        """Welches Wort beschreibt, wo das Objekt vom Bezug aus im BILD liegt -- die dominante Achse."""
+        _d = np.asarray(px_obj, float) - np.asarray(px_ref, float)
+        return max(RICHTUNGS_WOERTER, key=lambda w: float(_d @ np.asarray(RICHTUNGS_WOERTER[w])))
     # WAS DIE LETZTE EPISODE ERTASTET HAT, fuer das belegte Aussehen (s. HOEHE_BELEGT).
     # Warum ueber Episoden hinweg: am ENDE einer Episode steht der Arm ueber der Auflage und
     # verdeckt sie -- der Rauchtest fand dort nur 1 von 7 Stapeln.  Am ANFANG der naechsten ist
@@ -2703,6 +2763,24 @@ def run_self_learning_steering(headless=False):
             bez["cspread0"] = (float(_det["cspread"]) if _det.get("cspread") is not None else None)
             bez["ziel_xy"] = np.asarray(_p, float).copy()
             return np.array([_p[0], _p[1], _tz], float)
+        if bez.get("relation") == "richtung":
+            # EINE Peilung, die des Wortes -- an der WAHRGENOMMENEN Stelle des Bezugs.
+            _dw, _quelle = _wort_richtung(bez["wort"], _p)
+            if _dw is not None:
+                _q = _p + ZIEL_ABSTAND * _dw
+                if (REACH_XY[0][0] <= _q[0] <= REACH_XY[1][0] and REACH_XY[0][1] <= _q[1] <= REACH_XY[1][1]
+                        and float(np.linalg.norm(_q)) >= BASE_CLEAR):
+                    _wahr = 1000.0 * float(np.linalg.norm(_p - sim.obj_pos(bez["body"])[:2]))
+                    print(f"    [Zieladresse] '{bez['label']}' 1 Treffer bei "
+                          f"[{_p[0]:+.3f},{_p[1]:+.3f}] (wahr {_wahr:.0f}mm) -> {bez['wort']}: "
+                          f"Richtung ({_dw[0]:+.2f},{_dw[1]:+.2f}) [{_quelle}], ablegen bei "
+                          f"[{_q[0]:+.3f},{_q[1]:+.3f}]", flush=True)
+                    bez["aufgeloest"] = True
+                    bez["ziel_xy"] = np.asarray(_p, float).copy()
+                    return _q
+            print(f"    [Zieladresse] '{bez['label']}': Richtung nicht erreichbar -- "
+                  f"Rückfall auf Ziel {state.target_idx + 1}", flush=True)
+            return None
         for _ph in bez["peilungen"]:
             _q = _p + ZIEL_ABSTAND * np.array([np.cos(_ph), np.sin(_ph)])
             if (REACH_XY[0][0] <= _q[0] <= REACH_XY[1][0] and REACH_XY[0][1] <= _q[1] <= REACH_XY[1][1]
@@ -2715,6 +2793,8 @@ def run_self_learning_steering(headless=False):
                 print(f"    [Zieladresse] '{bez['label']}' 1 Treffer bei "
                       f"[{_p[0]:+.3f},{_p[1]:+.3f}] (wahr {_wahr:.0f}mm) -> ablegen daneben bei "
                       f"[{_q[0]:+.3f},{_q[1]:+.3f}]", flush=True)
+                bez["aufgeloest"] = True                 # fuer das Richtungs-Etikett am Ende
+                bez["ziel_xy"] = np.asarray(_p, float).copy()
                 return _q
         print(f"    [Zieladresse] '{bez['label']}' gefunden, aber keine erreichbare Ablage daneben"
               f" -- Rückfall auf Ziel {state.target_idx + 1}", flush=True)
@@ -2868,10 +2948,32 @@ def run_self_learning_steering(headless=False):
                          f"eine reine Groessenangabe ist keine Adresse")
         _ph0 = float(crng.uniform(0.0, 2.0 * np.pi))     # acht Peilungen ab einem zufaelligen
         _peil = [(_ph0 + 2.0 * np.pi * k / 8.0) for k in range(8)]   # Winkel, s. ZIEL_ADRESSE
+        _wort = None
+        if ZIEL_RELATION == "richtung":
+            # DAS WORT WIRD NUR UNTER DEN ERREICHBAREN GEWUERFELT -- Aufgabenerzeugung, wie die Wahl
+            # des Bezugskoerpers.  Der Arbeitsraum ist in y nur 140 mm breit; "links" 50 mm neben
+            # einem Koerper am linken Rand ist keine Aufgabe, sondern ein sicherer Fehlschlag.
+            # Geprueft an der WAHRGENOMMENEN Stelle mit derselben Bedeutung, die spaeter aufloest.
+            from pc_cvnn.pc_act14 import REACH_XY
+            from pc_cvnn.pc_act16 import BASE_CLEAR
+            _pn = np.asarray(_nah["pos"], float)
+            _ok = []
+            for _w in RICHTUNGS_WOERTER:
+                _dw, _ = _wort_richtung(_w, _pn, laut=False)
+                if _dw is None:
+                    continue
+                _q = _pn + ZIEL_ABSTAND * _dw
+                if (REACH_XY[0][0] <= _q[0] <= REACH_XY[1][0] and REACH_XY[0][1] <= _q[1] <= REACH_XY[1][1]
+                        and float(np.linalg.norm(_q)) >= BASE_CLEAR):
+                    _ok.append(_w)
+            if not _ok:
+                return _kein(f"{_b}: keine Richtung erreichbar")
+            _wort = _ok[int(crng.integers(len(_ok)))]
+        _txt = " + ".join(str(t) for t in _tri if t is not None) or "beliebig"
         state.ziel_bezug = {"tripel": _tri, "mess": _mess, "peilungen": _peil, "body": _b,
-                            "relation": ZIEL_RELATION,
-                            "label": ("auf " if ZIEL_RELATION == "auf" else "")
-                                     + (" + ".join(str(t) for t in _tri if t is not None) or "beliebig")}
+                            "relation": ZIEL_RELATION, "wort": _wort,
+                            "label": ("auf " + _txt if ZIEL_RELATION == "auf"
+                                      else f"{_wort} von {_txt}" if _wort else _txt)}
         return _tri
 
     colour_of_body = dict(_loaded.get("colour_of_body", {})) if _loaded is not None else {}
@@ -3304,6 +3406,8 @@ def run_self_learning_steering(headless=False):
                     "dream_seen": [np.asarray(z) for z in dream_nov.seen],
                     "self_eval": seval,
                     "hoehe_schaetzer": hoehen_schaetzer,
+                    "wort_bedeutung": {w: [np.asarray(v, float) for v in l]
+                                       for w, l in wort_bedeutung.items()},
 
                     # EIGENSCHAFTS-ADRESSEN WERDEN NICHT GESPEICHERT.  Sie sind fluechtig: der
                     # Auto-Lauf schreibt sie in JEDER Episode neu aus der aktuellen Detektion.
@@ -6173,6 +6277,47 @@ def run_self_learning_steering(headless=False):
                 print(f"    [Selbst-Stapel] {'liegt drauf' if _sd else 'nicht drauf'}  "
                       f"{'=' if _sd == _wahr else '!='}  Welt: {'liegt drauf' if _wahr else 'nicht drauf'}"
                       f"   [{_grund}]", flush=True)
+        # DAS RICHTUNGS-ETIKETT IM NACHHINEIN (s. RICHTUNG_QUELLE).  Nach jeder Ablage NEBEN einem
+        # Bezug -- "an" mit Zufallspeilung ebenso wie "richtung" -- sieht der Agent, wo sein Koerper
+        # vom Bezug aus im BILD liegt, und merkt sich die Weltverschiebung unter dem Wort, das er
+        # sieht.  Auch eine Fehlablage ist dann ein richtiges Beispiel, nur fuer ein anderes Wort.
+        # Alles aus der eigenen Wahrnehmung: Bezug = die Detektion an der aufgeloesten Stelle,
+        # Objekt = die Detektion an der Hand beim Loslassen.  Die Weltlage steht nur im Protokoll.
+        if _bz is not None and _bz.get("relation") in ("an", "richtung") and _bz.get("aufgeloest"):
+            _zr = np.asarray(_bz["ziel_xy"], float)
+            _kd = [d for d in jdets if d.get("pos") is not None and d.get("px") is not None]
+            _dref = min(_kd, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"], float) - _zr)),
+                        default=None)
+            if _dref is not None and float(np.linalg.norm(np.asarray(_dref["pos"], float) - _zr)) > 0.04:
+                _dref = None
+            _dobj = min((d for d in _kd if d is not _dref),
+                        key=lambda d: float(np.linalg.norm(np.asarray(d["pos"], float) - hxy_end)),
+                        default=None)
+            if _dobj is not None and float(np.linalg.norm(np.asarray(_dobj["pos"], float) - hxy_end)) > 0.05:
+                _dobj = None
+            if _dref is None or _dobj is None:
+                print(f"    [Richtung] enthalten -- "
+                      f"{'Bezug' if _dref is None else 'eigener Koerper'} nicht gesehen", flush=True)
+            else:
+                _v = np.asarray(_dobj["pos"], float) - np.asarray(_dref["pos"], float)
+                _dist = float(np.linalg.norm(_v))
+                _ges = _wort_gesehen(_dobj["px"], _dref["px"])
+                _wel = "?"                                 # PRIVILEGIERT, nur zum Vergleich
+                if shape_clf.H is not None:
+                    _pw = shape_clf._world_to_px(np.vstack([sim.obj_pos(body)[:2],
+                                                            sim.obj_pos(_bz["body"])[:2]]))
+                    _wel = _wort_gesehen(_pw[0], _pw[1])
+                _soll = _bz.get("wort")
+                _txt = (f"Soll {_soll}, " if _soll else "") + f"gesehen {_ges} ({1000 * _dist:.0f}mm)"
+                _txt += f"  {'=' if _ges == _wel else '!='}  Welt: {_wel}"
+                if _soll:
+                    _txt += f"  | {'TRIFFT' if _ges == _soll else 'VERFEHLT'} das Wort"
+                if 0.02 <= _dist <= 0.10:
+                    wort_bedeutung[_ges].append(_v / _dist)
+                    _txt += f"  | gemerkt unter '{_ges}' ({len(wort_bedeutung[_ges])} Beispiele)"
+                else:
+                    _txt += "  | nicht neben dem Bezug, kein Beispiel"
+                print(f"    [Richtung] {_txt}", flush=True)
         if s_ok is None:
             print(f"    [Selbst-Urteil] enthalten -- noch keine eigene Klasse für {body}", flush=True)
         else:
