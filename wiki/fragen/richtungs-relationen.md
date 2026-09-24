@@ -22,6 +22,12 @@ sources:
 > Bedeutungen selbst (3 von 4 innerhalb 1,5 Grad), und die gelernte Bedeutung traegt gepaart
 > wie das Kamera-Geruest (Worttreffer 51 gegen 47, geliefert 35 gegen 35). Die Relation in der
 > ADRESSE ("der Wuerfel links vom blauen") und "herunter" als Wort sind noch nicht gebaut.
+>
+> **KLARSTELLUNG DES NUTZERS (2026-09-24):** gemeint war die Relation **ausschliesslich als
+> Zielpunkt fuer die Ablage** (BEZUG) - also genau das, was gebaut und gemessen ist. Die Relation
+> in der ADRESSE ("nimm den Wuerfel links vom blauen") war nicht gewuenscht und ist kein offener
+> Punkt dieser Idee. "Herunter nehmen" ist entsprechend als Ablageziel zu lesen: der Zielpunkt ist
+> der Tisch, nicht die Auflage.
 
 # Die Idee
 

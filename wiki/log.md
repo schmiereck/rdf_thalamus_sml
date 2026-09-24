@@ -7,6 +7,10 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-24
 
+* **Ergaenzung**: [Richtungs-Relationen](/fragen/richtungs-relationen.md) - Klarstellung des
+  Nutzers: die Relationen waren nur als ZIELPUNKT der Ablage gemeint (gebaut und gemessen), nicht
+  als Relation in der Adresse. Der Punkt "Relation in der Adresse" ist damit kein offener Faden.
+
 * **Anlage**: [Richtungswoerter selbst gelernt](/befunde/richtungswoerter-selbst-gelernt.md) -
   `ACT23_ZIEL_RELATION=richtung` (b8a0f00), Bezugssystem Kamerabild nach Nutzerentscheidung.
   Spielphase 40 Ep "an": 27 Etiketten im Nachhinein, danach 3 von 4 Woertern innerhalb 1,5 Grad
