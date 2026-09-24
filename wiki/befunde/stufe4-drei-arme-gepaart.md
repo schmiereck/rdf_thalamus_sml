@@ -70,6 +70,12 @@ eigene Detektion hat.** Die Unsichtbarkeit, die auf dem Pruefstand gemessen war
 
 ## Vermutung, nicht gemessen: der Test macht die Relation ueberfluessig
 
+> **NICHT GESTUETZT (2026-09-24), s. [Der Stapel neben der Mitte](/befunde/stufe4-stapel-neben-der-mitte.md).**
+> Mit dem Koerper 16 mm neben der Mitte (Pruefstand: K0 zielt dann 18 mm daneben) verliert K0
+> gegenueber dieser Reihe auf sonst gleicher Szene nur netto 3 von 90 Episoden (12 gegen 9,
+> p = 0,66). Der Fleckschwerpunkt hat dem blinden Arm den Stapel nicht geschenkt; warum er
+> trotzdem zufasst, ist offen. Die Relation traegt auch neben der Mitte nichts (K1 41 %, K2 42 %).
+
 Der Abstapel-Aufbau (`ACT23_ABSTAPELN`) stellt den Koerper **genau in die Mitte der Platte**. Damit
 liegt der Schwerpunkt des verschmolzenen Flecks - Platte plus Koerper, das Einzige, was K0 sieht -
 praktisch auf dem Koerper. Die gewoehnliche Adresse findet den verschmolzenen Fleck, zielt auf

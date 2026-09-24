@@ -5,6 +5,20 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-24
+
+* **Anlage**: [Der Stapel neben der Mitte](/befunde/stufe4-stapel-neben-der-mitte.md) - die drei
+  gepaarten Arme noch einmal, der Koerper 16 mm neben der Plattenmitte
+  (`ACT23_ABSTAPELN_VERSATZ`, Code 7b2405e; K2 mit `ACT23_ADR_REL_ANTEIL=1.0`, weil eine
+  Vorpruefung zeigte, dass 0,5 schon fuer zentrierte Stapel grenzwertig ist). 88 von 90 Episoden
+  szenengleich. **K0 30 %, K1 41 %, K2 42 %, nichts unter Bonferroni** (K0-K1 16 zu 6, p = 0,053).
+  Das sah zuerst wie die Bestaetigung der Mitten-Vermutung aus. **Der direkte Test widerlegt das:**
+  die Szenen beider Reihen sind bis auf die Koerperlage gleich (90/90 gleiches Kommando und Ziel),
+  jeder Arm laesst sich also mit sich selbst paaren - K0 zentriert gegen versetzt 12 zu 9, p = 0,66.
+  **Der Versatz schadet dem blinden Arm nicht; die Vermutung aus der Drei-Arme-Seite ist dort als
+  nicht gestuetzt markiert.** Die Relation traegt auch hier nichts (11 zu 10) und loest neben der
+  Mitte seltener auf (47 statt 63 Episoden).
+
 ## 2026-09-19
 
 ## 2026-09-20

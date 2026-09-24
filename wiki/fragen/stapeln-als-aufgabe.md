@@ -196,7 +196,12 @@ nach zwei, drei Episoden verschiedene Szenen. In der Reihenfolge des Nutzens:
 2. **ERLEDIGT, s. [Drei Arme je Episode gepaart](/befunde/stufe4-drei-arme-gepaart.md): weder
    Sichtbarkeit noch Relation traegt messbar (34 / 37 / 43 %), und der Test war fuer die
    Kontrolle zu leicht -- der Koerper steht genau in der Plattenmitte.** Naechster Schritt: ein
-   Stapel AUSSERHALB der Mitte. Urspruenglich: **Die richtige Kontrolle fuer Stufe 4:** drei Arme - ohne Chroma-Schnitt | mit Schnitt,
+   Stapel AUSSERHALB der Mitte. **ERLEDIGT 2026-09-24, s. [Der Stapel neben der
+   Mitte](/befunde/stufe4-stapel-neben-der-mitte.md): 30 / 41 / 42 %, nichts signifikant, und der
+   Versatz schadet dem blinden Arm auf gleicher Szene nicht (12 gegen 9) - die Mitten-Vermutung
+   faellt. "Herunterholen" braucht die Relation nicht, weil der obere Koerper ueber seine
+   Eigenschaften eindeutig ist; eine Aufgabe, die sie braucht, muesste zwei GLEICHE Koerper
+   enthalten, von denen nur einer auf etwas liegt.** Urspruenglich: **Die richtige Kontrolle fuer Stufe 4:** drei Arme - ohne Chroma-Schnitt | mit Schnitt,
    Eigenschafts-Adresse | mit Schnitt, relationale Adresse. Der Sweep hat nur die letzten beiden
    verglichen; der grosse Schritt (Sichtbarkeit) steckte in beiden.
 3. **Danach die Richtungsfrage:** Umstapeln mit der Relation auf BEIDEN Seiten ("nimm das, was
