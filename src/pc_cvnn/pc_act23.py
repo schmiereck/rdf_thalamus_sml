@@ -850,6 +850,14 @@ ADR_REL_KLEINER = float(os.environ.get("ACT23_ADR_REL_KLEINER", "1.5"))
 # herunter.  Das ist die Aufgabe, an der Stufe 4 gemessen wird -- ohne sie gaebe es nie einen
 # gestapelten Koerper zu adressieren, weil die Episode ihn erst am ENDE erzeugt.
 ABSTAPELN = os.environ.get("ACT23_ABSTAPELN", "0") == "1"
+# DER STAPEL AUSSERHALB DER MITTE (ACT23_ABSTAPELN_VERSATZ, in m, Vorgabe 0).
+# Der Abstapel-Aufbau stellte den Koerper GENAU in die Plattenmitte.  Dann liegt der Schwerpunkt
+# des verschmolzenen Flecks auf ihm, und auch ein Arm, fuer den der Stapel unsichtbar ist, trifft
+# ihn: gemessen greift er ihn in 51 von 90 Episoden (wiki/befunde/stufe4-drei-arme-gepaart.md).
+# Der Test machte die Relation ueberfluessig.  Mit Versatz zielt die gewoehnliche Adresse daneben
+# (Sonde: 18 mm bei 16 mm Versatz), waehrend der Chroma-Schnitt den Koerper weiter auf ~7 mm trifft.
+# DIE RICHTUNG kommt aus crng -- mit ACT23_SZENE_JE_EPISODE also fuer alle Arme dieselbe.
+ABSTAPELN_VERSATZ = float(os.environ.get("ACT23_ABSTAPELN_VERSATZ", "0"))
 # =========================================================================================
 # DIE SZENE JE EPISODE AUS (SEED, EPISODENNUMMER) (ACT23_SZENE_JE_EPISODE, Vorgabe 0).
 #
@@ -5876,10 +5884,19 @@ def run_self_learning_steering(headless=False):
                 _cb = state.selected()[1]
                 _ch = float(sim.m.geom_size[sim.m.body_geomadr[
                     mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, _cb)]][2])
-                sim.set_object(_cb, sim.obj_pos(_sn)[:2].tolist(), z=_so + _ch)
+                _vs = np.zeros(2)
+                if ABSTAPELN_VERSATZ > 0.0:
+                    # AUSSERHALB DER MITTE, Richtung aus crng (s. ABSTAPELN_VERSATZ).  Der
+                    # Schwerpunkt bleibt ueber der Platte, solange der Versatz unter ihrer
+                    # Halbbreite liegt -- bei 70 mm also bis 35 mm.
+                    _wv = float(crng.uniform(0.0, 2.0 * np.pi))
+                    _vs = ABSTAPELN_VERSATZ * np.array([np.cos(_wv), np.sin(_wv)])
+                sim.set_object(_cb, (sim.obj_pos(_sn)[:2] + _vs).tolist(), z=_so + _ch)
                 sim.step(40)                               # setzen lassen, sonst faellt er im Bild
                 print(f"  [Abstapeln] {_cb} steht auf {_sn} "
-                      f"(Oberkante {1000 * _so:.0f}mm) -- Aufgabe: herunterholen", flush=True)
+                      f"(Oberkante {1000 * _so:.0f}mm"
+                      + (f", {1000 * ABSTAPELN_VERSATZ:.0f}mm neben der Mitte" if ABSTAPELN_VERSATZ > 0 else "")
+                      + ") -- Aufgabe: herunterholen", flush=True)
         if SZENE_JE_EPISODE:
             # DER SZENEN-ABDRUCK -- das Messinstrument fuer die Paarung.  Genommen NACH allem, was
             # die Szene festlegt (Objektwahl, Ziel, Neubau, Farben, Abstapel-Aufbau) und VOR der
