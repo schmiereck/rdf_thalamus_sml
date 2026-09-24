@@ -19,6 +19,13 @@ sources:
     title: Der Anlass
 ---
 
+> **NUTZERVORGABE 2026-09-24: KAMERA STATT TASTEN.** Der Nutzer haelt die Beruehrung fuer keinen
+> guten Eingang, weil offen ist, ob und wie sie am physischen Roboter traegt. Die Tast-Schalter
+> bleiben im Code und diese Messung gilt weiter, aber **das Tasten wird nicht weiter ausgebaut**.
+> Neue Etiketten sollen aus dem Kamerabild kommen (ggf. aus der Eigenpropriozeption des Arms).
+> Ein Kandidat fuer die Hoehe ist gemessen vorhanden: ein erhoehter Koerper erscheint radial von der
+> Kamera weg verschoben, mit r = 1,00 zur Hoehe ([Parallaxe](/befunde/stapeln-bricht-die-tischebene.md)).
+
 # Warum
 
 Der [HoehenSchaetzer](/befunde/oberkante-ohne-privileg.md) nahm der Laufzeit ihr letztes Privileg -
