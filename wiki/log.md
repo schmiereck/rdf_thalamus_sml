@@ -7,6 +7,13 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-24
 
+* **Anlage**: [Generalisierung Relation x Zielart](/befunde/generalisierung-relation-zielart.md) -
+  `ACT23_ZIEL_ZELLEN` (5ec268b). Diagonale auf:balken / links:wuerfel im Training ausgelassen,
+  zwei Ketten je 100 Ep, Test gepaart gegen untrainiert. Die vorher festgehaltene Erwartung ist
+  eingetreten: **das Training verbessert nichts nachweisbar** (geuebt 34 -> 41/44 %, p = 0,73/0,55),
+  also ist die Generalisierung nicht streng pruefbar. Die ausgelassenen Zellen ziehen in beiden
+  Ketten mit, auf:balken am staerksten (23 -> 54/62 %, p = 0,22/0,06).
+
 * **Anlage**: [Auf beliebige Koerper](/befunde/auf-beliebige-koerper.md) - `ACT23_AUF_ALLE`,
   `ACT23_AUF_LOSLASSEN` und `ACT23_ZIEL_RELATION=alle` gebaut (Nutzerwuensche). Zwei Seeds, 80 Ep:
   getragene Koerper landen auf Platte 10/14, Wuerfel 9/16, Balken 10/18 auf dem Ziel, liegen bleiben
