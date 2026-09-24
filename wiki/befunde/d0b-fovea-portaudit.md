@@ -125,3 +125,8 @@ Fovea-Bild gewonnenes Greifer-Landmark oder eine vorab kalibrierte 3D-Kameraproj
 die Hubhöhe abbildet. Sie wird zunächst nur gegen die getrennte Evaluation auditiert. Erst dann
 ist ein enthaltendes Mitbewegungs-Selbstetikett möglich. Die Sonde bleibt ein
 Wegwerfprotokoll und kein Laufzeitverbraucher.
+
+Die erste Referenzsonde ist nun als [Selbstbewegungs-Befund](/befunde/d0b-hand-selbstbewegung.md)
+gemessen: Der eigene Fingerimpuls ist sichtbar, sein fester Differenzschwerpunkt aber kein
+brauchbarer Punkt. D0b verfolgt deshalb nur noch den dort beschriebenen gelernten
+Maskenausleser; die Tischhomographie bleibt ausgeschlossen.

@@ -1,5 +1,12 @@
 # Chronik
 
+## 2026-09-24
+
+* **D0b-Handlandmark, erster Audit**: [Selbstbewegung](/befunde/d0b-hand-selbstbewegung.md) -
+  36 ausgeführte Öffnen/Schließen-Impulse erzeugen 36 sichtbare Kameradifferenzen. Deren fester
+  Schwerpunkt erreicht aber nur 12/31 sichtbare Klauen innerhalb 20 px (Median 24,2 px).
+  Selbstbewegung bleibt als Trainingsziel offen; fester Punktdetektor und Greifzustandskopf nicht.
+
 ## 2026-09-23
 
 * **D0b-Selbstetikett angehalten**: [Portaudit](/befunde/d0b-fovea-portaudit.md) - die neue
