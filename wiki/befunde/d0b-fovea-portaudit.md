@@ -1,7 +1,7 @@
 ---
 type: Befund
-title: D0b-Portaudit - eingefrorene Fovea-Frames und Hubabdeckung sind erfassbar
-description: Zwölf eingefrorene Wegwerfepisoden schreiben 3.329 vollständige agentensichtbare Fovea-/Hand-Frames ohne Lernmutation, darunter 358 Hub- und 338 Trageframes. Der Trace trägt nun auch eine äußere Episoden-ID; ein Selbstetikett ist noch nicht bewertet.
+title: D0b-Portaudit - Fovea-Auswahl ist sichtbar, aber ohne Handbild kein Mitbewegungs-Etikett
+description: In zwölf eingefrorenen Episoden sind Fovea-Auswahl und getrennte Simulator-Evaluation vollständig erfasst. Die Auswahl allein unterscheidet einen Fehlgriff jedoch nicht vom Tragen; für das geplante Mitbewegungs-Selbstetikett fehlt eine Bildraumreferenz der eigenen Hand.
 tags: [act23, dream-rsi, d0b, fovea, instrumentation]
 status: stable
 evidenz: einzelmessung
@@ -20,6 +20,12 @@ sources:
   - id: coverage-integrity
     resource: ../../log/d0b-coverage/seed101-12ep/result.json
     title: Integritätsnachweis der Abdeckungserhebung
+  - id: selflabel-trace
+    resource: ../../log/d0b-selflabel/seed101-12ep/fovea_frames.jsonl
+    title: Fovea-Auswahl und Eigenpropriozeption, getrennt nach Trajektorie
+  - id: selflabel-eval
+    resource: ../../log/d0b-selflabel/seed101-12ep/eval_truth.jsonl
+    title: Ausschließlich externe Simulator-Evaluation
 ---
 
 # Auditbefund
@@ -80,10 +86,42 @@ eine monotone äußere `episode_id`; ein eingefrorener Zwei-Episoden-Rauchtest s
 IDs 1 und 2 ohne Lücke und enthält Hubframes. Damit kann der spätere Split nach ganzen
 Trajektorien erfolgen, statt Beinah-Duplikate einer Szene auf Training und Test zu verteilen.
 
-# Nächster Schritt
+# Gegenprüfung des Selbstetiketts
 
-Auf diesen Gruppen wird nun **offline und ohne Lernupdate** ein Kandidatenetikett geprüft: zwei
-sichtbare, aufeinanderfolgende Bildraum-Positionen müssen sich zusammen mit der eigenen Hand
-bewegen; unzureichende Sicht bleibt Enthaltung. Erst die Gegenprüfung dieses Selbstetiketts gegen
-getrennte Simulatorgrundwahrheit legt Sensitivität, Präzision, Kalibrierung und eine mögliche
-Lernaufgabe fest. Die Sonde bleibt ein Wegwerfprotokoll und kein Laufzeitverbraucher.
+Die neue Wegwerfserie (Seed 101, zwölf Episoden) ist vollständig: **3.329** Trace- und genau
+**3.329** Evaluationszeilen besitzen dieselbe äußere Episoden-ID und Phase. Alle Trace-Zeilen
+sind eingefroren. Die Fovea schreibt nun ihre eigene, klassenkonditionierte Auswahl als
+`selection_px` und `selection_mass`; Objektpose, Kontakt und Weld bleiben ausschließlich in
+`eval_truth.jsonl`.
+
+| Prüfung | Ergebnis |
+|---|---:|
+| Episoden-IDs | 1–12, ohne Lücke |
+| Fovea-Auswahl vorhanden | 2.809 / 3.329 (84,4 %) |
+| Fovea-Auswahl in Hubphase | 320 / 358 (89,4 %) |
+| Fovea-Auswahl in Tragephase | 338 / 338 (100 %) |
+| extern als getragen markierte Frames | 359 / 3.329 |
+| zeitliche Trace-/Eval-Fehlzuordnung | 0 |
+
+Die bloße Sichtbarkeit ist kein Greifzustand. Besonders deutlich ist Episode 9: Sie hat 125
+Trageframes mit durchgehend vorhandener Fovea-Auswahl, aber **0 / 125** davon sind extern als
+getragen markiert. Vier weitere Carry-Episoden sind dagegen vollständig getragen. Ein positives
+Etikett aus „Carry + Auswahl sichtbar“ hätte somit in dieser kleinen Serie 4 von 5 Carry-Episoden
+getroffen, würde aber gerade die FSM-Phase als Ersatz für Wahrnehmung verwenden und den
+Fehlgriff nicht erkennen. Auch die Auswahlmasse trennt nicht stabil: in der Carryphase liegen die
+125 negativen Frames mit 50,7–118,3 im Bereich der positiven Folgen (14,0–114,4).
+
+Das beabsichtigte Kriterium „Kandidat bewegt sich mit der Hand“ kann der vorhandene Trace noch
+nicht berechnen. `selection_px` ist eine Objektposition im Kamerabild; die eigene Hand liegt nur
+als xyz-Propriozeption vor. Die vorhandene `world_to_px`-Homographie beschreibt ausdrücklich
+die Tischfläche und ist oberhalb der Tischhöhe beim Hub ungültig. Eine nachträgliche Projektion
+würde daher eine unzulässige, nicht geprüfte Geometrie einschleusen.
+
+# Entscheidung für den nächsten Schritt
+
+Ein lernender Kopf wird nicht angeschlossen. D0b bleibt offen, aber sein nächstes kleines Tor ist
+eine **agentenzugängliche Bildraumreferenz der eigenen Hand**: entweder ein aus dem vorhandenen
+Fovea-Bild gewonnenes Greifer-Landmark oder eine vorab kalibrierte 3D-Kameraprojektion, die auch
+die Hubhöhe abbildet. Sie wird zunächst nur gegen die getrennte Evaluation auditiert. Erst dann
+ist ein enthaltendes Mitbewegungs-Selbstetikett möglich. Die Sonde bleibt ein
+Wegwerfprotokoll und kein Laufzeitverbraucher.

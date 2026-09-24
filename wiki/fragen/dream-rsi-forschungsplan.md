@@ -109,7 +109,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 | Paket | Inhalt | Voraussetzung | Status | Befund / Entscheidung |
 |---|---|---|---|---|
 | D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | verworfen | Beide getrennten 120-Episoden-Linien verfehlen den Wrist-Pilotvertrag; Seed 29 bestätigt auf Seed 103 zwar Lieferung, aber nicht die erforderliche Ausrichtung. Neuer Kandidat nur mit neuem, vorab fixiertem Vertrag |
-| D0b | Selbstbeobachteter visueller Greifzustand | D0 geschlossen; F0-Portaudit | in Arbeit | [Portaudit](/befunde/d0b-fovea-portaudit.md): zwölf gefrorene Episoden liefern Hub-/Trageframes und gruppierbare Trajektorien; nun Mitbewegungs-Selbstetikett gegen getrennte Grundwahrheit prüfen |
+| D0b | Selbstbeobachteter visueller Greifzustand | D0 geschlossen; F0-Portaudit | in Arbeit | [Portaudit](/befunde/d0b-fovea-portaudit.md): Fovea-Auswahl und externe Evaluation sind sauber erfasst, doch ohne Hand-Bildraumreferenz trennt Sichtbarkeit den Fehlgriff nicht. Erst Hand-Landmark/3D-Projektion auditieren, kein Lernkopf |
 | D1 | Beobachtung, Checkpoints, Neustart- und Nichtbeeinflussungsnachweis | D0 | offen | - |
 | D2 | Kleine Bibliothek echter Trainingslinien | D1 | offen | - |
 | D3 | Replay mit Abdeckungs- und Informationspruefung | D2 | offen | - |
@@ -121,7 +121,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 | S1 | Motorisches Lernsignal und autonomer kurzer Regelkreis | S0, D1 | offen | - |
 | S2 | Eigene Anpassung und ACT23-Integration | S1 | offen | - |
 | S3 | Optional: Geschwindigkeit oder Drehmoment statt Winkelvorgabe | S2, eigener Befund zum Bedarf | offen | - |
-| F0 | Vorhandene Netzzustaende fuer neue Wahrnehmungsaufgaben pruefen | keine | in Arbeit | D0b-Portaudit schreibt Fovea-Zustände getrennt; zunächst Hub-Abdeckung und Signaltragfähigkeit auf gehaltenen Szenen prüfen |
+| F0 | Vorhandene Netzzustaende fuer neue Wahrnehmungsaufgaben pruefen | keine | in Arbeit | D0b-Portaudit: Auswahl ist über Hub/Carry sichtbar, aber ohne visuelle Handreferenz nicht als Greifzustand auswertbar; Handreferenz vor einem Fovea-Kopf auditieren |
 | F1 | Zusaetzlichen gelernten Wahrnehmungskopf verdrahten | F0, D1 | offen | - |
 | F2 | Detailstufe und Bestandserhalt | F1 | offen | - |
 | F3 | Mehrere Aufgaben und Integration mit Motorik | F1/F2; S2 fuer Motorvergleich | offen | - |

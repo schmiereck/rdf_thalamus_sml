@@ -347,6 +347,9 @@ D0_MANIFEST_DIR = os.environ.get("ACT23_D0_MANIFEST_DIR", "")
 # D0b stores only the agent-visible Fovea/hand time series.  It never reads simulator pose,
 # contact or weld state; those remain an external evaluation channel.
 D0B_TRACE_JSONL = os.environ.get("ACT23_D0B_TRACE_JSONL", "")
+# Separate ground-truth channel for evaluating a prospective D0b self-label.  It must never be
+# read by the trace consumer or a learner; keeping a distinct file makes that boundary auditable.
+D0B_EVAL_JSONL = os.environ.get("ACT23_D0B_EVAL_JSONL", "")
 # MuJoCo selbst ist deterministisch: bleibt das Objekt liegen und der Arm kehrt in dieselbe
 # Ruhelage zurueck, wiederholt sich eine Episode BIS AUF DEN MILLIMETER (im Rauchtest gemessen:
 # 63+-0 mm ueber drei Laeufe).  Der einzige natuerliche Streukanal ist die ARMSTELLUNG beim Start
@@ -4523,12 +4526,21 @@ def run_self_learning_steering(headless=False):
                     "id_conditioned": bool(id_mu is not None),
                     "frozen": bool(D0_FREEZE),
                 }
+                _d0b_sel_px = None; _d0b_sel_mass = 0.0
                 if FOVEA_NET:
                     ctr = (HEX_F - 1) / 2.0
                     sel = np.real(arr[:, :, 0]) if id_mu is not None else None
                     if sel is not None and float(sel.sum()) > 0.3:  # IDENTITY drive: class-colour saliency
                         mem["_lost"] = 0                            #   present -> fovea_gradient toward it
                         com = com2d(sel)
+                        _d0b_sel_mass = float(sel.sum())
+                        if com is not None:
+                            _d0b_sel_px = np.asarray(gaze, float) + warp_gaze_delta(com, ctr, vc.fovea._ek())
+                        vc._d0b_frame.update({
+                            "selection_px": None if _d0b_sel_px is None else
+                                            [float(x) for x in _d0b_sel_px],
+                            "selection_mass": _d0b_sel_mass,
+                        })
                         drive = -fovea_gradient(vc.fovea.cells)     # net active-inference gaze drive
                         if com is not None:
                             mem["gaze"] = np.clip(np.asarray(gaze, float)
@@ -5065,6 +5077,17 @@ def run_self_learning_steering(headless=False):
                        **frame}
                 with open(D0B_TRACE_JSONL, "a", encoding="utf-8") as fh:
                     fh.write(json.dumps(rec, sort_keys=True) + "\n")
+                if D0B_EVAL_JSONL:
+                    # Strictly external evaluation: geometric simulator truth is written only here,
+                    # after the agent-visible trace.  It is never returned to the tracker or learner.
+                    rest_z = float(snap[body][1])
+                    obj = np.asarray(sim.obj_pos(body), float)
+                    attached = bool(obj[2] > rest_z + 0.02 and np.linalg.norm(obj[:2] - h[:2]) <= 0.045)
+                    ev = {"schema": "act23-d0b-eval-v1", "episode_id": int(_d0b_episode_id),
+                          "phase": str(phase), "truth_lifted": bool(obj[2] > rest_z + 0.02),
+                          "truth_attached": attached}
+                    with open(D0B_EVAL_JSONL, "a", encoding="utf-8") as fh:
+                        fh.write(json.dumps(ev, sort_keys=True) + "\n")
             except Exception as _e:
                 if os.environ.get("ACT23_DEBUG", "0") == "1":
                     print(f"    [D0b-Trace] uebersprungen: {_e}", flush=True)

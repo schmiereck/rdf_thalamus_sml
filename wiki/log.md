@@ -2,6 +2,12 @@
 
 ## 2026-09-23
 
+* **D0b-Selbstetikett angehalten**: [Portaudit](/befunde/d0b-fovea-portaudit.md) - die neue
+  12-Episoden-Serie ordnet 3.329 Fovea-Frames und getrennte Evaluationszeilen exakt zu; 2.809
+  enthalten eine echte Fovea-Auswahl. Ein Fehlgriff hat dennoch 125/125 sichtbare Carry-Frames.
+  Ohne Bildraumreferenz der eigenen Hand ist Mitbewegung nicht berechenbar; kein Lernkopf und
+  zuerst Audit eines Hand-Landmarks oder einer 3D-Kameraprojektion.
+
 * **D0b-Portaudit**: [eingefrorene Fovea-Frames](/befunde/d0b-fovea-portaudit.md) - 200 vollständige,
   rein agentensichtbare Bildraum-/Topzustands-/Hand-Frames, keine Lernmutation. Die Wegwerfepisode
   hatte keinen Hub; damit ist nur die Sonde, nicht ein Greifzustandssignal belegt.

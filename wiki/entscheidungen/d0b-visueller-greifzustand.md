@@ -96,8 +96,11 @@ noch Servo werden vorab als Wirkung ausgegeben.
 
 # Nächster konkreter Schritt
 
-Der [Portaudit](/befunde/d0b-fovea-portaudit.md) bestätigt Instrumentierung und Hubabdeckung auf
-eingefrorenen Kopien (358 Hub- und 338 Trageframes in zwölf Episoden). Er trägt jetzt eine äußere
-Trajektorien-ID für gruppierte Splits. Nächster Schritt ist die offline Gegenprüfung eines
-Mitbewegungs-Selbstetiketts; erst deren Präzision, Sensitivität und Enthaltungen legen Metriken,
-Budget, Seeds und Abbruchregel für einen Lernvergleich fest.
+Der [Portaudit](/befunde/d0b-fovea-portaudit.md) bestätigt Instrumentierung, Hubabdeckung und die
+strikte Trennung der Auswertungswahrheit auf eingefrorenen Kopien (358 Hub- und 338 Trageframes
+in zwölf Episoden). Die Gegenprüfung verwirft jedoch das verkürzte Signal „Fovea-Auswahl sichtbar“:
+ein Fehlgriff besitzt dieselbe Auswahl über eine vollständige Carryphase. Die aktuelle Fovea-Sonde
+hat keine Bildraumposition der eigenen Hand; die vorhandene Tischhomographie darf beim Hub nicht
+als Ersatz dienen. Nächster Schritt ist deshalb ausschließlich ein auditierter Hand-Landmark oder
+eine höhenrichtige, vorher kalibrierte Kameraprojektion. Erst damit wird das angekündigte,
+enthaltende Mitbewegungs-Selbstetikett berechenbar; ein Lernvergleich bleibt gesperrt.
