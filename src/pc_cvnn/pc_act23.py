@@ -6127,14 +6127,22 @@ def run_self_learning_steering(headless=False):
             _obl = float(sim.obj_pos(_bzl["body"])[2] + sim.m.geom_size[sim.m.body_geomadr[_sbl]][2])
             _hb = float(sim.m.geom_size[sim.m.body_geomadr[
                 mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, body)]][2])   # halbe Hoehe
-            _oben_jetzt = float(sim.obj_pos(body)[2]) - _hb > _obl - 0.004
+            # OBEN AUF DIESEM KOERPER, nicht bloss hoch: auch seitlich innerhalb seiner groessten
+            # Auflage (Platte 35 mm halb) plus Rand -- sonst zaehlte ein Koerper, der auf einem
+            # NACHBARN gelandet ist.
+            _eo = float(np.linalg.norm(sim.obj_pos(body)[:2] - sim.obj_pos(_bzl["body"])[:2]))
+            _oben_jetzt = float(sim.obj_pos(body)[2]) - _hb > _obl - 0.004 and _eo < 0.045
             if _rel is None:
                 print(f"    [Ablage auf] {_bzl['body']}: nie angehoben losgelassen -- nicht abgelegt",
                       flush=True)
             else:
                 _sl = 1000.0 * float(np.linalg.norm(_rel["cxy"] - _rel["tgt"]))
                 _uk = 1000.0 * (_rel["cz"] - _rel["obj_h"] - _obl)   # Unterkante minus Oberkante
-                _drauf = _sl < 1000.0 * act16.TOL and _uk > -4.0
+                # AUF DEM ZIEL ABGELEGT: beim Loslassen innerhalb der Liefertoleranz in der richtigen
+                # Hoehe -- ODER es liegt am Ende oben auf ihm.  Das Zweite gemessen noetig: auf der
+                # 70-mm-Platte lagen Koerper stabil oben, die beim Loslassen 25-26 mm neben der Mitte
+                # waren, und wurden als "nicht auf dem Ziel" gefuehrt.
+                _drauf = (_sl < 1000.0 * act16.TOL and _uk > -4.0) or _oben_jetzt
                 _txt = (f"beim Loslassen seitlich {_sl:.0f}mm, Unterkante {_uk:+.0f}mm ueber der "
                         f"Oberkante von {_bzl['body']} -> "
                         + ("AUF DEM ZIEL abgelegt" if _drauf else "nicht auf dem Ziel")

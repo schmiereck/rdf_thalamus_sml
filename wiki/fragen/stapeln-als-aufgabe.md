@@ -205,6 +205,11 @@ Einschaetzung am Code und an den Messungen (Analyse, nicht gemessen):
   Stapel-Selbsturteil gibt es) und daraus eine gelernte Eigenschaft "traegt" je Koerper bzw.
   Form bilden. Das waere Aneignung einer neuen Eigenschaft, nicht nur einer neuen Aufgabe.
 
+> **GEMESSEN 2026-09-24, s. [Auf beliebige Koerper](/befunde/auf-beliebige-koerper.md):** die
+> Einschaetzung oben war fuer das ABLEGEN falsch - getragene Koerper landen auf Wuerfeln 9 von 16,
+> auf Balken 10 von 18 auf dem Ziel; liegen bleiben sie dort seltener (4 bzw. 3). Der Nutzer wertet
+> die Ablage, nicht das Liegenbleiben (`ACT23_AUF_LOSLASSEN`).
+
 Vorschlag: ein Schalter, der "auf" fuer alle Koerper oeffnet, eine ehrliche Messung, welche
 Paarungen gelingen, und die Tragfaehigkeit als selbst gelernte Eigenschaft.
 

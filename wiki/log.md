@@ -7,6 +7,14 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-24
 
+* **Anlage**: [Auf beliebige Koerper](/befunde/auf-beliebige-koerper.md) - `ACT23_AUF_ALLE`,
+  `ACT23_AUF_LOSLASSEN` und `ACT23_ZIEL_RELATION=alle` gebaut (Nutzerwuensche). Zwei Seeds, 80 Ep:
+  getragene Koerper landen auf Platte 10/14, Wuerfel 9/16, Balken 10/18 auf dem Ziel, liegen bleiben
+  10/4/3. Meine Vorhersage war fuer die Ablage falsch. Wertungsfehler behoben: stabil auf der Platte
+  liegende Koerper, 25-26 mm neben der Mitte losgelassen, galten als nicht abgelegt.
+* **Ergaenzung**: [Die Auflagenhoehe ertasten](/mechanismen/hoehe-ertasten.md) - Nutzervorgabe
+  Kamera statt Tasten; das Tasten wird nicht weiter ausgebaut.
+
 * **Ergaenzung**: [Stapeln als Aufgabe](/fragen/stapeln-als-aufgabe.md) - Nutzerwunsch, auf
   BELIEBIGE Koerper zu stapeln. Einschaetzung: Wuerfel tragen bis ~12 mm Versatz, Balkenformen bis
   ~7 mm, die gemessene Ablagegenauigkeit liegt bei 19-25 mm - der Engpass ist die Ablage. Chance:
