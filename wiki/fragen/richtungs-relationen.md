@@ -3,7 +3,7 @@ type: Frage
 title: Richtungs-Relationen - links, rechts, davor, dahinter, herunter
 description: Nutzeridee 2026-09-24 - die Sprache um die Relationen links/rechts/davor/dahinter und die Aktion "herunter nehmen" erweitern. Analyse am Code und an den Stufe-4-Messungen. Kernpunkt - "herunter" gibt es als Aufgabe schon (Abstapeln), und die gepaarten Laeufe zeigen, dass eine Relation in der ADRESSE nur zaehlt, wenn die Eigenschaften allein nicht eindeutig sind. Richtungs-Relationen im BEZUG (Ablageziel) sind dagegen die erste Relation, fuer die es keinen anderen Weg gibt, das Ziel zu nennen. Mechanisch ist "links von Y" heute schon fast da (die Relation "an" zieht die Richtung zufaellig); offen sind das Bezugssystem und woher die Wortbedeutung gelernt wird. Vorschlag - Bedeutung aus der eigenen Ablage im Nachhinein etikettieren, das Wort ist die einzige Vorgabe.
 tags: [act23, sprache, stapeln, relation, nutzeridee]
-status: draft
+status: stable
 evidenz: vermutung
 ebene: code
 generated: { by: claude/opus-5.5, at: 2026-09-24T00:00:00Z }
@@ -26,8 +26,8 @@ sources:
 > **KLARSTELLUNG DES NUTZERS (2026-09-24):** gemeint war die Relation **ausschliesslich als
 > Zielpunkt fuer die Ablage** (BEZUG) - also genau das, was gebaut und gemessen ist. Die Relation
 > in der ADRESSE ("nimm den Wuerfel links vom blauen") war nicht gewuenscht und ist kein offener
-> Punkt dieser Idee. "Herunter nehmen" ist entsprechend als Ablageziel zu lesen: der Zielpunkt ist
-> der Tisch, nicht die Auflage.
+> Punkt dieser Idee. **"Herunter" gehoert nach Aussage des Nutzers nicht dazu** (ein Versehen in der
+> Ideenliste) - die Idee ist mit den vier Richtungswoertern als Ablageziel VOLLSTAENDIG umgesetzt.
 
 # Die Idee
 

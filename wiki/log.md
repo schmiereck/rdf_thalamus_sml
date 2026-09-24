@@ -10,6 +10,7 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 * **Ergaenzung**: [Richtungs-Relationen](/fragen/richtungs-relationen.md) - Klarstellung des
   Nutzers: die Relationen waren nur als ZIELPUNKT der Ablage gemeint (gebaut und gemessen), nicht
   als Relation in der Adresse. Der Punkt "Relation in der Adresse" ist damit kein offener Faden.
+  "Herunter" war laut Nutzer ein Versehen - die Idee ist mit den vier Richtungswoertern erledigt.
 
 * **Anlage**: [Richtungswoerter selbst gelernt](/befunde/richtungswoerter-selbst-gelernt.md) -
   `ACT23_ZIEL_RELATION=richtung` (b8a0f00), Bezugssystem Kamerabild nach Nutzerentscheidung.
