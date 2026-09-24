@@ -1,7 +1,7 @@
 ---
 type: Befund
-title: D0b-Handlandmark - Eigenbewegung ist sichtbar, ihr Schwerpunkt kein Greiferpunkt
-description: Ein ausgeführter Öffnen/Schließen-Impuls erzeugt in 36/36 Kamerapaaren ein eigenes Bildsignal. Der Schwerpunkt der Differenzmaske trifft die externe Klauenposition aber nur in 12/31 sichtbaren Fällen innerhalb 20 px; D0b braucht eine gelernte Bewegungsmaske statt dieser festen Auslese.
+title: D0b-Handlandmark - Eigenbewegung ist sichtbar, doch Punkt- und lokale Maskenauslese scheitern
+description: Fingerimpulse erzeugen zuverlässig ein eigenes Kamerasignal. Weder ihr Schwerpunkt noch ein auf zurückgehaltenen Posen gelernter, räumlich geteilter Bildpatch-Ausleser lokalisieren die Klaue ausreichend; D0b braucht eine räumlich gebundene Repräsentation.
 tags: [act23, dream-rsi, d0b, fovea, hand, selbstbewegung]
 status: stable
 evidenz: einzelmessung
@@ -17,6 +17,15 @@ sources:
   - id: evaluation
     resource: ../../log/d0b-hand-landmark/seed101-36pose/eval.jsonl
     title: Getrennte Geometrie-Evaluation der Klauenposition
+  - id: mask-probe
+    resource: ../../log/d0b-hand-mask/seed101-96pose/self_motion_frames.npz
+    title: 96 reine Kamera-/Selbstbewegungsbeobachtungen
+  - id: mask-tool
+    resource: ../../src/pc_cvnn/act23_d0b_hand_mask_audit.py
+    title: Positionsgetrennter NumPy-Maskenausleser
+  - id: mask-evaluation
+    resource: ../../log/d0b-hand-mask/seed101-96pose/linear-mask-audit/result.json
+    title: Getrennte Positionsauswertung des gelernten Maskenauslesers
 ---
 
 # Behauptung
@@ -73,11 +82,40 @@ einem vorangehenden Sechs-Posen-Bildtest ebenfalls instabil (5–80 px) und wird
 verwendet. Damit ist eine Laufzeitregel „hellgrau = Hand“ ebenso ausgeschlossen wie
 „Differenzschwerpunkt = Hand“.
 
+# Gelernter Maskenausleser
+
+Die Sonde speichert inzwischen zusätzlich zu den JSON-Protokollen die beiden echten Kamerabilder
+und das kontinuierliche RGB-Differenzfeld in einer komprimierten, nur lokalen `.npz`-Datei. Auf
+96 Positionen (Seed 101) werden alle Positionen mit `pose_id % 3 == 0` als vollständiger Test
+zurückgehalten. Ein kleiner NumPy-Ausleser erhält nur das offene 40×40-RGB-Bild. Seine Gewichte
+sind räumlich geteilt: jedes Ausgabepixel liest denselben 3×3-RGB-Patch. Trainiert wird es allein
+auf dem selbst erzeugten Differenzfeld; die Klauenposition wird erst nach der Vorhersage aus der
+getrennten Evaluation gelesen.
+
+| Größe | Wert |
+|---|---:|
+| Trainings- / Testpositionen | 64 / 32 |
+| sichtbare, gepaarte Testpositionen | 29 |
+| Masken-MSE, Ausleser | 0,00607 |
+| Masken-MSE, Konstante | 0,00675 |
+| Landmarkfehler, Median | 57,8 px |
+| Landmark ≤ 20 px | 5 / 29 |
+
+Der Ausleser lernt somit etwas vom Bewegungsfeld (MSE −10,1 % gegenüber der Konstante), aber
+nicht dessen Ort. Das ist keine widersprüchliche Aussage: Die geteilte lokale Filterregel erkennt
+helligkeitsartige Bewegung, kann jedoch Armteile, Finger und Schatten ohne übergreifende
+Geometrie nicht binden. Seine Landmark-Ausgabe ist deutlich schlechter als der gleichzeitig
+gemessene Differenzschwerpunkt; dieser Unterschied ist erwartbar, weil der Schwerpunkt die
+zweite, aktiv erzeugte Ansicht kennt, der Ausleser aber nur das offene Bild erhält.
+
 # Folgen
 
 D0b/F0 bleibt vor einem Greifzustandskopf gesperrt. Der nächste Kandidat ist ein kleiner
-**gelernter Ausleser einer verteilten Selbstbewegungsmaske**: Der Bildunterschied ist nur sein
-selbst erzeugtes Trainingsziel, nicht der spätere Landmark. Er muss auf ganzen, zurückgehaltenen
-Posen gegen dieselbe getrennte Evaluationsdatei mindestens Sichtbarkeit, Fehlerquantile und
-Enthaltungen belegen. Erst danach darf seine Bildraumreferenz zusammen mit `selection_px` das
+**räumlich gebundener** Ausleser einer verteilten Selbstbewegungsmaske. Der gerade verworfene
+lokale Patch-Ausleser darf nicht durch mehr Epochen oder eine andere Schwelle nachgetunt werden.
+Zuerst wird geprüft, ob der vorhandene Fovea-Zustand bei einer durch Selbstbewegung gesetzten
+Sakkade die Fingerregion räumlich bindet; erst ein vorab formulierter, auf ganzen Posen
+zurückgehaltener Vergleich gegen die lokale Baseline kann einen reicheren Kopf rechtfertigen.
+Der Bildunterschied bleibt nur sein selbst erzeugtes Trainingsziel, nie ein Laufzeitlabel. Erst
+nach einem bestandenen Landmark-Audit darf seine Bildraumreferenz zusammen mit `selection_px` das
 Mitbewegungs-Selbstetikett versuchen.

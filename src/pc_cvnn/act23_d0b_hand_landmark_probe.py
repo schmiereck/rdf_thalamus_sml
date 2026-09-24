@@ -78,7 +78,7 @@ def run(output: Path, poses=POSES):
     visual_path, eval_path = output / "visual.jsonl", output / "eval.jsonl"
     sim = BracketArmSim(render_wh=(240, 240))
     sim.set_reach_site("contact")
-    rows = []
+    rows, open_frames, closed_frames, motion_targets, pose_ids = [], [], [], [], []
     try:
         for pose_id, requested in enumerate(poses, 1):
             sim.reset_home(); sim.set_reach_site("contact"); _park_objects(sim)
@@ -90,6 +90,12 @@ def run(output: Path, poses=POSES):
             closed_img = _frame_at_grip(sim, CLOSED)
             landmark, support = motion_landmark(open_img, closed_img)
             truth = external_claw_landmark(sim)
+            # The continuous visual difference is the future head's self-generated target.  It
+            # stays on this side of the protocol boundary; the evaluator has no access to it.
+            open_frames.append(open_img)
+            closed_frames.append(closed_img)
+            motion_targets.append(np.abs(open_img.astype(np.int16) - closed_img.astype(np.int16)).sum(axis=2))
+            pose_ids.append(pose_id)
             record = {"schema": "act23-d0b-hand-visual-v1", "pose_id": pose_id,
                       "requested_xyz": list(requested), "reached_xyz": [float(x) for x in sim.grasp_pos()],
                       "open_angle": OPEN, "closed_angle": CLOSED,
@@ -109,6 +115,12 @@ def run(output: Path, poses=POSES):
               "max_error_px": None if not rows else float(max(rows)),
               "within_20px": int(sum(error <= 20.0 for error in rows)),
               "visual": str(visual_path), "evaluation": str(eval_path)}
+    frames_path = output / "self_motion_frames.npz"
+    np.savez_compressed(frames_path, pose_id=np.asarray(pose_ids, dtype=np.int32),
+                        open_rgb=np.asarray(open_frames, dtype=np.uint8),
+                        closed_rgb=np.asarray(closed_frames, dtype=np.uint8),
+                        motion_rgb_l1=np.asarray(motion_targets, dtype=np.int16))
+    result["self_motion_frames"] = str(frames_path)
     (output / "result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return result
 

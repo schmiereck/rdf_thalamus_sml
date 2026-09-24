@@ -2,6 +2,11 @@
 
 ## 2026-09-24
 
+* **D0b-Handmaske, lokaler Ausleser negativ**: [Selbstbewegung](/befunde/d0b-hand-selbstbewegung.md) -
+  auf 64/32 ganzen Trainings-/Testpositionen senkt der ausschließlich visuell trainierte
+  Patch-Ausleser die Masken-MSE um 10,1 %, verfehlt aber den Landmark-Ort (Median 57,8 px,
+  5/29 innerhalb 20 px). Keine Epochen-/Schwellensuche; Fovea-Raumbindung ist das nächste Tor.
+
 * **D0b-Handlandmark, erster Audit**: [Selbstbewegung](/befunde/d0b-hand-selbstbewegung.md) -
   36 ausgeführte Öffnen/Schließen-Impulse erzeugen 36 sichtbare Kameradifferenzen. Deren fester
   Schwerpunkt erreicht aber nur 12/31 sichtbare Klauen innerhalb 20 px (Median 24,2 px).
