@@ -7,6 +7,12 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-24
 
+* **Anlage**: [Richtungs-Relationen](/fragen/richtungs-relationen.md) und
+  [Struktur-Experte](/fragen/struktur-experte.md) - zwei Nutzerideen, am Code und an den gepaarten
+  Messungen analysiert. Relationen: im Ablageziel zuerst, weil nur dort die Aufgabe sie erzwingt;
+  Wortbedeutung aus eigener Ablage etikettieren. Experte: das Urteil ist der Engpass, nicht das
+  Vorschlagen; zuerst ein Experimentverwalter mit dreistufigem Urteil.
+
 * **Anlage**: [Der Stapel neben der Mitte](/befunde/stufe4-stapel-neben-der-mitte.md) - die drei
   gepaarten Arme noch einmal, der Koerper 16 mm neben der Plattenmitte
   (`ACT23_ABSTAPELN_VERSATZ`, Code 7b2405e; K2 mit `ACT23_ADR_REL_ANTEIL=1.0`, weil eine
