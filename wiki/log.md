@@ -2,6 +2,10 @@
 
 ## 2026-09-24
 
+* **D0b-F1b, zeitlicher Expertenpfad verworfen**: [F1b-Vertrag](/messungen/d0b-fovea-zeitbindung.md) -
+  die echte Bildfolge vor/nach eigenem Fingerimpuls erreicht in drei Seeds Median 42,4 px und
+  2/29, 5/29 bzw. 4/29 Klauen innerhalb 24 px. Zeitinformation allein löst die Bindung nicht.
+
 * **D0b-F1a, Architektur-Experte verworfen**: [F1a-Vertrag](/messungen/d0b-fovea-selbstbewegung.md) -
   der neue räumliche Fovea-Crop-MLP verfehlt auf demselben 64/32-Positionssplit in allen drei
   Initialisierungen beide Tore (Median 42,4/42,4/46,3 px; jeweils 5/29 innerhalb 24 px). Keine

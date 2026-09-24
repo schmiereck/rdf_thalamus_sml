@@ -160,11 +160,19 @@ F1a verbessert damit den eingefrorenen Topzustand (53,5 px) etwas, bleibt aber k
 Nach dem Vertrag wird diese Struktur auf dieser Datenbasis nicht durch mehr Epochen, andere Breite
 oder Schwellen nachoptimiert. Sie ist als erster Architektur-Experte sauber **verworfen**.
 
+# Zeitlicher F1b-Crop-Kopf
+
+F1b erhielt die beiden tatsächlich beobachteten Bilder vor und nach demselben eigenen
+Fingerimpuls, also ausdrücklich Zeitinformation statt der F1a-Einzelansicht. Sein separater
+[Vertrag](/messungen/d0b-fovea-zeitbindung.md) verlangte Median ≤24 px und mindestens 12/29
+Klauen innerhalb 24 px in zwei von drei Seeds. Ergebnis: alle drei Mediane 42,4 px, mit 2/29,
+5/29 und 4/29 Treffern. Auch dieser inhaltlich andere Expertenpfad ist ohne Nachoptimierung
+**verworfen**.
+
 # Folgen
 
-D0b/F0 bleibt vor einem Greifzustandskopf gesperrt. Der nächste Kandidat braucht eine von F1a
-inhaltlich verschiedene Hypothese, etwa zeitliche Bindung über mehrere eigene Bewegungen statt
-einer einzelnen offenen Ansicht. Der [Architektur-Expertenpfad](/entscheidungen/architektur-evolution-expertenpfad.md)
-verlangt dafür wieder eine eigene Selbstüberwachung, einen frischen Vertrag und einen Split nach
-ganzen Positionen. Erst nach bestandenem Landmark-Audit darf irgendeine Bildraumreferenz zusammen
+D0b/F0 bleibt vor einem Greifzustandskopf gesperrt. F1b widerlegt die enge Hypothese, dass die
+zweite Bildansicht allein die Bindung löst. Ein weiterer Kandidat braucht eine neue Aufgabe oder
+eine feinere, nicht auf neun grobe Sakkaden reduzierte räumliche Repräsentation und wieder einen
+eigenen Vertrag. Erst nach bestandenem Landmark-Audit darf irgendeine Bildraumreferenz zusammen
 mit `selection_px` das Mitbewegungs-Selbstetikett versuchen.

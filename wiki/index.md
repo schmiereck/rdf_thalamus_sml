@@ -110,6 +110,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Kopfloses A/B im vollen act23-Lauf](messungen/act23-headless-ab.md) - die einzige Ebene, auf der Wirkung behauptet werden darf
 * [Wiederholungsmessung EXV](messungen/exekutionsvarianz-exv.md) - trennt Ausfuehrungsstreuung von Situationssignal
 * [D0b-F1a Selbstbewegungs-Fovea](messungen/d0b-fovea-selbstbewegung.md) - räumlicher Crop-Kopf auf Eigenbewegung, vorab getornt und in 3/3 Seeds verworfen
+* [D0b-F1b zeitliche Selbstbewegungs-Fovea](messungen/d0b-fovea-zeitbindung.md) - Zweibild-Crop-Kopf vorab getornt und in 3/3 Seeds verworfen
 
 # Offene Fragen
 
