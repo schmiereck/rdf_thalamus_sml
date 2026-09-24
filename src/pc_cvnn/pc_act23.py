@@ -787,9 +787,27 @@ ZIEL_ABSTAND = float(os.environ.get("ACT23_ZIEL_ABSTAND", "0.05"))
 # GRASP_Z + h.  Alle Koerper dieser Welt sind 24 mm hoch (0,012 Halbmass), der Aufschlag ist
 # deshalb fuer alle derselbe.
 ZIEL_RELATION = os.environ.get("ACT23_ZIEL_RELATION", "an").strip().lower()
-if ZIEL_RELATION not in ("an", "auf", "richtung"):
-    raise SystemExit(f"ACT23_ZIEL_RELATION muss 'an', 'auf' oder 'richtung' sein, "
+if ZIEL_RELATION not in ("an", "auf", "richtung", "alle"):
+    raise SystemExit(f"ACT23_ZIEL_RELATION muss 'an', 'auf', 'richtung' oder 'alle' sein, "
                      f"nicht {ZIEL_RELATION!r}")
+# "alle" (Nutzerwunsch 2026-09-24): je Episode wird die Relation gewuerfelt -- "auf" mit 1/5,
+# sonst eines der vier Richtungswoerter.  Zusammen mit den zufaelligen Farb-/Formkombinationen
+# der Szene ist das das weite Spielfeld, auf dem Generalisierung auf NIE geuebte Kombinationen
+# beobachtbar wird (wiki/fragen/stapeln-als-aufgabe.md).
+# =========================================================================================
+# AUF BELIEBIGE KOERPER (ACT23_AUF_ALLE, Vorgabe 0).  Nutzerwunsch 2026-09-24.  Bisher nimmt
+# "auf" nur die STUETZEN (Platten), weil ein 24-mm-Wuerfel auf einem Wuerfel unter 12 mm Versatz
+# verlangt und die Ablage im Median 19-25 mm daneben liegt.  Der Nutzer will die Ablage AUF
+# anderen Koerpern trotzdem ueben -- das Ziel und das Hinlegen, nicht das Liegenbleiben.
+AUF_ALLE = os.environ.get("ACT23_AUF_ALLE", "0") == "1"
+# ERFOLG BEIM LOSLASSEN (ACT23_AUF_LOSLASSEN, Vorgabe 0).  Nutzervorgabe: "Wenn es beim
+# Loslassen herunter rutscht, finde ich das nicht schlimm ... verbesserungswuerdig, aber nicht
+# als Fehler."  Bei einer "auf"-Ablage zaehlt dann als geliefert, was im LETZTEN gehaltenen
+# Augenblick seitlich innerhalb der Liefertoleranz ueber dem Ziel stand und mit der Unterkante auf
+# Hoehe der Oberkante des Zielkoerpers war.  Ob es danach oben bleibt, steht getrennt im Protokoll.
+# EIGENER Schalter, nicht an AUF_ALLE gehaengt: er aendert das Erfolgsetikett, aus dem gelernt
+# wird, und muss einzeln abschaltbar sein.
+AUF_LOSLASSEN = os.environ.get("ACT23_AUF_LOSLASSEN", "0") == "1"
 # =========================================================================================
 # RICHTUNGS-RELATIONEN (ACT23_ZIEL_RELATION=richtung).  Nutzeridee 2026-09-24,
 # wiki/fragen/richtungs-relationen.md: "lege es LINKS / RECHTS / VOR / HINTER Y".
@@ -1001,7 +1019,7 @@ SOCKEL_HOEHEN = [float(v) / 1000.0 for v in os.environ.get("ACT23_SOCKEL_HOEHEN"
 # LAUT SAGEN, WAS FEHLT -- nicht still mitschalten.  Ein Schalter, der einen zweiten heimlich
 # umlegt, macht jedes A/B mehrdeutig (dieselbe Regel wie bei AUGMENT/NEIGHBOURS und EIG_DIREKT).
 # "auf" braucht DREI fremde Schalter, und ohne sie ist es nicht wirkungslos, sondern STILL FALSCH:
-if ZIEL_RELATION == "auf":
+if ZIEL_RELATION in ("auf", "alle"):
     _fehlt = []
     if not act16.GOAL_Z:
         _fehlt.append("ACT16_GOAL_Z=1 -- sonst wird die dritte Zielgroesse verworfen und die Klaue "
@@ -1037,14 +1055,15 @@ if ZIEL_RELATION == "auf":
                       "(sie steht nicht in state.OBJECTS), also braucht ihre Adresse den "
                       "klassenlosen Weg; sonst faellt JEDE Episode auf den Marker zurueck")
     if _fehlt:
-        print("  [Ziel-Relation] ACT23_ZIEL_RELATION=auf ist gesetzt, aber es fehlt:", flush=True)
+        print(f"  [Ziel-Relation] ACT23_ZIEL_RELATION={ZIEL_RELATION} ist gesetzt, aber es fehlt:",
+              flush=True)
         for _m in _fehlt:
             print(f"      {_m}", flush=True)
-    if not SOCKEL:
+    if not SOCKEL and not AUF_ALLE:
         print("  [Ziel-Relation] ACT23_SOCKEL ist NICHT gesetzt -- dann gibt es keine Stuetze in "
               "der Szene, auf die 'auf' zeigen koennte, und jede Episode faellt auf den Marker "
               "zurueck.", flush=True)
-if ZIEL_RELATION == "richtung" and not ZIEL_ADRESSE:
+if ZIEL_RELATION in ("richtung", "alle") and not ZIEL_ADRESSE:
     print("  [Ziel-Relation] ACT23_ZIEL_RELATION=richtung ohne ACT23_ZIEL_ADRESSE=1 -- ohne "
           "Zieladresse gibt es keinen Bezugskoerper, jede Episode legt am Marker ab.", flush=True)
 
@@ -2896,14 +2915,22 @@ def run_self_learning_steering(headless=False):
         state.ziel_bezug = None
         if state.ziel_modus != "koerper":
             return None
-        if ZIEL_MISCH is not None and ZIEL_RELATION == "auf" and float(crng.random()) >= ZIEL_MISCH:
+        if ZIEL_MISCH is not None and ZIEL_RELATION in ("auf", "alle") and float(crng.random()) >= ZIEL_MISCH:
             # AUFGABENMISCHUNG (s. ZIEL_MISCH): diese Episode ist eine gewoehnliche Marker-Ablage.
             # EIGENE Zeile, nicht [Zielwurf] -- das hier ist gewollt und kein gescheiterter Wurf; die
             # Auswertung muss beides trennen koennen.
             print("    [Ziel] Marker-Episode (Aufgabenmischung)", flush=True)
             return None
         _a = state.selected()[1]
-        if ZIEL_RELATION == "auf":
+        _rel = ZIEL_RELATION
+        if _rel == "alle":
+            _rel = "auf" if float(crng.random()) < 0.2 else "richtung"
+        if _rel == "auf" and AUF_ALLE:
+            # AUF JEDEN KOERPER (s. AUF_ALLE): Platten und alle Objekte der Szene.
+            _kand = [nm for nm in dict.fromkeys(list(state.STUETZEN)
+                                                + [nm for _l, nm, _m in state.OBJECTS])
+                     if nm != _a and not _geparkt_jetzt(nm)]
+        elif _rel == "auf":
             # AUF etwas gestellt wird nur, was tragen kann -- die STUETZEN.  Ein 24-mm-Wuerfel auf
             # einem 24-mm-Wuerfel verlangt unter 12 mm Versatz und ist bei gemessenen 21-25 mm
             # Ablagegenauigkeit von Anfang an unloesbar; die Auflage ist die Schwierigkeitsachse.
@@ -2920,7 +2947,7 @@ def run_self_learning_steering(headless=False):
             return None
         if not _kand:
             return _kein("kein Bezugskoerper verfuegbar"
-                         + (" (keine Stuetze in der Szene)" if ZIEL_RELATION == "auf" else ""))
+                         + (" (keine Stuetze in der Szene)" if _rel == "auf" else ""))
         _b = _kand[int(crng.integers(len(_kand)))]
         _sm = sim.d.mocap_pos.copy()
         _ds = [d for d in shape_clf.perceive_all(sim)
@@ -2949,7 +2976,7 @@ def run_self_learning_steering(headless=False):
         _ph0 = float(crng.uniform(0.0, 2.0 * np.pi))     # acht Peilungen ab einem zufaelligen
         _peil = [(_ph0 + 2.0 * np.pi * k / 8.0) for k in range(8)]   # Winkel, s. ZIEL_ADRESSE
         _wort = None
-        if ZIEL_RELATION == "richtung":
+        if _rel == "richtung":
             # DAS WORT WIRD NUR UNTER DEN ERREICHBAREN GEWUERFELT -- Aufgabenerzeugung, wie die Wahl
             # des Bezugskoerpers.  Der Arbeitsraum ist in y nur 140 mm breit; "links" 50 mm neben
             # einem Koerper am linken Rand ist keine Aufgabe, sondern ein sicherer Fehlschlag.
@@ -2971,8 +2998,8 @@ def run_self_learning_steering(headless=False):
             _wort = _ok[int(crng.integers(len(_ok)))]
         _txt = " + ".join(str(t) for t in _tri if t is not None) or "beliebig"
         state.ziel_bezug = {"tripel": _tri, "mess": _mess, "peilungen": _peil, "body": _b,
-                            "relation": ZIEL_RELATION, "wort": _wort,
-                            "label": ("auf " + _txt if ZIEL_RELATION == "auf"
+                            "relation": _rel, "wort": _wort,
+                            "label": ("auf " + _txt if _rel == "auf"
                                       else f"{_wort} von {_txt}" if _wort else _txt)}
         return _tri
 
@@ -6091,6 +6118,32 @@ def run_self_learning_steering(headless=False):
               f" | tragen {_carry_m:5.2f} (min {_carry_lo:4.2f}) | loesen {_rel_m:5.2f}  [N]"
               f"  | Messpunkte {_cnt or 'KEINE'}", flush=True)
         _rel = getattr(act16.run_combined, "_release", None)
+        _bzl = state.ziel_bezug
+        if _bzl is not None and _bzl.get("relation") == "auf" and _bzl.get("aufgeloest"):
+            # AUF ETWAS ABGELEGT? -- im LETZTEN gehaltenen Augenblick (s. AUF_LOSLASSEN).  Gemessen
+            # privilegiert wie das gewoehnliche Lieferurteil auch; gezaehlt wird es nur mit Schalter,
+            # protokolliert immer, damit ein Lauf ohne Schalter dieselbe Frage mitbeantwortet.
+            _sbl = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, _bzl["body"])
+            _obl = float(sim.obj_pos(_bzl["body"])[2] + sim.m.geom_size[sim.m.body_geomadr[_sbl]][2])
+            _hb = float(sim.m.geom_size[sim.m.body_geomadr[
+                mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, body)]][2])   # halbe Hoehe
+            _oben_jetzt = float(sim.obj_pos(body)[2]) - _hb > _obl - 0.004
+            if _rel is None:
+                print(f"    [Ablage auf] {_bzl['body']}: nie angehoben losgelassen -- nicht abgelegt",
+                      flush=True)
+            else:
+                _sl = 1000.0 * float(np.linalg.norm(_rel["cxy"] - _rel["tgt"]))
+                _uk = 1000.0 * (_rel["cz"] - _rel["obj_h"] - _obl)   # Unterkante minus Oberkante
+                _drauf = _sl < 1000.0 * act16.TOL and _uk > -4.0
+                _txt = (f"beim Loslassen seitlich {_sl:.0f}mm, Unterkante {_uk:+.0f}mm ueber der "
+                        f"Oberkante von {_bzl['body']} -> "
+                        + ("AUF DEM ZIEL abgelegt" if _drauf else "nicht auf dem Ziel")
+                        + (" | danach: bleibt oben" if _oben_jetzt else
+                           " | danach: rutschte ab (verbesserungswuerdig)" if _drauf else ""))
+                if AUF_LOSLASSEN and _drauf and not res.get("ok", False):
+                    res["ok"] = True
+                    _txt += "  => als GELIEFERT gewertet (ACT23_AUF_LOSLASSEN)"
+                print(f"    [Ablage auf] {_txt}", flush=True)
         if _rel is not None:
             # ABLAGE-MESSUNG (nur Diagnose): trennt "zu hoch losgelassen" von "seitlich verfehlt".
             # fall  = wie hoch das OBJEKT beim Oeffnen der Klaue noch ueber seiner Ruhelage stand
