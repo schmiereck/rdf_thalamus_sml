@@ -7,6 +7,11 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-24
 
+* **Ergaenzung**: [Stapeln als Aufgabe](/fragen/stapeln-als-aufgabe.md) - Nutzerwunsch, auf
+  BELIEBIGE Koerper zu stapeln. Einschaetzung: Wuerfel tragen bis ~12 mm Versatz, Balkenformen bis
+  ~7 mm, die gemessene Ablagegenauigkeit liegt bei 19-25 mm - der Engpass ist die Ablage. Chance:
+  die Tragfaehigkeit als selbst gelernte Eigenschaft.
+
 * **Ergaenzung**: [Richtungs-Relationen](/fragen/richtungs-relationen.md) - Klarstellung des
   Nutzers: die Relationen waren nur als ZIELPUNKT der Ablage gemeint (gebaut und gemessen), nicht
   als Relation in der Adresse. Der Punkt "Relation in der Adresse" ist damit kein offener Faden.

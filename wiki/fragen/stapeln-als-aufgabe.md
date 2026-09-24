@@ -181,6 +181,33 @@ sein Klassentor) und behoben: [Der Stapel wird sichtbar](/befunde/stapel-wird-si
    [Ertasten](/mechanismen/hoehe-ertasten.md), die dafuer schon stehen.
 3. Erst dann das A/B: Umstapeln gegen den heutigen Sonderfall.
 
+# Nutzerwunsch 2026-09-24: auf BELIEBIGE Koerper stapeln
+
+Nicht nur auf die Platte, sondern auf jeden vorhandenen Koerper der Szene. Heute verhindert das
+eine Zeile mit Begruendung: `_ziel_adresse_wuerfeln` nimmt fuer "auf" nur `state.STUETZEN`.
+Einschaetzung am Code und an den Messungen (Analyse, nicht gemessen):
+
+    Koerper            Grundriss (halbe Breite)     Versatz, bei dem ein 24-mm-Wuerfel noch traegt
+    Sockelplatten      25-35 mm                     bis ~25-35 mm
+    Wuerfel            12 mm                        unter 12 mm
+    L/U/T/X/Y          Balken 7 mm breit            quer zum Balken unter ~7 mm
+
+    gemessene Ablagegenauigkeit: Median 19-25 mm ([Ablage](/befunde/ablage-und-platzieren.md))
+
+* **Der Engpass ist die seitliche Ablagegenauigkeit, nicht die Sprache.** Auf einem Wuerfel
+  muesste der Arm etwa doppelt so genau ablegen wie heute im Median; auf den Balkenformen noch
+  genauer. Erwartung: selten erfolgreich, auf Balken fast nie.
+* **Wahrnehmung:** Koerper auf Koerper liest 16 mm Parallaxe
+  ([dort](/befunde/stapeln-bricht-die-tischebene.md)); gleichfarbige Stapel sind ueber die
+  Farbstreuung nicht trennbar. Die Hoehe ist dagegen einfach: alle Koerper sind 24 mm hoch.
+* **Die Chance fuer das [Projektziel](/ziel.md):** WELCHER Koerper traegt, muss dem Agenten
+  niemand sagen. Er kann es aus eigenen Versuchen lernen (liegt es danach oben oder nicht - das
+  Stapel-Selbsturteil gibt es) und daraus eine gelernte Eigenschaft "traegt" je Koerper bzw.
+  Form bilden. Das waere Aneignung einer neuen Eigenschaft, nicht nur einer neuen Aufgabe.
+
+Vorschlag: ein Schalter, der "auf" fuer alle Koerper oeffnet, eine ehrliche Messung, welche
+Paarungen gelingen, und die Tragfaehigkeit als selbst gelernte Eigenschaft.
+
 # Wie es weitergehen kann (Stand 2026-09-23)
 
 Nach dem [Sweep](/befunde/stufe4-sweep-widerlegt.md) ist das Hindernis nicht der Mechanismus,
