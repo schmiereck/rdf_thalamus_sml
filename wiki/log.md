@@ -7,6 +7,14 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-24
 
+* **Anlage**: [Richtungswoerter selbst gelernt](/befunde/richtungswoerter-selbst-gelernt.md) -
+  `ACT23_ZIEL_RELATION=richtung` (b8a0f00), Bezugssystem Kamerabild nach Nutzerentscheidung.
+  Spielphase 40 Ep "an": 27 Etiketten im Nachhinein, danach 3 von 4 Woertern innerhalb 1,5 Grad
+  der Kamera-Achse ("links" 18 Grad bei n = 5). Gepaart, 75 Episoden: gelernte Bedeutung gegen
+  Kamera-Geruest Worttreffer 51 gegen 47 (p = 0,42), geliefert 35 gegen 35, kein Rueckfall.
+  Neben dem Bezug trifft das Wort in 92-94 %, die Fehltreffer sind Ablagen 100 mm und mehr weg.
+  Selbsturteil = Welt in 123 von 124.
+
 * **Anlage**: [Richtungs-Relationen](/fragen/richtungs-relationen.md) und
   [Struktur-Experte](/fragen/struktur-experte.md) - zwei Nutzerideen, am Code und an den gepaarten
   Messungen analysiert. Relationen: im Ablageziel zuerst, weil nur dort die Aufgabe sie erzwingt;

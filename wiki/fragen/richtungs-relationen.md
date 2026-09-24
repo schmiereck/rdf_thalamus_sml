@@ -16,6 +16,13 @@ sources:
     title: Die Relation in der Adresse traegt nicht, wenn die Eigenschaften eindeutig sind
 ---
 
+> **GEBAUT UND GEMESSEN 2026-09-24** (Code b8a0f00), s.
+> [Richtungswoerter selbst gelernt](/befunde/richtungswoerter-selbst-gelernt.md): Bezugssystem
+> Kamerabild (Nutzerentscheidung). Aus 40 Spielepisoden mit "an" lernt der Agent die vier
+> Bedeutungen selbst (3 von 4 innerhalb 1,5 Grad), und die gelernte Bedeutung traegt gepaart
+> wie das Kamera-Geruest (Worttreffer 51 gegen 47, geliefert 35 gegen 35). Die Relation in der
+> ADRESSE ("der Wuerfel links vom blauen") und "herunter" als Wort sind noch nicht gebaut.
+
 # Die Idee
 
 Zur Relation "auf" kommen **links von, rechts von, davor, dahinter** und die Aktion
