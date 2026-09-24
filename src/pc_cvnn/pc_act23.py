@@ -808,6 +808,24 @@ AUF_ALLE = os.environ.get("ACT23_AUF_ALLE", "0") == "1"
 # EIGENER Schalter, nicht an AUF_ALLE gehaengt: er aendert das Erfolgsetikett, aus dem gelernt
 # wird, und muss einzeln abschaltbar sein.
 AUF_LOSLASSEN = os.environ.get("ACT23_AUF_LOSLASSEN", "0") == "1"
+# ERLAUBTE ZELLEN (ACT23_ZIEL_ZELLEN, Vorgabe leer = alle).  Fuer die Generalisierungsmessung
+# (wiki/befunde/generalisierung-relation-zielart.md): eine Zelle ist WORT:ZIELART, WORT aus
+# auf/links/rechts/vor/hinter, ZIELART aus platte/wuerfel/balken.  Ist die Liste gesetzt, wird je
+# Episode zuerst ein erlaubtes Wort gewuerfelt, dann ein Bezugskoerper einer dafuer erlaubten Art.
+# So lassen sich Kombinationen im Training AUSLASSEN und im Test gezielt abfragen.  Das ist
+# Aufgabenerzeugung (welche Uebung gestellt wird), keine Laufzeitregel.
+ZIEL_ZELLEN = {tuple(z.strip().lower().split(":")) for z in
+               os.environ.get("ACT23_ZIEL_ZELLEN", "").split(",") if z.strip()}
+for _z in ZIEL_ZELLEN:
+    if len(_z) != 2 or _z[0] not in ("auf", "links", "rechts", "vor", "hinter")             or _z[1] not in ("platte", "wuerfel", "balken"):
+        raise SystemExit(f"ACT23_ZIEL_ZELLEN: '{':'.join(_z)}' ist keine Zelle WORT:ZIELART")
+
+
+def zielart(body):
+    """Die Art eines Bezugskoerpers fuer ACT23_ZIEL_ZELLEN -- Aufgabenerzeugung, nicht Wahrnehmung."""
+    if body.startswith("sockel"):
+        return "platte"
+    return "wuerfel" if body in ("obj_red", "obj_green", "obj_blue") else "balken"
 # =========================================================================================
 # RICHTUNGS-RELATIONEN (ACT23_ZIEL_RELATION=richtung).  Nutzeridee 2026-09-24,
 # wiki/fragen/richtungs-relationen.md: "lege es LINKS / RECHTS / VOR / HINTER Y".
@@ -2923,7 +2941,13 @@ def run_self_learning_steering(headless=False):
             return None
         _a = state.selected()[1]
         _rel = ZIEL_RELATION
-        if _rel == "alle":
+        _zwort = None
+        if ZIEL_ZELLEN:
+            # ZELLEN (s. ZIEL_ZELLEN): erst das Wort, dann nur Bezugskoerper einer erlaubten Art.
+            _ws = sorted({w for w, _k in ZIEL_ZELLEN})
+            _zwort = _ws[int(crng.integers(len(_ws)))]
+            _rel = "auf" if _zwort == "auf" else "richtung"
+        elif _rel == "alle":
             _rel = "auf" if float(crng.random()) < 0.2 else "richtung"
         if _rel == "auf" and AUF_ALLE:
             # AUF JEDEN KOERPER (s. AUF_ALLE): Platten und alle Objekte der Szene.
@@ -2945,6 +2969,24 @@ def run_self_learning_steering(headless=False):
         def _kein(grund):
             print(f"    [Zielwurf] keine Adresse: {grund}", flush=True)
             return None
+        if _zwort is not None:
+            _kand = [nm for nm in dict.fromkeys(list(state.STUETZEN) + [n for _l, n, _m in state.OBJECTS])
+                     if nm != _a and not _geparkt_jetzt(nm) and (_zwort, zielart(nm)) in ZIEL_ZELLEN]
+            if _zwort != "auf":
+                # Nur Bezugskoerper, neben denen das Wort ueberhaupt erreichbar ist -- sonst verfiele
+                # die Episode (der Arbeitsraum ist in y nur 140 mm breit).  Aufgabenerzeugung.
+                from pc_cvnn.pc_act14 import REACH_XY
+                from pc_cvnn.pc_act16 import BASE_CLEAR
+                def _erreichbar(nm):
+                    _pp = sim.obj_pos(nm)[:2]
+                    _dw, _ = _wort_richtung(_zwort, _pp, laut=False)
+                    if _dw is None:
+                        return False
+                    _q = _pp + ZIEL_ABSTAND * _dw
+                    return bool(REACH_XY[0][0] <= _q[0] <= REACH_XY[1][0]
+                                and REACH_XY[0][1] <= _q[1] <= REACH_XY[1][1]
+                                and float(np.linalg.norm(_q)) >= BASE_CLEAR)
+                _kand = [nm for nm in _kand if _erreichbar(nm)]
         if not _kand:
             return _kein("kein Bezugskoerper verfuegbar"
                          + (" (keine Stuetze in der Szene)" if _rel == "auf" else ""))
@@ -2993,10 +3035,14 @@ def run_self_learning_steering(headless=False):
                 if (REACH_XY[0][0] <= _q[0] <= REACH_XY[1][0] and REACH_XY[0][1] <= _q[1] <= REACH_XY[1][1]
                         and float(np.linalg.norm(_q)) >= BASE_CLEAR):
                     _ok.append(_w)
+            if _zwort is not None:
+                _ok = [w for w in _ok if w == _zwort]
             if not _ok:
-                return _kein(f"{_b}: keine Richtung erreichbar")
+                return _kein(f"{_b}: keine Richtung erreichbar"
+                             + (f" ('{_zwort}')" if _zwort else ""))
             _wort = _ok[int(crng.integers(len(_ok)))]
         _txt = " + ".join(str(t) for t in _tri if t is not None) or "beliebig"
+        print(f"    [Zielzelle] {_wort or _rel}:{zielart(_b)} ({_b})", flush=True)   # Auswertung
         state.ziel_bezug = {"tripel": _tri, "mess": _mess, "peilungen": _peil, "body": _b,
                             "relation": _rel, "wort": _wort,
                             "label": ("auf " + _txt if _rel == "auf"
