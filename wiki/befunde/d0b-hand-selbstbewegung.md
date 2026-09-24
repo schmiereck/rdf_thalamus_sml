@@ -1,7 +1,7 @@
 ---
 type: Befund
-title: D0b-Handlandmark - Eigenbewegung ist sichtbar, doch auch die eingefrorene Fovea bindet die Finger nicht ausreichend
-description: Fingerimpulse erzeugen zuverlässig ein eigenes Kamerasignal. Schwerpunkt, lokaler Maskenausleser und der komplexe Topzustand der eingefrorenen Fovea verfehlen auf zurückgehaltenen Posen die Klaue; eine neue Fovea-Aufgabe braucht einen eigenen, isolierten Lernvertrag.
+title: D0b-Handlandmark - Eigenbewegung ist sichtbar, doch auch der erste räumliche Fovea-Crop-Kopf verfehlt sein Tor
+description: Fingerimpulse erzeugen zuverlässig ein eigenes Kamerasignal. Schwerpunkt, lokale Maske, eingefrorene Fovea und ein isolierter räumlicher Fovea-Crop-MLP verfehlen auf zurückgehaltenen Posen die Klaue; F1a ist ohne Nachoptimierung verworfen.
 tags: [act23, dream-rsi, d0b, fovea, hand, selbstbewegung]
 status: stable
 evidenz: einzelmessung
@@ -32,6 +32,15 @@ sources:
   - id: fovea-evaluation
     resource: ../../log/d0b-fovea-binding/seed101-96pose/result.json
     title: Positionsgetrennter Audit der Fovea-Sakkadenwahl
+  - id: crop-contract
+    resource: /messungen/d0b-fovea-selbstbewegung.md
+    title: Vorab festgelegter F1a-Vertrag und Ergebnis
+  - id: crop-tool
+    resource: ../../src/pc_cvnn/act23_d0b_fovea_crop_head_audit.py
+    title: Isolierter räumlicher Fovea-Crop-MLP
+  - id: crop-evaluation
+    resource: ../../log/d0b-fovea-crop-head/seed101-96pose/result.json
+    title: Drei positionsgetrennte F1a-Seed-Auswertungen
 ---
 
 # Behauptung
@@ -138,13 +147,24 @@ eine konstante Bildmitte. Sie erreicht aber nicht annähernd die für eine Handr
 Abdeckung. Der kleine Gewinn rechtfertigt weder einen Greifzustandskopf noch nachträgliches
 Tuning des linearen Auslesers. Er zeigt nur, dass die Fovea-Aufgabe nicht informationsleer ist.
 
+# Isolierter F1a-Crop-Kopf
+
+Der vorab festgelegte [F1a-Vertrag](/messungen/d0b-fovea-selbstbewegung.md) ist vollständig
+ausgeführt. Der neue MLP erhält räumlich gepoolte RGB-Werte eines vollständigen Hex-Fovea-Crops;
+die Auswahl des besten von neun Blickpunkten erfolgt nur aus diesem offenen Kamerabild. Das
+eigene Bewegungsfeld liefert beim Training das Ziel, die getrennte Klauengeometrie erst die
+Auswertung. Alle drei Initialisierungen verfehlen beide Vertragstore (Median ≤40 px und mindestens
+9/29 innerhalb 24 px): Seeds 11/17 erreichen 42,4 px und 5/29, Seed 23 46,3 px und 5/29.
+
+F1a verbessert damit den eingefrorenen Topzustand (53,5 px) etwas, bleibt aber kein Landmark.
+Nach dem Vertrag wird diese Struktur auf dieser Datenbasis nicht durch mehr Epochen, andere Breite
+oder Schwellen nachoptimiert. Sie ist als erster Architektur-Experte sauber **verworfen**.
+
 # Folgen
 
-D0b/F0 bleibt vor einem Greifzustandskopf gesperrt. Der nächste Kandidat ist keine Änderung am
-Teacher, sondern ein **neuer, isolierter Fovea-Lernzweig für Selbstbewegung**. Sein einziges
-Trainingsziel ist das vom eigenen Fingerimpuls erzeugte Bewegungsfeld; bestehende Fovea-Gewichte,
-die D0-Basis und der ACT23-Steuerpfad bleiben unangetastet. Vor der ersten Lernzeile muss sein
-Vertrag ganze Positionssplits, einen frischen Checkpoint, die getrennte Klauen-Evaluation und
-eine vorab festgelegte Landmark-/Enthaltungsmetrik enthalten. Erst nach bestandenem
-Landmark-Audit darf seine Bildraumreferenz zusammen mit `selection_px` das
-Mitbewegungs-Selbstetikett versuchen.
+D0b/F0 bleibt vor einem Greifzustandskopf gesperrt. Der nächste Kandidat braucht eine von F1a
+inhaltlich verschiedene Hypothese, etwa zeitliche Bindung über mehrere eigene Bewegungen statt
+einer einzelnen offenen Ansicht. Der [Architektur-Expertenpfad](/entscheidungen/architektur-evolution-expertenpfad.md)
+verlangt dafür wieder eine eigene Selbstüberwachung, einen frischen Vertrag und einen Split nach
+ganzen Positionen. Erst nach bestandenem Landmark-Audit darf irgendeine Bildraumreferenz zusammen
+mit `selection_px` das Mitbewegungs-Selbstetikett versuchen.

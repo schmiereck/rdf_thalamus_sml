@@ -2,6 +2,15 @@
 
 ## 2026-09-24
 
+* **D0b-F1a, Architektur-Experte verworfen**: [F1a-Vertrag](/messungen/d0b-fovea-selbstbewegung.md) -
+  der neue räumliche Fovea-Crop-MLP verfehlt auf demselben 64/32-Positionssplit in allen drei
+  Initialisierungen beide Tore (Median 42,4/42,4/46,3 px; jeweils 5/29 innerhalb 24 px). Keine
+  Nachoptimierung; nächste Hypothese braucht zeitliche Selbstbewegungsbindung.
+
+* **Architektur als Forschungsvariable**: [Architektur-Expertenpfad](/entscheidungen/architektur-evolution-expertenpfad.md) -
+  PC-CVNN und gewachsene Module sind veränderbar. Neue Experten bauen isolierte Varianten,
+  prüfen sie gegen vorab gesetzte Tore und integrieren nur reproduzierbare Gewinne.
+
 * **D0b-Fovea-Raumbindung negativ**: [Selbstbewegung](/befunde/d0b-hand-selbstbewegung.md) -
   auf 64/32 ganzen Trainings-/Testpositionen verbessert der eingefrorene komplexe Fovea-Topzustand
   die Sakkadenwahl gegenüber der Bildmitte (Median 53,5 statt 80,5 px), erreicht aber nur 4/29

@@ -109,7 +109,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 | Paket | Inhalt | Voraussetzung | Status | Befund / Entscheidung |
 |---|---|---|---|---|
 | D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | verworfen | Beide getrennten 120-Episoden-Linien verfehlen den Wrist-Pilotvertrag; Seed 29 bestätigt auf Seed 103 zwar Lieferung, aber nicht die erforderliche Ausrichtung. Neuer Kandidat nur mit neuem, vorab fixiertem Vertrag |
-| D0b | Selbstbeobachteter visueller Greifzustand | D0 geschlossen; F0-Portaudit | in Arbeit | [Hand-Selbstbewegung](/befunde/d0b-hand-selbstbewegung.md): auch eingefrorene Fovea-Raumbindung zu schwach (Median 53,5 px). Erst einen isolierten Selbstbewegungs-Fovea-Lernvertrag schreiben, kein Greifzustandskopf |
+| D0b | Selbstbeobachteter visueller Greifzustand | D0 geschlossen; F0-Portaudit | in Arbeit | [Hand-Selbstbewegung](/befunde/d0b-hand-selbstbewegung.md): F1a-Crop-Kopf verfehlt sein Tor in 3/3 Seeds. Nächste Hypothese muss zeitlich statt einzelbildbasiert sein; kein Greifzustandskopf |
 | D1 | Beobachtung, Checkpoints, Neustart- und Nichtbeeinflussungsnachweis | D0 | offen | - |
 | D2 | Kleine Bibliothek echter Trainingslinien | D1 | offen | - |
 | D3 | Replay mit Abdeckungs- und Informationspruefung | D2 | offen | - |
@@ -121,7 +121,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 | S1 | Motorisches Lernsignal und autonomer kurzer Regelkreis | S0, D1 | offen | - |
 | S2 | Eigene Anpassung und ACT23-Integration | S1 | offen | - |
 | S3 | Optional: Geschwindigkeit oder Drehmoment statt Winkelvorgabe | S2, eigener Befund zum Bedarf | offen | - |
-| F0 | Vorhandene Netzzustaende fuer neue Wahrnehmungsaufgaben pruefen | keine | in Arbeit | D0b-Hand-Selbstbewegung: bestehende Fovea schlägt Bildmitte, bindet Finger aber nicht ausreichend; isolierter Lernzweig braucht eigenen Vertrag |
+| F0 | Vorhandene Netzzustaende fuer neue Wahrnehmungsaufgaben pruefen | keine | in Arbeit | D0b-F1a: erster räumlicher Crop-Kopf verworfen (3/3); nächste Strukturhypothese braucht zeitliche Selbstbewegungsbindung und eigenen Vertrag |
 | F1 | Zusaetzlichen gelernten Wahrnehmungskopf verdrahten | F0, D1 | offen | - |
 | F2 | Detailstufe und Bestandserhalt | F1 | offen | - |
 | F3 | Mehrere Aufgaben und Integration mit Motorik | F1/F2; S2 fuer Motorvergleich | offen | - |

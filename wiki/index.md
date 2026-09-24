@@ -99,6 +99,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Vorgaben 2026-08-30](entscheidungen/defaults-2026-08-30.md) - der 1053-Episoden-Zustand wird Standard, samt ehrlichem Vorbehalt zur Greifergeometrie
 * [Die Wissensbasis wird ein Wiki im Repo](entscheidungen/wissensbasis-als-wiki.md) - warum, und was daran noch offen ist
 * [ACT23_WORLD_FULL_EVERY](entscheidungen/welt-fit-plan.md) - der Welt-Fit laeuft nur noch jede vierte Episode voll; **Vorgabe seit 2026-09-08**, Rueckfall mit n=1
+* [Architektur-Expertenpfad](entscheidungen/architektur-evolution-expertenpfad.md) - neue Netzstrukturen sind erlaubt, werden aber erst isoliert gegen feste Tore geprüft und nur bei reproduzierbarem Gewinn integriert
 
 # Messvorschriften
 
@@ -108,6 +109,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Dream-RSI: Evaluationsvertrag](messungen/dream-rsi-evaluation.md) - Entwurf: Zustand/Replay, unabhaengige Testdaten, Lernfortschritt und Gesamtkosten; in D0 vor dem ersten Experiment konkretisieren
 * [Kopfloses A/B im vollen act23-Lauf](messungen/act23-headless-ab.md) - die einzige Ebene, auf der Wirkung behauptet werden darf
 * [Wiederholungsmessung EXV](messungen/exekutionsvarianz-exv.md) - trennt Ausfuehrungsstreuung von Situationssignal
+* [D0b-F1a Selbstbewegungs-Fovea](messungen/d0b-fovea-selbstbewegung.md) - räumlicher Crop-Kopf auf Eigenbewegung, vorab getornt und in 3/3 Seeds verworfen
 
 # Offene Fragen
 
