@@ -714,6 +714,18 @@ EIG_DIREKT_FORM = os.environ.get("ACT23_EIG_DIREKT_FORM", "0") == "1"
 # ER DARF NIRGENDS ALS KLASSE GELESEN WERDEN -- die eine Stelle, die das taete, ist der
 # Fovea-Tracker (s. eig_servo); dort wird er ausdruecklich uebersprungen.
 EIG_GESEHEN = "~gesehen"
+# DIE DAUERHAFTE ADRESSE (ACT23_EIG_DAUERHAFT, Vorgabe 0 bis gemessen).  Befund
+# wiki/befunde/direkt-adresse-verkuerzt-aneignung.md: obj_V bekam die Direkt-Adresse 'cube' und
+# wurde in 15 Kommandos nie getroffen, mit 'cube + dick' (anderer Seed) in 7 von 16.  Zwei Teile:
+#   (1) ANLEGEN.  _adresse_wuerfeln sucht die KUERZESTE Adresse, die in DIESER Szene eindeutig
+#       ist.  Fuer ein Kommando, das jede Episode neu gewuerfelt wird, ist das richtig; eine
+#       Direkt-Adresse steht aber den ganzen Lauf und muss auch in Szenen tragen, die sie nie
+#       gesehen hat.  Sie nennt deshalb ALLE gemessenen Koerpereigenschaften (Form UND Groesse;
+#       die Farbe bleibt draussen, solange die Welt umfaerbt).
+#   (2) AUFLOESEN.  Passen mehrere Detektionen, gewinnt bisher die FLAECHENGROESSTE -- bei 'cube'
+#       also irgendein Wuerfel.  Mit dem Schalter gewinnt bei einer stetigen Adresse die, die dem
+#       GESPEICHERTEN MESSWERT am naechsten liegt.
+EIG_DAUERHAFT = os.environ.get("ACT23_EIG_DAUERHAFT", "0") == "1"
 # LAUT SAGEN, WAS FEHLT -- nicht still mitschalten (s. AUGMENT/NEIGHBOURS oben: ein Schalter, der
 # einen zweiten heimlich umlegt, macht jedes A/B mehrdeutig).  Ohne EIG_STETIG ist EIG_DIREKT
 # nicht wirkungslos, aber verstuemmelt: die Formachse faellt weg, weil es fuer eine unbekannte
@@ -1382,7 +1394,22 @@ def finde_nach_eigenschaften(sim, shape_clf, colours, farbe=None, form=None, gro
         treffer.append(det)
     if not treffer:
         return None, None, []
-    best = max(treffer, key=lambda d: float(d.get("area", 0.0)))
+    if EIG_DAUERHAFT and mess is not None and len(treffer) > 1:
+        # DER NAECHSTE ZUM MESSWERT, nicht der groesste (s. EIG_DAUERHAFT, Teil 2).  Abstand je
+        # genannter Achse auf ihre eigene Toleranz normiert, damit Form und Groesse vergleichbar
+        # zaehlen.
+        def _abst(det):
+            _s = 0.0
+            if form is not None and mess[1] is not None and det.get("desc") is not None:
+                _e = np.asarray(shape_clf.desc_embed(det["desc"]), float)
+                _s += float(np.linalg.norm(_e - np.asarray(mess[1], float))) / (
+                    EIG_TOL_FORM * eig_bezug(shape_clf))
+            if groesse is not None and mess[2] is not None and det.get("span") is not None:
+                _s += abs(float(det["span"]) - float(mess[2])) / EIG_TOL_SPAN
+            return _s
+        best = min(treffer, key=_abst)
+    else:
+        best = max(treffer, key=lambda d: float(d.get("area", 0.0)))
     return np.asarray(best["pos"], float), best, treffer
 
 
@@ -4382,8 +4409,12 @@ def run_self_learning_steering(headless=False):
                 _fo = EIG_GESEHEN
             if EIG_DIREKT_FORM and _fo is None:
                 continue              # ohne Formachse gibt es hier nichts zu adressieren
-            _tri = _adresse_wuerfeln((_f, _fo, _g), _mess, _p, ident=True,
-                                     start=([False, True, False] if EIG_DIREKT_FORM else None))
+            # DAUERHAFT (s. EIG_DAUERHAFT, Teil 1): mit Form UND Groesse beginnen.  Die Farbe ist
+            # oben schon gestrichen, wenn die Welt umfaerbt; sonst bleibt sie gewuerfelt.
+            _start = ([False, True, False] if EIG_DIREKT_FORM else None)
+            if EIG_DAUERHAFT:
+                _start = [bool(_f is not None and not FARB_MISCHUNG), _fo is not None, _g is not None]
+            _tri = _adresse_wuerfeln((_f, _fo, _g), _mess, _p, ident=True, start=_start)
             if _tri is None:
                 continue                  # weder Farbe noch Form -- eine reine Groessenadresse
                 #   waere blind (s. Nutzervorgabe in _auto_eig_umschreiben)
