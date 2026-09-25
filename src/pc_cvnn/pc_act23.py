@@ -725,7 +725,20 @@ EIG_GESEHEN = "~gesehen"
 #   (2) AUFLOESEN.  Passen mehrere Detektionen, gewinnt bisher die FLAECHENGROESSTE -- bei 'cube'
 #       also irgendein Wuerfel.  Mit dem Schalter gewinnt bei einer stetigen Adresse die, die dem
 #       GESPEICHERTEN MESSWERT am naechsten liegt.
-EIG_DAUERHAFT = os.environ.get("ACT23_EIG_DAUERHAFT", "0") == "1"
+# VORGABE 1 seit 2026-09-26 (Nutzerentscheidung nach der Messung: V/11 0/15 -> 5/16 geliefert,
+# Klaue am richtigen Koerper 38 -> 51 von 59).  Wirkt nur mit ACT23_EIG_STETIG bzw. EIG_DIREKT.
+EIG_DAUERHAFT = os.environ.get("ACT23_EIG_DAUERHAFT", "1") == "1"
+# DIE ADRESSE NACHFUEHREN (ACT23_EIG_NACHFUEHREN, Vorgabe 0 bis gemessen).  Eine Direkt-Adresse
+# stammt aus EINER Sichtung, und ein asymmetrischer Koerper sieht in jeder Lage anders aus
+# (gemessen: 9 von 56 Aufloesungen > 40 mm daneben, 26 von 56 mehrdeutig).  Nachgefuehrt wird
+# nach dem Muster von _streuung: hat der Agent den Koerper SELBST getragen, ist das Ding am
+# Loslass-Punkt dasselbe wie vorher -- Objektkonstanz aus der eigenen Handlung, kein Etikett.
+# Zwei Sicherungen gegen Verwechslung: die Adresse muss in DIESER Episode EINDEUTIG aufgeloest
+# haben (sonst kann der Arm etwas Fremdes getragen haben), und am Loslass-Punkt muss genau EIN
+# sauberer Fleck liegen.  Gespeichert werden BEISPIELE (hoechstens EIG_NACH_MAX), kein Mittelwert:
+# ein Mittel laege zwischen den Lagen.  Ein Treffer zaehlt, wenn er zu irgendeinem Beispiel passt.
+EIG_NACHFUEHREN = os.environ.get("ACT23_EIG_NACHFUEHREN", "0") == "1"
+EIG_NACH_MAX = int(os.environ.get("ACT23_EIG_NACH_MAX", "10"))
 # LAUT SAGEN, WAS FEHLT -- nicht still mitschalten (s. AUGMENT/NEIGHBOURS oben: ein Schalter, der
 # einen zweiten heimlich umlegt, macht jedes A/B mehrdeutig).  Ohne EIG_STETIG ist EIG_DIREKT
 # nicht wirkungslos, aber verstuemmelt: die Formachse faellt weg, weil es fuer eine unbekannte
@@ -1350,12 +1363,13 @@ def _eig_passt(det, namen, mess, shape_clf):
         if det.get("desc") is None:
             return False
         _e = np.asarray(shape_clf.desc_embed(det["desc"]), float)
-        if float(np.linalg.norm(_e - np.asarray(mess[1], float))) >                 EIG_TOL_FORM * eig_bezug(shape_clf):
+        # mess[1] darf mehrere Beispiele tragen (Zeilen, s. EIG_NACHFUEHREN): das naechste zaehlt
+        if float(np.min(np.linalg.norm(np.atleast_2d(np.asarray(mess[1], float)) - _e, axis=1))) >                 EIG_TOL_FORM * eig_bezug(shape_clf):
             return False
     if namen[2] is not None and mess[2] is not None:
         if det.get("span") is None:
             return False
-        if abs(float(det["span"]) - float(mess[2])) > EIG_TOL_SPAN:
+        if float(np.min(np.abs(np.atleast_1d(np.asarray(mess[2], float)) - float(det["span"]))))                 > EIG_TOL_SPAN:
             return False
     return True
 
@@ -1402,10 +1416,11 @@ def finde_nach_eigenschaften(sim, shape_clf, colours, farbe=None, form=None, gro
             _s = 0.0
             if form is not None and mess[1] is not None and det.get("desc") is not None:
                 _e = np.asarray(shape_clf.desc_embed(det["desc"]), float)
-                _s += float(np.linalg.norm(_e - np.asarray(mess[1], float))) / (
-                    EIG_TOL_FORM * eig_bezug(shape_clf))
+                _s += float(np.min(np.linalg.norm(np.atleast_2d(np.asarray(mess[1], float)) - _e,
+                                                  axis=1))) / (EIG_TOL_FORM * eig_bezug(shape_clf))
             if groesse is not None and mess[2] is not None and det.get("span") is not None:
-                _s += abs(float(det["span"]) - float(mess[2])) / EIG_TOL_SPAN
+                _s += float(np.min(np.abs(np.atleast_1d(np.asarray(mess[2], float))
+                                          - float(det["span"])))) / EIG_TOL_SPAN
             return _s
         best = min(treffer, key=_abst)
     else:
@@ -1568,6 +1583,8 @@ class CommandState23:
         # OBJECTS -- sonst koennte die Neugier sie zum Greifen auswaehlen -, werden aber von der
         # Szene aufgebaut und nach jeder Episode wiederhergestellt wie jeder andere Koerper.
         self.STUETZEN = []
+        self.EIG_MESS_EX = {}      # Koerper -> [(Formeinbettung, Spanne), ...] nachgefuehrt (EIG_NACHFUEHREN)
+        self.EIG_EINDEUTIG = {}    # Koerper -> loeste die Adresse in DIESER Episode eindeutig auf?
         self.EIG_MESS = {}         # Koerper -> (Chromatizitaet, Formeinbettung, Spanne) -- die
         #   GEMESSENEN Werte derselben drei Achsen (ACT23_EIG_STETIG).  Die Namen oben bleiben fuer
         #   Anzeige und Protokoll, gematcht wird auf diesen hier.  Wird wie EIGENSCHAFT NICHT
@@ -4543,6 +4560,57 @@ def run_self_learning_steering(headless=False):
                 out.append((d["shape"], nah))
         return out
 
+    def _eig_mess_fuer(body):
+        """Der Messwert einer stetigen Adresse, samt nachgefuehrter Beispiele (s. EIG_NACHFUEHREN).
+        Ohne Beispiele genau der gespeicherte Wert -- dann ist alles wie vorher."""
+        m = state.EIG_MESS.get(body)
+        ex = state.EIG_MESS_EX.get(body) or []
+        if m is None or not ex:
+            return m
+        emb = [np.asarray(m[1], float)] if m[1] is not None else []
+        spn = [float(m[2])] if m[2] is not None else []
+        emb += [np.asarray(e, float) for e, _s in ex if e is not None]
+        spn += [float(s) for _e, s in ex if s is not None]
+        return (m[0], np.vstack(emb) if emb else None, np.asarray(spn, float) if spn else None)
+
+    def _eig_nachfuehren(body, method, hand_xy, last):
+        """Die Adresse um die Sichtung am Loslass-Punkt erweitern -- nur nach eigenem Tragen und
+        eindeutiger Aufloesung (s. EIG_NACHFUEHREN).  Der Ort kommt aus der EIGENEN Hand."""
+        _eindeutig = state.EIG_EINDEUTIG.pop(body, False)
+        if not (EIG_NACHFUEHREN and method == "eigenschaft" and body in state.EIG_MESS):
+            return
+        if not _eindeutig or last <= 0.0 or hand_xy is None:
+            return
+        _h = np.asarray(hand_xy, float)
+        if not (-0.115 <= _h[0] <= 0.115 and 0.075 <= _h[1] <= 0.235):
+            return
+        saved = sim.d.mocap_pos.copy()
+        dets = shape_clf.perceive_all(sim)
+        sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+        nah = [d for d in dets if d.get("pos") is not None
+               and float(np.linalg.norm(np.asarray(d["pos"], float) - _h)) < 0.04]
+        if len(nah) != 1:
+            return                                         # verschmolzen oder mehrdeutig
+        d = nah[0]
+        _mth = shape_clf._merge_th()
+        if d.get("desc") is None or (_mth is not None and d.get("cspread") is not None
+                                     and float(d["cspread"]) > _mth):
+            return
+        if shape_clf.area_hi is not None and float(d.get("area", 0.0)) > shape_clf.area_hi:
+            return
+        e = np.asarray(shape_clf.desc_embed(d["desc"]), float)
+        s = float(d["span"]) if d.get("span") is not None else None
+        _alt = _eig_mess_fuer(body)
+        _abst = (float(np.min(np.linalg.norm(np.atleast_2d(_alt[1]) - e, axis=1)))
+                 / (EIG_TOL_FORM * eig_bezug(shape_clf)) if _alt and _alt[1] is not None else float("nan"))
+        ex = state.EIG_MESS_EX.setdefault(body, [])
+        ex.append((e, s))
+        if len(ex) > EIG_NACH_MAX:
+            del ex[0]
+        print(f"    [Eig-Nachfuehren] {body}: Sichtung vom Loslass-Punkt aufgenommen "
+              f"(Abstand zur bisherigen Adresse {_abst:.2f} Toleranzen, {len(ex)} Beispiele)",
+              flush=True)
+
     def _streuung(body, p0, last):
         """STREUUNG FUER EINE JUNGE KLASSE -- die Identitaet kommt aus der EIGENEN HANDLUNG.
 
@@ -5166,7 +5234,8 @@ def run_self_learning_steering(headless=False):
             _saved = sim.d.mocap_pos.copy()
             _pos, _det, _tr = finde_nach_eigenschaften(
                 sim, shape_clf, colours, _f, _fo, _g,
-                mess=(state.EIG_MESS.get(body) if EIG_STETIG else None))
+                mess=(_eig_mess_fuer(body) if EIG_STETIG else None))
+            state.EIG_EINDEUTIG[body] = bool(_pos is not None and len(_tr) == 1)
             sim.d.mocap_pos[:] = _saved
             mujoco.mj_forward(sim.m, sim.d)
             if _pos is not None and EIG_SPLIT:
@@ -6530,7 +6599,8 @@ def run_self_learning_steering(headless=False):
                 vc.viz.update(sim.render(CAM), "Szene aktualisiert")   # restore frame -> stale layout); a plain
             except Exception:                                  #   image refresh -- no colour-keyed track step
                 pass                                           #   that would walk the gaze off the final view
-        _streuung(body, snap.get(body, (None,))[0], _lift_m)   # zuerst die selbst getragene Sichtung
+        _streuung(body, snap.get(body, (None,))[0], _lift_m)
+        _eig_nachfuehren(body, method, hxy_end, _lift_m)       # dieselbe Handlungs-Identitaet   # zuerst die selbst getragene Sichtung
         #   einspeisen, DANN der Blick -- so profitiert er schon von der breiteren Klasse
         open_set_glance()                  # lifelong OPEN-SET look at the settled scene: young self-labelled
         #   classes keep growing exemplars over the new poses; an undiscovered novel object keeps feeding
