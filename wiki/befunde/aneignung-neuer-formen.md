@@ -19,6 +19,10 @@ sources:
 
 # obj_Y: selbst angeeignet, in beiden Seeds
 
+> **NICHT MEHR WIEDERHOLBAR (2026-09-25):** fuer den heutigen Zustand ist obj_Y nicht mehr neu -
+> die T-Klasse beansprucht es in 14 von 16 Lagen, ein Vorlauf ergab in 40 Episoden keine Geburt.
+> S. [Lerngeschwindigkeit mit neuem Koerper](/befunde/lerngeschwindigkeit-neuer-koerper.md).
+
 Neuer Koerper: drei Arme zu 120 Grad, je 14 x 26 mm, Spannweite 52 mm, Mitte **massiv** (kein
 Schlitz wie beim U). Bewusst gewaehlt, weil **jede** bestehende Form aus achsparallelen Kaesten
 bei 90 Grad gebaut ist - das Y bringt als erstes gedrehte Kaesten und 120-Grad-Winkel. Vorab

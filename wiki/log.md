@@ -7,6 +7,11 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-25
 
+* **Anlage**: [Lerngeschwindigkeit mit neuem Koerper](/befunde/lerngeschwindigkeit-neuer-koerper.md) -
+  Vorlauf mit obj_Y ergab nichts: die T-Klasse beansprucht es heute in 14 von 16 Lagen. Drei neue
+  Koerper (act14, nur bei Bedarf im Modell, 706c7f8), Sonde: Zylinder = Wuerfel, Stern und V
+  teilweise neu. Vier Laeufe: Knopf nach 41/68/75 Ep, einmal nie; Geburt->Knopf 30-56 Ep.
+
 * **Anlage**: [Lernkurven in der Rueckschau](/befunde/lernkurven-rueckschau.md) - Nutzerauftrag
   "aus der Lerngeschwindigkeit lernen". Prequentiell ueber die beiden Langlaeufe des Live-Zustands:
   alle Lerner flach; Weltmodell AUC 0,60 im Lauf (0,76 nach eigener Angabe), ueberzuversichtlich.
