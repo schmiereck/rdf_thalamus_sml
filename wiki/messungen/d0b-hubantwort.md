@@ -47,3 +47,29 @@ Fehlgriffe auswählt, wäre nachträglich gewählt. Der nächste zulässige Schr
 unabhängige, vorab mit diesem Merkmalsvektor und Enthaltungskriterium festgelegte
 Replikationsfamilie; erst dort darf eine Klassifikationsgüte gegen die getrennte Wahrheit
 bewertet werden. Der Befund steht in [D0b-Hubantwort](/befunde/d0b-hubantwort.md).
+
+# Replikationsvertrag v1
+
+Die explorative Seed-101-Auswertung ist abgeschlossen und wird nicht mehr für Wahl oder Tuning
+benutzt. Für zwei neue, vollständig eingefrorene Familien mit Seeds 103 und 107 gilt unverändert:
+
+* Eine Trajektorie ist nur bei mindestens zwei `lift`-Frames mit festem Blick und vollständigem
+  `selection_cell_com` gültig.
+* Der einzige Prädiktor ist die euklidische Distanz zwischen erstem und letztem Zell-Schwerpunkt.
+  Er lautet `getragen` ab 1,50 Zellen, `nicht getragen` bis 0,75 Zellen und sonst `Enthaltung`.
+* Der Auswerter liest die Wahrheit erst nach Erzeugung dieser drei Labels. Er prüft außerdem die
+  Zeilen- und ID-Gleichheit beider Dateien und bricht bei einem Liftframe ohne festen Blick ab.
+* Jede Familie umfasst 20 Episoden und braucht mindestens 12 gültige Trajektorien. Fehlt diese
+  Abdeckung, ist sie technisch unentschieden und wird nicht durch Nachziehen der Episodenzahl
+  ersetzt.
+* Der Wahrnehmungskandidat besteht nur, wenn beide Familien mindestens 0,80 Precision für
+  `getragen`, mindestens 0,50 Recall über alle tatsächlich getragenen gültigen Trajektorien und
+  höchstens 0,50 Enthaltungen erreichen. Ein einziger Verstoß verwirft diese feste Rohantwort;
+  kein Schwellen- oder Merkmals-Tuning folgt.
+
+Ausführbarer Auswerter:
+
+```powershell
+..\rdf_thalamus_sml\.venv\Scripts\python.exe src\pc_cvnn\act23_d0b_lift_response_audit.py `
+  log\d0b-lift-response\seed103-20ep --output log\d0b-lift-response\seed103-20ep\audit.json
+```

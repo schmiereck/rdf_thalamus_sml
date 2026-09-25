@@ -2,6 +2,11 @@
 
 ## 2026-09-25
 
+* **D0b-Hubantwort, Replikationsvertrag v1**: [Messvorschrift](/messungen/d0b-hubantwort.md) -
+  zwei neue 20-Episoden-Familien (Seeds 103/107) prüfen ausschließlich die nun fixierte
+  Schwerpunktantwort: getragen ab 1,50, nicht getragen bis 0,75 Zellen, sonst Enthaltung.
+  Der neue Auswerter prüft ID-Gleichheit und liest die getrennte Wahrheit erst nach dem Label.
+
 * **D0b-Hubantwort, Beobachtbarkeit belegt**: [Hubantwort](/befunde/d0b-hubantwort.md) -
   zwölf eingefrorene Episoden liefern 389/389 Liftframes mit festem Blick und vollständigem
   Fovea-Schwerpunkt. Bei sechs getragenen gegen vier nicht getragenen Trajektorien beträgt die
