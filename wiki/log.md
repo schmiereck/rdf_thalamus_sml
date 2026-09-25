@@ -5,6 +5,14 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-27
+
+* **Entscheidung + Ergaenzung**: [Die Direkt-Adresse verkuerzt die Aneignung](/befunde/direkt-adresse-verkuerzt-aneignung.md) -
+  `ACT23_EIG_DAUERHAFT` ist Vorgabe 1 (Nutzerauftrag, 82b9aa5). `ACT23_EIG_NACHFUEHREN` gebaut und
+  gemessen: 7 Nachfuehrungen in 400 Ep, alle 0,15-0,62 Toleranzen von der alten Adresse; Lieferungen
+  gleich (21 gegen 19), Fehlaufloesungen > 40 mm 16/67 gegen 9/56, mehrdeutig 51 gegen 26. Bleibt
+  Vorgabe 0. Folgerung: Gegenbeispiele statt mehr Beispiele.
+
 ## 2026-09-26
 
 * **Ergaenzung**: [Die Direkt-Adresse verkuerzt die Aneignung](/befunde/direkt-adresse-verkuerzt-aneignung.md) -

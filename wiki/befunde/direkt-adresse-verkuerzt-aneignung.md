@@ -118,6 +118,39 @@ Naheliegende Fortsetzung: den gespeicherten Messwert mit weiteren eigenen Sichtu
 **Einschraenkung:** ein Lauf je Koerper und Seed, 11-18 Kommandos. Der Schalter bleibt Vorgabe 0;
 die Empfehlung ist, ihn ueberall dort zu setzen, wo `ACT23_EIG_DIREKT=1` gesetzt wird.
 
+# Vorgabe und Nachfuehren (2026-09-27)
+
+**`ACT23_EIG_DAUERHAFT` ist seit 82b9aa5 Vorgabe 1** (Nutzerentscheidung nach der Messung oben).
+Er wirkt nur mit `ACT23_EIG_STETIG` bzw. `ACT23_EIG_DIREKT`; Laeufe ohne diese Schalter sind
+unveraendert. Wer eine stetige Eigenschafts-Messung von vor 82b9aa5 nachstellen will, setzt ihn
+auf 0.
+
+**`ACT23_EIG_NACHFUEHREN` (Vorgabe 0) - gemessen, bringt nichts, verschlechtert die Eindeutigkeit.**
+Gebaut nach dem Muster von `_streuung`: hat der Agent den Koerper selbst getragen UND die Adresse in
+dieser Episode eindeutig aufgeloest, und liegt am Loslass-Punkt genau ein sauberer Fleck, wird
+dessen Sichtung als weiteres BEISPIEL der Adresse gespeichert (hoechstens 10; ein Treffer zaehlt,
+wenn er zu irgendeinem Beispiel passt). Dieselben vier Laeufe:
+
+                        Dauerhaft                         Dauerhaft + Nachfuehren
+    geliefert           19 / 59                           21 / 61
+    nachgefuehrt        -                                 7-mal in 400 Episoden (1, 0, 1, 4 je Lauf)
+    Aufloesungen        56, davon > 40 mm 9, mehrdeutig 26    67, davon > 40 mm 16, mehrdeutig 51
+    Abstand der neuen Sichtungen zur bisherigen Adresse: 0,15-0,62 Toleranzen
+
+    (die Laeufe bleiben bis Episode 87 zeichengleich - das erste Beispiel aendert lange keine
+     Entscheidung)
+
+**Was das zeigt, und es ist wichtiger als der Schalter:** jede neue Sichtung lag NAHE an der alten
+Adresse. Der eigene Koerper faellt also nicht aus der Toleranz heraus - die Lage ist nicht das
+Problem. Die Fehlaufloesungen entstehen, weil ANDERE Koerper in die Toleranz fallen. Mehr Beispiele
+erweitern den Bereich, der als Treffer zaehlt, und machen genau das schlimmer (mehrdeutig 26 ->
+51). Die richtige Richtung ist die umgekehrte: die Adresse muss lernen, was sie NICHT treffen darf
+- etwa die Mitbewerber einer mehrdeutigen Aufloesung als Gegenbeispiele merken, oder die Toleranz
+aus dem Abstand zu ihnen ableiten statt aus dem globalen `eig_bezug`. Nicht gebaut.
+
+Einschraenkung: ein Lauf je Koerper und Seed; die Mehrdeutigkeits-Zaehlung stammt aus dem
+Debug-Protokoll und ist die belastbarste Zahl hier.
+
 # Fallen
 
 * **Vier Paare, 100 Episoden.** Die Richtung ist in allen vier gleich und gross; ein Nachweis im
