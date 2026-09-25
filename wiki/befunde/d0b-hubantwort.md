@@ -1,7 +1,7 @@
 ---
 type: Befund
-title: D0b-Hubantwort - feste Fovea zeigt einen Kandidaten für den visuellen Greifzustand
-description: Bei festem Blick verschiebt sich der Fovea-Auswahlschwerpunkt in sechs getragenen Lifttrajektorien stärker als in vier Fehlgriffen; die Einzelmessung ist noch kein Klassifikator.
+title: D0b-Hubantwort - feste Fovea-Rohantwort verfehlt den Replikationsvertrag
+description: Der erste Richtungsbefund hält als feste, enthaltende Zellantwort auf Seed 103 nicht: drei Fehlgriffe werden als getragen markiert, Precision 0,786 statt 0,80.
 tags: [act23, dream-rsi, d0b, fovea, hub, greifen, selbstbewegung]
 status: stable
 evidenz: einzelmessung
@@ -20,13 +20,22 @@ sources:
   - id: receipt
     resource: ../../log/d0b-lift-response/seed101-12ep/result.json
     title: Eingefrorene Laufquittung und Komponentenhashes
+  - id: replication-frames
+    resource: ../../log/d0b-lift-response/seed103-20ep/fovea_frames.jsonl
+    title: Neue, agentenzugängliche Seed-103-Foveatraces
+  - id: replication-truth
+    resource: ../../log/d0b-lift-response/seed103-20ep/eval_truth.jsonl
+    title: Getrennte Seed-103-Trageevaluation
+  - id: replication-audit
+    resource: ../../log/d0b-lift-response/seed103-20ep/audit.json
+    title: Festgeschriebene Rohantwort-Auswertung
 ---
 
 # Behauptung
 
-Eine eigene Hubbewegung erzeugt bei festem Fovea-Blick einen sichtbaren Kandidaten für
-„Objekt wird mit der Hand bewegt“. Der rohe, relativ zum Blick gemessene Auswahl-Schwerpunkt
-verändert sich in dieser kleinen Probe bei getragenen Objekten stärker als bei Fehlgriffen.
+Eine eigene Hubbewegung erzeugt bei festem Fovea-Blick eine messbare Bildantwort. Die einfache,
+aus dem ersten Audit festgeschriebene Zellantwort trennt Tragen und Fehlgriff jedoch nicht
+präzise genug und ist als Greifzustandsprädiktor verworfen.
 
 # Aufbau
 
@@ -68,10 +77,21 @@ positiven Trajektorien oberhalb 1,5 Zellen sind kein zulässiges Ergebnis, weil 
 aus genau denselben zehn Trajektorien abgelesen wurde. Auswahlmasse und Topzustand sind hier
 keine überzeugenden Alternativen.
 
+# Replikation
+
+Die vorab festgelegte Replikationsfamilie Seed 103 enthält 17 gültige Trajektorien. Sie erfüllt
+die Abdeckung (mindestens 12), Recall (11/13 = 0,846) und Enthaltung (2/17 = 0,118), doch drei
+Fehlgriffe werden als `getragen` markiert. Damit liegt die Precision bei 11/14 = 0,786 und unter
+dem vorher festgelegten Tor 0,80.[^replication-audit]
+
+Das ist kein Rundungsgrund für eine Schwellenänderung: Die Schwellen 1,50/0,75 und alle Tore
+standen bereits im Vertrag. Nach dessen expliziter Abbruchregel wird Seed 107 nicht gefahren;
+eine zweite Familie könnte den verworfenen Prädiktor nicht wieder zulassen.
+
 # Folgen
 
-D0b bleibt auf Prüfstandsebene offen. Als nächstes wird ein separater Vertrag für eine
-Replikationsfamilie festgelegt: die hier festgelegte Rohantwort wird ohne Nachanpassung gegen
-eine einfache, enthaltende Klassifikation geprüft, nach ganzen Trajektorien und mit weiterhin
-getrennter Tragewahrheit. Erst ein bestandener, reproduzierter Wahrnehmungsbefund erlaubt einen
-lernenden Verbraucher im ACT23-Pfad.
+Die feste Schwerpunktantwort wird weder nachoptimiert noch als Lernkopf oder Laufzeitregel
+verdrahtet. D0b/F0 ist mit den bisher geprüften Handlandmarks, Crop-Köpfen und dieser Rohantwort
+zurückgestellt. Ein späterer Neustart braucht eine eigenständige Repräsentations- oder
+Aufgabenhypothese samt neuem Vertrag; höhere Fovea-Auflösung oder ein Motorpfad sind dadurch
+nicht belegt.

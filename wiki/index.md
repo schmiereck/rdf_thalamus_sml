@@ -41,7 +41,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [D0b: visueller Greifzustand](entscheidungen/d0b-visueller-greifzustand.md) - neuer Kandidat nach D0: Fovea-Bildfolge und eigene Hubbewegung sollen Objekt-im-Greifer ohne Simulatoretikett sichtbar machen; erst danach ein Handlungsverbraucher
 * [D0b-Portaudit](befunde/d0b-fovea-portaudit.md) - Fovea-Auswahl und externe Evaluation sind getrennt vollständig; sichtbare Auswahl trennt den Fehlgriff nicht und benötigt eine Hand-Bildraumreferenz
 * [D0b-Hand-Selbstbewegung](befunde/d0b-hand-selbstbewegung.md) - Fingerimpuls erzeugt ein eigenes Kamerasignal, doch Schwerpunkt, lokale Maske und eingefrorene Fovea verfehlen den Greifer; neuer Fovea-Lernzweig braucht einen isolierten Vertrag
-* [D0b-Hubantwort](befunde/d0b-hubantwort.md) - bei festem Fovea-Blick reagiert der Auswahl-Schwerpunkt in 6 getragenen Lifttrajektorien stärker als in 4 Fehlgriffen; Replikation vor Klassifikation
+* [D0b-Hubantwort](befunde/d0b-hubantwort.md) - feste Schwerpunktantwort scheitert auf neuer Seed-103-Familie an Precision 0,786 statt 0,80; kein Tuning und keine Integration
 * [Exekutionsvarianz](befunde/exekutionsvarianz.md) - ICC 0,61, Obergrenze 82 % gegen Grundrate 54 %; der Deckel sitzt in der Situationsrepraesentation
 * [1109 Episoden ohne Lernfortschritt](befunde/langlauf-ohne-fortschritt.md) - 43 h GUI-Lauf, vier unabhaengige Groessen flach
 * [Selbst-Aneignung stockt](befunde/selbstaneignung-stockt.md) - 17/17 und 14/14 selbst geborene Klassen verhungern, keine je kommandiert

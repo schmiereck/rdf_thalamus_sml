@@ -104,7 +104,8 @@ negativ geprüft.
 
 Der neue [Hubantwort-Befund](/befunde/d0b-hubantwort.md) umgeht die fehlende Handposition ohne
 Homographie: Während des Hebens bleibt der Blick fixiert und der Auswahl-Schwerpunkt verschiebt
-sich bei sechs getragenen Trajektorien stärker als bei vier Fehlgriffen. Das ist nur eine
-Einzelmessung. Nächster Schritt ist eine vorab festgelegte Replikationsfamilie für einen
-enthaltenden Rohantwort-Klassifikator; ein Lernvergleich und jeder Eingriff in Schließen oder
-Servos bleiben bis zu deren Bestehen gesperrt.
+sich in der ersten Stichprobe bei getragenen Trajektorien stärker. Die danach fixierte,
+enthaltende Rohantwort scheitert jedoch schon auf Seed 103 an drei falsch-positiven Fehlgriffen
+(Precision 0,786 statt 0,80). Sie wird nicht nachoptimiert oder integriert. Ein Lernvergleich
+und jeder Eingriff in Schließen oder Servos bleiben gesperrt, bis eine neue, unabhängige
+Wahrnehmungshypothese einen eigenen Vertrag besteht.

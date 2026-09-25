@@ -109,7 +109,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 | Paket | Inhalt | Voraussetzung | Status | Befund / Entscheidung |
 |---|---|---|---|---|
 | D0 | Gemeinsame Basis, messbare Lernaufgabe, vorab fixierter Versuch | keine | verworfen | Beide getrennten 120-Episoden-Linien verfehlen den Wrist-Pilotvertrag; Seed 29 bestätigt auf Seed 103 zwar Lieferung, aber nicht die erforderliche Ausrichtung. Neuer Kandidat nur mit neuem, vorab fixiertem Vertrag |
-| D0b | Selbstbeobachteter visueller Greifzustand | D0 geschlossen; F0-Portaudit | in Arbeit | [Hubantwort](/befunde/d0b-hubantwort.md): bei festem Blick 3,89 statt 0,60 Zellen Rohantwort (6/4 Trajektorien, Einzelmessung). Replikationsvertrag vor jedem Klassifikator; kein Greifzustandskopf |
+| D0b | Selbstbeobachteter visueller Greifzustand | D0 geschlossen; F0-Portaudit | zurückgestellt | [Hubantwort](/befunde/d0b-hubantwort.md): feste Rohantwort scheitert auf neuer Seed-103-Familie an Precision 0,786 statt 0,80. Kein Tuning und kein Greifzustandskopf |
 | D1 | Beobachtung, Checkpoints, Neustart- und Nichtbeeinflussungsnachweis | D0 | offen | - |
 | D2 | Kleine Bibliothek echter Trainingslinien | D1 | offen | - |
 | D3 | Replay mit Abdeckungs- und Informationspruefung | D2 | offen | - |
@@ -121,7 +121,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 | S1 | Motorisches Lernsignal und autonomer kurzer Regelkreis | S0, D1 | offen | - |
 | S2 | Eigene Anpassung und ACT23-Integration | S1 | offen | - |
 | S3 | Optional: Geschwindigkeit oder Drehmoment statt Winkelvorgabe | S2, eigener Befund zum Bedarf | offen | - |
-| F0 | Vorhandene Netzzustaende fuer neue Wahrnehmungsaufgaben pruefen | keine | in Arbeit | D0b-F1a: erster räumlicher Crop-Kopf verworfen (3/3); nächste Strukturhypothese braucht zeitliche Selbstbewegungsbindung und eigenen Vertrag |
+| F0 | Vorhandene Netzzustaende fuer neue Wahrnehmungsaufgaben pruefen | keine | zurückgestellt | D0b-F1a/F1b und feste Hubantwort verworfen; ein neuer F0-Zweig braucht eine eigenständige Repräsentationshypothese und Vertrag |
 | F1 | Zusaetzlichen gelernten Wahrnehmungskopf verdrahten | F0, D1 | offen | - |
 | F2 | Detailstufe und Bestandserhalt | F1 | offen | - |
 | F3 | Mehrere Aufgaben und Integration mit Motorik | F1/F2; S2 fuer Motorvergleich | offen | - |

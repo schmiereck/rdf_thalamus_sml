@@ -73,3 +73,16 @@ Ausführbarer Auswerter:
 ..\rdf_thalamus_sml\.venv\Scripts\python.exe src\pc_cvnn\act23_d0b_lift_response_audit.py `
   log\d0b-lift-response\seed103-20ep --output log\d0b-lift-response\seed103-20ep\audit.json
 ```
+
+# Replikation Seed 103: verworfen
+
+Seed 103 liefert 20 vollständige Episoden, 17 gültige Lifttrajektorien und unveränderte
+Basis-SHA `ad9d768c...c09b9e`; der Lauf hat keine Lernkomponenten geändert. Der festgelegte
+Auswerter erzeugt 14-mal `getragen`, einmal `nicht getragen` und zweimal Enthaltung. Gegen die
+erst nach der Labelbildung gelesene Wahrheit sind dies TP=11, FP=3, FN=1, TN=0: Precision
+0,786, Recall 0,846 und Enthaltung 0,118.
+
+Die Abdeckung, Recall- und Enthaltungs-Tore bestehen, die Precision verfehlt mit 0,786 jedoch
+das vorab festgelegte 0,80-Tor. Nach dem Vertrag verwirft bereits dieser Verstoß die feste
+Rohantwort; Seed 107 wird deshalb nicht als Rettungs-, Schwellen- oder Merkmals-Tuning
+ausgeführt. Der negative Befund steht in [D0b-Hubantwort](/befunde/d0b-hubantwort.md).

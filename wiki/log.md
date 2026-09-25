@@ -2,6 +2,11 @@
 
 ## 2026-09-25
 
+* **D0b-Hubantwort, feste Rohregel verworfen**: [Hubantwort](/befunde/d0b-hubantwort.md) -
+  Seed 103 erfüllt die technische Abdeckung mit 17 Trajektorien, verfehlt aber mit 11 TP,
+  3 FP, 1 FN und 0 TN die fixierte Precision 0,80 (erreicht 0,786). Kein Schwellen-Tuning,
+  keine zweite Rettungsfamilie und keine Integration als Greifzustand.
+
 * **D0b-Hubantwort, Replikationsvertrag v1**: [Messvorschrift](/messungen/d0b-hubantwort.md) -
   zwei neue 20-Episoden-Familien (Seeds 103/107) prüfen ausschließlich die nun fixierte
   Schwerpunktantwort: getragen ab 1,50, nicht getragen bis 0,75 Zellen, sonst Enthaltung.
