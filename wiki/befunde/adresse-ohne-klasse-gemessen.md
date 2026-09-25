@@ -16,6 +16,11 @@ sources:
     title: Der Bau und die zwei Defekte, die dabei auffielen
 ---
 
+> **BESTAETIGT 2026-09-26 im trainierten Zustand**, mit zwei weiteren Koerpern (Stern, V): erstes
+> Kommando Ep 8-22 statt 43-80 bzw. nie, s. [Die Direkt-Adresse verkuerzt die Aneignung](/befunde/direkt-adresse-verkuerzt-aneignung.md).
+> Neue Grenze dort: eine Adresse, die nur eine bekannte Klasse nennt (`'cube'`), trifft den neuen
+> Koerper nicht.
+
 # Nachtrag 2026-09-16: die Ursache war eine andere
 
 **Die Zahlen dieser Seite stehen. Ihre Erklaerung nicht.** Die Seite las die Spaltung als

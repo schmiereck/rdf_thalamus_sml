@@ -5,6 +5,13 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-26
+
+* **Anlage**: [Die Direkt-Adresse verkuerzt die Aneignung](/befunde/direkt-adresse-verkuerzt-aneignung.md) -
+  Nutzerauftrag, die offene Frage der Zeitverkuerzung. Vier Paare Kette gegen Direkt: erstes
+  Kommando Ep 8/22/8/20 statt nie/43/80/76, 4 von 4 Paaren (p = 0,125). Lieferquote auf dem neuen
+  Koerper gleich. Eine Adresse `'cube'` trifft den neuen Koerper nicht (V/11: 0 von 15).
+
 ## 2026-09-25
 
 * **Anlage**: [Lerngeschwindigkeit mit neuem Koerper](/befunde/lerngeschwindigkeit-neuer-koerper.md) -

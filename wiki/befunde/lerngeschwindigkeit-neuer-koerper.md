@@ -69,6 +69,9 @@ ist der Lauf wieder bitgleich.
 
 # Was die Lerngeschwindigkeit hier zeigt
 
+> **GEMESSEN 2026-09-26:** die Direkt-Adresse verkuerzt die Zeit bis zum ersten Kommando auf 8-22
+> Episoden, in allen vier Paaren - s. [dort](/befunde/direkt-adresse-verkuerzt-aneignung.md).
+
 Sie misst **nicht das Lernen, sondern die Vergabe**: der Agent hat die Klasse schnell, die
 Kommandierbarkeit spaet. Das ist die bekannte
 [Vergabe-Engstelle](/befunde/vergabe-engstelle-diagnose.md), jetzt mit einer Zeitangabe. Damit ist
