@@ -7,6 +7,12 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-26
 
+* **Ergaenzung**: [Die Direkt-Adresse verkuerzt die Aneignung](/befunde/direkt-adresse-verkuerzt-aneignung.md) -
+  Nutzerauftrag, die cube-Luecke geschlossen: `ACT23_EIG_DAUERHAFT` (b94bb66). Ursache zweiteilig
+  (kuerzeste in DIESER Szene eindeutige Adresse; bei Mehrdeutigkeit der flaechengroesste Treffer),
+  nicht der Klassenname. V/11 0/15 -> 5/16, Klaue am Koerper 2/15 -> 13/16; Rest unveraendert. Offen:
+  9 von 56 Aufloesungen noch > 40 mm daneben.
+
 * **Anlage**: [Die Direkt-Adresse verkuerzt die Aneignung](/befunde/direkt-adresse-verkuerzt-aneignung.md) -
   Nutzerauftrag, die offene Frage der Zeitverkuerzung. Vier Paare Kette gegen Direkt: erstes
   Kommando Ep 8/22/8/20 statt nie/43/80/76, 4 von 4 Paaren (p = 0,125). Lieferquote auf dem neuen

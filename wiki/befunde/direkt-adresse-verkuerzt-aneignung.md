@@ -19,6 +19,10 @@ sources:
     title: Dieselbe Frage am 2026-09-16 im frischen Zustand (7 gegen 22 Episoden)
 ---
 
+> **LUECKE GESCHLOSSEN 2026-09-26** (Abschnitt unten, Code b94bb66): mit `ACT23_EIG_DAUERHAFT=1`
+> nennt die Direkt-Adresse Form UND Groesse, und mehrdeutige Treffer gehen an den naechsten zum
+> Messwert. V/11: `'cube + mittel'`, 5 von 16 geliefert statt 0 von 15.
+
 # Die Frage
 
 Die [Kettenlaeufe](/befunde/lerngeschwindigkeit-neuer-koerper.md) zeigten: der Agent bildet die
@@ -65,6 +69,54 @@ Formadresse bekommen.
    `'cube + dick'`; das Groessenband trennte das V von den echten Wuerfeln, und es klappte (7 von 16).
    Das ist die bekannte Grenze **"Eindeutigkeit ist nicht Richtigkeit"**: die Adresse wird beim
    Wuerfeln auf Eindeutigkeit in DIESER Szene geprueft, spaeter stehen andere Koerper da.
+
+# Die Luecke geschlossen: ACT23_EIG_DAUERHAFT (Nutzerauftrag)
+
+Die Ursache hatte zwei Teile (am Code):
+
+1. **Anlegen.** `_adresse_wuerfeln` sucht die KUERZESTE Adresse, die in DIESER Szene eindeutig ist.
+   Richtig fuer ein Kommando, das jede Episode neu gewuerfelt wird; falsch fuer eine Direkt-Adresse,
+   die den ganzen Lauf steht. Beim V/11 stand im Moment der Sichtung kein Wuerfel in der Szene, also
+   genuegte `'cube'`.
+2. **Aufloesen.** `finde_nach_eigenschaften` nimmt bei mehreren Treffern still den
+   FLAECHENGROESSTEN - bei `'cube'` also irgendeinen Wuerfel.
+
+Nicht die Ursache war der Klassenname: bei stetiger Adressierung vergleicht `_eig_passt` die Form
+ohnehin ueber den Vektor; `'cube'` ist dort nur das Etikett der Achse.
+
+Mit `ACT23_EIG_DAUERHAFT=1` (Vorgabe 0) nennt die Direkt-Adresse alle gemessenen Eigenschaften des
+Koerpers (Form und Groesse; die Farbe bleibt draussen, solange die Welt umfaerbt), und bei
+mehreren Treffern gewinnt der, der dem gespeicherten Messwert am naechsten liegt (Abstand je Achse
+auf ihre Toleranz normiert). Dieselben vier Laeufe, dazu `ACT23_DEBUG=1` fuer die echte
+Aufloesung:
+
+    Koerper Seed   Direkt                                   Direkt + Dauerhaft
+    V        11    'cube'          0 / 15, Klaue am V  2/15  'cube + mittel'   5 / 16, Klaue 13/16
+    V        23    'cube + dick'   7 / 16, Klaue 10/16       'cube + dick'     7 / 14, Klaue 13/14
+    Stern    11    '~gesehen'      6 / 17, Klaue 15/17       '~gesehen + dick' 4 / 18, Klaue 14/18
+    Stern    23    'neu-13 + dick' 3 / 11, Klaue 11/11       unveraendert (Adresse war schon vollstaendig;
+                                                             der Lauf ist zeichengleich)
+    zusammen       16 / 59 geliefert, Klaue 38/59            19 / 59 geliefert, Klaue 51/59
+    erstes Kommando unveraendert: Ep 8 / 22 / 8 / 20
+
+    echte Aufloesung (nur im Dauerhaft-Arm protokolliert):
+      V/11      19x  Median 14 mm   > 40 mm: 6   mehrdeutig: 2
+      V/23      25x  Median 14 mm   > 40 mm: 0   mehrdeutig: 15
+      Stern/11  12x  Median  1 mm   > 40 mm: 3   mehrdeutig: 9
+
+**Der Problemfall ist behoben** (0 -> 5 Lieferungen, Klaue am richtigen Koerper 2 -> 13 von 15/16),
+die schnelle Aneignung bleibt, und der Arm fasst insgesamt deutlich oefter am richtigen Koerper zu
+(51 gegen 38 von 59). Die Lieferungen auf den anderen drei sind im Rauschen gleich.
+
+**Was bleibt:** in 9 von 56 protokollierten Aufloesungen landet die Adresse noch ueber 40 mm
+daneben, also vermutlich auf einem anderen Koerper, und MEHRDEUTIG ist sie haeufig (26 von 56) - die
+Wahl nach dem Messwert entscheidet diese Faelle meist richtig, nicht immer. Das zeigt die Grenze
+einer Adresse aus EINER Sichtung: ein asymmetrischer Koerper sieht in jeder Lage etwas anders aus.
+Naheliegende Fortsetzung: den gespeicherten Messwert mit weiteren eigenen Sichtungen nachfuehren
+(die Adresse ist heute eingefroren).
+
+**Einschraenkung:** ein Lauf je Koerper und Seed, 11-18 Kommandos. Der Schalter bleibt Vorgabe 0;
+die Empfehlung ist, ihn ueberall dort zu setzen, wo `ACT23_EIG_DIREKT=1` gesetzt wird.
 
 # Fallen
 
