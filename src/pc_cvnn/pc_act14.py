@@ -117,11 +117,45 @@ def _y_arm_xml(breite_mm):
             + chr(10).join(teile) + chr(10) + "    </body>")
 
 
+# NEUE KOERPER FUER DIE LERNGESCHWINDIGKEIT (2026-09-25).  NICHT in der XML-Datei, sondern nur
+# eingefuegt, wenn ein Lauf sie braucht: gemessen veraendern schon drei zusaetzliche, geparkte
+# Koerper den Ablauf (Seed 11, Episode 2: 31 gegen 40 mm).  Eingefuegt wird, wenn ACT14_NEUE_KOERPER=1
+# gesetzt ist oder ACT23_NOVEL_BODY auf einen von ihnen zeigt.
+NEUE_KOERPER = ("obj_Zyl", "obj_V", "obj_Stern")
+_NEUE_KOERPER_XML = """    <!-- NEUE KOERPER FUER DIE LERNGESCHWINDIGKEIT (2026-09-25, wiki/befunde/lerngeschwindigkeit-neuer-koerper.md).
+         obj_Y ist fuer den heutigen Zustand NICHT mehr neu: die T-Klasse (neu-9) beansprucht es in
+         10 von 12 Lagen.  Drei Kandidaten, die sich von allen achsparallelen Balkenformen absetzen;
+         welcher wirklich neu ist, entscheidet eine Sonde, nicht diese Beschreibung.  Farben fest
+         (die Farbmischung wuerfelt nur _FARB_KOERPER um).  Alle starten GEPARKT.
+           obj_Zyl    Zylinder, 34 mm Durchmesser -- die erste RUNDE Silhouette
+           obj_V      zwei Arme 14 x 30 mm im 60-Grad-Winkel, offen und asymmetrisch
+           obj_Stern  sechs Arme: drei Balken 14 x 44 mm zu je 60 Grad, massive Mitte -->
+    <body name="obj_Zyl" pos="0.58 -0.75 0.012">
+      <freejoint/>
+      <geom type="cylinder" size="0.017 0.012" rgba="0.95 0.55 0.1 1" density="700" friction="1.4 0.05 0.001"/>
+    </body>
+    <body name="obj_V" pos="0.62 -0.75 0.012">
+      <freejoint/>
+      <geom type="box" pos="-0.0075 0.0130 0" size="0.007 0.015 0.012" euler="0 0 0.52360" rgba="0.65 0.95 0.15 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" pos="0.0075 0.0130 0" size="0.007 0.015 0.012" euler="0 0 -0.52360" rgba="0.65 0.95 0.15 1" density="700" friction="1.4 0.05 0.001"/>
+    </body>
+    <body name="obj_Stern" pos="0.66 -0.75 0.012">
+      <freejoint/>
+      <geom type="box" size="0.007 0.022 0.012" euler="0 0 0.00000" rgba="0.45 0.12 0.9 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" size="0.007 0.022 0.012" euler="0 0 1.04720" rgba="0.45 0.12 0.9 1" density="700" friction="1.4 0.05 0.001"/>
+      <geom type="box" size="0.007 0.022 0.012" euler="0 0 2.09440" rgba="0.45 0.12 0.9 1" density="700" friction="1.4 0.05 0.001"/>
+    </body>
+
+"""
+
+
 def _modell_laden():
     """Vorgabe: XML unveraendert von der Platte.  Nur wenn ACT14_FINGER_KNICK oder ACT23_Y_ARM_W
     gesetzt ist, wird die betreffende Geometrie ersetzt."""
     _yw = os.environ.get("ACT23_Y_ARM_W", "")
-    if _KNICK_ENV is None and not _yw:
+    _neu = (os.environ.get("ACT14_NEUE_KOERPER", "0") == "1"
+            or os.environ.get("ACT23_NOVEL_BODY", "") in NEUE_KOERPER)
+    if _KNICK_ENV is None and not _yw and not _neu:
         return mujoco.MjModel.from_xml_path(ASSET)
     # KOMMA ALS DEZIMALTRENNER ZULASSEN: `$env:X=37.2958` weist in PowerShell eine ZAHL zu, und
     # beim Umwandeln in die Umgebungsvariable greift die Locale -- unter deutschem Windows kommt
@@ -143,6 +177,9 @@ def _modell_laden():
         a = xml.index('    <body name="obj_Y"')
         b = xml.index("</body>", a) + len("</body>")
         xml = xml[:a] + _y_arm_xml(_zahl(_yw, 14.0)) + xml[b:]
+    if _neu:
+        a = xml.index('    <!-- SOCKEL: eine breite flache Platte')
+        xml = xml[:a] + _NEUE_KOERPER_XML + xml[a:]
     return mujoco.MjModel.from_xml_string(xml)
 
 ARM_JOINTS = ["joint_0", "joint_1", "joint_2", "joint_3", "joint_4"]   # 5 DOF (gripper = joint_5)
