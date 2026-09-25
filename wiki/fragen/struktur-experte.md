@@ -60,6 +60,11 @@ geleitete Suche, zu wenig fuer eine blinde.
 
 ## Die richtige Fitness
 
+> **EINGESCHRAENKT 2026-09-25** ([Ruecksetz-Versuch](/befunde/ruecksetz-versuch.md)): die Lerner
+> des Live-Zustands sind SATT - die Policy am Teacher, Weltmodell und Online-Fovea ohne Wirkung auf
+> die Quote. Lerngeschwindigkeit taugt nur als Fitness auf etwas NEUEM, dessen Lernziel noch nicht
+> erreicht ist; auf dem alten Greifen misst sie nichts.
+
 Nach [Projektziel](/ziel.md) ist die Lieferquote die falsche Zielgroesse. Besser ist, **wie
 schnell die Struktur etwas NEUES lernt**: eine neue Farbe, eine neue Form, ein neues Wort. Das hat
 zwei Vorteile - es misst, worauf es ankommt, und es ist haeufig schaerfer als die Quote, weil eine

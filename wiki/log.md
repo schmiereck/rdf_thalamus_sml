@@ -5,6 +5,18 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-25
+
+* **Anlage**: [Lernkurven in der Rueckschau](/befunde/lernkurven-rueckschau.md) - Nutzerauftrag
+  "aus der Lerngeschwindigkeit lernen". Prequentiell ueber die beiden Langlaeufe des Live-Zustands:
+  alle Lerner flach; Weltmodell AUC 0,60 im Lauf (0,76 nach eigener Angabe), ueberzuversichtlich.
+* **Anlage**: [Ruecksetz-Versuch](/befunde/ruecksetz-versuch.md) - je ein Lerner frisch gegen die
+  Kontrolle, 100 Ep. Policy: 60 -> 0 %, Erholung auf 25-30 %, stockt bei 21 mm vom Teacher.
+  Weltmodell leer: 26 gegen 26 in den ersten 50 Ep. Fovea: sichtbare Online-Lernkurve, ohne
+  Quotenwirkung. Spaete Rueckgaenge bei Weltmodell/Fovea unter Bonferroni. Deutung: satt am Teacher.
+* **Ergaenzung**: [Struktur-Experte](/fragen/struktur-experte.md) - Lerngeschwindigkeit nur auf
+  NEUEM eine sinnvolle Fitness.
+
 ## 2026-09-24
 
 * **Anlage**: [Generalisierung Relation x Zielart](/befunde/generalisierung-relation-zielart.md) -
