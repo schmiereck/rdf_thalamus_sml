@@ -97,10 +97,14 @@ noch Servo werden vorab als Wirkung ausgegeben.
 # Nächster konkreter Schritt
 
 Der [Portaudit](/befunde/d0b-fovea-portaudit.md) bestätigt Instrumentierung, Hubabdeckung und die
-strikte Trennung der Auswertungswahrheit auf eingefrorenen Kopien (358 Hub- und 338 Trageframes
-in zwölf Episoden). Die Gegenprüfung verwirft jedoch das verkürzte Signal „Fovea-Auswahl sichtbar“:
-ein Fehlgriff besitzt dieselbe Auswahl über eine vollständige Carryphase. Die aktuelle Fovea-Sonde
-hat keine Bildraumposition der eigenen Hand; die vorhandene Tischhomographie darf beim Hub nicht
-als Ersatz dienen. Nächster Schritt ist deshalb ausschließlich ein auditierter Hand-Landmark oder
-eine höhenrichtige, vorher kalibrierte Kameraprojektion. Erst damit wird das angekündigte,
-enthaltende Mitbewegungs-Selbstetikett berechenbar; ein Lernvergleich bleibt gesperrt.
+strikte Trennung der Auswertungswahrheit auf eingefrorenen Kopien. Die Gegenprüfung verwirft das
+verkürzte Signal „Fovea-Auswahl sichtbar“: ein Fehlgriff besitzt dieselbe Auswahl über eine
+vollständige Carryphase. Handlandmark und drei isolierte Fovea-Landmark-Ausleser wurden daraufhin
+negativ geprüft.
+
+Der neue [Hubantwort-Befund](/befunde/d0b-hubantwort.md) umgeht die fehlende Handposition ohne
+Homographie: Während des Hebens bleibt der Blick fixiert und der Auswahl-Schwerpunkt verschiebt
+sich bei sechs getragenen Trajektorien stärker als bei vier Fehlgriffen. Das ist nur eine
+Einzelmessung. Nächster Schritt ist eine vorab festgelegte Replikationsfamilie für einen
+enthaltenden Rohantwort-Klassifikator; ein Lernvergleich und jeder Eingriff in Schließen oder
+Servos bleiben bis zu deren Bestehen gesperrt.

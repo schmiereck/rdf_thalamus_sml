@@ -500,6 +500,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             # FOLLOW the object live while approaching it; when it is occluded (gripper over it)
             # the tracker returns None and we keep the last estimate (memory) — the act11 pattern.
             if track_fn is not None and k % 4 == 0:           # follow live: drives the gaze + viz +
+                run_combined._d0b_phase = phase               # read-only D0b probe context for the tracker;
+                                                               # never used by the controller or its learner
                 tr = track_fn()                              # lifelong net learning, and SHOWS the
                 if track_log_fn is not None:                  # read-only observation hook: receives the
                     track_log_fn(ep, phase, tr)               # current FSM phase after the real camera read

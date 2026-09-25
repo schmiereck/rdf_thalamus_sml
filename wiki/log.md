@@ -1,5 +1,13 @@
 # Chronik
 
+## 2026-09-25
+
+* **D0b-Hubantwort, Beobachtbarkeit belegt**: [Hubantwort](/befunde/d0b-hubantwort.md) -
+  zwölf eingefrorene Episoden liefern 389/389 Liftframes mit festem Blick und vollständigem
+  Fovea-Schwerpunkt. Bei sechs getragenen gegen vier nicht getragenen Trajektorien beträgt die
+  Schwerpunktänderung Median 3,89 gegen 0,60 Zellen (explorativ einseitig p=0,057). Das ist
+  eine Einzelmessung und noch kein Klassifikator; eine vorab festgelegte Replikation folgt.
+
 ## 2026-09-24
 
 * **D0b-F1b, zeitlicher Expertenpfad verworfen**: [F1b-Vertrag](/messungen/d0b-fovea-zeitbindung.md) -

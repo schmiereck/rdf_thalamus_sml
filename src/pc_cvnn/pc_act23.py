@@ -347,6 +347,7 @@ D0_MANIFEST_DIR = os.environ.get("ACT23_D0_MANIFEST_DIR", "")
 # D0b stores only the agent-visible Fovea/hand time series.  It never reads simulator pose,
 # contact or weld state; those remain an external evaluation channel.
 D0B_TRACE_JSONL = os.environ.get("ACT23_D0B_TRACE_JSONL", "")
+D0B_LIFT_PROBE = os.environ.get("ACT23_D0B_LIFT_PROBE", "0") == "1"
 # Separate ground-truth channel for evaluating a prospective D0b self-label.  It must never be
 # read by the trace consumer or a learner; keeping a distinct file makes that boundary auditable.
 D0B_EVAL_JSONL = os.environ.get("ACT23_D0B_EVAL_JSONL", "")
@@ -4487,6 +4488,7 @@ def run_self_learning_steering(headless=False):
                     mem["px"] = np.asarray(near["px"], float)
             if mem["px"] is not None:                          # form tracker drives the hex fovea view
                 lo, hi = HEX_F * vc.fovea.K, RES - HEX_F * vc.fovea.K
+                _d0b_lift = D0B_LIFT_PROBE and getattr(act16.run_combined, "_d0b_phase", "") == "lift"
                 # IDENTITY-CONDITIONED net gaze: point the hex fovea at the commanded object's OWN
                 # self-labelled COLOUR CLASS (centroid chroma) -- fovea_gradient then drives toward THAT
                 # object (no detector needed for the drive's identity, only a light occlusion re-anchor).
@@ -4502,7 +4504,13 @@ def run_self_learning_steering(headless=False):
                     mem["_fc"] = mem.get("_fc", 0) + 1
                     if not FOVEA_MEM and mem["_fc"] % FOVEA_ANCHOR == 0:
                         mem["gaze"] = 0.5 * mem["gaze"] + 0.5 * np.asarray(mem["px"], float)
-                    gaze = np.clip(mem["gaze"], lo, hi)
+                    if _d0b_lift:
+                        if mem.get("_d0b_lift_gaze") is None:
+                            mem["_d0b_lift_gaze"] = np.asarray(mem["gaze"], float).copy()
+                        gaze = np.asarray(mem["_d0b_lift_gaze"], float)
+                    else:
+                        mem.pop("_d0b_lift_gaze", None)
+                        gaze = np.clip(mem["gaze"], lo, hi)
                 else:
                     gaze = np.clip(mem["px"], lo, hi)              # detector-set gaze (default, unchanged)
                 vc._P["state"]["gaze"] = gaze
@@ -4525,6 +4533,7 @@ def run_self_learning_steering(headless=False):
                     "top_im": [float(x) for x in np.imag(_top_d0b)],
                     "id_conditioned": bool(id_mu is not None),
                     "frozen": bool(D0_FREEZE),
+                    "lift_probe_fixed_gaze": bool(_d0b_lift),
                 }
                 _d0b_sel_px = None; _d0b_sel_mass = 0.0
                 if FOVEA_NET:
@@ -4540,9 +4549,10 @@ def run_self_learning_steering(headless=False):
                             "selection_px": None if _d0b_sel_px is None else
                                             [float(x) for x in _d0b_sel_px],
                             "selection_mass": _d0b_sel_mass,
+                            "selection_cell_com": None if com is None else [float(x) for x in com],
                         })
                         drive = -fovea_gradient(vc.fovea.cells)     # net active-inference gaze drive
-                        if com is not None:
+                        if com is not None and not _d0b_lift:
                             mem["gaze"] = np.clip(np.asarray(gaze, float)
                                                   + warp_gaze_delta(com, ctr, vc.fovea._ek())
                                                   + np.clip(drive * 6.0, -2, 2), lo, hi)

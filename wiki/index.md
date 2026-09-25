@@ -41,6 +41,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [D0b: visueller Greifzustand](entscheidungen/d0b-visueller-greifzustand.md) - neuer Kandidat nach D0: Fovea-Bildfolge und eigene Hubbewegung sollen Objekt-im-Greifer ohne Simulatoretikett sichtbar machen; erst danach ein Handlungsverbraucher
 * [D0b-Portaudit](befunde/d0b-fovea-portaudit.md) - Fovea-Auswahl und externe Evaluation sind getrennt vollständig; sichtbare Auswahl trennt den Fehlgriff nicht und benötigt eine Hand-Bildraumreferenz
 * [D0b-Hand-Selbstbewegung](befunde/d0b-hand-selbstbewegung.md) - Fingerimpuls erzeugt ein eigenes Kamerasignal, doch Schwerpunkt, lokale Maske und eingefrorene Fovea verfehlen den Greifer; neuer Fovea-Lernzweig braucht einen isolierten Vertrag
+* [D0b-Hubantwort](befunde/d0b-hubantwort.md) - bei festem Fovea-Blick reagiert der Auswahl-Schwerpunkt in 6 getragenen Lifttrajektorien stärker als in 4 Fehlgriffen; Replikation vor Klassifikation
 * [Exekutionsvarianz](befunde/exekutionsvarianz.md) - ICC 0,61, Obergrenze 82 % gegen Grundrate 54 %; der Deckel sitzt in der Situationsrepraesentation
 * [1109 Episoden ohne Lernfortschritt](befunde/langlauf-ohne-fortschritt.md) - 43 h GUI-Lauf, vier unabhaengige Groessen flach
 * [Selbst-Aneignung stockt](befunde/selbstaneignung-stockt.md) - 17/17 und 14/14 selbst geborene Klassen verhungern, keine je kommandiert
@@ -103,6 +104,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 # Messvorschriften
 
+* [D0b-Hubantwort](messungen/d0b-hubantwort.md) - fester Blick während des Hubs; getrennte Tragewahrheit und Rohantwort ohne Klassifikator
 * [D0-Pilot: Wiedererkennung einer neuen Form](messungen/dream-rsi-d0-pilot.md) - vorab fixierter Komponentenvergleich eingefroren/lernend; kein Arm-Lernnachweis
 * [D0-Pilot: Y/T-Trennbarkeit](messungen/dream-rsi-yt-trennbarkeit.md) - frische Y/T-Szenen, Dreisicht-Open-Set-Anspruch und explorative lokale Deskriptordiagnose
 * [D0-Kandidat: Wrist-Lernaufgabe](messungen/dream-rsi-d0-wrist-lernaufgabe.md) - signalreiche L-Wrist-Aufgabe; Freeze bestanden, Pilotvertrag v1 mit Seeds, Budget, Kontrolle und Abbruchregel fixiert
