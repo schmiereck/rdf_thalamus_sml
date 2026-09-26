@@ -5,6 +5,13 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-27
+
+* **Ergaenzung**: [Ablage-Schwelle im Teacher](/befunde/ablage-schwelle-im-teacher.md) - Netz-Betrieb,
+  150 Ep gepaart: die Policy folgt der 8-mm-Schwelle nur zoegerlich (Loslassen 25 -> ~21 mm, ihre
+  Abweichung vom Teacher steigt). Ursache am Code: 24000 alte Etiketten, 8000 davon geschuetzt.
+  Vorschlag: den ganzen Puffer mit dem neuen Teacher neu etikettieren.
+
 ## 2026-09-26 (Fortsetzung)
 
 * **Ergaenzung**: [Ablage-Schwelle im Teacher](/befunde/ablage-schwelle-im-teacher.md) - A/B unter FSM,

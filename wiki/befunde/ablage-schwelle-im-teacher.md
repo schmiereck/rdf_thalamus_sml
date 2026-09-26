@@ -88,6 +88,38 @@ Unter `netz` faehrt die Policy, die noch die alte Schwelle gelernt hat; sie mues
 Verhalten erst ueber die DAgger-Etiketten lernen - nicht gemessen. Die Vorgabe bleibt 20 mm, bis
 ein Lauf unter `netz` zeigt, dass die Policy der neuen Schwelle folgt.
 
+# Lernt die Policy die neue Schwelle? (2026-09-27, Netz-Betrieb)
+
+Gepaart je Episode, Seed 9901, 150 Ep, Netz-Betrieb (die Policy faehrt), Kopien:
+
+    Block      Schwelle 20 mm (Kontrolle)             8 mm
+               gel. seitlich entlang Netz-Teacher     gel. seitlich entlang Netz-Teacher
+      0- 24     13     26      24       18             13     25      23       24
+     25- 49     15     25      18       18             18     17      17       25
+     50- 74     18     26      25       18             15     25      20       23
+     75- 99     14     27      22       19             13     21      16       21
+    100-124      9     27      25       16             13     25      19       18
+    125-149     12     26      24       18             14     21      14       25
+    (Median je Block in mm; "Netz-Teacher" = Abweichung der Policy vom Teacher in der Ablagephase)
+
+    geliefert Ep 0-74:   46 gegen 46   (12 | 12, p = 1,00)
+    geliefert Ep 75-149: 35 gegen 40   ( 9 | 14, p = 0,41)
+
+**Die Policy folgt nur zoegerlich.** Der Abstand beim Loslassen sinkt im 8-mm-Arm von 25 auf
+um 21 mm und schwankt stark; unter FSM, wo der Teacher selbst faehrt, waren es 10 mm. Ihre
+Abweichung vom Teacher in der Ablagephase ist HOEHER als in der Kontrolle (21-25 gegen 16-19 mm):
+der Teacher sagt jetzt etwas anderes, die Policy hinkt hinterher.
+
+**Warum, am Code:** im DAgger-Puffer liegen 24000 Beispiele mit den ALTEN Etiketten, davon 8000 als
+geschuetzter Kern (`CORE`), der nie verdraengt wird. Neue Episoden ersetzen die uebrigen nur
+langsam, und die Policy lernt eine Mischung aus alter und neuer Regel. Das passt zum
+[Ruecksetz-Versuch](/befunde/ruecksetz-versuch.md): die Policy lernt langsam.
+
+**Der naheliegende Ausweg, nicht gebaut:** `reactive_subgoal` ist eine REINE Funktion des Zustands.
+Aendert sich der Teacher, lassen sich alle gespeicherten Zustaende sofort mit der neuen Regel neu
+etikettieren und die Policy einmal nachtrainieren - statt 24000 Beispiele ueber Hunderte Episoden
+auszuwaschen.
+
 # Verwandt
 
 * [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md) - die Nutzerfrage
