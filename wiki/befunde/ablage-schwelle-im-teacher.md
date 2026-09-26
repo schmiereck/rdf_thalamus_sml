@@ -3,9 +3,9 @@ type: Befund
 title: Die Ablagegenauigkeit ist eine Konstante des Teachers - er laesst los, sobald die Hand 20 mm vom Ziel entfernt tief genug ist
 description: Aus der Nutzerfrage nach Aufmerksamkeit fuer Objekt und Ziel. Zerlegung von 224 Ablagen aus drei 100-Episoden-Laeufen mit unveraenderter Policy - der seitliche Abstand beim Loslassen liegt auffaellig eng bei 25-31 mm (Median 26), fast nur ENTLANG der Klauenachse (|24| gegen |9| mm quer), waehrend die Objektlage nur 12 mm falsch geglaubt wird und in der Klaue 3-5 mm versetzt sitzt. Die Ursache steht im Code - der Teacher (reactive_subgoal, ebenso die FSM) traegt, bis die HAND weniger als NEAR = 20 mm vom Ziel ist, senkt dann ab und laesst los, sobald die HOEHE erreicht ist; seitlich wird nicht weiter konvergiert. Die Policy hat genau das gelernt. Neuer Schalter ACT16_NEAR_ABLAGE (Vorgabe 20 mm, zeichengleich) trennt die Ablage vom Anfahren; das A/B steht noch aus.
 tags: [act23, ablage, teacher, aufmerksamkeit, nutzeridee]
-status: draft
+status: stable
 evidenz: einzelmessung
-ebene: code
+ebene: act23-ab
 generated: { by: claude/opus-5.5, at: 2026-09-26T00:00:00Z }
 sources:
   - id: logs
@@ -67,10 +67,26 @@ sondern eine Ungenauigkeit IM Teacher, und ein Teacher darf nach
 Anfahr-Naehe beim Greifen; er gilt im Teacher und in der FSM. Die Hand erreicht nachweislich etwa
 6 mm (erste Anfahrt im [Langlauf](/befunde/langlauf-ohne-fortschritt.md): 5,9 mm).
 
-**Offen, als naechstes zu messen:** ein gepaartes A/B unter `ACT23_CHOREO=fsm` (dort faehrt der
-Teacher direkt, die Wirkung ist ohne Umlernen sichtbar) mit 8 gegen 20 mm. Erwartung: der Abstand
-beim Loslassen faellt deutlich, die Lieferquote steigt. Fuer die Policy (`netz`) muesste sie das neue
-Verhalten erst ueber DAgger lernen.
+# Das A/B (2026-09-26): der Mechanismus bestaetigt sich
+
+Gepaart je Episode unter `ACT23_CHOREO=fsm` (der Teacher faehrt direkt), Seeds 9801/9802 je 60 Ep,
+117 szenengleiche Paare, Kopien von act23_state.pkl (unveraendert):
+
+                                         NEAR_ABLAGE 20 mm      8 mm
+    seitlich beim Loslassen (Median)          22 mm            10 mm    (Q25-Q75: 9-36 gegen 5-22)
+      davon entlang der Klauenachse           20 mm             6 mm
+    Endlage nach dem Absetzen (Median)        19 mm            14 mm
+    geliefert                                 46 / 117         54 / 117
+    McNemar                                   nur 20 mm: 6 | nur 8 mm: 14   ->  p = 0,12
+
+**Der Ablagefehler halbiert sich, und der Anteil entlang der Klaue verschwindet fast ganz** (20 -> 6
+mm) - die Ursache ist damit belegt. Die Lieferquote steigt um 7 Punkte, aber nicht nachweisbar:
+nach dem Loslassen driftet das Objekt noch (Endlage 14 mm), und bei 25 mm Liefertoleranz lag ein Teil
+der Ablagen schon vorher innerhalb.
+
+Unter `netz` faehrt die Policy, die noch die alte Schwelle gelernt hat; sie muesste das neue
+Verhalten erst ueber die DAgger-Etiketten lernen - nicht gemessen. Die Vorgabe bleibt 20 mm, bis
+ein Lauf unter `netz` zeigt, dass die Policy der neuen Schwelle folgt.
 
 # Verwandt
 

@@ -7,6 +7,10 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-26 (Fortsetzung)
 
+* **Ergaenzung**: [Ablage-Schwelle im Teacher](/befunde/ablage-schwelle-im-teacher.md) - A/B unter FSM,
+  117 Paare: `ACT16_NEAR_ABLAGE` 8 statt 20 mm -> Abstand beim Loslassen 22 -> 10 mm, entlang der
+  Klaue 20 -> 6, geliefert 46 -> 54 (McNemar 6:14, p = 0,12). Mechanismus belegt, Quote nicht.
+
 * **Ergaenzung**: [Die Direkt-Adresse verkuerzt die Aneignung](/befunde/direkt-adresse-verkuerzt-aneignung.md) -
   `ACT23_EIG_GEGEN` (91f9fa3): Gegenbeispiele aus derselben Sichtung. Mehrdeutig 26/56 -> 7/51,
   > 40 mm 9 -> 6, geliefert 19 -> 21. Die Reste sind eindeutige Fehltreffer (V/11), gegen die keine
