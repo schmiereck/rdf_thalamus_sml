@@ -233,6 +233,25 @@ class RuntimePolicyModule(ArmModule):
         from collections import Counter
         return dict(Counter(getattr(self, "_Xk", []) or []))
 
+    def relabel(self, teacher) -> tuple:
+        """Den DAgger-Puffer mit einem (geaenderten) Teacher NEU etikettieren.
+
+        Die Etiketten sind `teacher(state)` einer REINEN Zustandsfunktion (reactive_subgoal).
+        Aendert sich der Teacher (etwa ACT16_NEAR_ABLAGE), tragen die gespeicherten Zeilen die
+        ALTE Regel, und 8000 davon sind als Kern vor dem Verdraengen geschuetzt -- gemessen folgt
+        die Policy dann in 150 Episoden nur zoegerlich (wiki/befunde/ablage-schwelle-im-teacher.md).
+        Neu etikettiert wird nur der DAgger-Puffer; die Selbst-Imitation traegt die EIGENEN
+        Handlungen der Policy, keine Teacher-Etiketten, und bleibt unberuehrt.
+        Gibt (Zeilen, davon geaendert) zurueck; der Aufrufer trainiert nach."""
+        n = changed = 0
+        for i, x in enumerate(self._X):
+            y = np.asarray(teacher(np.asarray(x, float)), float)
+            if not np.allclose(y, np.asarray(self._Y[i], float), atol=1e-9):
+                changed += 1
+            self._Y[i] = y
+            n += 1
+        return n, changed
+
     def sanitize(self) -> int:
         """One-time HEAL of a buffer polluted by off-table (perception-glitch) states -- e.g. the 897ca5a
         px-as-metres servo bug drove ~26% of the DAgger buffer to |coord|~50-176 m and wrecked the fitted

@@ -3832,6 +3832,16 @@ def run_self_learning_steering(headless=False):
         print(f"  [Persistenz] Zustand geladen: Welt-Modell {world.n()} Versuche, Runtime-Policy "
               f"{runtime.n()} Samples, offene Klassen {shape_clf.open_names} — Startup-Training übersprungen",
               flush=True)
+        if os.environ.get("ACT23_RELABEL", "0") == "1":
+            # NEU ETIKETTIEREN (ACT23_RELABEL, Vorgabe 0): den DAgger-Puffer mit dem AKTUELLEN Teacher
+            # neu beschriften und einmal nachtrainieren -- noetig, wenn sich der Teacher geaendert
+            # hat (s. RuntimePolicyModule.relabel).  Nach den Zustands-Migrationen oben, damit
+            # reactive_subgoal die vollen Zeilen sieht.
+            _nr, _ch = runtime.relabel(act16.reactive_subgoal)
+            runtime.train(epochs=400)
+            print(f"  [Neu-Etikett] {_nr} DAgger-Zeilen mit dem aktuellen Teacher neu beschriftet, "
+                  f"{_ch} davon geaendert ({100.0 * _ch / max(_nr, 1):.1f} %) -- Policy nachtrainiert "
+                  f"(ACT16_NEAR_ABLAGE={act16.NEAR_ABLAGE:.3f})", flush=True)
         _bad = runtime.sanitize()                              # HEAL a DAgger buffer polluted by off-table
         if _bad:                                               # perception-glitch states (897ca5a servo bug
             runtime.train(epochs=200)                          # logged px-as-metres -> a quarter of the buffer
