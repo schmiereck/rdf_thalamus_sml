@@ -117,7 +117,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 | D5 | Neue ACT23-Laeufe und rekursive Verbesserung | D4 | offen | - |
 | D6 | Curriculum fuer einen einzelnen lernenden Arm | D5 | offen | - |
 | D7 | Verteilung auf getrennte Rechner | D1; Integration nach D5 | offen | - |
-| S0 | Semantik und Messaufgabe fuer direkte Servosteuerung | D0 | offen | - |
+| S0 | Semantik und Messaufgabe fuer direkte Servosteuerung | D0 | in Arbeit | [S0-Servogrundaudit](/befunde/s0-servo-grundaudit.md): Aktuatorvertrag für fünf direkte, druckfreie Gelenkkanäle geprüft; Lernaufgabe und Kontrolle noch offen |
 | S1 | Motorisches Lernsignal und autonomer kurzer Regelkreis | S0, D1 | offen | - |
 | S2 | Eigene Anpassung und ACT23-Integration | S1 | offen | - |
 | S3 | Optional: Geschwindigkeit oder Drehmoment statt Winkelvorgabe | S2, eigener Befund zum Bedarf | offen | - |

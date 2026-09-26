@@ -1,5 +1,16 @@
 # Chronik
 
+## 2026-09-26
+
+* **S0-Aktuatorvertrag bestanden**: [Servogrundaudit](/befunde/s0-servo-grundaudit.md) - fünf
+  begrenzte direkte Gelenkimpulse folgen innerhalb maximal 0,19°; Greifer, Drucksensor,
+  IK und Teacher sind ausgeschlossen. Lernaufgabe und Kontrollvergleich bleiben als S0 offen.
+
+* **S0 gestartet**: [Servogrundaudit](/messungen/s0-servo-grundaudit.md) - der direkte
+  Motorzweig beginnt mit einem begrenzten, druckfreien Gelenkimpuls. Kein IK, Teacher,
+  Objekt-, Kontakt- oder Drucksignal ist zulässig; erst der bestandene Aktuatorvertrag öffnet
+  selbst gesammelte Propriozeptionsübergänge.
+
 ## 2026-09-25
 
 * **D0b-Hubantwort, feste Rohregel verworfen**: [Hubantwort](/befunde/d0b-hubantwort.md) -

@@ -90,6 +90,11 @@ Architekturziels ausgegeben. Die komplexe Darstellung allein ist kein Wirksamkei
 
 # S0 - Aktionsraum und signalreiche Aufgabe
 
+**Festlegung 2026-09-26:** Der Motorzweig verwendet keinen Drucksensor als Lernsignal oder
+Laufzeitvoraussetzung. S0/S1 beginnen ausschließlich mit Stellwerten, Encoder-/Propriozeptions-
+Folgen und sicheren freien Bewegungen. Kontakt und Greifen bleiben spätere, getrennte Fragen;
+eine reale Hardwareübertragung darf nicht von sauberem Fingerdruck abhängen.
+
 - [ ] Fruehere direkte Motorversuche samt Logs suchen und ihre Aktions-/Beobachtungsraeume,
   Lernziele und Abbruchgruende festhalten.
 - [ ] Tatsaechlich aktive DOFs, Aktuatorgrenzen, Stellgroessen und Steuerfrequenz erfassen.
