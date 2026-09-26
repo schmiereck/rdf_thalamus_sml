@@ -739,6 +739,17 @@ EIG_DAUERHAFT = os.environ.get("ACT23_EIG_DAUERHAFT", "1") == "1"
 # ein Mittel laege zwischen den Lagen.  Ein Treffer zaehlt, wenn er zu irgendeinem Beispiel passt.
 EIG_NACHFUEHREN = os.environ.get("ACT23_EIG_NACHFUEHREN", "0") == "1"
 EIG_NACH_MAX = int(os.environ.get("ACT23_EIG_NACH_MAX", "10"))
+# GEGENBEISPIELE (ACT23_EIG_GEGEN, Vorgabe 0 bis gemessen).  Das Nachfuehren zeigte: die
+# Fehlaufloesungen entstehen, weil FREMDE Koerper in die Toleranz fallen, nicht weil der eigene
+# herausfaellt.  Also lernt die Adresse, was sie NICHT treffen darf.  Ohne Etikett: was im
+# SELBEN Blick raeumlich getrennt neben dem Koerper liegt, ist per Anschauung ein anderes Ding.
+# Quellen: (1) beim Anlegen der Direkt-Adresse die uebrigen sauberen Flecken im Bild, (2) beim
+# Aufloesen die unterlegenen Mitbewerber, wenn der beste Treffer KLAR vorn liegt (hoechstens
+# EIG_GEGEN_MARGE mal so weit vom Messwert wie der naechste).  Ein Fleck passt dann nur, wenn er
+# innerhalb der Toleranz liegt UND dem eigenen Messwert naeher ist als jedem Gegenbeispiel.
+EIG_GEGEN = os.environ.get("ACT23_EIG_GEGEN", "0") == "1"
+EIG_GEGEN_MARGE = float(os.environ.get("ACT23_EIG_GEGEN_MARGE", "0.5"))
+EIG_GEGEN_MAX = int(os.environ.get("ACT23_EIG_GEGEN_MAX", "20"))
 # LAUT SAGEN, WAS FEHLT -- nicht still mitschalten (s. AUGMENT/NEIGHBOURS oben: ein Schalter, der
 # einen zweiten heimlich umlegt, macht jedes A/B mehrdeutig).  Ohne EIG_STETIG ist EIG_DIREKT
 # nicht wirkungslos, aber verstuemmelt: die Formachse faellt weg, weil es fuer eine unbekannte
@@ -1347,6 +1358,19 @@ def eig_bezug(shape_clf):
     return 1.86              # NICHT merken -- s. oben: der Notnagel darf den Lauf nicht praegen
 
 
+def _eig_abstand(det, namen, emb, span, shape_clf):
+    """Abstand einer Detektion zu (einem oder mehreren) Messwerten, je genannter Achse auf ihre
+    Toleranz normiert und summiert.  None, wenn keine genannte Achse vergleichbar ist."""
+    _s, _n = 0.0, 0
+    if namen[1] is not None and emb is not None and det.get("desc") is not None:
+        _e = np.asarray(shape_clf.desc_embed(det["desc"]), float)
+        _s += float(np.min(np.linalg.norm(np.atleast_2d(np.asarray(emb, float)) - _e, axis=1))) / (
+            EIG_TOL_FORM * eig_bezug(shape_clf)); _n += 1
+    if namen[2] is not None and span is not None and det.get("span") is not None:
+        _s += float(np.min(np.abs(np.atleast_1d(np.asarray(span, float)) - float(det["span"]))))             / EIG_TOL_SPAN; _n += 1
+    return _s if _n else None
+
+
 def _eig_passt(det, namen, mess, shape_clf):
     """Passt eine Detektion auf eine STETIGE Adresse?  Eine Achse ohne Namen ist 'beliebig'.
 
@@ -1371,6 +1395,15 @@ def _eig_passt(det, namen, mess, shape_clf):
             return False
         if float(np.min(np.abs(np.atleast_1d(np.asarray(mess[2], float)) - float(det["span"]))))                 > EIG_TOL_SPAN:
             return False
+    if len(mess) > 3 and mess[3]:
+        # GEGENBEISPIELE (s. EIG_GEGEN): naeher an einem bekannten ANDEREN Ding als am eigenen
+        # Messwert -> kein Treffer, auch wenn die Toleranz passt.
+        _dp = _eig_abstand(det, namen, mess[1], mess[2], shape_clf)
+        if _dp is not None:
+            for _ge, _gs in mess[3]:
+                _dn = _eig_abstand(det, namen, _ge, _gs, shape_clf)
+                if _dn is not None and _dn < _dp:
+                    return False
     return True
 
 
@@ -1413,15 +1446,8 @@ def finde_nach_eigenschaften(sim, shape_clf, colours, farbe=None, form=None, gro
         # genannter Achse auf ihre eigene Toleranz normiert, damit Form und Groesse vergleichbar
         # zaehlen.
         def _abst(det):
-            _s = 0.0
-            if form is not None and mess[1] is not None and det.get("desc") is not None:
-                _e = np.asarray(shape_clf.desc_embed(det["desc"]), float)
-                _s += float(np.min(np.linalg.norm(np.atleast_2d(np.asarray(mess[1], float)) - _e,
-                                                  axis=1))) / (EIG_TOL_FORM * eig_bezug(shape_clf))
-            if groesse is not None and mess[2] is not None and det.get("span") is not None:
-                _s += float(np.min(np.abs(np.atleast_1d(np.asarray(mess[2], float))
-                                          - float(det["span"])))) / EIG_TOL_SPAN
-            return _s
+            _a = _eig_abstand(det, (farbe, form, groesse), mess[1], mess[2], shape_clf)
+            return 0.0 if _a is None else _a
         best = min(treffer, key=_abst)
     else:
         best = max(treffer, key=lambda d: float(d.get("area", 0.0)))
@@ -1583,6 +1609,7 @@ class CommandState23:
         # OBJECTS -- sonst koennte die Neugier sie zum Greifen auswaehlen -, werden aber von der
         # Szene aufgebaut und nach jeder Episode wiederhergestellt wie jeder andere Koerper.
         self.STUETZEN = []
+        self.EIG_NEG = {}          # Koerper -> [(Formeinbettung, Spanne), ...] Gegenbeispiele (EIG_GEGEN)
         self.EIG_MESS_EX = {}      # Koerper -> [(Formeinbettung, Spanne), ...] nachgefuehrt (EIG_NACHFUEHREN)
         self.EIG_EINDEUTIG = {}    # Koerper -> loeste die Adresse in DIESER Episode eindeutig auf?
         self.EIG_MESS = {}         # Koerper -> (Chromatizitaet, Formeinbettung, Spanne) -- die
@@ -4437,6 +4464,22 @@ def run_self_learning_steering(headless=False):
                 #   waere blind (s. Nutzervorgabe in _auto_eig_umschreiben)
             _k = state.add_eigenschaft(_nah, *_tri)
             state.EIG_MESS[_nah] = _mess
+            if EIG_GEGEN:
+                # QUELLE 1: was im SELBEN Blick raeumlich getrennt daneben liegt, ist ein anderes Ding.
+                _neg = []
+                for _o in dets:
+                    if (_o is d or _o.get("pos") is None or _o.get("desc") is None
+                            or float(_o.get("area", 0.0)) < 200.0):
+                        continue
+                    if float(np.linalg.norm(np.asarray(_o["pos"], float) - _p)) < 0.04:
+                        continue
+                    if _o.get("cspread") is not None and float(_o["cspread"]) > _mth:
+                        continue                  # verschmolzen: kein sauberes Gegenbeispiel
+                    _neg.append((np.asarray(shape_clf.desc_embed(_o["desc"]), float),
+                                 float(_o["span"]) if _o.get("span") is not None else None))
+                state.EIG_NEG[_nah] = _neg[-EIG_GEGEN_MAX:]
+                print(f"  [Eig-Gegen] {_nah}: {len(_neg)} Gegenbeispiele aus dem Blick der Adressierung",
+                      flush=True)
             # IN DIE SZENENVERWALTUNG AUFNEHMEN, wie es _try_bind bei der Knopfvergabe tut:
             # HINZUFUEGEN, nicht alles zurueckholen (s. randomize_objects).
             act16.OBJS = list(dict.fromkeys(list(act16.OBJS) + [_nah]))
@@ -4565,13 +4608,17 @@ def run_self_learning_steering(headless=False):
         Ohne Beispiele genau der gespeicherte Wert -- dann ist alles wie vorher."""
         m = state.EIG_MESS.get(body)
         ex = state.EIG_MESS_EX.get(body) or []
-        if m is None or not ex:
+        neg = (state.EIG_NEG.get(body) or []) if EIG_GEGEN else []
+        if m is None or (not ex and not neg):
             return m
+        if not ex:
+            return (m[0], m[1], m[2], list(neg))
         emb = [np.asarray(m[1], float)] if m[1] is not None else []
         spn = [float(m[2])] if m[2] is not None else []
         emb += [np.asarray(e, float) for e, _s in ex if e is not None]
         spn += [float(s) for _e, s in ex if s is not None]
-        return (m[0], np.vstack(emb) if emb else None, np.asarray(spn, float) if spn else None)
+        return (m[0], np.vstack(emb) if emb else None, np.asarray(spn, float) if spn else None,
+                list(neg))
 
     def _eig_nachfuehren(body, method, hand_xy, last):
         """Die Adresse um die Sichtung am Loslass-Punkt erweitern -- nur nach eigenem Tragen und
@@ -5236,6 +5283,21 @@ def run_self_learning_steering(headless=False):
                 sim, shape_clf, colours, _f, _fo, _g,
                 mess=(_eig_mess_fuer(body) if EIG_STETIG else None))
             state.EIG_EINDEUTIG[body] = bool(_pos is not None and len(_tr) == 1)
+            if EIG_GEGEN and EIG_STETIG and _pos is not None and len(_tr) > 1:
+                # QUELLE 2: liegt der beste Treffer KLAR vorn, sind die Mitbewerber andere Dinge.
+                _mm = _eig_mess_fuer(body)
+                _ab = sorted(((_eig_abstand(_o, (_f, _fo, _g), _mm[1], _mm[2], shape_clf) or 0.0), _i)
+                             for _i, _o in enumerate(_tr))
+                if _ab[0][0] <= EIG_GEGEN_MARGE * _ab[1][0]:
+                    _ng = state.EIG_NEG.setdefault(body, [])
+                    for _a, _i in _ab[1:]:
+                        _o = _tr[_i]
+                        if _o.get("desc") is not None:
+                            _ng.append((np.asarray(shape_clf.desc_embed(_o["desc"]), float),
+                                        float(_o["span"]) if _o.get("span") is not None else None))
+                    del _ng[:-EIG_GEGEN_MAX]
+                    print(f"    [Eig-Gegen] {body}: {len(_ab) - 1} Mitbewerber als Gegenbeispiel gemerkt "
+                          f"(Abstand {_ab[0][0]:.2f} gegen {_ab[1][0]:.2f}, {len(_ng)} gesamt)", flush=True)
             sim.d.mocap_pos[:] = _saved
             mujoco.mj_forward(sim.m, sim.d)
             if _pos is not None and EIG_SPLIT:
