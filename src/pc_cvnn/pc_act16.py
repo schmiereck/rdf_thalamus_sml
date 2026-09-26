@@ -55,6 +55,14 @@ CARRY_MDQ  = float(os.environ.get("ACT16_CARRY_MDQ",  "0.011")) # slower lateral
 #   a concave object (a perceived U) is not torn out of the claws by carry acceleration.  Opt-in (carry_gentle).
 PUSH_LIFT_Z = 0.07                              # raise the claws to move behind an object (clear it)
 STANDOFF, NEAR, TOL, CAP = 0.045, 0.02, 0.025, 2200
+# ABLAGE-NAEHE (ACT16_NEAR_ABLAGE, Vorgabe = NEAR = 0,02 m, also zeichengleich).  Gemessen 2026-09-26
+# (wiki/befunde/ablage-schwelle-im-teacher.md): der seitliche Abstand beim Loslassen liegt eng bei
+# 25-31 mm (Median 26), fast nur entlang der Klauenachse, waehrend die Objektlage nur 12 mm falsch
+# geglaubt wird und in der Klaue 3-5 mm versetzt sitzt.  Die Ursache ist diese Konstante: der Teacher
+# traegt, bis die HAND NEAR vom Ziel ist, senkt dann ab und laesst los, sobald die HOEHE erreicht
+# ist -- seitlich konvergiert wird nicht mehr.  Die Policy hat genau das gelernt.  Der Schalter
+# trennt die Ablage vom Anfahren (das Greifen behaelt NEAR).
+NEAR_ABLAGE = float(str(os.environ.get("ACT16_NEAR_ABLAGE", "")).replace(",", ".") or NEAR)
 GRASP_OFFSET = float(os.environ.get("ACT16_GRASP_OFFSET", "0.006"))   # (#2) grasp height = obj_half + this
 #   (cube -> 0.018, was 0.014): the claw tips sit ~14mm below the contact site, so grasp_z=0.014 put them
 #   AT the floor and any overshoot was blocked/deflected; +4mm lifts them clear while still gripping the cube
@@ -303,7 +311,7 @@ def reactive_subgoal(state):
     place_z = grasp_z - h_griff + h_auf                   # abgelegt wird OHNE die Griff-Auflage
     grasped = (cz > lift_thresh) and (j5 < J5_CLOSED_TH)  # object lifted off the table AND gripper closed
     if grasped:                                           # CARRY -> place -> release
-        if np.linalg.norm(hxy - t) > NEAR:               # carry over the target
+        if np.linalg.norm(hxy - t) > NEAR_ABLAGE:        # carry over the target (s. NEAR_ABLAGE)
             return np.array([tx, ty, carry_z, J5_GRIP])
         if hz > place_z + 0.012:                          # lower onto the target (or its SUPPORT)
             return np.array([tx, ty, place_z, J5_GRIP])
@@ -645,7 +653,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                             mode, phase = "push", "approach"      # wide / retries spent -> push fallback
                 elif phase == "carry":
                     j5, aim = gclose, np.array([tgt_eff[0], tgt_eff[1], CARRY_Z])   # via the routed waypoint
-                    if np.linalg.norm(hxy - tgt_true) < NEAR:
+                    if np.linalg.norm(hxy - tgt_true) < NEAR_ABLAGE:   # s. NEAR_ABLAGE
                         phase = "place"
                 elif phase == "place":
                     # ABLAGEHOEHE: tgt_z statt der Konstanten GRASP_Z.  Ohne dritten Wert aus

@@ -5,6 +5,14 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-26 (Fortsetzung)
+
+* **Anlage**: [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md) - Nutzerfrage,
+  am Code: Objekt laufend beobachtet, Ziel einmal je Episode, Ablage gegenueber dem Ziel offen.
+* **Anlage**: [Ablage-Schwelle im Teacher](/befunde/ablage-schwelle-im-teacher.md) - 224 Ablagen
+  zerlegt: 25-31 mm beim Loslassen kommen aus NEAR = 20 mm im Teacher (loslassen nach Hoehe, nicht
+  nach seitlicher Ankunft). Schalter `ACT16_NEAR_ABLAGE` gebaut, Vorgabe zeichengleich.
+
 ## 2026-09-27
 
 * **Entscheidung + Ergaenzung**: [Die Direkt-Adresse verkuerzt die Aneignung](/befunde/direkt-adresse-verkuerzt-aneignung.md) -
