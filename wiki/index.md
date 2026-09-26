@@ -43,6 +43,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [D0b-Hand-Selbstbewegung](befunde/d0b-hand-selbstbewegung.md) - Fingerimpuls erzeugt ein eigenes Kamerasignal, doch Schwerpunkt, lokale Maske und eingefrorene Fovea verfehlen den Greifer; neuer Fovea-Lernzweig braucht einen isolierten Vertrag
 * [D0b-Hubantwort](befunde/d0b-hubantwort.md) - feste Schwerpunktantwort scheitert auf neuer Seed-103-Familie an Precision 0,786 statt 0,80; kein Tuning und keine Integration
 * [S0-Servogrundaudit](befunde/s0-servo-grundaudit.md) - fünf Armservos folgen einem direkten druckfreien Impuls; kein IK oder Teacher im Kanal
+* [S1-Propriozeptionsübergänge](befunde/s1-proprio-uebergaenge.md) - 3.000 sichere direkte Servoübergänge, nach ganzen Rollouts geteilt und ohne Druck, Kontakt, IK oder Teacher
 * [Exekutionsvarianz](befunde/exekutionsvarianz.md) - ICC 0,61, Obergrenze 82 % gegen Grundrate 54 %; der Deckel sitzt in der Situationsrepraesentation
 * [1109 Episoden ohne Lernfortschritt](befunde/langlauf-ohne-fortschritt.md) - 43 h GUI-Lauf, vier unabhaengige Groessen flach
 * [Selbst-Aneignung stockt](befunde/selbstaneignung-stockt.md) - 17/17 und 14/14 selbst geborene Klassen verhungern, keine je kommandiert
@@ -106,6 +107,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 # Messvorschriften
 
 * [S0-Servogrundaudit](messungen/s0-servo-grundaudit.md) - direkter druckfreier Gelenkimpuls; prüft Aktuatorvertrag und Propriozeptionsantwort ohne IK oder Teacher
+* [S1-Propriozeptionsübergänge](messungen/s1-proprio-uebergaenge.md) - ganze freie Servo-Rollouts liefern `(q, ctrl, q')` ohne Druck, Kontakt, IK oder Teacher
 * [D0b-Hubantwort](messungen/d0b-hubantwort.md) - fester Blick während des Hubs; getrennte Tragewahrheit und Rohantwort ohne Klassifikator
 * [D0-Pilot: Wiedererkennung einer neuen Form](messungen/dream-rsi-d0-pilot.md) - vorab fixierter Komponentenvergleich eingefroren/lernend; kein Arm-Lernnachweis
 * [D0-Pilot: Y/T-Trennbarkeit](messungen/dream-rsi-yt-trennbarkeit.md) - frische Y/T-Szenen, Dreisicht-Open-Set-Anspruch und explorative lokale Deskriptordiagnose

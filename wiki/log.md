@@ -2,6 +2,14 @@
 
 ## 2026-09-26
 
+* **S1-Übergangssatz gültig**: [Propriozeptionsübergänge](/befunde/s1-proprio-uebergaenge.md) -
+  3.000 druckfreie, freie Servoübergänge bestehen nach dem neuen inneren Stellbereich die
+  harte Encoderschranke. Der erste Satz mit Randüberschwinger bleibt vom Training ausgeschlossen.
+
+* **S1-Übergangssammler gebaut**: [Propriozeptionsübergänge](/messungen/s1-proprio-uebergaenge.md) -
+  50 ganze freie Rollouts erfassen nur direkte Stellwerte und Encoderfolgen. Der Testsplit ist
+  trajektoriengetrennt; Druck, Kontakt, Kamera, Objekt, IK und Teacher sind ausgeschlossen.
+
 * **S0-Aktuatorvertrag bestanden**: [Servogrundaudit](/befunde/s0-servo-grundaudit.md) - fünf
   begrenzte direkte Gelenkimpulse folgen innerhalb maximal 0,19°; Greifer, Drucksensor,
   IK und Teacher sind ausgeschlossen. Lernaufgabe und Kontrollvergleich bleiben als S0 offen.
