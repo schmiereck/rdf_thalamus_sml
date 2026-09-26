@@ -120,6 +120,29 @@ Aendert sich der Teacher, lassen sich alle gespeicherten Zustaende sofort mit de
 etikettieren und die Policy einmal nachtrainieren - statt 24000 Beispiele ueber Hunderte Episoden
 auszuwaschen.
 
+# Neu etikettiert (2026-09-27): die Policy folgt stetiger, aber nicht bis zum Teacher
+
+`ACT23_RELABEL=1` (cb714c4): nach dem Laden wird der DAgger-Puffer mit dem aktuellen Teacher neu
+beschriftet und 400 Epochen nachtrainiert. Gegenprobe: mit der alten Schwelle aendert sich keine
+der 24000 Zeilen; mit 8 mm sind es 455 (1,9 %). Selber Seed, selbe Szenen (150/150):
+
+    Block      20 mm (Kontrolle)    8 mm ohne Neu-Etikett    8 mm MIT Neu-Etikett
+               seitl. entl.         seitl. entl.             seitl. entl.   Netz-Teacher
+      0- 24     26    24             25    23                 23    18        25
+     25- 49     25    18             17    17                 21    15        24
+     50- 74     26    25             25    20                 23    19        18
+     75- 99     27    22             21    16                 18    14        20
+    100-124     27    25             25    19                 21    14        17
+    125-149     26    24             21    14                 16    12        28
+    geliefert   81 / 150             86 / 150                 87 / 150
+
+**Mit dem Neu-Etikett faellt der Ablagefehler stetig** (23 -> 16 mm, entlang der Klaue 18 -> 12),
+statt zu schwanken. Er erreicht aber nicht die 10 mm, die der Teacher unter FSM schafft, und die
+Lieferungen bleiben gleich. Zwei Gruende, beide am Code, keiner gemessen: (1) nur 1,9 % der Zeilen
+tragen den Unterschied - "8 statt 20 mm vor dem Ziel" ist fuer das Netz ein feines Detail; (2) die
+Selbst-Imitation (12000 EIGENE Handlungen aus erfolgreichen Episoden) wurde bewusst nicht
+angefasst - sie sind Erfahrung, kein Teacher-Etikett - und sie lassen nach der alten Schwelle los.
+
 # Verwandt
 
 * [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md) - die Nutzerfrage

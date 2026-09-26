@@ -7,6 +7,11 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-27
 
+* **Ergaenzung**: [Ablage-Schwelle im Teacher](/befunde/ablage-schwelle-im-teacher.md) - `ACT23_RELABEL`
+  (cb714c4): 455 von 24000 Zeilen neu beschriftet; der Ablagefehler faellt ueber 150 Ep stetig
+  23 -> 16 mm (ohne Neu-Etikett schwankend 17-25), Lieferungen 87 gegen 86. Die Selbst-Imitation
+  traegt noch die alte Schwelle.
+
 * **Ergaenzung**: [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md) - Nutzerschritt 2:
   `ACT23_ZIEL_NACHSEHEN` (980d305) gemessen, 120 Paare: geliefert 52 gegen 52, zum wahren Ziel 20
   gegen 21 mm. Das Ziel wird schon beim ersten Blick auf 1-2 mm gesehen; der Fehler steckt beim
