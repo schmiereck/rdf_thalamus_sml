@@ -7,6 +7,11 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-27
 
+* **Ergaenzung**: [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md) - das
+  Objekt in der Hand ansehen (9159ab2): aus Traghoehe 8/17 verdeckt und 7-30 mm daneben, aus der
+  Tiefe 8/8 gesehen und ~5 mm daneben. A/B 120 Paare: wo gesehen, 18 -> 12 mm zum wahren Ziel;
+  greift bei 26 von 80 Ablagen, Lieferungen 51 gegen 51. Vorgaben 0.
+
 * **Ergaenzung**: [Ablage-Schwelle im Teacher](/befunde/ablage-schwelle-im-teacher.md) - `ACT23_RELABEL`
   (cb714c4): 455 von 24000 Zeilen neu beschriftet; der Ablagefehler faellt ueber 150 Ep stetig
   23 -> 16 mm (ohne Neu-Etikett schwankend 17-25), Lieferungen 87 gegen 86. Die Selbst-Imitation

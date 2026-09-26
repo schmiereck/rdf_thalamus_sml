@@ -86,6 +86,38 @@ OBJEKT IN DER HAND waehrend der Ablage (seine Lage wird beim Tragen 16 mm falsch
 Ablage selbst (Drift nach dem Loslassen). Die Teacher-Schwelle war der erste und groesste Posten
 ([dort](/befunde/ablage-schwelle-im-teacher.md)).
 
+# Gemessen 2026-09-27: das Objekt in der Hand ansehen
+
+Beim Tragen gilt die Objektlage im Code als GLEICH der Hand (sobald der Fingerdruck > 0,3 N ist);
+der Teacher bringt die HAND zum Ziel. Der tatsaechliche Versatz Hand-Objekt beim Loslassen
+("Glaube") ist 12-16 mm und landet in der Ablage. Also: das Objekt ansehen und die Hand so fuehren,
+dass das OBJEKT aufs Ziel kommt (`ACT23_OBJ_SEHEN`, `ACT16_OBJSICHT_Z`, `ACT16_OBJ_VERSATZ`, alle
+Vorgabe 0, zeichengleich).
+
+**Vorpruefung, woher der Blick kommen muss** (je 30 Ep, FSM, Zieladresse):
+
+    Blick aus Traghoehe (Hand 60-93 mm)   8 von 17 verdeckt; gesehen 7-30 mm daneben (Median ~16) --
+                                          MEHR als der Versatz selbst (Median ~13); der gesehene
+                                          Versatz liegt fast immer bei 17-22 mm (Parallaxe)
+    Blick aus der Tiefe (Hand < 35 mm)    8 von 8 gesehen, 2-18 mm daneben (Median ~5-6) --
+                                          weniger als der Versatz (Median ~10)
+
+**A/B** (FSM, Ablage-Naehe 8 mm, Blick unter 35 mm, Seeds 9811/9812 je 60 Ep, 120 Paare):
+
+                                          Hand aufs Ziel    Objekt aufs Ziel
+    geliefert                             51 / 120          51 / 120        (11 | 11, p = 1,00)
+    Endlage zum WAHREN Ziel (alle Ablagen) 22 mm            20 mm
+    Blick ausgeloest                      -                 26 von 80 Ablagen, 3x nicht gesehen
+    nur Episoden mit gesehenem Objekt     18 mm       ->    12 mm zum wahren Ziel (n = 22)
+
+**Wo die Korrektur greift, wirkt sie** (18 -> 12 mm). Sie greift aber nur bei einem Drittel der
+Ablagen: die uebrigen Objekte fallen schon AUS DER HOEHE ("beim Oeffnen 65 mm ueber Ruhelage") -
+der Griff loest sich beim Tragen, bevor die Hand unten ist. Die Lieferquote aendert sich nicht.
+
+**Stand der Aufmerksamkeitsfrage:** die Objekt-Aufmerksamkeit ist der richtige Posten und wirkt,
+aber der naechste groessere Verlust liegt davor - im Halten beim Tragen und in der Drift nach dem
+Loslassen. Einschraenkung: zwei Seeds, einfache Korrektur (ein Blick, ein Versatz), nur FSM.
+
 # Was hier NICHT behauptet wird
 
 Keine Wirkung. Alles ist Codeanalyse; die einzige Messung ist die Zerlegung des Ablagefehlers.
