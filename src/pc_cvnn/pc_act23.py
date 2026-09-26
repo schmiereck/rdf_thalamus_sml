@@ -850,6 +850,10 @@ AUF_LOSLASSEN = os.environ.get("ACT23_AUF_LOSLASSEN", "0") == "1"
 # sobald er traegt und die Hand in ACT16_NACHSEH_R um das Ziel steht.  Nur fuer wahrgenommene Ziele
 # ("an" und Richtungswoerter); ein Marker ist eine exakte Koordinate, dort gibt es nichts zu sehen.
 ZIEL_NACHSEHEN = os.environ.get("ACT23_ZIEL_NACHSEHEN", "0") == "1"
+# DAS OBJEKT IN DER HAND ANSCHAUEN (ACT23_OBJ_SEHEN, Vorgabe 0).  Kurz vor dem Ablegen schaut der
+# Agent das GETRAGENE Objekt an: die Detektion naechst der eigenen Hand (innerhalb 40 mm).  Ohne
+# ACT16_OBJ_VERSATZ nur Messung.
+OBJ_SEHEN = os.environ.get("ACT23_OBJ_SEHEN", "0") == "1"
 # ERLAUBTE ZELLEN (ACT23_ZIEL_ZELLEN, Vorgabe leer = alle).  Fuer die Generalisierungsmessung
 # (wiki/befunde/generalisierung-relation-zielart.md): eine Zelle ist WORT:ZIELART, WORT aus
 # auf/links/rechts/vor/hinter, ZIELART aus platte/wuerfel/balken.  Ist die Liste gesetzt, wird je
@@ -5772,6 +5776,19 @@ def run_self_learning_steering(headless=False):
     res = {}
     def ep_end(ep, ok, err): res["ok"] = bool(ok); res["err"] = float(err)
 
+    def _objekt_sehen(hand_xy, hand_z):
+        """Das getragene Objekt ansehen: die Detektion naechst der Hand.  Nur Kamera + eigene Hand."""
+        saved = sim.d.mocap_pos.copy()
+        dets = shape_clf.perceive_all(sim)
+        sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+        _h = np.asarray(hand_xy, float)
+        nah = [d for d in dets if d.get("pos") is not None and float(d.get("area", 0.0)) >= 100.0
+               and float(np.linalg.norm(np.asarray(d["pos"], float) - _h)) < 0.04]
+        if not nah:
+            return None
+        d = min(nah, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"], float) - _h)))
+        return np.asarray(d["pos"], float)
+
     def _ziel_nachsehen():
         """Der ZWEITE Blick auf das Ziel (s. ACT23_ZIEL_NACHSEHEN): dieselbe Aufloesung wie zu Beginn,
         jetzt aus der Naehe.  Scheitert sie (verdeckt, mehrdeutig), bleibt das erste Ziel stehen."""
@@ -6309,6 +6326,7 @@ def run_self_learning_steering(headless=False):
                            servo=(method in ("color", "shape") or eig_servo),
                            rescatter=False, episode_end_fn=ep_end,
                            ziel_nachsehen_fn=(_ziel_nachsehen if ZIEL_NACHSEHEN else None),
+                           objekt_sehen_fn=(_objekt_sehen if OBJ_SEHEN else None),
                            lifelong=True, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
                            arm_reset=False)
         _T["nach_ausfuehrung"] = _time.perf_counter()
@@ -6437,6 +6455,14 @@ def run_self_learning_steering(headless=False):
                              f"(Ziel {1000.0 * float(np.linalg.norm(np.asarray(_rel['tgt'], float) - _tw)):.0f}mm "
                              f"daneben gesehen)")
                     _ns = getattr(act16.run_combined, "_nachsehen", None)
+                    _os = getattr(act16.run_combined, "_objsicht", None)
+                    if _os is not None:
+                        _zus += (f" | Objekt in der Hand: wahr {1000.0 * float(np.linalg.norm(_os['wahr'] - _os['hand'])):.0f}mm neben der Hand"
+                                 + (" (nicht gesehen)" if _os["gesehen"] is None else
+                                    f", gesehen {1000.0 * float(np.linalg.norm(_os['gesehen'] - _os['wahr'])):.0f}mm daneben, "
+                                    f"Versatz gesehen {1000.0 * float(np.linalg.norm(_os['gesehen'] - _os['hand'])):.0f}mm, "
+                                    f"Richtungsfehler {1000.0 * float(np.linalg.norm((_os['gesehen'] - _os['hand']) - (_os['wahr'] - _os['hand']))):.0f}mm")
+                                 + f", Hand {1000.0 * _os['hz']:.0f}mm hoch")
                     if _ns is not None:
                         _zus += (" | Nachsehen: " + ("gescheitert" if _ns["neu"] is None else
                                  f"erster Blick {1000.0 * float(np.linalg.norm(_ns['alt'] - _tw)):.0f}mm, "

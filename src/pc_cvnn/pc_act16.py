@@ -62,7 +62,8 @@ STANDOFF, NEAR, TOL, CAP = 0.045, 0.02, 0.025, 2200
 # traegt, bis die HAND NEAR vom Ziel ist, senkt dann ab und laesst los, sobald die HOEHE erreicht
 # ist -- seitlich konvergiert wird nicht mehr.  Die Policy hat genau das gelernt.  Der Schalter
 # trennt die Ablage vom Anfahren (das Greifen behaelt NEAR).
-NACHSEH_R = float(os.environ.get("ACT16_NACHSEH_R", "0.04"))   # ab hier schaut er das Ziel nochmal an
+NACHSEH_R = float(os.environ.get("ACT16_NACHSEH_R", "0.04"))
+OBJ_VERSATZ = os.environ.get("ACT16_OBJ_VERSATZ", "0") == "1"   # gesehenen Objektversatz ausgleichen   # ab hier schaut er das Ziel nochmal an
 NEAR_ABLAGE = float(str(os.environ.get("ACT16_NEAR_ABLAGE", "")).replace(",", ".") or NEAR)
 GRASP_OFFSET = float(os.environ.get("ACT16_GRASP_OFFSET", "0.006"))   # (#2) grasp height = obj_half + this
 #   (cube -> 0.018, was 0.014): the claw tips sit ~14mm below the contact site, so grasp_z=0.014 put them
@@ -345,7 +346,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                  episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None,
                  ood_rate=0.0, ood_rng=None, tol=None, carry_target_fn=None,
                  post_goal_fn=None, macro_log_fn=None, servo=False, rescatter=True, orient_fn=None,
-                 ziel_nachsehen_fn=None,
+                 ziel_nachsehen_fn=None, objekt_sehen_fn=None,
                  carry_gentle=False, grip_close=None, wrist_fn=None, arm_reset=True, policy_log_fn=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
@@ -520,6 +521,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         phase = "over" if mode == "grasp" else "approach"
         dwell = 0; via = "grasp"; done = False; grasp_retry = 0
         run_combined._nachsehen = None                        # s. ZIEL NOCHMAL ANSCHAUEN
+        run_combined._objsicht = None                         # s. DAS OBJEKT IN DER HAND ANSCHAUEN
+        _hand_versatz = np.zeros(2)                           # Objekt minus Hand, gesehen (Vorgabe: 0)
         # closed-loop grasp-target BELIEF: starts at the up-front perception, then the live fovea
         # CORRECTS it each frame (precision-weighted, occlusion-gated) instead of freezing the snapshot
         obj_belief = (cube_plan.copy() if cube_plan is not None else None) if servo else None
@@ -592,6 +595,20 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                     tgt = _g2.copy(); tgt_true = _g2.copy()
                     if post_goal_fn is not None:
                         post_goal_fn(cmd, c_true, tgt_true)
+            # DAS OBJEKT IN DER HAND ANSCHAUEN (objekt_sehen_fn, s. ACT23_OBJ_SEHEN).  Beim Tragen gilt
+            # die Objektlage als GLEICH der Hand (s. _cobs unten) -- gemessen liegt es beim Loslassen
+            # aber 12-16 mm daneben, und genau das landet in der Ablage, weil der Teacher die HAND zum
+            # Ziel bringt (wiki/fragen/aufmerksamkeit-objekt-ziel.md).  EINMAL, zur selben Zeit wie der
+            # zweite Blick aufs Ziel: der Versatz Objekt-minus-Hand wird gesehen und protokolliert;
+            # nur mit ACT16_OBJ_VERSATZ=1 fuehrt er die Hand so, dass das OBJEKT aufs Ziel kommt.
+            if (objekt_sehen_fn is not None and run_combined._objsicht is None
+                    and cz > obj_h + 0.014 and sim.d.qpos[sim.jqadr["joint_5"]] < J5_CLOSED_TH
+                    and float(np.linalg.norm(hxy - tgt_true)) < NACHSEH_R):
+                _gs = objekt_sehen_fn(hxy, float(hz))
+                run_combined._objsicht = {"hand": hxy.copy(), "hz": float(hz), "wahr": c_true.copy(),
+                                          "gesehen": None if _gs is None else np.asarray(_gs, float)[:2].copy()}
+                if _gs is not None and OBJ_VERSATZ:
+                    _hand_versatz = np.asarray(_gs, float)[:2] - hxy
             tgt_eff = tgt                                     # routed carry target (obstacle): once the
             if carry_target_fn is not None and cz > 0.03:     # object is lifted, follow the planned route
                 _wp = carry_target_fn(hxy, tgt_true)          # AROUND the perceived board instead of going
