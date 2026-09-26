@@ -7,6 +7,11 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-27
 
+* **Ergaenzung**: [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md) - Nutzerschritt 2:
+  `ACT23_ZIEL_NACHSEHEN` (980d305) gemessen, 120 Paare: geliefert 52 gegen 52, zum wahren Ziel 20
+  gegen 21 mm. Das Ziel wird schon beim ersten Blick auf 1-2 mm gesehen; der Fehler steckt beim
+  Objekt in der Hand (16 mm) und in der Drift nach dem Loslassen. Vorgabe 0.
+
 * **Ergaenzung**: [Ablage-Schwelle im Teacher](/befunde/ablage-schwelle-im-teacher.md) - Netz-Betrieb,
   150 Ep gepaart: die Policy folgt der 8-mm-Schwelle nur zoegerlich (Loslassen 25 -> ~21 mm, ihre
   Abweichung vom Teacher steigt). Ursache am Code: 24000 alte Etiketten, 8000 davon geschuetzt.

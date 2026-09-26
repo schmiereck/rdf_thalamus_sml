@@ -3,9 +3,9 @@ type: Frage
 title: Aufmerksamkeit fuer Objekt und Ziel - das Objekt wird laufend angeschaut, das Ziel nur einmal
 description: Nutzerfrage 2026-09-26 - hat das Netz eine Aufmerksamkeit fuer das zu tragende Objekt und eine fuer den Zielpunkt bzw. das Zielobjekt, auf die es sich konzentriert? Am Code geprueft. Das Objekt hat eine laufende Aufmerksamkeit (Fovea-Tracker alle 4 Schritte, Servo auf die Griff-Annahme beim Anfahren, Objektgedaechtnis beim Tragen). Das Ziel hat KEINE - goal_fn wird einmal je Episode aufgerufen, das Ziel wird als Koordinate bzw. Ziel-Latent festgelegt und beim Ablegen nie wieder angeschaut; die Ablage ist gegenueber dem Ziel ein offener Regelkreis. Die Policy hat zwar getrennte Eingaenge fuer Objekt und Ziel, der Zieleingang ist aber je Episode konstant. Der heutige Ablagefehler kommt allerdings zuerst aus einer groben Teacher-Schwelle, nicht aus der fehlenden Aufmerksamkeit.
 tags: [act23, aufmerksamkeit, fovea, ziel, architektur, nutzeridee]
-status: draft
-evidenz: vermutung
-ebene: code
+status: stable
+evidenz: einzelmessung
+ebene: act23-ab
 generated: { by: claude/opus-5.5, at: 2026-09-26T00:00:00Z }
 sources:
   - id: code
@@ -58,6 +58,33 @@ haelt und ihren Abstand schliesst (Blick-Servo auf den relativen Versatz), waere
 3. **Relative Aufmerksamkeit** - Objekt-in-der-Hand und Ziel im selben Blick, gesteuert wird der
    Versatz. Braucht einen zweiten Blickpunkt oder einen Blick, der beide umfasst (Zoom); dort sitzt
    die eigentliche Architekturfrage.
+
+# Gemessen 2026-09-27: das Ziel nochmal anschauen bringt nichts - das Ziel ist nicht das Problem
+
+`ACT23_ZIEL_NACHSEHEN` (980d305, Vorgabe 0): sobald der Agent traegt und die Hand 40 mm vor dem Ziel
+steht, loest er die Zieladresse ein zweites Mal ueber die Kamera auf. Neu im Protokoll der Abstand
+zum WAHREN Ziel (wahre Bezugslage plus Versatz). Zieladresse "an", FSM, Ablage-Naehe 8 mm, je
+Episode gepaart, Seeds 9811/9812 je 60 Ep, 120 Paare:
+
+                                        ein Blick        zwei Blicke
+    geliefert                           52 / 120         52 / 120      (8 | 8, p = 1,00)
+    Ziel beim ersten Blick daneben      Median 1 mm      2 mm
+    zweiter Blick                       -                46x ausgeloest, 14x gescheitert (verdeckt);
+                                                         gegen den ersten: 10 besser, 32 gleich, 4 schlechter
+    Endlage zum WAHREN Ziel             Median 20 mm     21 mm         (gepaart 28 besser, 31 schlechter)
+    beim Loslassen seitlich             12 mm            14 mm
+    Objektlage: Annahme gegen Wahrheit  16 mm            17 mm
+
+**Das Ziel wird schon beim ersten Blick auf 1-2 mm genau gesehen.** Ein zweiter Blick hat nichts zu
+korrigieren und scheitert nahe am Arm oft an der Verdeckung. Der verbleibende Fehler steckt beim
+OBJEKT: die Annahme ueber seine Lage in der Hand weicht um 16-17 mm ab, und nach dem Loslassen
+rutscht es weiter (12 mm beim Loslassen, 17-20 mm am Ende).
+
+**Die Antwort auf die Nutzerfrage** lautet damit, Stand heute: eine zweite Aufmerksamkeit fuer das
+ZIEL lohnt nicht - es wird schon genau genug gesehen. Lohnen koennte eine Aufmerksamkeit fuer das
+OBJEKT IN DER HAND waehrend der Ablage (seine Lage wird beim Tragen 16 mm falsch geglaubt), und die
+Ablage selbst (Drift nach dem Loslassen). Die Teacher-Schwelle war der erste und groesste Posten
+([dort](/befunde/ablage-schwelle-im-teacher.md)).
 
 # Was hier NICHT behauptet wird
 
