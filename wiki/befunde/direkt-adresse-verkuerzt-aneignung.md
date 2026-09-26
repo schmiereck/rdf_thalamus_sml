@@ -151,6 +151,31 @@ aus dem Abstand zu ihnen ableiten statt aus dem globalen `eig_bezug`. Nicht geba
 Einschraenkung: ein Lauf je Koerper und Seed; die Mehrdeutigkeits-Zaehlung stammt aus dem
 Debug-Protokoll und ist die belastbarste Zahl hier.
 
+# Gegenbeispiele: was die Adresse NICHT treffen darf (2026-09-26)
+
+Nutzerauftrag nach dem Nachfuehren-Befund. `ACT23_EIG_GEGEN` (91f9fa3, Vorgabe 0): Gegenbeispiele
+ohne Etikett aus derselben Sichtung - beim Anlegen die uebrigen sauberen Flecken im Blick, beim
+Aufloesen die Mitbewerber, wenn der beste Treffer klar vorn liegt (hoechstens halb so weit vom
+Messwert). Ein Fleck passt nur, wenn er in der Toleranz liegt UND dem eigenen Messwert naeher ist
+als jedem Gegenbeispiel. Dieselben vier Laeufe:
+
+                               Dauerhaft          + Gegenbeispiele
+    mehrdeutige Aufloesungen   26 von 56          7 von 51
+    Aufloesung > 40 mm         9                  6   (alle in V/11, dort unveraendert)
+    geliefert                  19 / 59            21 / 61
+    Klaue am Koerper           51 / 59            53 / 61
+    je Lauf  Stern/11          mehrdeutig 9/12 -> 1/4, > 40 mm 3 -> 0, Klaue 14/18 -> 18/19
+             V/23              mehrdeutig 15/25 -> 4/28
+             Stern/23, V/11    zeichengleich bzw. gleich
+
+**Gegen die Mehrdeutigkeit wirken sie deutlich** (26 -> 7). Die verbleibenden Fehltreffer (V/11,
+6 von 19) sind von anderer Art: EINDEUTIG und falsch - der eigene Koerper faellt in dieser Lage aus
+der Toleranz, ein fremder hinein, und Mitbewerber, die man als Gegenbeispiel merken koennte, gibt es
+dabei nicht. Dagegen hilft keine der beiden Quellen. Denkbar: die Messwerte ALLER anderen
+kommandierbaren Koerper, die der Agent schon kennt, von vornherein als Gegenbeispiele fuehren. Nicht
+gebaut. Der Schalter bleibt Vorgabe 0 (ein Lauf je Koerper und Seed); Empfehlung: zusammen mit
+`ACT23_EIG_DIREKT` setzen.
+
 # Fallen
 
 * **Vier Paare, 100 Episoden.** Die Richtung ist in allen vier gleich und gross; ein Nachweis im
