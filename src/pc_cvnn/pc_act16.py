@@ -63,7 +63,13 @@ STANDOFF, NEAR, TOL, CAP = 0.045, 0.02, 0.025, 2200
 # ist -- seitlich konvergiert wird nicht mehr.  Die Policy hat genau das gelernt.  Der Schalter
 # trennt die Ablage vom Anfahren (das Greifen behaelt NEAR).
 NACHSEH_R = float(os.environ.get("ACT16_NACHSEH_R", "0.04"))
-OBJ_VERSATZ = os.environ.get("ACT16_OBJ_VERSATZ", "0") == "1"   # gesehenen Objektversatz ausgleichen   # ab hier schaut er das Ziel nochmal an
+OBJ_VERSATZ = os.environ.get("ACT16_OBJ_VERSATZ", "0") == "1"   # gesehenen Objektversatz ausgleichen
+# ERST TIEF UNTEN HINSCHAUEN (ACT16_OBJSICHT_Z, Vorgabe 0 = sofort in NACHSEH_R).  Gemessen aus
+# Traghoehe (60-93 mm): 8 von 17 verdeckt, gesehen 7-30 mm daneben -- mehr als der Versatz selbst,
+# und der gesehene Versatz liegt fast immer bei 17-22 mm (Parallaxe: die Kamera bildet auf die
+# Tischebene ab).  Mit dem Schalter schaut er erst, wenn die Hand unter dieser Hoehe steht.
+OBJSICHT_Z = float(os.environ.get("ACT16_OBJSICHT_Z", "0"))
+OBJ_WARTE = int(os.environ.get("ACT16_OBJ_WARTE", "150"))   # Schritte, die die Korrektur hoechstens dauert   # ab hier schaut er das Ziel nochmal an
 NEAR_ABLAGE = float(str(os.environ.get("ACT16_NEAR_ABLAGE", "")).replace(",", ".") or NEAR)
 GRASP_OFFSET = float(os.environ.get("ACT16_GRASP_OFFSET", "0.006"))   # (#2) grasp height = obj_half + this
 #   (cube -> 0.018, was 0.014): the claw tips sit ~14mm below the contact site, so grasp_z=0.014 put them
@@ -602,8 +608,9 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             # zweite Blick aufs Ziel: der Versatz Objekt-minus-Hand wird gesehen und protokolliert;
             # nur mit ACT16_OBJ_VERSATZ=1 fuehrt er die Hand so, dass das OBJEKT aufs Ziel kommt.
             if (objekt_sehen_fn is not None and run_combined._objsicht is None
-                    and cz > obj_h + 0.014 and sim.d.qpos[sim.jqadr["joint_5"]] < J5_CLOSED_TH
-                    and float(np.linalg.norm(hxy - tgt_true)) < NACHSEH_R):
+                    and cz > obj_h + 0.004 and sim.d.qpos[sim.jqadr["joint_5"]] < J5_CLOSED_TH
+                    and float(np.linalg.norm(hxy - tgt_true)) < NACHSEH_R
+                    and (OBJSICHT_Z <= 0.0 or hz < OBJSICHT_Z)):
                 _gs = objekt_sehen_fn(hxy, float(hz))
                 run_combined._objsicht = {"hand": hxy.copy(), "hz": float(hz), "wahr": c_true.copy(),
                                           "gesehen": None if _gs is None else np.asarray(_gs, float)[:2].copy()}
@@ -691,13 +698,22 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 elif phase == "carry":
                     j5, aim = gclose, np.array([tgt_eff[0], tgt_eff[1], CARRY_Z])   # via the routed waypoint
                     if np.linalg.norm(hxy - tgt_true) < NEAR_ABLAGE:   # s. NEAR_ABLAGE
-                        phase = "place"
+                        phase, dwell = "place", 0
                 elif phase == "place":
                     # ABLAGEHOEHE: tgt_z statt der Konstanten GRASP_Z.  Ohne dritten Wert aus
                     # goal_fn ist tgt_z == GRASP_Z, und diese Zeilen sind Zeichen fuer Zeichen die alten.
                     if not TASTEN:
-                        j5, aim = gclose, np.array([tgt[0], tgt[1], tgt_z])
-                        if hz < tgt_z + 0.012:
+                        # OBJEKT AUFS ZIEL, NICHT DIE HAND (ACT16_OBJ_VERSATZ): ist der Versatz
+                        # Objekt-minus-Hand gesehen, wird die Hand um ihn verschoben, und losgelassen
+                        # wird erst, wenn die verschobene Stelle erreicht ist (hoechstens OBJ_WARTE
+                        # Schritte, dann wie bisher).  Ohne gesehenen Versatz ist _hand_versatz = 0 und
+                        # die Zeilen sind die alten.
+                        _zh = np.asarray(tgt, float) - _hand_versatz
+                        j5, aim = gclose, np.array([_zh[0], _zh[1], tgt_z])
+                        dwell += 1
+                        _da = (not np.any(_hand_versatz) or dwell > OBJ_WARTE
+                               or float(np.linalg.norm(hxy - _zh)) < NEAR_ABLAGE)
+                        if hz < tgt_z + 0.012 and _da:
                             phase, dwell = "release", 0
                     else:
                         # ERTASTEN (s. TASTEN oben): TAST_TIEF unter die Schaetzung zielen und
