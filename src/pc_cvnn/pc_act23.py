@@ -844,6 +844,12 @@ AUF_ALLE = os.environ.get("ACT23_AUF_ALLE", "0") == "1"
 # EIGENER Schalter, nicht an AUF_ALLE gehaengt: er aendert das Erfolgsetikett, aus dem gelernt
 # wird, und muss einzeln abschaltbar sein.
 AUF_LOSLASSEN = os.environ.get("ACT23_AUF_LOSLASSEN", "0") == "1"
+# DAS ZIEL NOCHMAL ANSCHAUEN (ACT23_ZIEL_NACHSEHEN, Vorgabe 0 bis gemessen).  Nutzeridee
+# 2026-09-26 (wiki/fragen/aufmerksamkeit-objekt-ziel.md): das Ziel wird heute EINMAL je Episode
+# gesehen.  Mit dem Schalter loest der Agent die Zieladresse ein zweites Mal ueber die Kamera auf,
+# sobald er traegt und die Hand in ACT16_NACHSEH_R um das Ziel steht.  Nur fuer wahrgenommene Ziele
+# ("an" und Richtungswoerter); ein Marker ist eine exakte Koordinate, dort gibt es nichts zu sehen.
+ZIEL_NACHSEHEN = os.environ.get("ACT23_ZIEL_NACHSEHEN", "0") == "1"
 # ERLAUBTE ZELLEN (ACT23_ZIEL_ZELLEN, Vorgabe leer = alle).  Fuer die Generalisierungsmessung
 # (wiki/befunde/generalisierung-relation-zielart.md): eine Zelle ist WORT:ZIELART, WORT aus
 # auf/links/rechts/vor/hinter, ZIELART aus platte/wuerfel/balken.  Ist die Liste gesetzt, wird je
@@ -2885,6 +2891,7 @@ def run_self_learning_steering(headless=False):
                           f"[{_q[0]:+.3f},{_q[1]:+.3f}]", flush=True)
                     bez["aufgeloest"] = True
                     bez["ziel_xy"] = np.asarray(_p, float).copy()
+                    bez["ziel_rel"] = np.asarray(_q, float) - np.asarray(_p, float)   # fuer die Wahrheit
                     return _q
             print(f"    [Zieladresse] '{bez['label']}': Richtung nicht erreichbar -- "
                   f"Rückfall auf Ziel {state.target_idx + 1}", flush=True)
@@ -2903,6 +2910,7 @@ def run_self_learning_steering(headless=False):
                       f"[{_q[0]:+.3f},{_q[1]:+.3f}]", flush=True)
                 bez["aufgeloest"] = True                 # fuer das Richtungs-Etikett am Ende
                 bez["ziel_xy"] = np.asarray(_p, float).copy()
+                bez["ziel_rel"] = np.asarray(_q, float) - np.asarray(_p, float)   # fuer die Wahrheit
                 return _q
         print(f"    [Zieladresse] '{bez['label']}' gefunden, aber keine erreichbare Ablage daneben"
               f" -- Rückfall auf Ziel {state.target_idx + 1}", flush=True)
@@ -5754,6 +5762,20 @@ def run_self_learning_steering(headless=False):
     res = {}
     def ep_end(ep, ok, err): res["ok"] = bool(ok); res["err"] = float(err)
 
+    def _ziel_nachsehen():
+        """Der ZWEITE Blick auf das Ziel (s. ACT23_ZIEL_NACHSEHEN): dieselbe Aufloesung wie zu Beginn,
+        jetzt aus der Naehe.  Scheitert sie (verdeckt, mehrdeutig), bleibt das erste Ziel stehen."""
+        bez = state.ziel_bezug
+        if bez is None or bez.get("relation") not in ("an", "richtung") or not bez.get("aufgeloest"):
+            return None
+        _merk = {k: bez.get(k) for k in ("aufgeloest", "ziel_xy", "ziel_rel")}
+        print("    [Ziel-Nachsehen] zweiter Blick auf das Ziel", flush=True)
+        q = state.ziel_loeser(bez)
+        if q is None:
+            bez.update(_merk)                          # erster Blick bleibt gueltig
+            return None
+        return q
+
     _dbg = os.environ.get("ACT23_DEBUG", "0") == "1"
     _dbgimg = os.environ.get("ACT23_DEBUG_IMG", "")
     def _pos():
@@ -6276,6 +6298,7 @@ def run_self_learning_steering(headless=False):
                            place_servo_fn=_plan_ueber_ports,
                            servo=(method in ("color", "shape") or eig_servo),
                            rescatter=False, episode_end_fn=ep_end,
+                           ziel_nachsehen_fn=(_ziel_nachsehen if ZIEL_NACHSEHEN else None),
                            lifelong=True, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
                            arm_reset=False)
         _T["nach_ausfuehrung"] = _time.perf_counter()
@@ -6396,6 +6419,18 @@ def run_self_learning_steering(headless=False):
             _bz = state.ziel_bezug
             if _bz is not None:
                 _bp = sim.obj_pos(_bz["body"])[:2]
+                if _bz.get("ziel_rel") is not None:
+                    # DAS WAHRE ZIEL: wahre Lage des Bezugs plus derselbe Versatz.  Gewertet wird sonst
+                    # gegen das WAHRGENOMMENE Ziel -- ein Fehler beim Sehen des Ziels waere unsichtbar.
+                    _tw = _bp + np.asarray(_bz["ziel_rel"], float)
+                    _zus += (f" | zum WAHREN Ziel {1000.0 * float(np.linalg.norm(_end - _tw)):.0f}mm "
+                             f"(Ziel {1000.0 * float(np.linalg.norm(np.asarray(_rel['tgt'], float) - _tw)):.0f}mm "
+                             f"daneben gesehen)")
+                    _ns = getattr(act16.run_combined, "_nachsehen", None)
+                    if _ns is not None:
+                        _zus += (" | Nachsehen: " + ("gescheitert" if _ns["neu"] is None else
+                                 f"erster Blick {1000.0 * float(np.linalg.norm(_ns['alt'] - _tw)):.0f}mm, "
+                                 f"zweiter {1000.0 * float(np.linalg.norm(_ns['neu'] - _tw)):.0f}mm daneben"))
                 _zus += (f" | zum Bezug {1000.0 * float(np.linalg.norm(_end - _bp)):.0f}mm"
                          f" (Soll {0.0 if _bz.get('relation') == 'auf' else 1000.0 * ZIEL_ABSTAND:.0f}mm)")
                 # HAT DER ARM DEN BEZUGSKOERPER ANGERUEHRT?  Das ist der Trennungstest zwischen den

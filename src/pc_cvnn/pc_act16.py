@@ -62,6 +62,7 @@ STANDOFF, NEAR, TOL, CAP = 0.045, 0.02, 0.025, 2200
 # traegt, bis die HAND NEAR vom Ziel ist, senkt dann ab und laesst los, sobald die HOEHE erreicht
 # ist -- seitlich konvergiert wird nicht mehr.  Die Policy hat genau das gelernt.  Der Schalter
 # trennt die Ablage vom Anfahren (das Greifen behaelt NEAR).
+NACHSEH_R = float(os.environ.get("ACT16_NACHSEH_R", "0.04"))   # ab hier schaut er das Ziel nochmal an
 NEAR_ABLAGE = float(str(os.environ.get("ACT16_NEAR_ABLAGE", "")).replace(",", ".") or NEAR)
 GRASP_OFFSET = float(os.environ.get("ACT16_GRASP_OFFSET", "0.006"))   # (#2) grasp height = obj_half + this
 #   (cube -> 0.018, was 0.014): the claw tips sit ~14mm below the contact site, so grasp_z=0.014 put them
@@ -344,6 +345,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                  episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None,
                  ood_rate=0.0, ood_rng=None, tol=None, carry_target_fn=None,
                  post_goal_fn=None, macro_log_fn=None, servo=False, rescatter=True, orient_fn=None,
+                 ziel_nachsehen_fn=None,
                  carry_gentle=False, grip_close=None, wrist_fn=None, arm_reset=True, policy_log_fn=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
@@ -517,6 +519,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         mode = (force(cmd) if callable(force) else force) or mode_perc or "grasp"
         phase = "over" if mode == "grasp" else "approach"
         dwell = 0; via = "grasp"; done = False; grasp_retry = 0
+        run_combined._nachsehen = None                        # s. ZIEL NOCHMAL ANSCHAUEN
         # closed-loop grasp-target BELIEF: starts at the up-front perception, then the live fovea
         # CORRECTS it each frame (precision-weighted, occlusion-gated) instead of freezing the snapshot
         obj_belief = (cube_plan.copy() if cube_plan is not None else None) if servo else None
@@ -572,6 +575,23 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 run_combined._maxcz = float(cz)
             if cz > obj_h + 0.02 and float(np.linalg.norm(c_true - hxy)) > 0.045:
                 run_combined._slipped = True                 # lifted but the object is far from the claw
+            # ZIEL NOCHMAL ANSCHAUEN (ziel_nachsehen_fn, s. ACT23_ZIEL_NACHSEHEN).  Das Ziel wird zu
+            # Beginn EINMAL gesehen und dann festgehalten (wiki/fragen/aufmerksamkeit-objekt-ziel.md).
+            # Hier schaut der Agent ein zweites Mal hin: EINMAL, sobald er das Objekt traegt und die
+            # Hand in NACHSEH_R um das Ziel steht -- also aus der Naehe, kurz vor dem Ablegen.
+            # Liefert der Blick ein Ziel, wird es das neue Ziel der Episode: Steuerung, Ziel-Latent
+            # (post_goal_fn) und Wertung, genau wie beim ersten Blick.
+            if (ziel_nachsehen_fn is not None and run_combined._nachsehen is None
+                    and cz > obj_h + 0.014 and sim.d.qpos[sim.jqadr["joint_5"]] < J5_CLOSED_TH
+                    and float(np.linalg.norm(hxy - tgt_true)) < NACHSEH_R):
+                _g2 = ziel_nachsehen_fn()
+                run_combined._nachsehen = {"alt": tgt_true.copy(), "neu": None}
+                if _g2 is not None:
+                    _g2 = np.asarray(_g2, float)[:2]
+                    run_combined._nachsehen["neu"] = _g2.copy()
+                    tgt = _g2.copy(); tgt_true = _g2.copy()
+                    if post_goal_fn is not None:
+                        post_goal_fn(cmd, c_true, tgt_true)
             tgt_eff = tgt                                     # routed carry target (obstacle): once the
             if carry_target_fn is not None and cz > 0.03:     # object is lifted, follow the planned route
                 _wp = carry_target_fn(hxy, tgt_true)          # AROUND the perceived board instead of going
