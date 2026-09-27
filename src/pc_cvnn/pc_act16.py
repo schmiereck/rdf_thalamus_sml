@@ -71,6 +71,12 @@ OBJ_VERSATZ = os.environ.get("ACT16_OBJ_VERSATZ", "0") == "1"   # gesehenen Obje
 OBJSICHT_Z = float(os.environ.get("ACT16_OBJSICHT_Z", "0"))
 OBJ_WARTE = int(os.environ.get("ACT16_OBJ_WARTE", "150"))   # Schritte, die die Korrektur hoechstens dauert   # ab hier schaut er das Ziel nochmal an
 NEAR_ABLAGE = float(str(os.environ.get("ACT16_NEAR_ABLAGE", "")).replace(",", ".") or NEAR)
+# ABSENKEN AB (ACT16_SENK_NAH, Vorgabe = NEAR_ABLAGE, also zeichengleich).  Gemessen 2026-09-28: mit
+# NEAR_ABLAGE = 8 mm erreicht das sanfte Tragen die 8 mm oft nie -- 17-29 von 60 FSM-Episoden liefen
+# in die Tragezeitgrenze und oeffneten am Episodenende aus 60-90 mm Hoehe (mit 20 mm: 2).  Der Schalter
+# trennt die beiden Aufgaben der einen Schwelle: ab SENK_NAH wird abgesenkt (und dabei weiter aufs
+# Ziel gezielt), losgelassen wird erst unten UND naeher als NEAR_ABLAGE (FSM: hoechstens OBJ_WARTE).
+SENK_NAH = float(str(os.environ.get("ACT16_SENK_NAH", "")).replace(",", ".") or NEAR_ABLAGE)
 GRASP_OFFSET = float(os.environ.get("ACT16_GRASP_OFFSET", "0.006"))   # (#2) grasp height = obj_half + this
 #   (cube -> 0.018, was 0.014): the claw tips sit ~14mm below the contact site, so grasp_z=0.014 put them
 #   AT the floor and any overshoot was blocked/deflected; +4mm lifts them clear while still gripping the cube
@@ -319,9 +325,11 @@ def reactive_subgoal(state):
     place_z = grasp_z - h_griff + h_auf                   # abgelegt wird OHNE die Griff-Auflage
     grasped = (cz > lift_thresh) and (j5 < J5_CLOSED_TH)  # object lifted off the table AND gripper closed
     if grasped:                                           # CARRY -> place -> release
-        if np.linalg.norm(hxy - t) > NEAR_ABLAGE:        # carry over the target (s. NEAR_ABLAGE)
+        if np.linalg.norm(hxy - t) > SENK_NAH:           # carry over the target (s. NEAR_ABLAGE, SENK_NAH)
             return np.array([tx, ty, carry_z, J5_GRIP])
         if hz > place_z + 0.012:                          # lower onto the target (or its SUPPORT)
+            return np.array([tx, ty, place_z, J5_GRIP])
+        if np.linalg.norm(hxy - t) > NEAR_ABLAGE:        # unten, aber noch nicht nah genug (nur SENK_NAH > NEAR_ABLAGE)
             return np.array([tx, ty, place_z, J5_GRIP])
         return np.array([tx, ty, place_z, J5_OPEN])       # release
     # (Ein gefuehlter LEERGRIFF -- Backenwinkel + Fingerdruck statt Hub-Hoehe -- stand hier und ist
@@ -697,7 +705,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                             mode, phase = "push", "approach"      # wide / retries spent -> push fallback
                 elif phase == "carry":
                     j5, aim = gclose, np.array([tgt_eff[0], tgt_eff[1], CARRY_Z])   # via the routed waypoint
-                    if np.linalg.norm(hxy - tgt_true) < NEAR_ABLAGE:   # s. NEAR_ABLAGE
+                    if np.linalg.norm(hxy - tgt_true) < SENK_NAH:   # s. NEAR_ABLAGE, SENK_NAH
                         phase, dwell = "place", 0
                 elif phase == "place":
                     # ABLAGEHOEHE: tgt_z statt der Konstanten GRASP_Z.  Ohne dritten Wert aus
@@ -711,7 +719,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                         _zh = np.asarray(tgt, float) - _hand_versatz
                         j5, aim = gclose, np.array([_zh[0], _zh[1], tgt_z])
                         dwell += 1
-                        _da = (not np.any(_hand_versatz) or dwell > OBJ_WARTE
+                        _da = ((not np.any(_hand_versatz) and SENK_NAH <= NEAR_ABLAGE)
+                               or dwell > OBJ_WARTE
                                or float(np.linalg.norm(hxy - _zh)) < NEAR_ABLAGE)
                         if hz < tgt_z + 0.012 and _da:
                             phase, dwell = "release", 0
