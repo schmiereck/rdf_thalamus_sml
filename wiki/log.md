@@ -1,5 +1,15 @@
 # Chronik
 
+## 2026-09-27
+
+* **S1-PC-Vorwärtsmodell verworfen**: [Vorwärtsmodell](/befunde/s1-pc-vorwaertsmodell.md) -
+  der 24er komplexe Ein-Latent-Experte erreicht 0,021131 statt 0,000138 rad² Persistenz-MSE
+  und ist auf 0/5 Gelenken besser. Keine Parameter- oder Architektursuche unter diesem Vertrag.
+
+* **S1-PC-Vorwärtsvertrag**: [Vorwärtsmodell](/messungen/s1-pc-vorwaertsmodell.md) - der
+  isolierte 24-dimensionale komplexe PC-Experte erhält nur Encoderzustand und direkte
+  Stellwerte. Zwölf Epochen und die Tore gegen Persistenz sind vor dem Lauf festgelegt.
+
 ## 2026-09-26
 
 * **S1-Übergangssatz gültig**: [Propriozeptionsübergänge](/befunde/s1-proprio-uebergaenge.md) -

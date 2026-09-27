@@ -118,7 +118,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 | D6 | Curriculum fuer einen einzelnen lernenden Arm | D5 | offen | - |
 | D7 | Verteilung auf getrennte Rechner | D1; Integration nach D5 | offen | - |
 | S0 | Semantik und Messaufgabe fuer direkte Servosteuerung | D0 | in Arbeit | [S0-Servogrundaudit](/befunde/s0-servo-grundaudit.md): Aktuatorvertrag für fünf direkte, druckfreie Gelenkkanäle geprüft; Lernaufgabe und Kontrolle noch offen |
-| S1 | Motorisches Lernsignal und autonomer kurzer Regelkreis | S0, D1 | in Arbeit | [S1-Propriozeptionsübergänge](/befunde/s1-proprio-uebergaenge.md): 3.000 sichere freie `(q, ctrl, q')`-Übergänge; Vorwärtsmodell auf ganzen Testrollouts steht aus |
+| S1 | Motorisches Lernsignal und autonomer kurzer Regelkreis | S0, D1 | in Arbeit | [S1-PC-Vorwärtsmodell](/befunde/s1-pc-vorwaertsmodell.md): erster generativer PC-Experte verliert 154× gegen Persistenz; neue aktionskonditionierte Hypothese oder S1 zurückstellen |
 | S2 | Eigene Anpassung und ACT23-Integration | S1 | offen | - |
 | S3 | Optional: Geschwindigkeit oder Drehmoment statt Winkelvorgabe | S2, eigener Befund zum Bedarf | offen | - |
 | F0 | Vorhandene Netzzustaende fuer neue Wahrnehmungsaufgaben pruefen | keine | zurückgestellt | D0b-F1a/F1b und feste Hubantwort verworfen; ein neuer F0-Zweig braucht eine eigenständige Repräsentationshypothese und Vertrag |
