@@ -5,6 +5,18 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-28
+
+* **Widerlegt**: [Ablage-Schwelle im Teacher](/befunde/ablage-schwelle-im-teacher.md) - die
+  "Abwuerfe aus der Hoehe" waren ein Zeitgrenzen-Artefakt der 8-mm-Schwelle (FSM erreicht sie beim
+  Tragen nie, 17-29 von 60 Ep). Neuer Schalter `ACT16_SENK_NAH` (11c651a, zeichengleich geprueft).
+  A/B: Hand auf 8 mm am Ziel, Objekt trotzdem 21-22 mm daneben entlang der Klaue; geliefert 53
+  gegen 47 von 120 (p = 0,24). Die Ursache ist der Sitz des Objekts in der Hand.
+
+* **Ergaenzung**: [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md) -
+  Objektblick mit SENK_NAH wiederholt: loest bei 57 von 79 Ablagen aus, wo gesehen 21 -> 15 mm zum
+  wahren Ziel; geliefert 56 gegen 49 (18 | 11, p = 0,27). Schalter bleiben aus.
+
 ## 2026-09-27
 
 * **Ergaenzung**: [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md) - das
