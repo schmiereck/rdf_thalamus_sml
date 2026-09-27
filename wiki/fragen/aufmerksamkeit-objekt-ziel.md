@@ -147,6 +147,34 @@ nicht gemessen: die Hand korrigiert, waehrend das Objekt schon den Tisch beruehr
 Stand: die Objekt-Aufmerksamkeit ist der richtige Posten fuer den Ablagefehler, bringt als
 einfache Korrektur (ein Blick, ein Versatz) aber keine Lieferungen. Schalter bleiben aus.
 
+# Gemessen 2026-09-28: in der Luft korrigieren - kein Schleifen, das Fehlerbudget ist 8 + 8 mm
+
+`ACT16_LUFT_H` (Vorgabe 0, zeichengleich): die Hand haelt beim Nachfuehren 15 mm ueber der
+Ablagehoehe, bis sie naeher als 8 mm an der verschobenen Stelle steht, und senkt erst dann ab.
+Neu im Protokoll: beim Loslassen der Abstand Hand-Sollstelle und wie weit das Objekt seit dem Blick
+in der Klaue gewandert ist. Wie oben (FSM, SENK_NAH, Blick unter 35 mm, Seeds 9811/9812, 120 Paare):
+
+                                          Blick            Blick + Luft
+    geliefert                             49 / 120         51 / 120    (12 | 14, p = 0,85)
+    zum WAHREN Ziel, Objekt gesehen       17 mm            15 mm       (n = 49)
+    Objekt seit dem Blick gewandert       3 mm (Q75 8-9)   3 mm (Q75 6-10)
+
+**Die Vermutung "das Objekt wird unten mitgeschleift" ist widerlegt**: es wandert zwischen Blick
+und Loslassen nur 3 mm, in beiden Armen. Die Schwebe bringt 2 mm und keine Lieferungen.
+
+**Das Fehlerbudget beim Loslassen** (Objekt gesehen, Mediane je Seed und Arm):
+
+    Blick daneben (Richtungsfehler des gesehenen Versatzes)   7-9 mm
+    Hand von der Sollstelle                                    7-8 mm  (= NEAR_ABLAGE: sie laesst
+                                                                        los, sobald sie 8 mm erreicht)
+    Objekt in der Klaue gewandert                              3 mm
+    Objekt seitlich vom Ziel                                   17-19 mm
+
+Zwei gleich grosse Posten von je ~8 mm, die sich addieren koennen. Die naechsten Hebel waeren
+also ein genauerer Blick (der Blick aus 34 mm Hoehe hat noch Parallaxe; das Objekt liegt nach dem
+Ablegen auf dem Tisch und wird DANN genau gesehen - daraus liesse sich die Korrektur des Blicks
+selbst lernen, ohne Teacher) und eine engere Hand-Toleranz. Nicht gemessen.
+
 # Was hier NICHT behauptet wird
 
 Keine Wirkung. Alles ist Codeanalyse; die einzige Messung ist die Zerlegung des Ablagefehlers.

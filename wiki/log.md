@@ -7,6 +7,11 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-28
 
+* **Ergaenzung**: [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md) -
+  `ACT16_LUFT_H` (in der Luft korrigieren, zeichengleich geprueft): Objekt wandert seit dem Blick
+  nur 3 mm (Schleif-Vermutung widerlegt), zum wahren Ziel 17 -> 15 mm, geliefert 49 gegen 51
+  (p = 0,85). Fehlerbudget: Blick ~8 mm, Hand-Toleranz 8 mm, Wandern 3 mm.
+
 * **Widerlegt**: [Ablage-Schwelle im Teacher](/befunde/ablage-schwelle-im-teacher.md) - die
   "Abwuerfe aus der Hoehe" waren ein Zeitgrenzen-Artefakt der 8-mm-Schwelle (FSM erreicht sie beim
   Tragen nie, 17-29 von 60 Ep). Neuer Schalter `ACT16_SENK_NAH` (11c651a, zeichengleich geprueft).
