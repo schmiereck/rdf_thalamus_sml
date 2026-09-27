@@ -854,6 +854,18 @@ ZIEL_NACHSEHEN = os.environ.get("ACT23_ZIEL_NACHSEHEN", "0") == "1"
 # Agent das GETRAGENE Objekt an: die Detektion naechst der eigenen Hand (innerhalb 40 mm).  Ohne
 # ACT16_OBJ_VERSATZ nur Messung.
 OBJ_SEHEN = os.environ.get("ACT23_OBJ_SEHEN", "0") == "1"
+# DEN BLICK AUF DAS OBJEKT IN DER HAND SELBST KORRIGIEREN LERNEN (ACT23_BLICK_LERNEN, Vorgabe 0).
+# Aus 34 mm Hoehe sieht die Kamera das gehaltene Objekt 7-9 mm falsch (Parallaxe: die Homographie
+# bildet auf die Tischebene ab).  Nach dem Ablegen liegt es auf dem Tisch und wird DORT genau gesehen.
+# Das Etikett kommt also aus Kamera und eigener Hand, ohne Teacher und ohne Simulator-Wahrheit:
+#     Merkmale  gesehener Versatz Objekt-minus-Hand, Handlage und -hoehe beim Blick
+#     Etikett   gesehene Ruhelage nach dem Ablegen minus Hand beim Loslassen
+# Gelernt wird "wo landet das Objekt relativ zur Hand" -- Parallaxe UND die typische Drift nach dem
+# Loslassen in einem.  1 = lernen und vorhersagen, aber nicht benutzen (Schatten); 2 = benutzen,
+# sobald BLICK_MIN Beispiele da sind.  Die Beispiele werden im Zustand gespeichert.
+BLICK_LERNEN = int(os.environ.get("ACT23_BLICK_LERNEN", "0"))
+BLICK_MIN = int(os.environ.get("ACT23_BLICK_MIN", "12"))
+BLICK_MAX = 400
 # ERLAUBTE ZELLEN (ACT23_ZIEL_ZELLEN, Vorgabe leer = alle).  Fuer die Generalisierungsmessung
 # (wiki/befunde/generalisierung-relation-zielart.md): eine Zelle ist WORT:ZIELART, WORT aus
 # auf/links/rechts/vor/hinter, ZIELART aus platte/wuerfel/balken.  Ist die Liste gesetzt, wird je
@@ -2334,6 +2346,7 @@ def run_self_learning_steering(headless=False):
     # je einer pro eigener Ablage, die der Agent im Nachhinein unter diesem Wort gesehen hat.
     # Ein schlichtes dict aus Listen -- pickelbar ohne Klasse, additiv wie der Hoehenschaetzer.
     wort_bedeutung = dict((_loaded or {}).get("wort_bedeutung") or {})
+    blick_daten = list((_loaded or {}).get("blick_daten") or [])   # s. BLICK_LERNEN
     for _w in RICHTUNGS_WOERTER:
         wort_bedeutung.setdefault(_w, [])
 
@@ -3564,6 +3577,7 @@ def run_self_learning_steering(headless=False):
                     "hoehe_schaetzer": hoehen_schaetzer,
                     "wort_bedeutung": {w: [np.asarray(v, float) for v in l]
                                        for w, l in wort_bedeutung.items()},
+                    "blick_daten": list(blick_daten),
 
                     # EIGENSCHAFTS-ADRESSEN WERDEN NICHT GESPEICHERT.  Sie sind fluechtig: der
                     # Auto-Lauf schreibt sie in JEDER Episode neu aus der aktuellen Detektion.
@@ -5776,6 +5790,25 @@ def run_self_learning_steering(headless=False):
     res = {}
     def ep_end(ep, ok, err): res["ok"] = bool(ok); res["err"] = float(err)
 
+    def _blick_merkmale(o, h, hz):
+        """Merkmale des Blicks: gesehener Versatz, Handlage, Hoehe und deren Produkt (Parallaxe waechst
+        mit Hoehe mal Abstand zur Kamera)."""
+        return np.array([1.0, o[0], o[1], h[0], h[1], hz, h[0] * hz, h[1] * hz], float)
+
+    def _blick_vorhersage(f):
+        """Ridge-Regression auf blick_daten; None, solange zu wenig Beispiele da sind."""
+        if len(blick_daten) < BLICK_MIN:
+            return None
+        X = np.array([np.asarray(x, float) for x, _y in blick_daten])
+        Y = np.array([np.asarray(y, float) for _x, y in blick_daten])
+        mu, sd = X.mean(0), X.std(0) + 1e-9
+        mu[0], sd[0] = 0.0, 1.0
+        Z = (X - mu) / sd
+        W = np.linalg.solve(Z.T @ Z + 1.0 * np.eye(Z.shape[1]), Z.T @ Y)
+        return ((np.asarray(f, float) - mu) / sd) @ W
+
+    _blick_akt = {"v": None}
+
     def _objekt_sehen(hand_xy, hand_z):
         """Das getragene Objekt ansehen: die Detektion naechst der Hand.  Nur Kamera + eigene Hand."""
         saved = sim.d.mocap_pos.copy()
@@ -5787,7 +5820,15 @@ def run_self_learning_steering(headless=False):
         if not nah:
             return None
         d = min(nah, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"], float) - _h)))
-        return np.asarray(d["pos"], float)
+        g = np.asarray(d["pos"], float)
+        if BLICK_LERNEN:                                   # s. BLICK_LERNEN
+            _o = g[:2] - _h[:2]
+            _f = _blick_merkmale(_o, _h[:2], float(hand_z))
+            _p = _blick_vorhersage(_f)
+            _blick_akt["v"] = {"f": _f, "o": _o, "p": _p}
+            if BLICK_LERNEN >= 2 and _p is not None:
+                return _h[:2] + np.asarray(_p, float)       # die gelernte Landestelle statt des Rohblicks
+        return g
 
     def _ziel_nachsehen():
         """Der ZWEITE Blick auf das Ziel (s. ACT23_ZIEL_NACHSEHEN): dieselbe Aufloesung wie zu Beginn,
@@ -6376,6 +6417,39 @@ def run_self_learning_steering(headless=False):
         print(f"    [Griffdruck] zufassen {_close_m:5.2f} | heben {_lift_m:5.2f} (min {_lift_lo:4.2f})"
               f" | tragen {_carry_m:5.2f} (min {_carry_lo:4.2f}) | loesen {_rel_m:5.2f}  [N]"
               f"  | Messpunkte {_cnt or 'KEINE'}", flush=True)
+        if BLICK_LERNEN:
+            # DAS ETIKETT FUER DEN BLICK (s. BLICK_LERNEN): wo liegt das Objekt jetzt, GESEHEN, relativ
+            # zur Hand beim Loslassen?  Gesucht wird nahe der erwarteten Landestelle; auf etwas
+            # abgelegt ("auf") wird nicht gelernt (die Detektion verschmilzt mit der Auflage).
+            _bv = _blick_akt["v"]; _blick_akt["v"] = None
+            _osb = getattr(act16.run_combined, "_objsicht", None)
+            _lob = (_osb or {}).get("los")
+            _bzb = state.ziel_bezug
+            if (_bv is not None and _lob is not None
+                    and not (_bzb is not None and _bzb.get("relation") == "auf")):
+                _hl = np.asarray(_lob["hand"], float)[:2]
+                _erw = _hl + _bv["o"]
+                _sv = sim.d.mocap_pos.copy()
+                _dts = shape_clf.perceive_all(sim)
+                sim.d.mocap_pos[:] = _sv; mujoco.mj_forward(sim.m, sim.d)
+                _kd = [np.asarray(d["pos"], float)[:2] for d in _dts
+                       if d.get("pos") is not None and float(d.get("area", 0.0)) >= 100.0
+                       and float(np.linalg.norm(np.asarray(d["pos"], float)[:2] - _erw)) < 0.045]
+                if _kd:
+                    _ps = min(_kd, key=lambda q: float(np.linalg.norm(q - _erw)))
+                    _y = _ps - _hl
+                    _wahr = np.asarray(sim.obj_pos(body)[:2], float) - _hl   # nur Protokoll
+                    _txt = (f"Etikett {1000.0 * float(np.linalg.norm(_y)):.0f}mm (gegen Wahrheit "
+                            f"{1000.0 * float(np.linalg.norm(_y - _wahr)):.0f}mm) | Rohblick daneben "
+                            f"{1000.0 * float(np.linalg.norm(_bv['o'] - _y)):.0f}mm")
+                    if _bv["p"] is not None:
+                        _txt += (f" | gelernt daneben {1000.0 * float(np.linalg.norm(np.asarray(_bv['p']) - _y)):.0f}mm"
+                                 + (" (benutzt)" if BLICK_LERNEN >= 2 else " (Schatten)"))
+                    blick_daten.append((_bv["f"].copy(), _y.copy()))
+                    del blick_daten[:-BLICK_MAX]
+                    print(f"    [Blick-Lernen] {_txt} | {len(blick_daten)} Beispiele", flush=True)
+                else:
+                    print("    [Blick-Lernen] abgelegtes Objekt nicht gesehen -- kein Etikett", flush=True)
         _rel = getattr(act16.run_combined, "_release", None)
         _bzl = state.ziel_bezug
         if _bzl is not None and _bzl.get("relation") == "auf" and _bzl.get("aufgeloest"):
