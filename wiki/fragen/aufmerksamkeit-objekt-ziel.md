@@ -175,6 +175,27 @@ also ein genauerer Blick (der Blick aus 34 mm Hoehe hat noch Parallaxe; das Obje
 Ablegen auf dem Tisch und wird DANN genau gesehen - daraus liesse sich die Korrektur des Blicks
 selbst lernen, ohne Teacher) und eine engere Hand-Toleranz. Nicht gemessen.
 
+# Gemessen 2026-09-28: die Blickkorrektur selbst lernen (Seed 9811; 9812 lief noch)
+
+`ACT23_BLICK_LERNEN` (b92c299, Vorgabe 0). Etikett ohne Teacher und ohne Simulator-Wahrheit: nach
+dem Ablegen wird das Objekt auf dem Tisch GESEHEN; gelernt wird (Ridge) "gesehener Versatz, Handlage,
+Hoehe -> Landestelle relativ zur Hand beim Loslassen" - Parallaxe und Drift in einem. 1 = Schatten
+(lernt, benutzt den Rohblick), 2 = benutzt ab 12 Beispielen. FSM, SENK_NAH, Blick unter 35 mm,
+Seed 9811, 150 Ep je Arm, gepaart:
+
+    Etikett gegen Wahrheit                 1-3 mm (Median) -- das Selbst-Etikett ist gut
+    Vorhersagefehler je 30 Ep              Schatten: roh 10-16, gelernt  9-16 mm
+                                           benutzt:  roh 12-17, gelernt  5-11 mm
+    zum WAHREN Ziel (Objekt gesehen, n=68) 17 mm -> 17 mm
+    geliefert                              68 / 150 gegen 69 / 150 (14 | 15, p = 1,00)
+
+**Das Etikett aus der eigenen Kamera ist genau (1-3 mm), das Lernen aber bringt kaum etwas:** im
+Schattenarm sagt das gelernte Modell die Landestelle kaum besser vorher als der Rohblick, und wo es
+benutzt wird, bleibt das Objekt 17 mm vom wahren Ziel, die Lieferungen gleich. Der naheliegende
+Grund: die Landestelle enthaelt die Drift nach dem Loslassen (Median 12 mm), und die ist aus Blick,
+Handlage und Hoehe nicht vorhersagbar. Der bessere Vorhersagefehler im benutzten Arm (5-11 mm)
+schlaegt nicht auf die Endlage durch - ungeklaert.
+
 # Was hier NICHT behauptet wird
 
 Keine Wirkung. Alles ist Codeanalyse; die einzige Messung ist die Zerlegung des Ablagefehlers.

@@ -8,6 +8,10 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 ## 2026-09-28
 
 * **Ergaenzung**: [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md) -
+  `ACT23_BLICK_LERNEN` (b92c299): Blickkorrektur aus eigenem Kamera-Etikett gelernt. Etikett 1-3 mm
+  genau, Endlage 17 -> 17 mm, geliefert 68 gegen 69 von 150 (Seed 9811; 9812 ausstehend).
+
+* **Ergaenzung**: [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md) -
   `ACT16_LUFT_H` (in der Luft korrigieren, zeichengleich geprueft): Objekt wandert seit dem Blick
   nur 3 mm (Schleif-Vermutung widerlegt), zum wahren Ziel 17 -> 15 mm, geliefert 49 gegen 51
   (p = 0,85). Fehlerbudget: Blick ~8 mm, Hand-Toleranz 8 mm, Wandern 3 mm.
