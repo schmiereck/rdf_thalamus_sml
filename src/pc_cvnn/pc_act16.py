@@ -77,6 +77,13 @@ NEAR_ABLAGE = float(str(os.environ.get("ACT16_NEAR_ABLAGE", "")).replace(",", ".
 # trennt die beiden Aufgaben der einen Schwelle: ab SENK_NAH wird abgesenkt (und dabei weiter aufs
 # Ziel gezielt), losgelassen wird erst unten UND naeher als NEAR_ABLAGE (FSM: hoechstens OBJ_WARTE).
 SENK_NAH = float(str(os.environ.get("ACT16_SENK_NAH", "")).replace(",", ".") or NEAR_ABLAGE)
+# IN DER LUFT KORRIGIEREN (ACT16_LUFT_H, Vorgabe 0 = aus, zeichengleich).  Ohne den Schalter zielt
+# die Ablage waehrend des seitlichen Nachfuehrens schon auf die volle Ablagehoehe; ist die Hand noch
+# nicht ueber der (um den gesehenen Objektversatz verschobenen) Stelle, steht das Objekt womoeglich
+# schon auf dem Tisch und wird mitgeschleift.  Mit dem Schalter haelt die Hand LUFT_H ueber der
+# Ablagehoehe, bis sie naeher als NEAR_ABLAGE an der Stelle ist (hoechstens OBJ_WARTE Schritte), und
+# senkt erst dann senkrecht ab.
+LUFT_H = float(str(os.environ.get("ACT16_LUFT_H", "")).replace(",", ".") or 0.0)
 GRASP_OFFSET = float(os.environ.get("ACT16_GRASP_OFFSET", "0.006"))   # (#2) grasp height = obj_half + this
 #   (cube -> 0.018, was 0.014): the claw tips sit ~14mm below the contact site, so grasp_z=0.014 put them
 #   AT the floor and any overshoot was blocked/deflected; +4mm lifts them clear while still gripping the cube
@@ -537,6 +544,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         run_combined._nachsehen = None                        # s. ZIEL NOCHMAL ANSCHAUEN
         run_combined._objsicht = None                         # s. DAS OBJEKT IN DER HAND ANSCHAUEN
         _hand_versatz = np.zeros(2)                           # Objekt minus Hand, gesehen (Vorgabe: 0)
+        _luft_fertig = False                                  # s. LUFT_H
         # closed-loop grasp-target BELIEF: starts at the up-front perception, then the live fovea
         # CORRECTS it each frame (precision-weighted, occlusion-gated) instead of freezing the snapshot
         obj_belief = (cube_plan.copy() if cube_plan is not None else None) if servo else None
@@ -719,10 +727,21 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                         _zh = np.asarray(tgt, float) - _hand_versatz
                         j5, aim = gclose, np.array([_zh[0], _zh[1], tgt_z])
                         dwell += 1
+                        if LUFT_H > 0.0 and not _luft_fertig:     # s. LUFT_H: erst oben ankommen
+                            aim = np.array([_zh[0], _zh[1], tgt_z + LUFT_H])
+                            if ((objekt_sehen_fn is None or run_combined._objsicht is not None)
+                                    and float(np.linalg.norm(hxy - _zh)) < NEAR_ABLAGE
+                                    or dwell > OBJ_WARTE):
+                                _luft_fertig = True
+                                if run_combined._objsicht is not None:
+                                    run_combined._objsicht["luft"] = {"dwell": dwell, "hz": float(hz)}
                         _da = ((not np.any(_hand_versatz) and SENK_NAH <= NEAR_ABLAGE)
                                or dwell > OBJ_WARTE
                                or float(np.linalg.norm(hxy - _zh)) < NEAR_ABLAGE)
-                        if hz < tgt_z + 0.012 and _da:
+                        if hz < tgt_z + 0.012 and _da and (LUFT_H <= 0.0 or _luft_fertig):
+                            if run_combined._objsicht is not None:   # Diagnose, s. ACT23_OBJ_SEHEN
+                                run_combined._objsicht["los"] = {"hand": hxy.copy(), "wahr": c_true.copy(),
+                                                                 "zh": _zh.copy(), "dwell": dwell}
                             phase, dwell = "release", 0
                     else:
                         # ERTASTEN (s. TASTEN oben): TAST_TIEF unter die Schaetzung zielen und

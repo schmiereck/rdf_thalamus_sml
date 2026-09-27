@@ -6463,6 +6463,14 @@ def run_self_learning_steering(headless=False):
                                     f"Versatz gesehen {1000.0 * float(np.linalg.norm(_os['gesehen'] - _os['hand'])):.0f}mm, "
                                     f"Richtungsfehler {1000.0 * float(np.linalg.norm((_os['gesehen'] - _os['hand']) - (_os['wahr'] - _os['hand']))):.0f}mm")
                                  + f", Hand {1000.0 * _os['hz']:.0f}mm hoch")
+                        _lo = _os.get("los")
+                        if _lo is not None:
+                            # BEIM LOSLASSEN: steht die Hand auf der Sollstelle, und ist das Objekt
+                            # seit dem Blick in der Klaue gewandert?
+                            _zus += (f" | beim Loslassen: Hand {1000.0 * float(np.linalg.norm(_lo['hand'] - _lo['zh'])):.0f}mm von der Sollstelle, "
+                                     f"Objekt seit dem Blick {1000.0 * float(np.linalg.norm((_lo['wahr'] - _lo['hand']) - (_os['wahr'] - _os['hand']))):.0f}mm in der Klaue gewandert, "
+                                     f"{_lo['dwell']} Schritte"
+                                     + (f", Luft {_os['luft']['dwell']} Schritte" if "luft" in _os else ""))
                     if _ns is not None:
                         _zus += (" | Nachsehen: " + ("gescheitert" if _ns["neu"] is None else
                                  f"erster Blick {1000.0 * float(np.linalg.norm(_ns['alt'] - _tw)):.0f}mm, "
