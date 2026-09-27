@@ -118,6 +118,35 @@ der Griff loest sich beim Tragen, bevor die Hand unten ist. Die Lieferquote aend
 aber der naechste groessere Verlust liegt davor - im Halten beim Tragen und in der Drift nach dem
 Loslassen. Einschraenkung: zwei Seeds, einfache Korrektur (ein Blick, ein Versatz), nur FSM.
 
+# BERICHTIGUNG und Wiederholung (2026-09-28): es fiel nichts aus der Hoehe
+
+Die "Objekte, die schon aus der Hoehe fallen" (oben) waren **kein Griffverlust**: mit
+Ablage-Naehe 8 mm erreichte die FSM beim Tragen die Absenkbedingung oft nie, lief in die
+Tragezeitgrenze und oeffnete am Episodenende ueber dem Ziel - der Griff hielt bis dahin (Druck beim
+Tragen 5-7 N). Deshalb loeste der Blick nur bei einem Drittel der Ablagen aus. Details und Abhilfe
+(`ACT16_SENK_NAH`, 11c651a): [Ablage-Schwelle](/befunde/ablage-schwelle-im-teacher.md), Berichtigung.
+
+**Wiederholt mit SENK_NAH = 20 mm** (sonst wie oben: FSM, Zieladresse, Ablage 8 mm, Blick unter
+35 mm, Seeds 9811/9812 je 60 Ep, 120 Paare):
+
+                                          Hand aufs Ziel    Objekt aufs Ziel
+    Zeitgrenzen-Abwuerfe                  2                 4   (vorher 30 / 40)
+    Ablagen / Objekt gesehen              78 / 55           79 / 57
+    seitlich beim Loslassen               20 mm             21 mm
+    zum WAHREN Ziel (alle Ablagen)        22 mm             21 mm
+    nur mit gesehenem Objekt (n = 53)     21 mm      ->     15 mm zum wahren Ziel
+                                          (seitlich 19 -> 17)
+    geliefert                             56 / 120          49 / 120   (18 | 11, p = 0,27)
+
+**Der Blick loest jetzt bei drei Vierteln der Ablagen aus, und wo er das Objekt sieht, rueckt es
+6 mm naeher ans wahre Ziel (21 -> 15 mm).** Die Lieferquote folgt nicht: 7 Lieferungen weniger,
+nicht signifikant. Der Gewinn ist kleiner als der gesehene Versatz (14-15 mm) - der Blick ist rund
+5 mm genau, und das Objekt verschiebt sich beim Nachfuehren unten in der Klaue weiter (Vermutung,
+nicht gemessen: die Hand korrigiert, waehrend das Objekt schon den Tisch beruehrt).
+
+Stand: die Objekt-Aufmerksamkeit ist der richtige Posten fuer den Ablagefehler, bringt als
+einfache Korrektur (ein Blick, ein Versatz) aber keine Lieferungen. Schalter bleiben aus.
+
 # Was hier NICHT behauptet wird
 
 Keine Wirkung. Alles ist Codeanalyse; die einzige Messung ist die Zerlegung des Ablagefehlers.

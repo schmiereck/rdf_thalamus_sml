@@ -1,9 +1,9 @@
 ---
 type: Befund
 title: Die Ablagegenauigkeit ist eine Konstante des Teachers - er laesst los, sobald die Hand 20 mm vom Ziel entfernt tief genug ist
-description: Aus der Nutzerfrage nach Aufmerksamkeit fuer Objekt und Ziel. Zerlegung von 224 Ablagen aus drei 100-Episoden-Laeufen mit unveraenderter Policy - der seitliche Abstand beim Loslassen liegt auffaellig eng bei 25-31 mm (Median 26), fast nur ENTLANG der Klauenachse (|24| gegen |9| mm quer), waehrend die Objektlage nur 12 mm falsch geglaubt wird und in der Klaue 3-5 mm versetzt sitzt. Die Ursache steht im Code - der Teacher (reactive_subgoal, ebenso die FSM) traegt, bis die HAND weniger als NEAR = 20 mm vom Ziel ist, senkt dann ab und laesst los, sobald die HOEHE erreicht ist; seitlich wird nicht weiter konvergiert. Die Policy hat genau das gelernt. Neuer Schalter ACT16_NEAR_ABLAGE (Vorgabe 20 mm, zeichengleich) trennt die Ablage vom Anfahren; das A/B steht noch aus.
+description: WIDERLEGT 2026-09-28 (s. Berichtigung) - mit getrennter Absenk-Schwelle steht die Hand auf 8 mm am Ziel, das Objekt liegt trotzdem 21 mm daneben; der Fehler ist der Sitz des Objekts in der Hand, und die "10 mm" unter FSM waren zur Haelfte Zeitgrenzen-Abwuerfe aus der Hoehe. Urspruenglich: Aus der Nutzerfrage nach Aufmerksamkeit fuer Objekt und Ziel. Zerlegung von 224 Ablagen aus drei 100-Episoden-Laeufen mit unveraenderter Policy - der seitliche Abstand beim Loslassen liegt auffaellig eng bei 25-31 mm (Median 26), fast nur ENTLANG der Klauenachse (|24| gegen |9| mm quer), waehrend die Objektlage nur 12 mm falsch geglaubt wird und in der Klaue 3-5 mm versetzt sitzt. Die Ursache steht im Code - der Teacher (reactive_subgoal, ebenso die FSM) traegt, bis die HAND weniger als NEAR = 20 mm vom Ziel ist, senkt dann ab und laesst los, sobald die HOEHE erreicht ist; seitlich wird nicht weiter konvergiert. Die Policy hat genau das gelernt. Neuer Schalter ACT16_NEAR_ABLAGE (Vorgabe 20 mm, zeichengleich) trennt die Ablage vom Anfahren; das A/B steht noch aus.
 tags: [act23, ablage, teacher, aufmerksamkeit, nutzeridee]
-status: stable
+status: widerlegt
 evidenz: einzelmessung
 ebene: act23-ab
 generated: { by: claude/opus-5.5, at: 2026-09-26T00:00:00Z }
@@ -142,6 +142,42 @@ Lieferungen bleiben gleich. Zwei Gruende, beide am Code, keiner gemessen: (1) nu
 tragen den Unterschied - "8 statt 20 mm vor dem Ziel" ist fuer das Netz ein feines Detail; (2) die
 Selbst-Imitation (12000 EIGENE Handlungen aus erfolgreichen Episoden) wurde bewusst nicht
 angefasst - sie sind Erfahrung, kein Teacher-Etikett - und sie lassen nach der alten Schwelle los.
+
+# BERICHTIGUNG (2026-09-28): die "10 mm" unter FSM waren zur Haelfte ein Zeitgrenzen-Artefakt
+
+Mit `ACT16_NEAR_ABLAGE` = 8 mm muss die Hand schon in TRAGHOEHE naeher als 8 mm ans Ziel, bevor
+abgesenkt wird. Das sanfte Tragen schafft das oft nicht: in 17-29 von 60 FSM-Episoden lief die
+Tragephase in ihre Zeitgrenze (`carry:502`), und der Greifer oeffnete am Episodenende 60-90 mm UEBER
+dem Ziel (mit 20 mm: 2 von 60). Diese schwebenden Abwuerfe liegen seitlich genau (6-8 mm) und zogen
+den Median auf "10 mm". Getrennt nach Abwurfhoehe (dieselben Logs):
+
+                                  20 mm            8 mm (alt)
+    unten abgelegt                n=37/41, 22-23   n=25/26, 13-16 mm seitlich
+    aus der Hoehe (Zeitgrenze)    0                n=11/17, 6-8 mm
+
+Die Aussage "Mechanismus bestaetigt, Ablagefehler halbiert" ist damit **zu stark**; die Lieferzahlen
+des A/B (46 gegen 54) enthalten dieselben schwebenden Abwuerfe. Dasselbe Artefakt steckt in den
+Objekt-Versatz-Reihen ([dort](/fragen/aufmerksamkeit-objekt-ziel.md)).
+
+**Abhilfe: `ACT16_SENK_NAH`** (11c651a, Vorgabe = NEAR_ABLAGE, zeichengleich - geprueft: der
+20-mm-Arm reproduziert alle 60 Episoden des alten Laufs). Ab SENK_NAH wird abgesenkt und dabei
+weiter aufs Ziel gezielt; losgelassen wird erst unten UND naeher als NEAR_ABLAGE (FSM: hoechstens
+OBJ_WARTE Schritte). A/B unter FSM, Seeds 9801/9802, je 60 Ep, gepaart mit den alten Armen:
+
+                                  20 mm (Vorgabe)   SENK 20 / Ablage 8
+    Zeitgrenzen-Abwuerfe          0                 1
+    seitlich beim Loslassen       22-23             21-22 mm
+      davon entlang der Klaue     16-21             18-20
+    Glaube (Hand gegen Objekt)    14-15             14-15
+    Endlage                       17-23             14-21
+    geliefert                     47 / 120          53 / 120   (6 | 12, p = 0,24)
+
+**Die Hand steht jetzt unten auf 8 mm am Ziel - und das Objekt liegt trotzdem 21 mm daneben,
+entlang der Klaue.** Der Ablagefehler ist also nicht die Teacher-Schwelle, sondern der SITZ DES
+OBJEKTS IN DER HAND (Hand-Objekt-Versatz 14-15 mm, fast nur entlang der Klauenachse). Die fruehere
+Kernaussage dieser Seite (die Schwelle ist die Ursache) ist **widerlegt**; die Schwelle war nur
+die halbe Erklaerung fuer den Anteil entlang der Klaue in der urspruenglichen Zerlegung. Der
+naechste Hebel ist das Objekt in der Hand ([Aufmerksamkeit](/fragen/aufmerksamkeit-objekt-ziel.md)).
 
 # Verwandt
 
