@@ -6525,6 +6525,19 @@ def run_self_learning_steering(headless=False):
             #            und wie weit der SOLL-Abstand war.  Zieht es das Objekt zum Bezugskoerper
             #            HIN, ist der Nachbar der Magnet; streut es richtungslos, ist es die Bahn.
             _zus = ""
+            _oe = getattr(act16.run_combined, "_oeffnen", None)
+            if _oe is not None:
+                # BEIM ECHTEN OEFFNEN (s. act16 run_combined._oeffnen): wo standen Hand und Objekt, und
+                # wie weit ist das Objekt danach noch gerutscht?
+                _uo = np.asarray(_oe["fwd"], float); _uo = _uo / (float(np.linalg.norm(_uo)) + 1e-12)
+                _qo = np.array([-_uo[1], _uo[0]])
+                _ez = np.asarray(_oe["cxy"], float) - np.asarray(_oe["tgt"], float)
+                _rz = np.asarray(_oe["reach"], float) - np.asarray(_oe["tgt"], float)
+                _zus += (f" | OEFFNEN: Objekt {1000.0 * float(np.linalg.norm(_ez)):.0f}mm vom Ziel "
+                         f"(entlang {1000.0 * float(_ez @ _uo):+.0f}, quer {1000.0 * float(_ez @ _qo):+.0f}), "
+                         f"{1000.0 * (_oe['cz'] - _oe['obj_h']):.0f}mm hoch, Reichpunkt entlang {1000.0 * float(_rz @ _uo):+.0f} "
+                         f"quer {1000.0 * float(_rz @ _qo):+.0f} | danach gerutscht "
+                         f"{1000.0 * float(np.linalg.norm(_end - np.asarray(_oe['cxy'], float))):.0f}mm")
             _cb = _rel.get("cbel")
             if _cb is not None:
                 _zus += f" | Glaube {1000.0 * float(np.linalg.norm(np.asarray(_cb, float) - _rel['cxy'])):.0f}mm"

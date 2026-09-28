@@ -7,6 +7,10 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-28
 
+* **Neu**: [Ablage beim echten Oeffnen](/befunde/ablage-beim-oeffnen.md) - Nutzerauftrag "mittig
+  greifen": Schnappschuss im echten Moment des Oeffnens. Griff bei Erfolg und Misserfolg gleich mittig
+  (3 mm); Fehlablagen verrutschen danach seitlich in der Klaue (15 mm beim Oeffnen). Hand genau.
+
 * **Berichtigung**: [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md),
   [Ablage-Schwelle](/befunde/ablage-schwelle-im-teacher.md) - der Ablage-Schnappschuss liegt bei
   14 mm Objekthoehe, nicht beim Oeffnen; mit SENK_NAH ist die Hand dann noch 28 mm unterwegs. Werte

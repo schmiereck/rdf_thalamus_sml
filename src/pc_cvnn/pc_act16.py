@@ -571,6 +571,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         run_combined._inclaw = None                          # (quer, tief) mm des Objekts relativ zur
         #   Backenmitte beim Zufassen; None = die Klaue hat nie tief am Objekt geschlossen
         run_combined._release = None       # release snapshot (see the step loop)
+        run_combined._oeffnen = None       # Schnappschuss im ECHTEN Moment des Oeffnens (FSM), s. unten
         run_combined._tast = None          # Tast-Ergebnis der Ablage (s. TASTEN)
         run_combined._grip = {}            # Fingerdruck-Streifen: Messreihe JE PHASE (N).
         #   Ein realer Streifen liefert durchgehend -- also wird er auch durchgehend aufgezeichnet und
@@ -1036,6 +1037,15 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             # step, so what survives is the instant before the release.  (A first-open trigger is wrong:
             # the claw sits above J5_CLOSED_TH for much of the carry anyway, so it fired at lift-off and
             # reported a constant 14mm "fall" = the lift threshold itself.)
+            # DER ECHTE MOMENT DES OEFFNENS (Messung, 2026-09-28).  Der Schnappschuss darunter friert ein,
+            # sobald das Objekt unter 14 mm ueber Ruhelage sinkt -- fuehrt die Hand unten noch nach
+            # (SENK_NAH, OBJ_VERSATZ, LUFT_H), ist das NICHT das Oeffnen.  Hier: der erste Schritt der
+            # FSM-Phase "release".
+            if phase == "release" and run_combined._oeffnen is None:
+                run_combined._oeffnen = {"cxy": np.asarray(c_true, float).copy(), "cz": float(cz),
+                                         "obj_h": float(obj_h), "reach": np.asarray(hxy, float)[:2].copy(),
+                                         "tgt": np.asarray(tgt_true, float).copy(),
+                                         "fwd": np.asarray(sim.claw_fwd(), float)[:2].copy()}
             if j5 < J5_CLOSED_TH and cz > obj_h + 0.014:
                 run_combined._release = {"hz": float(hz), "cz": float(cz),
                                          "obj_h": float(obj_h),
