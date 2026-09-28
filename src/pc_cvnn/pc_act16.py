@@ -1052,7 +1052,14 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                                          # korrigiert den GRIFF; ob er beim ABLEGEN richtig herum
                                          # wirkt, hat nie jemand geprueft.  Ohne die Richtung sagt
                                          # der Log nur den Betrag ("seitlich 44mm").
-                                         "fwd": np.asarray(sim.claw_fwd(), float)[:2].copy()}
+                                         "fwd": np.asarray(sim.claw_fwd(), float)[:2].copy(),
+                                         # LAGE IN DER KLAUE BEIM LOSLASSEN und wo die BACKENMITTE
+                                         # steht (Messung, 2026-09-28): trennt "das Objekt sitzt
+                                         # aussermittig" von "die Klaue steht daneben".
+                                         "inclaw": sim.in_claw(c_true),
+                                         "jaw": np.asarray(sim.jaw_mid(), float)[:2].copy(),
+                                         "reach": np.asarray(hxy, float)[:2].copy(),
+                                         "phase": phase, "dwell": int(dwell)}
             sim.target("joint_5", j5)
             if press >= 0:                                    # DRUCKMESSSTREIFEN (ein Finger, innen);
                 # PHASE FUER DIE MESSUNG aus der BEOBACHTBAREN Lage ableiten, nicht aus dem

@@ -7,6 +7,12 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-28
 
+* **Berichtigung**: [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md),
+  [Ablage-Schwelle](/befunde/ablage-schwelle-im-teacher.md) - der Ablage-Schnappschuss liegt bei
+  14 mm Objekthoehe, nicht beim Oeffnen; mit SENK_NAH ist die Hand dann noch 28 mm unterwegs. Werte
+  "beim Loslassen"/"Drift" der heutigen Reihen betroffen, Endlagen und Lieferungen nicht. Diagnose
+  zur Klaue: Griff stabil (6 mm Wanderung), Objekt 12 mm vor dem Reichpunkt, quer 0.
+
 * **Ergaenzung**: [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md) -
   Blick-Lernen Seed 9812 nachgetragen: Vorhersage besser, Endlage 17 -> 20 mm. Beide Seeds: geliefert
   126 gegen 125 von 300 (p = 1,00). Ehrliches Negativ, Schalter bleibt aus.

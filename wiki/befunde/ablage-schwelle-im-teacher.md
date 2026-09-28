@@ -179,6 +179,29 @@ Kernaussage dieser Seite (die Schwelle ist die Ursache) ist **widerlegt**; die S
 die halbe Erklaerung fuer den Anteil entlang der Klaue in der urspruenglichen Zerlegung. Der
 naechste Hebel ist das Objekt in der Hand ([Aufmerksamkeit](/fragen/aufmerksamkeit-objekt-ziel.md)).
 
+# BERICHTIGUNG (2026-09-28, spaet): "beim Loslassen" war NICHT der Moment des Loslassens
+
+Die Ablage-Zeile nimmt ihren Schnappschuss im LETZTEN Schritt, in dem die Klaue geschlossen ist UND
+das Objekt noch mehr als 14 mm ueber seiner Ruhelage haengt (`run_combined._release`). Solange
+sofort nach dem Absenken losgelassen wurde (Vorgabe), war das praktisch derselbe Augenblick. Mit
+`ACT16_SENK_NAH` (und `ACT16_OBJ_VERSATZ`, `ACT16_LUFT_H`) fuehrt die Hand aber UNTEN noch nach -
+dann friert der Schnappschuss zu Beginn des Nachfuehrens ein. Diagnose (FSM, SENK_NAH, 62 Ablagen,
+neue Protokollfelder Reichpunkt/Phase):
+
+    Schnappschuss in Phase place nach median 30 Schritten (nicht beim Oeffnen)
+    Reichpunkt - Ziel entlang der Klaue    Q25/50/75  -34 / -28 / -6 mm   (die Hand ist noch unterwegs)
+    Objekt - Reichpunkt entlang            Q25/50/75   +8 / +12 / +18 mm  (quer 0) -- der Griff sitzt stabil
+    Objekt in der Klaue Griff -> Schnappschuss: median 6 mm gewandert
+
+**Folgen fuer die Seiten dieses Tages:** "seitlich beim Loslassen", "entlang der Klaue", "danach
+gedriftet" und das "Fehlerbudget" in den SENK_NAH-, Objektblick-, LUFT- und Blick-Lern-Reihen sind
+Werte eines FRUEHEREN Augenblicks; die "Drift" enthaelt die restliche Handbewegung. UNBERUEHRT sind
+die Endlagen ("final", "zum WAHREN Ziel") und alle Lieferzahlen - und damit alle Wirkungsaussagen
+(keine der Massnahmen aendert die Lieferungen). Das Etikett des Blick-Lerners (Ruhelage minus Hand
+beim Loslassen) nutzt die richtige Handlage (`_objsicht["los"]`) und ist nicht betroffen.
+Der Griff selbst ist stabil und bis auf L/T/U mittig (quer 1-2 mm; L, T, U 7-14 mm, gewollt: das L
+wird am langen Zinken gegriffen).
+
 # Verwandt
 
 * [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md) - die Nutzerfrage

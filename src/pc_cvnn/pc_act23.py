@@ -6507,6 +6507,16 @@ def run_self_learning_steering(headless=False):
                 _al = 1000.0 * float(_e @ _u)
                 _qu = 1000.0 * float(_e @ np.array([-_u[1], _u[0]]))
                 _dec = f" | entlang Klaue {_al:+.0f}mm, quer {_qu:+.0f}mm"
+                if _rel.get("inclaw") is not None:
+                    _dec += (f" | in der Klaue quer {_rel['inclaw'][0]:+.0f}mm, tief {_rel['inclaw'][1]:+.0f}mm"
+                             f", Backenmitte {1000.0 * float(np.linalg.norm(_rel['jaw'] - np.asarray(_rel['tgt'], float))):.0f}mm vom Ziel")
+                if _rel.get("reach") is not None:
+                    _rv = np.asarray(_rel["reach"], float) - np.asarray(_rel["tgt"], float)
+                    _ov = np.asarray(_rel["cxy"], float) - np.asarray(_rel["reach"], float)
+                    _qv = np.array([-_u[1], _u[0]])
+                    _dec += (f" | Reichpunkt-Ziel entlang {1000.0 * float(_rv @ _u):+.0f}mm quer {1000.0 * float(_rv @ _qv):+.0f}mm"
+                             f" | Objekt-Reichpunkt entlang {1000.0 * float(_ov @ _u):+.0f}mm quer {1000.0 * float(_ov @ _qv):+.0f}mm"
+                             f" | Phase {_rel.get('phase')} {_rel.get('dwell')} Schritte")
             # WARUM EINE ABLAGE DANEBENGEHT -- die zwei Faelle, die in "86 mm daneben" stecken und
             # ohne diese Zeile nicht zu trennen sind (s. wiki/befunde/ziel-als-adresse-gemessen.md):
             #   glaube   |Glaube - Wahrheit| beim Loslassen.  Gross = der Agent hat das getragene
