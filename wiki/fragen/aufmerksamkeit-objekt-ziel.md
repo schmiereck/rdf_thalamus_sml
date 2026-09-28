@@ -175,7 +175,7 @@ also ein genauerer Blick (der Blick aus 34 mm Hoehe hat noch Parallaxe; das Obje
 Ablegen auf dem Tisch und wird DANN genau gesehen - daraus liesse sich die Korrektur des Blicks
 selbst lernen, ohne Teacher) und eine engere Hand-Toleranz. Nicht gemessen.
 
-# Gemessen 2026-09-28: die Blickkorrektur selbst lernen (Seed 9811; 9812 lief noch)
+# Gemessen 2026-09-28: die Blickkorrektur selbst lernen (ehrliches Negativ, zwei Seeds)
 
 `ACT23_BLICK_LERNEN` (b92c299, Vorgabe 0). Etikett ohne Teacher und ohne Simulator-Wahrheit: nach
 dem Ablegen wird das Objekt auf dem Tisch GESEHEN; gelernt wird (Ridge) "gesehener Versatz, Handlage,
@@ -195,6 +195,18 @@ benutzt wird, bleibt das Objekt 17 mm vom wahren Ziel, die Lieferungen gleich. D
 Grund: die Landestelle enthaelt die Drift nach dem Loslassen (Median 12 mm), und die ist aus Blick,
 Handlage und Hoehe nicht vorhersagbar. Der bessere Vorhersagefehler im benutzten Arm (5-11 mm)
 schlaegt nicht auf die Endlage durch - ungeklaert.
+
+**Seed 9812 (nachgetragen, 150 Ep je Arm):** Etikett gegen Wahrheit 4 mm. Hier sagt das gelernte
+Modell auch im Schattenarm besser vorher (roh 10-18, gelernt 8-14 mm), im benutzten Arm roh 17-22
+gegen gelernt 8-17 mm. Die Endlage wird trotzdem SCHLECHTER: 17 -> 20 mm zum wahren Ziel (Objekt
+gesehen, n = 56), geliefert 58 gegen 56 (11 | 9, p = 0,82).
+
+**Beide Seeds zusammen (300 Paare):** geliefert 126 gegen 125 (25 | 24, p = 1,00), zum wahren Ziel
+17 -> 18 mm. **Ehrliches Negativ:** der Agent lernt aus eigener Beobachtung, die Landestelle
+relativ zur Hand besser vorherzusagen, aber das bringt das Objekt nicht naeher ans Ziel. Warum eine
+bessere Vorhersage nicht durchschlaegt, ist ungeklaert - eine Vermutung ist, dass die Drift von der
+Handbewegung selbst abhaengt (groessere Korrektur, andere Drift), sodass das in einem Arm gelernte
+Modell im anderen nicht gilt. Nicht gemessen. Der Schalter bleibt aus.
 
 # Was hier NICHT behauptet wird
 

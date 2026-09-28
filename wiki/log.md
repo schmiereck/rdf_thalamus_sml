@@ -8,6 +8,10 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 ## 2026-09-28
 
 * **Ergaenzung**: [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md) -
+  Blick-Lernen Seed 9812 nachgetragen: Vorhersage besser, Endlage 17 -> 20 mm. Beide Seeds: geliefert
+  126 gegen 125 von 300 (p = 1,00). Ehrliches Negativ, Schalter bleibt aus.
+
+* **Ergaenzung**: [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md) -
   `ACT23_BLICK_LERNEN` (b92c299): Blickkorrektur aus eigenem Kamera-Etikett gelernt. Etikett 1-3 mm
   genau, Endlage 17 -> 17 mm, geliefert 68 gegen 69 von 150 (Seed 9811; 9812 ausstehend).
 
