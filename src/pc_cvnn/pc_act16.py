@@ -84,6 +84,14 @@ SENK_NAH = float(str(os.environ.get("ACT16_SENK_NAH", "")).replace(",", ".") or 
 # Ablagehoehe, bis sie naeher als NEAR_ABLAGE an der Stelle ist (hoechstens OBJ_WARTE Schritte), und
 # senkt erst dann senkrecht ab.
 LUFT_H = float(str(os.environ.get("ACT16_LUFT_H", "")).replace(",", ".") or 0.0)
+# VOR DEM OEFFNEN HINSCHAUEN (ACT16_PRUEF_TOL in m, Vorgabe 0 = aus, zeichengleich).  Gemessen
+# 2026-09-28 (wiki/befunde/ablage-beim-oeffnen.md): Fehlablagen sind Objekte, die NACH dem Zufassen
+# seitlich in der Klaue verrutscht sind (15 gegen 3 mm beim Oeffnen); die Hand steht genau.  Mit dem
+# Schalter schaut die Kamera (objekt_sehen_fn) im Moment, in dem die FSM oeffnen wuerde, auf das
+# Objekt: liegt es naeher als PRUEF_TOL am Ziel, wird geoeffnet; sonst wird der gesehene Versatz
+# uebernommen und nachgefuehrt (mit LUFT_H > 0 wieder angehoben), hoechstens PRUEF_N-mal.
+PRUEF_TOL = float(str(os.environ.get("ACT16_PRUEF_TOL", "")).replace(",", ".") or 0.0)
+PRUEF_N = int(os.environ.get("ACT16_PRUEF_N", "2"))
 GRASP_OFFSET = float(os.environ.get("ACT16_GRASP_OFFSET", "0.006"))   # (#2) grasp height = obj_half + this
 #   (cube -> 0.018, was 0.014): the claw tips sit ~14mm below the contact site, so grasp_z=0.014 put them
 #   AT the floor and any overshoot was blocked/deflected; +4mm lifts them clear while still gripping the cube
@@ -545,6 +553,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         run_combined._objsicht = None                         # s. DAS OBJEKT IN DER HAND ANSCHAUEN
         _hand_versatz = np.zeros(2)                           # Objekt minus Hand, gesehen (Vorgabe: 0)
         _luft_fertig = False                                  # s. LUFT_H
+        _pruef_n = 0                                          # s. PRUEF_TOL
+        run_combined._pruef = []
         # closed-loop grasp-target BELIEF: starts at the up-front perception, then the live fovea
         # CORRECTS it each frame (precision-weighted, occlusion-gated) instead of freezing the snapshot
         obj_belief = (cube_plan.copy() if cube_plan is not None else None) if servo else None
@@ -739,7 +749,22 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                         _da = ((not np.any(_hand_versatz) and SENK_NAH <= NEAR_ABLAGE)
                                or dwell > OBJ_WARTE
                                or float(np.linalg.norm(hxy - _zh)) < NEAR_ABLAGE)
-                        if hz < tgt_z + 0.012 and _da and (LUFT_H <= 0.0 or _luft_fertig):
+                        _frei = hz < tgt_z + 0.012 and _da and (LUFT_H <= 0.0 or _luft_fertig)
+                        if (_frei and PRUEF_TOL > 0.0 and objekt_sehen_fn is not None
+                                and _pruef_n < PRUEF_N):
+                            # VOR DEM OEFFNEN HINSCHAUEN (s. PRUEF_TOL)
+                            _gp = objekt_sehen_fn(hxy, float(hz))
+                            _pruef_n += 1
+                            _eintrag = {"gesehen": None if _gp is None else np.asarray(_gp, float)[:2].copy(),
+                                        "wahr": c_true.copy(), "tgt": np.asarray(tgt, float).copy(),
+                                        "nach": False}
+                            if _gp is not None and float(np.linalg.norm(np.asarray(_gp, float)[:2] - tgt)) > PRUEF_TOL:
+                                _hand_versatz = np.asarray(_gp, float)[:2] - hxy
+                                dwell = 0; _frei = False; _eintrag["nach"] = True
+                                if LUFT_H > 0.0:
+                                    _luft_fertig = False
+                            run_combined._pruef.append(_eintrag)
+                        if _frei:
                             if run_combined._objsicht is not None:   # Diagnose, s. ACT23_OBJ_SEHEN
                                 run_combined._objsicht["los"] = {"hand": hxy.copy(), "wahr": c_true.copy(),
                                                                  "zh": _zh.copy(), "dwell": dwell}

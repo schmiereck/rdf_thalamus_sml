@@ -5,6 +5,13 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-09-29
+
+* **Ergaenzung**: [Ablage beim echten Oeffnen](/befunde/ablage-beim-oeffnen.md) - vor dem Oeffnen
+  hinschauen und nachfuehren (`ACT16_PRUEF_TOL`, zeichengleich): zum wahren Ziel 22 -> 17 mm,
+  geliefert 56 gegen 57 von 120 (p = 1,00). Die Fehlablagen: verdeckt, Bezugskoerper statt Objekt
+  gesehen, nach dem Anheben aus der Luft gefallen.
+
 ## 2026-09-28
 
 * **Neu**: [Ablage beim echten Oeffnen](/befunde/ablage-beim-oeffnen.md) - Nutzerauftrag "mittig

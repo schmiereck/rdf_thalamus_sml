@@ -6538,6 +6538,14 @@ def run_self_learning_steering(headless=False):
                          f"{1000.0 * (_oe['cz'] - _oe['obj_h']):.0f}mm hoch, Reichpunkt entlang {1000.0 * float(_rz @ _uo):+.0f} "
                          f"quer {1000.0 * float(_rz @ _qo):+.0f} | danach gerutscht "
                          f"{1000.0 * float(np.linalg.norm(_end - np.asarray(_oe['cxy'], float))):.0f}mm")
+            _pr = getattr(act16.run_combined, "_pruef", None)
+            if _pr:
+                # VOR DEM OEFFNEN HINGESCHAUT (s. act16 PRUEF_TOL): je Blick gesehen/wahr zum Ziel
+                _zus += " | Hinschauen: " + "; ".join(
+                    ("nicht gesehen" if e["gesehen"] is None else
+                     f"gesehen {1000.0 * float(np.linalg.norm(e['gesehen'] - e['tgt'])):.0f}mm"
+                     f" (wahr {1000.0 * float(np.linalg.norm(e['wahr'] - e['tgt'])):.0f}mm)")
+                    + (" -> nachfuehren" if e["nach"] else " -> oeffnen") for e in _pr)
             _cb = _rel.get("cbel")
             if _cb is not None:
                 _zus += f" | Glaube {1000.0 * float(np.linalg.norm(np.asarray(_cb, float) - _rel['cxy'])):.0f}mm"

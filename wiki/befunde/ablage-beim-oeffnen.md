@@ -61,6 +61,35 @@ unten auf ~5 mm, s. [Aufmerksamkeit](/fragen/aufmerksamkeit-objekt-ziel.md)) und
 nicht loslassen, sondern nachgreifen; oder die seitliche Nachfuehrung abschliessen, BEVOR das Objekt
 den Tisch beruehrt.
 
+# Gemessen 2026-09-29: vor dem Oeffnen hinschauen (`ACT16_PRUEF_TOL`)
+
+Nutzerauftrag, Hebel 1. Im Moment, in dem die FSM oeffnen wuerde, sieht die Kamera das Objekt an
+(objekt_sehen_fn: Detektion naechst der Hand). Liegt es mehr als 12 mm vom Ziel, wird der gesehene
+Versatz uebernommen und mit angehobenem Objekt (`ACT16_LUFT_H` = 15 mm) nachgefuehrt, hoechstens
+zweimal. Vorgabe 0, zeichengleich. Gleiche Szenen wie die Diagnose oben (Kontrolle), 120 Paare:
+
+                                        Kontrolle        hinschauen
+    geliefert                           56 / 120         57 / 120   (15 | 16, p = 1,00)
+    Endlage zum WAHREN Ziel (Median)    22 mm            17 mm
+    Objekt-Ziel beim Oeffnen (Q)        7 / 14 / 23      5 / 11 / 22
+    Endlage (Q)                         8 / 16 / 25      6 / 12 / 26
+    Blicke                              -                92, davon 31 Ablagen nachgefuehrt, 14 nicht gesehen
+    gesehen gegen wahr                  -                Median 1 mm, Q75 5 mm
+
+**Die Ablage wird genauer (Median 22 -> 17 mm zum wahren Ziel), die Lieferungen nicht.** Die
+Kamera sieht das Objekt unten fast immer richtig und die Nachfuehrung bringt es meist nah heran -
+die Fehlablagen sitzen aber in drei Schwaenzen, die das Hinschauen nicht erreicht:
+
+1. **Nicht gesehen** (14 Blicke; auffaellig oft `obj_red`, 33-59 mm daneben) - verdeckt unter der Klaue.
+2. **Falsches Objekt gesehen** - "gesehen 34 mm (wahr 9)", "gesehen 77 (wahr 31)": die naechste
+   Detektion im 40-mm-Umkreis der Hand ist dann offenbar der Bezugskoerper neben dem Ziel; die
+   Nachfuehrung schiebt das Objekt WEG.
+3. **Aus der Luft gefallen** - nach dem Anheben wird bei 10-38 mm Objekthoehe geoeffnet (vor allem U),
+   das Objekt faellt und rutscht (bis 26 mm) - richtig ausgerichtet, dann verloren.
+
+Naechste Stellschrauben, nicht gemessen: nach dem Nachfuehren ganz absetzen, bevor geoeffnet wird;
+das getragene Objekt ueber seine Eigenschaften (Farbe/Form) statt als naechsten Fleck suchen.
+
 # Verwandt
 
 * [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md)
