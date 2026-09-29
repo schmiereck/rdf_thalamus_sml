@@ -90,6 +90,36 @@ die Fehlablagen sitzen aber in drei Schwaenzen, die das Hinschauen nicht erreich
 Naechste Stellschrauben, nicht gemessen: nach dem Nachfuehren ganz absetzen, bevor geoeffnet wird;
 das getragene Objekt ueber seine Eigenschaften (Farbe/Form) statt als naechsten Fleck suchen.
 
+# Gemessen 2026-09-29: absetzen + ueber die Farbe suchen - schlechter, der Farbfilter macht blind
+
+Nutzerauftrag, beide Stellschrauben zusammen: `ACT16_PRUEF_ABSETZEN` (nach einer Nachfuehrung bis
+auf Ablagehoehe +4 mm absenken, erst dann oeffnen) und `ACT23_OBJ_EIG` (im 60-mm-Umkreis nur Flecken,
+deren Chromatizitaet naeher als 0,05 an der eigenen Sichtung des Objekts zu Beginn der Episode liegt).
+Beide Vorgabe 0. Sonst wie oben (hinschauen, LUFT_H), dieselben 120 Szenen:
+
+                                   Kontrolle   hinschauen   + absetzen + Farbe
+    geliefert                      56          57           45    (gegen Kontrolle 19 | 8, p = 0,05;
+                                                                    gegen hinschauen 20 | 8, p = 0,04)
+    zum WAHREN Ziel (Median)       22 mm       17 mm        25 mm
+    Objekt beim Tragen gesehen     55          51           18
+    "nicht gesehen" (alle Blicke)  -           40           98
+    Blick > 8 mm falsch            -           14 von 92    2 von 45
+    nachgefuehrt                   -           31           14
+
+**Der Farbfilter trifft, wenn er etwas findet (2 statt 14 falsche Objekte), aber er findet das
+gehaltene Objekt meist nicht mehr** (beim Tragen 18 statt 51-55 Sichtungen): die Farbe des Flecks an
+der Klaue weicht offenbar von der Farbe derselben Sichtung auf dem freien Tisch ab (Klaue im Bild,
+Schatten, verschmolzener Fleck - nicht gemessen). Damit faellt das Nachfuehren weitgehend aus.
+Warum die Lieferungen UNTER die Kontrolle fallen, ist nicht getrennt: die Absetz-Regel greift nur
+in 14 Ablagen, und die Laeufe lernen online, sodass sich die Paare ab der ersten Abweichung
+auseinanderentwickeln (in allen drei Armen streuen 15-20 Paare je Richtung). Mit Bonferroni fuer
+zwei Vergleiche (Schranke 0,025) ist keiner der beiden p-Werte signifikant - belegt ist nur: die
+Kombination hilft nicht. Schalter bleiben aus.
+
+Offene Wege, nicht gemessen: Toleranz der Farbe lockern oder zusaetzlich Form/Groesse nutzen;
+die Farbe der Referenz aus einer Sichtung IN der Hand nehmen statt vom freien Tisch; ABSETZEN
+einzeln messen.
+
 # Verwandt
 
 * [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md)

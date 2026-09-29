@@ -92,6 +92,11 @@ LUFT_H = float(str(os.environ.get("ACT16_LUFT_H", "")).replace(",", ".") or 0.0)
 # uebernommen und nachgefuehrt (mit LUFT_H > 0 wieder angehoben), hoechstens PRUEF_N-mal.
 PRUEF_TOL = float(str(os.environ.get("ACT16_PRUEF_TOL", "")).replace(",", ".") or 0.0)
 PRUEF_N = int(os.environ.get("ACT16_PRUEF_N", "2"))
+# NACH DEM NACHFUEHREN GANZ ABSETZEN (ACT16_PRUEF_ABSETZEN, Vorgabe 0).  Gemessen 2026-09-29: nach dem
+# Anheben (LUFT_H) oeffnete die FSM schon 12 mm ueber der Ablagehoehe -- das Objekt fiel aus 10-38 mm
+# und rutschte weg.  Mit dem Schalter wird nach einer Nachfuehrung bis auf die Ablagehoehe abgesenkt
+# (+4 mm, hoechstens OBJ_WARTE Schritte), erst dann geoeffnet.
+PRUEF_ABSETZEN = os.environ.get("ACT16_PRUEF_ABSETZEN", "0") == "1"
 GRASP_OFFSET = float(os.environ.get("ACT16_GRASP_OFFSET", "0.006"))   # (#2) grasp height = obj_half + this
 #   (cube -> 0.018, was 0.014): the claw tips sit ~14mm below the contact site, so grasp_z=0.014 put them
 #   AT the floor and any overshoot was blocked/deflected; +4mm lifts them clear while still gripping the cube
@@ -554,6 +559,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         _hand_versatz = np.zeros(2)                           # Objekt minus Hand, gesehen (Vorgabe: 0)
         _luft_fertig = False                                  # s. LUFT_H
         _pruef_n = 0                                          # s. PRUEF_TOL
+        _absetzen = False                                     # s. PRUEF_ABSETZEN
         run_combined._pruef = []
         # closed-loop grasp-target BELIEF: starts at the up-front perception, then the live fovea
         # CORRECTS it each frame (precision-weighted, occlusion-gated) instead of freezing the snapshot
@@ -749,7 +755,10 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                         _da = ((not np.any(_hand_versatz) and SENK_NAH <= NEAR_ABLAGE)
                                or dwell > OBJ_WARTE
                                or float(np.linalg.norm(hxy - _zh)) < NEAR_ABLAGE)
-                        _frei = hz < tgt_z + 0.012 and _da and (LUFT_H <= 0.0 or _luft_fertig)
+                        if _absetzen and (LUFT_H <= 0.0 or _luft_fertig):   # s. PRUEF_ABSETZEN
+                            aim = np.array([aim[0], aim[1], tgt_z - 0.003])
+                        _frei = (hz < (tgt_z + 0.004 if _absetzen and dwell <= OBJ_WARTE else tgt_z + 0.012)
+                                 and _da and (LUFT_H <= 0.0 or _luft_fertig))
                         if (_frei and PRUEF_TOL > 0.0 and objekt_sehen_fn is not None
                                 and _pruef_n < PRUEF_N):
                             # VOR DEM OEFFNEN HINSCHAUEN (s. PRUEF_TOL)
@@ -761,6 +770,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                             if _gp is not None and float(np.linalg.norm(np.asarray(_gp, float)[:2] - tgt)) > PRUEF_TOL:
                                 _hand_versatz = np.asarray(_gp, float)[:2] - hxy
                                 dwell = 0; _frei = False; _eintrag["nach"] = True
+                                _absetzen = PRUEF_ABSETZEN
                                 if LUFT_H > 0.0:
                                     _luft_fertig = False
                             run_combined._pruef.append(_eintrag)

@@ -7,6 +7,11 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-29
 
+* **Ergaenzung**: [Ablage beim echten Oeffnen](/befunde/ablage-beim-oeffnen.md) - absetzen + ueber
+  die Farbe suchen: geliefert 45 gegen 56 (Kontrolle) / 57 (hinschauen), p = 0,05/0,04, nicht
+  Bonferroni-signifikant. Der Farbfilter findet das gehaltene Objekt kaum (18 statt 51 Sichtungen),
+  trifft aber, wenn er findet (2 statt 14 Fehlgriffe). Schalter aus.
+
 * **Ergaenzung**: [Ablage beim echten Oeffnen](/befunde/ablage-beim-oeffnen.md) - vor dem Oeffnen
   hinschauen und nachfuehren (`ACT16_PRUEF_TOL`, zeichengleich): zum wahren Ziel 22 -> 17 mm,
   geliefert 56 gegen 57 von 120 (p = 1,00). Die Fehlablagen: verdeckt, Bezugskoerper statt Objekt

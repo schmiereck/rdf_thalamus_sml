@@ -863,6 +863,13 @@ OBJ_SEHEN = os.environ.get("ACT23_OBJ_SEHEN", "0") == "1"
 # Gelernt wird "wo landet das Objekt relativ zur Hand" -- Parallaxe UND die typische Drift nach dem
 # Loslassen in einem.  1 = lernen und vorhersagen, aber nicht benutzen (Schatten); 2 = benutzen,
 # sobald BLICK_MIN Beispiele da sind.  Die Beispiele werden im Zustand gespeichert.
+# DAS GETRAGENE OBJEKT UEBER SEINE EIGENSCHAFT SUCHEN (ACT23_OBJ_EIG, Vorgabe 0).  Gemessen 2026-09-29:
+# der Blick auf das Objekt in der Hand nahm den naechsten Fleck im 40-mm-Umkreis -- nahe am Ziel
+# manchmal den BEZUGSKOERPER, und die Nachfuehrung schob das Objekt weg.  Mit dem Schalter zaehlen im
+# 60-mm-Umkreis nur Flecken, deren Farbe (Chromatizitaet) zur eigenen Sichtung des Objekts zu Beginn
+# der Episode passt (situation_feats.last_det); passt keiner, gilt es als nicht gesehen.
+OBJ_EIG = os.environ.get("ACT23_OBJ_EIG", "0") == "1"
+OBJ_EIG_TOL = float(os.environ.get("ACT23_OBJ_EIG_TOL", "0.05"))
 BLICK_LERNEN = int(os.environ.get("ACT23_BLICK_LERNEN", "0"))
 BLICK_MIN = int(os.environ.get("ACT23_BLICK_MIN", "12"))
 BLICK_MAX = 400
@@ -5815,8 +5822,17 @@ def run_self_learning_steering(headless=False):
         dets = shape_clf.perceive_all(sim)
         sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
         _h = np.asarray(hand_xy, float)
-        nah = [d for d in dets if d.get("pos") is not None and float(d.get("area", 0.0)) >= 100.0
-               and float(np.linalg.norm(np.asarray(d["pos"], float) - _h)) < 0.04]
+        _d0 = getattr(situation_feats, "last_det", None) if OBJ_EIG else None
+        if _d0 is not None and _d0.get("chroma") is not None:
+            # UEBER DIE EIGENSCHAFT (s. OBJ_EIG): nur Flecken in der Farbe des eigenen Objekts
+            _c0 = np.asarray(_d0["chroma"], float)
+            nah = [d for d in dets if d.get("pos") is not None and float(d.get("area", 0.0)) >= 100.0
+                   and d.get("chroma") is not None
+                   and float(np.linalg.norm(np.asarray(d["chroma"], float) - _c0)) < OBJ_EIG_TOL
+                   and float(np.linalg.norm(np.asarray(d["pos"], float) - _h)) < 0.06]
+        else:
+            nah = [d for d in dets if d.get("pos") is not None and float(d.get("area", 0.0)) >= 100.0
+                   and float(np.linalg.norm(np.asarray(d["pos"], float) - _h)) < 0.04]
         if not nah:
             return None
         d = min(nah, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"], float) - _h)))
