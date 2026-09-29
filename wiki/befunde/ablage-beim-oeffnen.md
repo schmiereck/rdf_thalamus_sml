@@ -177,6 +177,26 @@ selbstgemachte (zu enge Toleranz, ein Drittel; dazu die Mischflecken). Naheliege
 ~0,08 (holt die 10 zurueck, die Nachbarn liegen bei >= 0,14). Gegen die Verdeckung hilft nur ein
 anderer Blickwinkel oder die Hand kurz wegnehmen - nicht gebaut.
 
+# Gemessen 2026-09-30: Farbtoleranz 0,08 - sieht mehr, liefert nicht mehr
+
+`ACT23_OBJ_EIG=2`, `ACT23_OBJ_EIG_TOL=0.08` (statt 0,05), sonst wie die Hand-Referenz-Reihe,
+dieselben 120 Szenen:
+
+                                   Toleranz 0,05    Toleranz 0,08
+    Blicke gesehen / nicht gesehen 49 / 103         70 / 77
+    falsches Objekt (> 8 mm)       0                4
+    nachgefuehrt                   18 von 72        25 von 73
+    geliefert                      59               59     (9 | 9, p = 1,00)
+    gegen Kontrolle (56)                            8 | 11, p = 0,65
+    zum WAHREN Ziel (Median)       19 mm            19 mm
+
+**Die gelockerte Toleranz holt die knapp abgelehnten Blicke zurueck (+21 gesehen, 4 falsche) und
+fuehrt oefter nach - an Lieferungen und Endlage aendert das nichts.** Die 19 Fehlablagen liegen beim
+Oeffnen im Median 40 mm daneben und werden meist gar nicht gesehen (verdeckt). Damit ist die
+Hinschau-Linie ausgeschoepft: sie macht die mittleren Ablagen genauer (22 -> 17-19 mm), die
+Fehlablagen sind ueberwiegend verdeckte Objekte, die die Kamera aus dieser Lage nicht sehen kann.
+Alle Schalter bleiben aus.
+
 # Verwandt
 
 * [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md)
