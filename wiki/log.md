@@ -7,6 +7,9 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-29
 
+* **Ergaenzung**: [Ablage beim echten Oeffnen](/befunde/ablage-beim-oeffnen.md) - Diagnose der
+  Blick-Blindheit (35 Faelle): 16 verdeckt, 10 knapp ueber der Farbtoleranz, 9 Mischfleck.
+
 * **Nachtrag**: [Ablage beim echten Oeffnen](/befunde/ablage-beim-oeffnen.md) - Referenzfarbe aus der
   Hand endgueltig: geliefert 59 gegen 56 (Kontrolle) / 57 (hinschauen) / 45 (Tisch-Farbe, p = 0,016),
   0 falsche Objekte, 103 Blicke "nicht gesehen". Diagnoselauf zur Blindheit gestartet.

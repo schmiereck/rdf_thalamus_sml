@@ -159,6 +159,24 @@ der Tisch-Farben-Reihe (45) wiederholt sich hier nicht und war vermutlich Streuu
 genauer als die Kontrolle (16 gegen 24 mm), nicht mehr Lieferungen, nicht besser als bloss
 hinschauen.
 
+# Gemessen 2026-09-29: warum der Blick "nicht gesehen" meldet (Diagnose)
+
+`ACT23_OBJ_EIG=2`, Diagnosezeile `[Objektblick]` (61b1a33), FSM, Seeds 9811/9812 je 30 Ep:
+35 abgelehnte Blicke, eingeteilt nach dem naechsten Fleck im 60-mm-Umkreis der Hand:
+
+    16  nichts in der Naehe - nur Flecken in 29-56 mm Abstand mit ganz anderer Farbe (0,14-0,62):
+        das eigene Objekt ist VERDECKT (Klaue/Arm).  Die fernen Flecken sind Nachbarn - genau die,
+        die der ungefilterte Blick (40 mm) frueher als "das Objekt" nahm (die 14 Fehlgriffe).
+    10  naher Fleck (3-27 mm) knapp ueber der Farbtoleranz (0,055-0,075 bei Toleranz 0,05):
+        das eigene Objekt, zu streng abgelehnt.
+     9  naher Fleck (7-23 mm) mit deutlich anderer Farbe (0,11-0,26): vermutlich das Objekt mit
+        der Klaue zu einem Fleck verschmolzen (Mischfarbe) - nicht geprueft.
+
+Die Blindheit hat also zwei Haelften: eine ehrliche (Verdeckung, knapp die Haelfte) und eine
+selbstgemachte (zu enge Toleranz, ein Drittel; dazu die Mischflecken). Naheliegend: Toleranz auf
+~0,08 (holt die 10 zurueck, die Nachbarn liegen bei >= 0,14). Gegen die Verdeckung hilft nur ein
+anderer Blickwinkel oder die Hand kurz wegnehmen - nicht gebaut.
+
 # Verwandt
 
 * [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md)
