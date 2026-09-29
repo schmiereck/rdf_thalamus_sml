@@ -380,7 +380,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                  episode_end_fn=None, cap=CAP, teacher_log_fn=None, goal_fn=None, place_servo_fn=None,
                  ood_rate=0.0, ood_rng=None, tol=None, carry_target_fn=None,
                  post_goal_fn=None, macro_log_fn=None, servo=False, rescatter=True, orient_fn=None,
-                 ziel_nachsehen_fn=None, objekt_sehen_fn=None,
+                 ziel_nachsehen_fn=None, objekt_sehen_fn=None, objekt_merken_fn=None,
                  carry_gentle=False, grip_close=None, wrist_fn=None, arm_reset=True, policy_log_fn=None):
     """If perceive_fn is given it is called per episode (arm parked, scene visible) and must
     return (cube_xy, target_xy) as PERCEIVED (e.g. from the camera) — the cube position is used
@@ -719,6 +719,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                     aim = np.array([c[0], c[1], griff_z])
                     if dwell > 90:
                         phase = "lift"
+                        if objekt_merken_fn is not None:          # die Klaue ist zu, das Objekt steht
+                            objekt_merken_fn(hxy, float(hz))      # noch: so sieht es IN DER HAND aus
                 elif phase == "lift":
                     j5, aim = gclose, np.array([hxy[0], hxy[1], CARRY_Z])
                     if hz > CARRY_Z - 0.015:

@@ -868,7 +868,11 @@ OBJ_SEHEN = os.environ.get("ACT23_OBJ_SEHEN", "0") == "1"
 # manchmal den BEZUGSKOERPER, und die Nachfuehrung schob das Objekt weg.  Mit dem Schalter zaehlen im
 # 60-mm-Umkreis nur Flecken, deren Farbe (Chromatizitaet) zur eigenen Sichtung des Objekts zu Beginn
 # der Episode passt (situation_feats.last_det); passt keiner, gilt es als nicht gesehen.
-OBJ_EIG = os.environ.get("ACT23_OBJ_EIG", "0") == "1"
+OBJ_EIG = int(os.environ.get("ACT23_OBJ_EIG", "0"))
+# 2 = die Referenzfarbe aus einer Sichtung IN DER HAND (2026-09-29): gemessen fand die Farbe der
+#     Tischsichtung zu Episodenbeginn das gehaltene Objekt kaum (18 statt 51 Sichtungen).  Gemerkt
+#     wird sie, sobald die Klaue geschlossen ist und das Objekt noch steht (objekt_merken_fn) -- dieselbe
+#     Sichtlage wie beim Ablegen, und die Nachbarn stehen dann weit weg (Szene: >= 131 mm).
 OBJ_EIG_TOL = float(os.environ.get("ACT23_OBJ_EIG_TOL", "0.05"))
 BLICK_LERNEN = int(os.environ.get("ACT23_BLICK_LERNEN", "0"))
 BLICK_MIN = int(os.environ.get("ACT23_BLICK_MIN", "12"))
@@ -5815,6 +5819,30 @@ def run_self_learning_steering(headless=False):
         return ((np.asarray(f, float) - mu) / sd) @ W
 
     _blick_akt = {"v": None}
+    _obj_ref = {"chroma": None}                        # s. OBJ_EIG = 2
+
+    def _objekt_merken(hand_xy, hand_z):
+        """Die Farbe des eigenen Objekts IN DER HAND merken (s. OBJ_EIG = 2): naechster Fleck an der Hand."""
+        _obj_ref["chroma"] = None
+        if OBJ_EIG < 2:
+            return
+        saved = sim.d.mocap_pos.copy()
+        dets = shape_clf.perceive_all(sim)
+        sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+        _h = np.asarray(hand_xy, float)[:2]
+        nah = [d for d in dets if d.get("pos") is not None and d.get("chroma") is not None
+               and float(d.get("area", 0.0)) >= 100.0
+               and float(np.linalg.norm(np.asarray(d["pos"], float) - _h)) < 0.04]
+        if not nah:
+            print("    [Objektfarbe] in der Hand nicht gesehen -- keine Referenz", flush=True)
+            return
+        d = min(nah, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"], float) - _h)))
+        _obj_ref["chroma"] = np.asarray(d["chroma"], float).copy()
+        _d0 = getattr(situation_feats, "last_det", None)
+        _txt = ""
+        if _d0 is not None and _d0.get("chroma") is not None:
+            _txt = f", Abstand zur Tischsichtung {float(np.linalg.norm(_obj_ref['chroma'] - np.asarray(_d0['chroma'], float))):.3f}"
+        print(f"    [Objektfarbe] in der Hand gemerkt{_txt}", flush=True)
 
     def _objekt_sehen(hand_xy, hand_z):
         """Das getragene Objekt ansehen: die Detektion naechst der Hand.  Nur Kamera + eigene Hand."""
@@ -5822,14 +5850,26 @@ def run_self_learning_steering(headless=False):
         dets = shape_clf.perceive_all(sim)
         sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
         _h = np.asarray(hand_xy, float)
-        _d0 = getattr(situation_feats, "last_det", None) if OBJ_EIG else None
-        if _d0 is not None and _d0.get("chroma") is not None:
+        _d0 = getattr(situation_feats, "last_det", None) if OBJ_EIG == 1 else None
+        _c0 = (np.asarray(_d0["chroma"], float) if (_d0 is not None and _d0.get("chroma") is not None)
+               else (_obj_ref["chroma"] if OBJ_EIG >= 2 else None))
+        if _c0 is not None:
             # UEBER DIE EIGENSCHAFT (s. OBJ_EIG): nur Flecken in der Farbe des eigenen Objekts
-            _c0 = np.asarray(_d0["chroma"], float)
             nah = [d for d in dets if d.get("pos") is not None and float(d.get("area", 0.0)) >= 100.0
                    and d.get("chroma") is not None
                    and float(np.linalg.norm(np.asarray(d["chroma"], float) - _c0)) < OBJ_EIG_TOL
                    and float(np.linalg.norm(np.asarray(d["pos"], float) - _h)) < 0.06]
+            if not nah:
+                # DIAGNOSE: warum nicht gesehen?  Alle Flecken im 60-mm-Umkreis mit Abstand,
+                # Farbabstand und Flaeche (auch die unter 100 px).
+                _nd = sorted((float(np.linalg.norm(np.asarray(d["pos"], float) - _h)), d) for d in dets
+                             if d.get("pos") is not None
+                             and float(np.linalg.norm(np.asarray(d["pos"], float) - _h)) < 0.06)
+                print("    [Objektblick] kein Fleck in der Farbe; nahe: " + (", ".join(
+                    f"{1000.0 * r:.0f}mm Farbe "
+                    + (f"{float(np.linalg.norm(np.asarray(d['chroma'], float) - _c0)):.3f}" if d.get("chroma") is not None else "-")
+                    + f" Flaeche {float(d.get('area', 0.0)):.0f}" for r, d in _nd) or "keine")
+                    + f" | Hand {1000.0 * float(hand_z):.0f}mm hoch", flush=True)
         else:
             nah = [d for d in dets if d.get("pos") is not None and float(d.get("area", 0.0)) >= 100.0
                    and float(np.linalg.norm(np.asarray(d["pos"], float) - _h)) < 0.04]
@@ -6384,6 +6424,7 @@ def run_self_learning_steering(headless=False):
                            rescatter=False, episode_end_fn=ep_end,
                            ziel_nachsehen_fn=(_ziel_nachsehen if ZIEL_NACHSEHEN else None),
                            objekt_sehen_fn=(_objekt_sehen if OBJ_SEHEN else None),
+                           objekt_merken_fn=(_objekt_merken if OBJ_EIG >= 2 else None),
                            lifelong=True, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
                            arm_reset=False)
         _T["nach_ausfuehrung"] = _time.perf_counter()
@@ -6466,6 +6507,7 @@ def run_self_learning_steering(headless=False):
                     print(f"    [Blick-Lernen] {_txt} | {len(blick_daten)} Beispiele", flush=True)
                 else:
                     print("    [Blick-Lernen] abgelegtes Objekt nicht gesehen -- kein Etikett", flush=True)
+        _obj_ref["chroma"] = None                          # s. OBJ_EIG = 2: gilt nur fuer diese Episode
         _rel = getattr(act16.run_combined, "_release", None)
         _bzl = state.ziel_bezug
         if _bzl is not None and _bzl.get("relation") == "auf" and _bzl.get("aufgeloest"):

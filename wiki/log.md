@@ -7,6 +7,11 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-29
 
+* **Ergaenzung (vorlaeufig)**: [Ablage beim echten Oeffnen](/befunde/ablage-beim-oeffnen.md) -
+  Referenzfarbe aus der Hand (`ACT23_OBJ_EIG=2`): Farbe in der Hand = Tischfarbe (Vermutung widerlegt),
+  Blick bleibt meist blind; ~100 Paare: 52 gegen 47 (Kontrolle) / 49 (hinschauen), nicht signifikant.
+  Diagnosezeile fuer die Blindheit eingebaut.
+
 * **Ergaenzung**: [Ablage beim echten Oeffnen](/befunde/ablage-beim-oeffnen.md) - absetzen + ueber
   die Farbe suchen: geliefert 45 gegen 56 (Kontrolle) / 57 (hinschauen), p = 0,05/0,04, nicht
   Bonferroni-signifikant. Der Farbfilter findet das gehaltene Objekt kaum (18 statt 51 Sichtungen),

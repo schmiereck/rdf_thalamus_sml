@@ -120,6 +120,31 @@ Offene Wege, nicht gemessen: Toleranz der Farbe lockern oder zusaetzlich Form/Gr
 die Farbe der Referenz aus einer Sichtung IN der Hand nehmen statt vom freien Tisch; ABSETZEN
 einzeln messen.
 
+# Gemessen 2026-09-29: Referenzfarbe aus der Hand (`ACT23_OBJ_EIG=2`) - VORLAEUFIG, ~100 von 120 Paaren
+
+Nutzerauftrag. Die Farbe wird gemerkt, sobald die Klaue zu ist und das Objekt noch steht
+(`objekt_merken_fn`, Uebergang close -> lift), sonst wie die Reihe davor (hinschauen, absetzen,
+LUFT_H). Stand bei 49/51 von 60 Episoden je Seed (der Warte-Befehl wurde vom System wegen
+Speicherknappheit beendet, die Laeufe liefen weiter):
+
+                                   gegen Kontrolle   gegen hinschauen   gegen Tisch-Farbe
+    geliefert                      47 -> 51          49 -> 52           40 -> 52
+    McNemar                        10 | 14, p = 0,54  9 | 12, p = 0,66   8 | 20, p = 0,036
+    zum WAHREN Ziel (Median)       24 -> 16 mm       16 -> 16 mm        24 -> 16 mm
+
+    Referenz in der Hand gemerkt   160-mal, 1-mal nicht gesehen
+    Farbabstand Hand gegen Tisch   meist 0,00-0,06; nur 7 von 160 ueber der Toleranz 0,05
+    Blicke beim Ablegen            43 gesehen, 0 falsches Objekt; 84-mal "nicht gesehen"
+
+**Die Vermutung von oben ist damit widerlegt:** die Farbe in der Hand ist fast dieselbe wie auf dem
+Tisch, und mit der Hand-Referenz bleibt der Blick ebenso oft "blind" (84 gegen 98). Der Farbfilter
+lehnt also etwas ANDERES ab - was, zeigt eine Diagnose, die erst in neuen Laeufen greift (Zeile
+`[Objektblick] kein Fleck in der Farbe; nahe: ...` mit Abstand, Farbabstand und Flaeche jedes
+nahen Flecks). Die Lieferzahlen liegen alle im Rauschen der online lernenden Paare; der Einbruch
+der Tisch-Farben-Reihe (45) wiederholt sich hier nicht und war vermutlich Streuung. Ergebnis:
+genauer als die Kontrolle (16 gegen 24 mm), nicht mehr Lieferungen, nicht besser als bloss
+hinschauen.
+
 # Verwandt
 
 * [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md)
