@@ -7,6 +7,10 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-29
 
+* **Nachtrag**: [Ablage beim echten Oeffnen](/befunde/ablage-beim-oeffnen.md) - Referenzfarbe aus der
+  Hand endgueltig: geliefert 59 gegen 56 (Kontrolle) / 57 (hinschauen) / 45 (Tisch-Farbe, p = 0,016),
+  0 falsche Objekte, 103 Blicke "nicht gesehen". Diagnoselauf zur Blindheit gestartet.
+
 * **Ergaenzung (vorlaeufig)**: [Ablage beim echten Oeffnen](/befunde/ablage-beim-oeffnen.md) -
   Referenzfarbe aus der Hand (`ACT23_OBJ_EIG=2`): Farbe in der Hand = Tischfarbe (Vermutung widerlegt),
   Blick bleibt meist blind; ~100 Paare: 52 gegen 47 (Kontrolle) / 49 (hinschauen), nicht signifikant.

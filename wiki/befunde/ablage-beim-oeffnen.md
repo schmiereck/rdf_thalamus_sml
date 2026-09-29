@@ -120,7 +120,21 @@ Offene Wege, nicht gemessen: Toleranz der Farbe lockern oder zusaetzlich Form/Gr
 die Farbe der Referenz aus einer Sichtung IN der Hand nehmen statt vom freien Tisch; ABSETZEN
 einzeln messen.
 
-# Gemessen 2026-09-29: Referenzfarbe aus der Hand (`ACT23_OBJ_EIG=2`) - VORLAEUFIG, ~100 von 120 Paaren
+# Gemessen 2026-09-29: Referenzfarbe aus der Hand (`ACT23_OBJ_EIG=2`)
+
+**ENDGUELTIG (alle 120 Paare):**
+
+                                   gegen Kontrolle   gegen hinschauen   gegen Tisch-Farbe
+    geliefert                      56 -> 59          57 -> 59           45 -> 59
+    McNemar                        13 | 16, p = 0,71  12 | 14, p = 0,85  8 | 22, p = 0,016
+    zum WAHREN Ziel (Median)       22 -> 19 mm       17 -> 19 mm        25 -> 19 mm
+    Referenz gemerkt 185-mal (3 nicht gesehen, 8 ueber der Toleranz); Blicke beim Ablegen 49
+    gesehen, 0 falsches Objekt, 103-mal "nicht gesehen"; 18 von 72 Ablagen nachgefuehrt.
+
+Bonferroni (drei Vergleiche, Schranke 0,017): der Unterschied zur Tisch-Farben-Reihe liegt knapp
+darunter - die Referenz aus der Hand ist besser als die vom Tisch, aber nicht besser als bloss
+hinschauen oder die Kontrolle. Die folgende Tabelle ist der vorlaeufige Stand bei ~100 Paaren.
+
 
 Nutzerauftrag. Die Farbe wird gemerkt, sobald die Klaue zu ist und das Objekt noch steht
 (`objekt_merken_fn`, Uebergang close -> lift), sonst wie die Reihe davor (hinschauen, absetzen,
