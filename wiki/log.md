@@ -7,6 +7,10 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-30
 
+* **Neu**: [Steuer-GUI](/mechanismen/gui-bedienung.md) - Umbau nach Nutzerbeobachtungen im
+  GUI-Lauf: farbneutrale Wuerfelnamen, aktuelle Farbe in Log und GUI, drei Gruppen mit
+  Klapplisten, Aufgabenzeile, Relation fest waehlbar.
+
 * **Ergaenzung**: [Farb-Mischung](/befunde/farb-mischung.md) - Nutzerbeobachtung im GUI-Lauf
   ("Gruenes Wuerfel" ohne gruenen Wuerfel): kein Auswahlfehler, die festen Knopf-Namen tragen
   Farbwoerter, waehrend FARB_MISCHUNG die Farben je Szene permutiert.

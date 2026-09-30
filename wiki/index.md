@@ -164,3 +164,4 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 # Chronik der Entwicklung
 
 * [act23-Entwicklungslinie](chronik/act23.md) - Juni bis September 2026, verdichtet: Etappen, Anlaesse, Messungen
+* [Steuer-GUI](mechanismen/gui-bedienung.md) - **Umbau 2026-09-30: farbneutrale Namen mit aktueller Farbe in Log/GUI, drei Gruppen (Objekt/Ziel/Ausfuehrung), Klapplisten, Aufgabenzeile; Relation im Ziel fest waehlbar.**

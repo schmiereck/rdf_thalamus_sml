@@ -1599,6 +1599,16 @@ def eig_split_teil(sim, shape_clf, colours, ckey, form, groesse, det_blob):
     return best if _d > EIG_SPLIT_FAKTOR * _sp else None
 
 
+# NUR ANZEIGE (s. CommandState23.farbname): die Palette, die FARB_MISCHUNG permutiert, und
+# farbneutrale Koerpernamen fuer den Beobachter.
+FARB_NAMEN = [((0.9, 0.1, 0.1), "rot"), ((0.1, 0.85, 0.1), "grün"), ((0.15, 0.3, 0.95), "blau"),
+              ((0.95, 0.55, 0.1), "orange"), ((0.1, 0.8, 0.85), "türkis"), ((0.45, 0.12, 0.9), "violett"),
+              ((0.65, 0.95, 0.15), "gelbgrün")]
+KOERPER_NAME = {"obj_red": "Würfel A", "obj_green": "Würfel B", "obj_blue": "Balken", "obj_L": "L-Form",
+                "obj_U": "U-Form", "obj_T": "T-Form", "obj_X": "Kreuz", "obj_Zyl": "Zylinder",
+                "obj_V": "V-Form", "obj_Stern": "Stern"}
+
+
 class CommandState23:
     """Unified command state for the act23 GUI.  ONE coherent object list (no colour/form mode), plus a
     grasp-policy toggle (teacher WRIST_ALIGN <-> SELF-learned world-model wrist).  Exposes the cmd/force/goal
@@ -1606,7 +1616,10 @@ class CommandState23:
 
     # one button per CONCRETE object; field 3 = how the net LOCALISES it (colour via vc / form via shape_clf /
     # long = the elongated obj_blue, localised by colour, wrist by the self-learned world model)
-    OBJECTS = [("Rotes Wuerfel", "obj_red", "color"), ("Gruenes Wuerfel", "obj_green", "color"),
+    # FARBNEUTRALE NAMEN (2026-09-30).  Bis dahin hiessen die Wuerfel "Rotes/Gruenes Wuerfel" --
+    # seit FARB_MISCHUNG (Vorgabe 1) die Farben je Szene permutiert, log der Name: "[Auto 83]
+    # Gruenes Wuerfel" war ein blauer Wuerfel (Nutzerbefund).  Die AKTUELLE Farbe zeigt anzeige().
+    OBJECTS = [("Würfel A", "obj_red", "color"), ("Würfel B", "obj_green", "color"),
                ("L-Form", "obj_L", "shape"), ("U-Form", "obj_U", "shape"), ("Langes Objekt", "obj_blue", "long")]
     SHAPE_KEY = {"obj_L": "L", "obj_U": "U"}
     MARKERS = ["target_sel_1", "target_sel_2", "target_sel_3"]
@@ -1635,6 +1648,7 @@ class CommandState23:
         # ziel_bezug traegt den Wurf DIESER Episode, ziel_loeser die Aufloesung (sie braucht
         # shape_clf und colours und kann deshalb nicht hier stehen).
         self.ziel_modus = "koerper" if ZIEL_ADRESSE else "ort"
+        self.ziel_art = None       # GUI: None = wie ACT23_ZIEL_RELATION; "an"/"auf"/Richtungswort fest
         self.ziel_bezug = None
         self.ziel_loeser = None
         # STUETZEN sind MOEBEL, keine Objekte: Koerper, auf die etwas gestellt werden kann, die aber
@@ -1733,6 +1747,64 @@ class CommandState23:
                 return p
         return self.marker_xy(self.target_idx)
 
+    # ---- ANZEIGE FUER DEN MENSCHEN (Log + GUI).  Die Farbnamen kommen aus der RGBA des Koerpers,
+    #      also privilegiert -- sie sind NUR Beschriftung fuer den Beobachter und gehen in keine
+    #      Entscheidung ein.  Der Agent selbst kennt nur seine Farbklassen ("farbe-4").
+    def farbname(self, body):
+        try:
+            _b = mujoco.mj_name2id(self.sim.m, mujoco.mjtObj.mjOBJ_BODY, body)
+            rgb = np.asarray(self.sim.m.geom_rgba[self.sim.m.body_geomadr[_b]][:3], float)
+        except Exception:
+            return "?"
+        return min(FARB_NAMEN, key=lambda fn: float(np.linalg.norm(rgb - np.asarray(fn[0]))))[1]
+
+    def koerper_hinweis(self, body):
+        return f"{KOERPER_NAME.get(body, body)}, {self.farbname(body)}"
+
+    def anzeige(self, i=None):
+        """Name eines Eintrags fuer Log und GUI: der Befehl, wie der Agent ihn traegt, plus in
+        Klammern, welcher Koerper das gerade ist und welche Farbe er hat."""
+        lbl, body, modus = self.OBJECTS[self.sel if i is None else i]
+        if modus == "eigenschaft":
+            return f"'{lbl}' ({self.koerper_hinweis(body)})"
+        if lbl == KOERPER_NAME.get(body):
+            return f"{lbl} ({self.farbname(body)})"
+        return f"{lbl} ({self.koerper_hinweis(body)})"
+
+    def ziel_hinweis(self):
+        if self.ziel_modus != "koerper":
+            return f"Ort: Marker {self.target_idx + 1}"
+        if self.ziel_bezug is None:
+            return "Bezug wird beim Start gewürfelt"
+        return f"'{self.ziel_bezug['label']}' -> {self.koerper_hinweis(self.ziel_bezug['body'])}"
+
+    def aufgabe(self):
+        """EIN Satz: was wird womit wohin gebracht."""
+        obj = self.anzeige()
+        if self.ziel_modus != "koerper":
+            wo = f"bei Marker {self.target_idx + 1}"
+        elif self.ziel_bezug is None:
+            _art = {None: "Relation zufällig", "an": "neben", "auf": "auf", "vor": "vor",
+                    "hinter": "hinter"}.get(self.ziel_art, f"{self.ziel_art} von")
+            wo = f"{_art} einem Körper (wird gewürfelt)"
+        else:
+            _bz = self.ziel_bezug
+            ref = f"{KOERPER_NAME.get(_bz['body'], _bz['body'])} ({self.farbname(_bz['body'])})"
+            _r = _bz.get("relation", "an")
+            _w = _bz.get("wort")
+            wo = (f"auf {ref}" if _r == "auf"
+                  else f"{_w if _w in ('vor', 'hinter') else str(_w) + ' von'} {ref}" if _w
+                  else f"neben {ref}")
+        if self.action == "push":
+            return f"{obj} schieben -> {wo}"
+        return f"{obj} greifen -> {'stapeln ' if 'auf ' in wo[:4] else 'ablegen '}{wo}"
+
+    def betrieb(self):
+        ch = {"netz": "Netz", "attractor": "Attraktor"}.get(self.choreo, "FSM (Teacher)")
+        pol = "selbst-gelernt" if self.policy == "self" else "Teacher"
+        return (f"Choreo {ch}  |  Greifer {pol}  |  Zielkodierung "
+                f"{'Latent' if self.goalmode == 'latent' else 'Koordinate'}  |  Auto {'an' if self.auto else 'aus'}")
+
     def label(self):
         act = "Greifen" if self.action == "grasp" else "Schieben"
         pol = "Selbst-gelernt" if self.policy == "self" else "Teacher"
@@ -1741,176 +1813,241 @@ class CommandState23:
         if self.ziel_bezug is not None:
             # das Label traegt die Relation schon ("auf ..."), fuer "an" steht sie hier davor
             _r = self.ziel_bezug.get("relation", "an")         # "richtung": "links von ..."
-            zt = f"Ziel: {'an ' if _r == 'an' else ''}{self.ziel_bezug['label']}"
+            zt = (f"Ziel: {'an ' if _r == 'an' else ''}{self.ziel_bezug['label']}"
+                  f" [= {self.koerper_hinweis(self.ziel_bezug['body'])}]")
         elif self.ziel_modus == "koerper":
             zt = f"Ziel: {ZIEL_RELATION} <kein Bezug>"
         else:
             zt = f"Ziel {self.target_idx + 1}"
-        return f"{self.selected()[0]} | {act} | Greifer: {pol} | Choreo: {ch} | {zt}{zl}"
+        return f"{self.anzeige()} | {act} | Greifer: {pol} | Choreo: {ch} | {zt}{zl}"
 
 
 EIG_ONLY = os.environ.get("ACT23_EIG_ONLY", "0") != "0"   # alte Objektzeile ausblenden
 
 
-class CommandPanel23:
-    """Same look as pc_act21's CommandPanel (arm camera + fovea + surprise + buttons) but with ONE unified
-    object row (no colour/form mode) and a grasp-policy toggle."""
+class _Auswahl:
+    """Eine KLAPPLISTE aus matplotlib-Knoepfen (Nutzerwunsch 2026-09-30: "Auswahl ueber Dropdowns
+    besser als das Durchwechseln bei Druck").  matplotlib hat kein Dropdown; ein Klick oeffnet
+    darueber eine Spalte mit allen Werten, ein Klick auf einen Wert setzt ihn und schliesst sie.
 
-    # EINE Quelle fuer Beschriftung und Farbe des Choreo-Knopfes -- Konstruktor UND Umschalter lesen
-    # sie, damit der Knopf nicht wieder etwas anderes anzeigt als der Zustand sagt.
+    optionen() -> [(schluessel, text), ...], wert() -> schluessel, setzen(schluessel).
+    farbe(schluessel) -> RGB oder None faerbt die Eintraege (Farbklassen)."""
+
+    def __init__(self, panel, rect, titel, optionen, wert, setzen, farbe=None, fontsize=7.5):
+        from matplotlib.widgets import Button
+        self.p, self.rect, self.titel = panel, rect, titel
+        self.optionen, self.wert, self.setzen, self.farbe = optionen, wert, setzen, farbe
+        self.fontsize = fontsize
+        ax = panel.fig.add_axes(rect)
+        self.b = Button(ax, "", color="#2b3b4a", hovercolor="#3a5060")
+        self.b.label.set_fontsize(fontsize)
+        self.b.on_clicked(self._klick)
+        self.aktiv = True
+        self._popup = []
+
+    def _text(self):
+        k = self.wert()
+        for s, t in self.optionen():
+            if s == k:
+                return t
+        return "-"
+
+    def refresh(self):
+        self.b.label.set_text(f"{self.titel}: {self._text()}  ▾" if self.aktiv else f"{self.titel}: -")
+        self.b.label.set_alpha(1.0 if self.aktiv else 0.4)
+        rgb = self.farbe(self.wert()) if (self.farbe is not None and self.aktiv) else None
+        self._faerben(self.b, rgb, "#2b3b4a")
+
+    @staticmethod
+    def _faerben(b, rgb, grund):
+        if rgb is None:
+            b.color = grund; b.hovercolor = "#3a5060"; b.label.set_color("w")
+        else:
+            b.color = rgb; b.hovercolor = rgb
+            hell = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+            b.label.set_color("#101014" if hell > 0.55 else "w")
+        b.ax.set_facecolor(b.color)
+
+    def _klick(self, _e):
+        if not self.aktiv:
+            return
+        offen = bool(self._popup)
+        self.p._popups_schliessen()
+        if not offen:
+            self._oeffnen()
+
+    def _oeffnen(self):
+        from matplotlib.widgets import Button
+        opts = self.optionen()
+        x, y, w, h = self.rect
+        hh = 0.03
+        pro_spalte = max(1, int((0.93 - (y + h)) / hh))    # nach oben ins Bild, bis unter den Rand
+        k0 = self.wert()
+        self.p._texte_zeigen(False)                        # sonst scheinen die Zeilen durch die Liste
+        for j, (s, t) in enumerate(opts):
+            sp, zl = divmod(j, pro_spalte)
+            ax = self.p.fig.add_axes([x + sp * (w + 0.004), y + h + 0.003 + zl * hh, w, hh - 0.002])
+            ax.set_zorder(50)
+            b = Button(ax, ("● " if s == k0 else "") + t, color="#1c2630", hovercolor="#35506a")
+            b.label.set_fontsize(self.fontsize)
+            if self.farbe is not None:
+                self._faerben(b, self.farbe(s), "#1c2630")
+            b.on_clicked(lambda _e, s=s: self._waehlen(s))
+            self._popup.append(b)
+        self.p.fig.canvas.draw_idle()
+
+    def _waehlen(self, s):
+        self.p._popups_schliessen()
+        self.setzen(s)
+        self.p._refresh()
+
+    def schliessen(self):
+        for b in self._popup:
+            b.disconnect_events()
+            self.p.fig.delaxes(b.ax)
+        self._popup = []
+
+
+class CommandPanel23:
+    """Die act23-Steuer-GUI: Armkamera + Fovea + Ueberraschung oben, darunter DREI GRUPPEN
+    (Nutzerwunsch 2026-09-30):
+      1 Objekt     WAS transportiert wird -- per Name (Klappliste) ODER per Eigenschaften
+      2 Ziel       WOHIN -- ein Ort (Marker) oder eine Relation zu einem Koerper (an/auf/links ...)
+      3 Ausfuehrung WIE -- Aktion, Choreographie, Greifer, Zielkodierung
+    und eine AUFGABENZEILE, die in einem Satz sagt, was gerade gilt.  Alle Wahlen sind
+    Klapplisten statt Durchschalt-Knoepfe."""
+
     CH_LBL = {"fsm": "Choreo: FSM", "netz": "Choreo: Netz", "attractor": "Choreo: Attraktor"}
     CH_COL = {"fsm": "#5a3a3a", "netz": "#2a5a7a", "attractor": "#5a2a7a"}
+    ZIEL_ARTEN = [("ort", "Ort (Marker)"), ("zufall", "Körper, Relation zufällig"),
+                  ("an", "an Körper"), ("auf", "auf Körper"), ("links", "links von Körper"),
+                  ("rechts", "rechts von Körper"), ("vor", "vor Körper"),
+                  ("hinter", "hinter Körper")]
 
     def __init__(self, state, cam, res, rng=None, randomize_fn=None):
         import matplotlib.pyplot as plt
         from matplotlib.widgets import Button
+        from matplotlib.patches import FancyBboxPatch
         from pc_cvnn.pc_act18 import HexFoveaViz, SurpriseViz
         self.plt = plt; self.state = state; self._cam = cam; self._randomize_fn = randomize_fn
         self._rng = rng if rng is not None else np.random.default_rng(0); plt.ion()
         fw, fh = (float(x) for x in os.environ.get("ACT23_FIGSIZE", "12.0,7.5").split(","))
         self.fig = plt.figure(figsize=(fw, fh)); self.fig.patch.set_facecolor("#0e0e12")
         self.fig.canvas.manager.set_window_title("act23 — Selbst-lernender Greifer (Netz steuern)")
-        self.axCam = self.fig.add_axes([0.035, 0.30, 0.38, 0.63]); self.axCam.axis("off")
+        self.axCam = self.fig.add_axes([0.035, 0.36, 0.38, 0.59]); self.axCam.axis("off")
         self.axCam.set_title(f"Arm — {cam} Kamera", color="w", fontsize=10)
         self.imCam = self.axCam.imshow(np.zeros((res, res, 3), np.uint8))
-        axFovI = self.fig.add_axes([0.44, 0.62, 0.24, 0.31]); axFovC = self.fig.add_axes([0.44, 0.30, 0.21, 0.26])
+        axFovI = self.fig.add_axes([0.44, 0.66, 0.24, 0.29]); axFovC = self.fig.add_axes([0.44, 0.36, 0.21, 0.25])
         self.fov_viz = HexFoveaViz(cam, res, axI=axFovI, axC=axFovC)
-        axE = self.fig.add_axes([0.715, 0.635, 0.27, 0.295]); axR = self.fig.add_axes([0.715, 0.30, 0.27, 0.235])
+        axE = self.fig.add_axes([0.715, 0.67, 0.27, 0.275]); axR = self.fig.add_axes([0.715, 0.36, 0.27, 0.235])
         self.surp_viz = SurpriseViz(axE=axE, axR=axR, show_readout=False)
-        self.status = self.fig.text(0.5, 0.255, "", ha="center", color="w", fontsize=11, family="monospace")
-        self.live = self.fig.text(0.225, 0.285, "", ha="center", color="#9fb4c8", fontsize=8.5, family="monospace")
-        # unified OBJECT row (one button per concrete object)
-        self._obj_btns = {}
-        # ACT23_EIG_ONLY=1 blendet die alte Objektzeile aus -- dann sind die drei Waehlfelder die
-        # einzige Bedienung.  Die LISTE bleibt intern bestehen (state.sel indiziert sie, und Auto,
-        # Neugier und Bewertung haengen daran); ausgeblendet wird nur die Bedienung.
-        for i, (lbl, nm, _m) in enumerate([] if EIG_ONLY else state.OBJECTS):
-            ax = self.fig.add_axes([0.035 + 0.115 * i, 0.150, 0.108, 0.055])
-            col = state.OBJ_COL[nm]
-            b = Button(ax, lbl, color=col, hovercolor=col); b.label.set_fontsize(7.5)
-            b.on_clicked(lambda _e, k=i: self._set_obj(k)); self._obj_btns[i] = b
-        if not EIG_ONLY:
-            self.fig.text(0.018, 0.178, "Objekt", color="#9fb4c8", fontsize=8,
-                          rotation=90, va="center")
-        # AUSWAHL NACH EIGENSCHAFTEN (Nutzeridee 2026-09-04): drei Felder statt eines Objektnamens.
-        # Jedes Feld schaltet durch seine bekannten Werte, "beliebig" laesst die Achse offen.
-        # Die Werte und die Zuweisung kommen von aussen (_eig_werte / _eig_fn), damit der
-        # Konstruktor nichts ueber Farben und Formklassen wissen muss -- so wie _introduce_fn.
+        # AUFGABENZEILE (zwei Zeilen) und die Live-Meldung
+        self.status = self.fig.text(0.5, 0.318, "", ha="center", color="w", fontsize=10.5,
+                                    family="monospace")
+        self.status2 = self.fig.text(0.5, 0.292, "", ha="center", color="#9fb4c8", fontsize=8,
+                                     family="monospace")
+        self.live = self.fig.text(0.225, 0.345, "", ha="center", color="#9fb4c8", fontsize=8.5,
+                                  family="monospace")
+        self._auswahlen = []
+
+        def gruppe(x0, x1, titel):
+            self.fig.patches.append(FancyBboxPatch((x0, 0.095), x1 - x0, 0.175,
+                                                   boxstyle="round,pad=0.004", transform=self.fig.transFigure,
+                                                   facecolor="#15181f", edgecolor="#3a4656", lw=1.0,
+                                                   zorder=-1))
+            self.fig.text(x0 + 0.008, 0.255, titel, color="#c8d6e5", fontsize=8.5, weight="bold")
+
+        # ---------------- 1 OBJEKT ----------------
+        gruppe(0.02, 0.365, "1  Objekt  (wird transportiert)")
         self._eig = [None, None, None]          # (Farbklasse, Formklasse, Groessenband)
         self._eig_werte = ([], [], [])
         self._eig_fn = None
-        self._farb_rgb = None                   # Name -> RGB des selbst gelernten Prototyps
-        self._eig_da = [None, None, None]       # was die Detektion HERGAEBE, auch wenn ungenannt
-        self._eig_btns = []
-        for i, titel in enumerate(("Farbe", "Form", "Groesse")):
-            ax = self.fig.add_axes([0.035 + 0.152 * i, 0.108, 0.145, 0.036])
-            b = Button(ax, f"{titel}: beliebig", color="#2b3b4a", hovercolor="#3a5060")
-            b.label.set_fontsize(7)
-            b.on_clicked(lambda _e, k=i: self._eig_weiter(k))
-            self._eig_btns.append(b)
-        axEig = self.fig.add_axes([0.495, 0.108, 0.105, 0.036])
-        self.bEig = Button(axEig, "waehlen", color="#3a5a44", hovercolor="#4a7256")
-        self.bEig.label.set_fontsize(7); self.bEig.on_clicked(self._eig_anwenden)
-        self.eig_status = self.fig.text(0.61, 0.126, "", color="#9fb4c8", fontsize=7,
-                                        va="center", family="monospace")
-        # grasp-policy toggle (right of the object row -- slot 6 belongs to a discovered form)
-        axPol = self.fig.add_axes([0.78, 0.150, 0.155, 0.055])
-        self.bPol = Button(axPol, "", color="#3a5a44", hovercolor="#4a7256"); self.bPol.on_clicked(self._toggle_policy)
-        # OPEN-SET: drop the unknown probe object into the scene (the net must DISCOVER + self-label it)
+        self._farb_rgb = None
+        self._eig_da = [None, None, None]
+        self._obj_btns = {}                      # (Altlast: add_discovered pflegt sie nicht mehr)
+        self.aObj = self._auswahl([0.028, 0.195, 0.33, 0.042], "per Name",
+                                  lambda: [(i, self.state.anzeige(i)) for i in range(len(self.state.OBJECTS))],
+                                  lambda: self.state.sel, self._set_obj)
+        self.aEig = []
+        for i, titel in enumerate(("Farbe", "Form", "Größe")):
+            a = self._auswahl([0.028 + 0.083 * i, 0.145, 0.079, 0.036], titel,
+                              lambda k=i: [(None, "beliebig")] + [(v, str(v)) for v in self._eig_werte[k]],
+                              lambda k=i: self._eig[k], lambda v, k=i: self._eig_setzen_feld(k, v),
+                              farbe=(lambda v: self._farb_rgb(v) if (self._farb_rgb and v) else None)
+                              if i == 0 else None, fontsize=6.5)
+            self.aEig.append(a)
+        axEig = self.fig.add_axes([0.28, 0.145, 0.078, 0.036])
+        self.bEig = Button(axEig, "per Eigensch.", color="#3a5a44", hovercolor="#4a7256")
+        self.bEig.label.set_fontsize(6.5); self.bEig.on_clicked(self._eig_anwenden)
+        self.obj_info = self.fig.text(0.028, 0.115, "", color="#9fb4c8", fontsize=7, family="monospace")
+        self.eig_status = self.obj_info                  # Rueckmeldung der Eigenschaftswahl
+        # ---------------- 2 ZIEL ----------------
+        gruppe(0.375, 0.655, "2  Ziel  (wohin)")
+        self.aArt = self._auswahl([0.383, 0.195, 0.175, 0.042], "Art", lambda: self.ZIEL_ARTEN,
+                                  self._ziel_art_wert, self._ziel_art_setzen)
+        self.aMarker = self._auswahl([0.563, 0.195, 0.085, 0.042], "Ort",
+                                     lambda: [(i, f"Marker {i + 1}") for i in range(len(self.state.MARKERS))],
+                                     lambda: self.state.target_idx, self._set_tgt)
+        axZN = self.fig.add_axes([0.383, 0.145, 0.13, 0.036])
+        self.bZN = Button(axZN, "Ziel neu würfeln", color="#5a4a7a", hovercolor="#7a64a0")
+        self.bZN.label.set_fontsize(7); self.bZN.on_clicked(self._ziel_neu)
+        self.ziel_info = self.fig.text(0.383, 0.115, "", color="#9fb4c8", fontsize=7, family="monospace")
+        # ---------------- 3 AUSFUEHRUNG ----------------
+        gruppe(0.665, 0.98, "3  Ausführung  (wie)")
+        self.aAkt = self._auswahl([0.673, 0.195, 0.148, 0.042], "Aktion",
+                                  lambda: [("grasp", "Greifen + Ablegen"), ("push", "Schieben")],
+                                  lambda: self.state.action, lambda v: setattr(self.state, "action", v))
+        self.aCh = self._auswahl([0.826, 0.195, 0.148, 0.042], "Choreo",
+                                 lambda: [("fsm", "FSM (Teacher)"), ("netz", "Netz"), ("attractor", "Attraktor")],
+                                 lambda: self.state.choreo, lambda v: setattr(self.state, "choreo", v))
+        self.aPol = self._auswahl([0.673, 0.145, 0.148, 0.036], "Greifer",
+                                  lambda: [("self", "Selbst-gelernt"), ("teacher", "Teacher")],
+                                  lambda: self.state.policy, lambda v: setattr(self.state, "policy", v))
+        self.aLG = self._auswahl([0.826, 0.145, 0.148, 0.036], "Zielkodierung",
+                                 lambda: [("latent", "Latent"), ("koord", "Koordinate")],
+                                 lambda: self.state.goalmode, lambda v: setattr(self.state, "goalmode", v))
+        # ---------------- UNTERE LEISTE ----------------
         self._introduce_fn = None
+        self._ziel_fn = None
         self._pending_introduce = False; self._pending_randomize = False   # deferred mid-episode clicks
-        axN = self.fig.add_axes([0.035, 0.220, 0.16, 0.05])
-        self.bN = Button(axN, "Objekt hinzufügen", color="#8a7430", hovercolor="#a89040")
-        self.bN.on_clicked(self._introduce)
-        # AUTO-Lauf: self-play episodes (random object + random target) until toggled off
-        axAuto = self.fig.add_axes([0.205, 0.220, 0.115, 0.05])
+        axAuto = self.fig.add_axes([0.02, 0.02, 0.15, 0.06])
         self.bAuto = Button(axAuto, "Auto: aus", color="#3a3a5a", hovercolor="#50507a")
         self.bAuto.on_clicked(self._toggle_auto)
-        # STAGE 2: scripted FSM choreography <-> the LEARNED runtime policy drives the sub-goals
-        axCh = self.fig.add_axes([0.33, 0.220, 0.125, 0.05])
-        # BESCHRIFTUNG AUS DEM ZUSTAND, nicht fest verdrahtet.  BUG bis 2026-08-03: hier stand
-        # "Choreo: FSM" fix -- seit der Vorgabe-Umstellung auf netz zeigte der Knopf also FSM an,
-        # WAEHREND das System auf Netz lief (vom Nutzer gemeldet).  Ein Druck haette dann auf
-        # Attraktor weitergeschaltet statt wie erwartet auf Netz.
-        self.bCh = Button(axCh, self.CH_LBL.get(state.choreo, "Choreo: FSM"),
-                          color=self.CH_COL.get(state.choreo, "#5a3a3a"), hovercolor="#7a5050")
-        self.bCh.on_clicked(self._toggle_choreo)
-        # STAGE 4a: place target as GOAL LATENT (latent-difference servo) <-> classic coordinate
-        axLG = self.fig.add_axes([0.462, 0.220, 0.082, 0.05])
-        _lat = state.goalmode == "latent"
-        self.bLG = Button(axLG, "Ziel: Latent" if _lat else "Ziel: Koord",
-                          color=("#2a6a5a" if _lat else "#5a4a3a"), hovercolor="#3a8a75")
-        self.bLG.label.set_fontsize(7)
-        self.bLG.on_clicked(self._toggle_goalmode)
-        # DAS ABLAGEZIEL: ein ORT (Marker) oder ein BEZUG auf einen Koerper (s. ZIEL_ADRESSE).
-        # Der Umschalter steht VOR den Marker-Knoepfen, weil er sie gegenstandslos macht.
-        self._ziel_fn = None
-        axZM = self.fig.add_axes([0.55, 0.220, 0.115, 0.05])
-        self.bZM = Button(axZM, "", color="#3a3a44", hovercolor="#55556a")
-        self.bZM.label.set_fontsize(7); self.bZM.on_clicked(self._toggle_zielmodus)
-        # named target buttons (top-right of the control band)
-        self._tgt_btns = {}
-        for i in range(len(state.MARKERS)):
-            ax = self.fig.add_axes([0.675 + 0.09 * i, 0.220, 0.085, 0.05])
-            b = Button(ax, f"Ziel {i + 1}", color="#3a3a44", hovercolor="#55556a")
-            b.label.set_fontsize(8)
-            b.on_clicked(lambda _e, i=i: self._set_tgt(i)); self._tgt_btns[i] = b
-        # bottom controls
-        axA = self.fig.add_axes([0.035, 0.04, 0.20, 0.07])
-        self.bA = Button(axA, "Modus: Greifen", color="#555", hovercolor="#777"); self.bA.on_clicked(self._toggle)
-        axP = self.fig.add_axes([0.25, 0.04, 0.16, 0.07])
-        self.bP = Button(axP, "Ziel neu", color="#7a5cae", hovercolor="#9a78d0"); self.bP.on_clicked(self._place)
-        axO = self.fig.add_axes([0.415, 0.04, 0.155, 0.07])
+        axO = self.fig.add_axes([0.18, 0.02, 0.15, 0.06])
         self.bO = Button(axO, "Objekte neu", color="#5c7aae", hovercolor="#78a0d0"); self.bO.on_clicked(self._objects)
-        axG = self.fig.add_axes([0.58, 0.04, 0.18, 0.07])
+        axN = self.fig.add_axes([0.34, 0.02, 0.17, 0.06])
+        self.bN = Button(axN, "Objekt hinzufügen", color="#8a7430", hovercolor="#a89040")
+        self.bN.on_clicked(self._introduce)
+        axG = self.fig.add_axes([0.58, 0.02, 0.2, 0.06])
         self.bG = Button(axG, "Ausführen", color="#1f8a5b", hovercolor="#27a96f"); self.bG.on_clicked(self._go)
-        axX = self.fig.add_axes([0.77, 0.04, 0.18, 0.07])
+        axX = self.fig.add_axes([0.79, 0.02, 0.19, 0.06])
         self.bX = Button(axX, "Beenden", color="#8a3030", hovercolor="#a94040"); self.bX.on_clicked(self._exit)
         self.fig.canvas.mpl_connect("close_event", lambda _e: setattr(self.state, "exit", True))
         self._refresh()
 
+    # ---------------- Hilfen ----------------
+    def _auswahl(self, rect, titel, optionen, wert, setzen, farbe=None, fontsize=7.5):
+        a = _Auswahl(self, rect, titel, optionen, wert, setzen, farbe=farbe, fontsize=fontsize)
+        self._auswahlen.append(a)
+        return a
+
+    def _popups_schliessen(self):
+        for a in self._auswahlen:
+            if a._popup:
+                a.schliessen()
+        self._texte_zeigen(True)
+
+    def _texte_zeigen(self, ja):
+        for t in (self.status, self.status2, self.live):
+            t.set_visible(ja)
+
+    # ---------------- Objekt ----------------
+    def _eig_setzen_feld(self, k, v):
+        self._eig[k] = v
+
     def _eig_beschriften(self, k):
-        """Ein Feld neu beschriften und einfaerben.
-
-        DREI Zustaende, die der Nutzer unterscheiden koennen muss (Befund 2026-09-05: "Form bleibt
-        auf 'beliebig' stehen.  Dort sollte wahrscheinlich auch etwas angezeigt werden."):
-          farbe-5     genannt -- Teil der Adresse
-          (farbe-5)   VORHANDEN, aber bewusst nicht genannt (unvollstaendige Adresse)
-          beliebig    die Detektion gibt auf dieser Achse nichts her
-        Die Farbe wird zusaetzlich als FLAECHE gezeigt: "farbe-5" ist nicht lesbar (Nutzerbefund
-        "Mit 'Farbe 5' kann ich nicht viel anfangen").  Der Farbwert ist der selbst gelernte
-        Prototyp der Klasse (classes[name]["mu"]) -- KEIN von uns vergebener Name wie "rot", denn
-        genau das Etikettieren von aussen sollte diese Linie loswerden.  Die Nummer bleibt am
-        Knopf, damit Knopf und Log dieselbe Sprache sprechen.
-        """
-        titel = ("Farbe", "Form", "Groesse")[k]
-        wert, da = self._eig[k], self._eig_da[k]
-        txt = str(wert) if wert is not None else (f"({da})" if da is not None else "beliebig")
-        b = self._eig_btns[k]
-        b.label.set_text(f"{titel}: {txt}")
-        rgb = self._farb_rgb(wert or da) if (k == 0 and self._farb_rgb is not None) else None
-        if rgb is None:
-            b.color = "#2b3b4a"; b.hovercolor = "#3a5060"; b.label.set_color("w")
-        else:
-            b.color = rgb; b.hovercolor = rgb
-            # Helligkeit entscheidet die Schriftfarbe, sonst verschwindet die Beschriftung auf
-            # hellem Gelb oder auf dunklem Blau.
-            hell = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
-            b.label.set_color("#101014" if hell > 0.55 else "w")
-        b.ax.set_facecolor(b.color)
-        # ungenannt = blasser, damit "(farbe-5)" auch ohne Klammern lesbar vom Genannten abfaellt
-        b.label.set_alpha(0.55 if (wert is None and da is not None) else 1.0)
-
-    def _eig_weiter(self, k):
-        """Ein Feld einen Wert weiterschalten.  None (= 'beliebig') ist immer der erste Eintrag."""
-        werte = [None] + list(self._eig_werte[k])
-        try:
-            i = werte.index(self._eig[k])
-        except ValueError:
-            i = 0
-        self._eig[k] = werte[(i + 1) % len(werte)]
-        self._eig_beschriften(k)
-        self.fig.canvas.draw_idle()
+        """(Altname, von aussen gerufen) -- die Felder beschriften sich in _refresh selbst."""
+        self._refresh()
 
     def _eig_anwenden(self, _e=None):
         """Das Tripel als Kommando setzen.  Meldet ZURUECK, was gefunden wurde -- auch
@@ -1918,32 +2055,58 @@ class CommandPanel23:
         if self._eig_fn is None:
             return
         txt = self._eig_fn(*self._eig)
-        self.eig_status.set_text(txt or "")
+        self._eig_rueck = txt or ""
         self._refresh()
 
-    def _set_obj(self, k): self.state.sel = k; self._refresh()
-    def _toggle_policy(self, _e):
-        self.state.policy = "teacher" if self.state.policy == "self" else "self"; self._refresh()
-    def _go(self, _e): self.state.go = True
-    def _exit(self, _e): self.state.exit = True
+    def _set_obj(self, k):
+        self.state.sel = k
+        _l, _b, _m = self.state.OBJECTS[k]
+        if _m == "eigenschaft":                          # die Felder zeigen dann die Adresse
+            self._eig = list(self.state.EIGENSCHAFT.get(_b, (None, None, None)))
+        self._eig_rueck = ""
 
-    def _toggle_zielmodus(self, _e):
-        """ORT <-> BEZUG.  Beim Umschalten auf "Körper" wird gleich gewuerfelt, damit der Befehl
-        oben sofort sagt, WORAUF er sich bezieht -- sonst stuende dort bis zum naechsten
-        "Ausführen" ein leerer Bezug, und der Nutzer saehe nicht, ob der Schalter etwas tut."""
-        self.state.ziel_modus = "ort" if self.state.ziel_modus == "koerper" else "koerper"
+    def zeige_eigenschaft(self, farbe=None, form=None, groesse=None, verfuegbar=None):
+        """Die drei Felder auf ein von AUSSEN gesetztes Tripel stellen (Auto-Lauf)."""
+        self._eig = [farbe, form, groesse]
+        self._eig_da = list(verfuegbar) if verfuegbar is not None else [None, None, None]
+        self._refresh()
+
+    def add_discovered(self, idx):
+        """Ein SELBST ENTDECKTES Objekt: es steht ab jetzt in der Klappliste (kein eigener Knopf)."""
+        self._refresh()
+
+    # ---------------- Ziel ----------------
+    def _ziel_art_wert(self):
+        if self.state.ziel_modus != "koerper":
+            return "ort"
+        return self.state.ziel_art or "zufall"
+
+    def _ziel_art_setzen(self, v):
+        if v == "ort":
+            self.state.ziel_modus = "ort"; self.state.ziel_bezug = None
+            return
+        self.state.ziel_modus = "koerper"
+        self.state.ziel_art = None if v == "zufall" else v
         self.state.ziel_bezug = None
-        if self.state.ziel_modus == "koerper" and self._ziel_fn is not None and not self.state.busy:
-            self._ziel_fn()
-        self._refresh()
+        if self._ziel_fn is not None and not self.state.busy:
+            self._ziel_fn()                              # gleich wuerfeln: die Aufgabenzeile zeigt den Bezug
 
     def _set_tgt(self, i):
         self.state.target_idx = i; self.state.sync_active()
-        self.update(self.state.sim.render(self._cam), f"Ziel {i + 1} gewählt"); self._refresh()
+        self.update(self.state.sim.render(self._cam), f"Marker {i + 1} gewählt")
 
-    def _place(self, _e):
-        self.state.place_selected_random(self._rng)
-        self.update(self.state.sim.render(self._cam), f"Ziel {self.state.target_idx + 1} neu platziert"); self._refresh()
+    def _ziel_neu(self, _e):
+        if self.state.ziel_modus == "koerper":
+            if self._ziel_fn is not None and not self.state.busy:
+                self._ziel_fn()
+        else:
+            self.state.place_selected_random(self._rng)
+            self.update(self.state.sim.render(self._cam), f"Marker {self.state.target_idx + 1} neu platziert")
+        self._refresh()
+
+    # ---------------- untere Leiste ----------------
+    def _go(self, _e): self.state.go = True
+    def _exit(self, _e): self.state.exit = True
 
     def _objects(self, _e):
         if self._randomize_fn is None:
@@ -1965,68 +2128,32 @@ class CommandPanel23:
 
     def _toggle_auto(self, _e):
         self.state.auto = not self.state.auto
-        self.bAuto.label.set_text("Auto: an" if self.state.auto else "Auto: aus")
-        self.bAuto.color = "#2a7a4a" if self.state.auto else "#3a3a5a"
-        self.bAuto.ax.set_facecolor(self.bAuto.color); self.fig.canvas.draw_idle()
-
-    def _toggle_choreo(self, _e):
-        # cycle FSM -> Netz -> Attractor (Etappe 3: latent-attractor place planning replaces the
-        # latent servo; still net-family, the runtime policy drives the grasp) -> FSM
-        nxt = {"fsm": "netz", "netz": "attractor", "attractor": "fsm"}
-        self.state.choreo = nxt.get(self.state.choreo, "fsm")
-        self.bCh.label.set_text(self.CH_LBL[self.state.choreo])
-        self.bCh.color = self.CH_COL[self.state.choreo]
-        self.bCh.ax.set_facecolor(self.bCh.color); self._refresh()
-
-    def _toggle_goalmode(self, _e):
-        self.state.goalmode = "koord" if self.state.goalmode == "latent" else "latent"
-        lat = self.state.goalmode == "latent"
-        self.bLG.label.set_text("Ziel: Latent" if lat else "Ziel: Koord")
-        self.bLG.color = "#2a6a5a" if lat else "#5a4a3a"
-        self.bLG.ax.set_facecolor(self.bLG.color); self._refresh()
-
-    def add_discovered(self, idx):
-        """Button for a SELF-DISCOVERED object (state.OBJECTS[idx]), appended to the object row."""
-        from matplotlib.widgets import Button
-        if EIG_ONLY:            # die Zeile ist ausgeblendet -- sonst tauchen bei der Geburt
-            self._refresh()     # einer Formklasse doch wieder Namensknoepfe auf ("Neue Form 7")
-            return
-        lbl, nm, _m = self.state.OBJECTS[idx]
-        ax = self.fig.add_axes([0.035 + 0.115 * idx, 0.150, 0.108, 0.055])
-        col = self.state.OBJ_COL.get(nm, "#888888")
-        b = Button(ax, lbl, color=col, hovercolor=col); b.label.set_fontsize(7.5)
-        b.on_clicked(lambda _e, k=idx: self._set_obj(k)); self._obj_btns[idx] = b
         self._refresh()
 
-    def zeige_eigenschaft(self, farbe=None, form=None, groesse=None, verfuegbar=None):
-        """Die drei Felder auf ein von AUSSEN gesetztes Tripel stellen (Auto-Lauf).
-
-        Ohne das standen die Felder auf "beliebig", waehrend der Lauf laengst ueber Eigenschaften
-        kommandierte -- die Anzeige log ueber den tatsaechlichen Befehl (Nutzerbefund 2026-09-05).
-        """
-        self._eig = [farbe, form, groesse]
-        self._eig_da = list(verfuegbar) if verfuegbar is not None else [None, None, None]
-        for k in range(3):
-            self._eig_beschriften(k)
-        self.fig.canvas.draw_idle()
-
-    def _toggle(self, _e):
-        self.state.action = "push" if self.state.action == "grasp" else "grasp"
-        self.bA.label.set_text("Modus: " + ("Schieben" if self.state.action == "push" else "Greifen")); self._refresh()
-
+    # ---------------- Anzeige ----------------
     def _refresh(self):
-        for i, b in self._obj_btns.items():
-            lbl = self.state.OBJECTS[i][0]
-            b.label.set_text(("● " if i == self.state.sel else "") + lbl)
-        self.bPol.label.set_text("Greifer: " + ("Selbst-gelernt" if self.state.policy == "self" else "Teacher"))
-        _bez = self.state.ziel_modus == "koerper"
-        self.bZM.label.set_text("Ziel: an Körper" if _bez else "Ziel: Ort")
-        self.bZM.color = "#2a6a5a" if _bez else "#3a3a44"; self.bZM.ax.set_facecolor(self.bZM.color)
-        for i, b in self._tgt_btns.items():
-            b.color = ("#3a3a44" if _bez else                  # der Marker ist dann gegenstandslos
-                       ("#c050c0" if i == self.state.target_idx else "#3a3a44"))
-            b.ax.set_facecolor(b.color)
-        self.status.set_text("Befehl:  " + self.state.label()); self.fig.canvas.draw_idle()
+        st = self.state
+        _l, _b, _m = st.OBJECTS[st.sel]
+        per_eig = _m == "eigenschaft"
+        for a in self._auswahlen:
+            if a in self.aEig:
+                a.aktiv = True
+            elif a is self.aMarker:
+                a.aktiv = st.ziel_modus != "koerper"
+            a.refresh()
+        # die Eigenschaftsfelder: bei einer NAMENS-Wahl blass, damit "Farbe: beliebig" nicht als
+        # Teil des Befehls gelesen wird (Nutzerbefund 2026-09-30)
+        for a in self.aEig:
+            a.b.label.set_alpha(1.0 if per_eig else 0.45)
+        self.bAuto.label.set_text("Auto: an" if st.auto else "Auto: aus")
+        self.bAuto.color = "#2a7a4a" if st.auto else "#3a3a5a"; self.bAuto.ax.set_facecolor(self.bAuto.color)
+        self.obj_info.set_text(("adressiert per EIGENSCHAFTEN" if per_eig else "adressiert per NAME")
+                               + f"  -> {st.koerper_hinweis(_b)}"
+                               + (f"   {self._eig_rueck}" if getattr(self, "_eig_rueck", "") else ""))
+        self.ziel_info.set_text(st.ziel_hinweis())
+        self.status.set_text("Aufgabe:  " + st.aufgabe())
+        self.status2.set_text(st.betrieb())
+        self.fig.canvas.draw_idle()
 
     def update(self, frame, txt=""):
         self.imCam.set_data(frame)
@@ -3040,7 +3167,9 @@ def run_self_learning_steering(headless=False):
         state.ziel_bezug = None
         if state.ziel_modus != "koerper":
             return None
-        if ZIEL_MISCH is not None and ZIEL_RELATION in ("auf", "alle") and float(crng.random()) >= ZIEL_MISCH:
+        _gui = state.ziel_art                           # in der GUI fest gewaehlte Relation (None = Umgebung)
+        if (_gui is None and ZIEL_MISCH is not None and ZIEL_RELATION in ("auf", "alle")
+                and float(crng.random()) >= ZIEL_MISCH):
             # AUFGABENMISCHUNG (s. ZIEL_MISCH): diese Episode ist eine gewoehnliche Marker-Ablage.
             # EIGENE Zeile, nicht [Zielwurf] -- das hier ist gewollt und kein gescheiterter Wurf; die
             # Auswertung muss beides trennen koennen.
@@ -3049,14 +3178,16 @@ def run_self_learning_steering(headless=False):
         _a = state.selected()[1]
         _rel = ZIEL_RELATION
         _zwort = None
-        if ZIEL_ZELLEN:
+        if _gui is not None:
+            _rel = _gui if _gui in ("an", "auf") else "richtung"
+        elif ZIEL_ZELLEN:
             # ZELLEN (s. ZIEL_ZELLEN): erst das Wort, dann nur Bezugskoerper einer erlaubten Art.
             _ws = sorted({w for w, _k in ZIEL_ZELLEN})
             _zwort = _ws[int(crng.integers(len(_ws)))]
             _rel = "auf" if _zwort == "auf" else "richtung"
         elif _rel == "alle":
             _rel = "auf" if float(crng.random()) < 0.2 else "richtung"
-        if _rel == "auf" and AUF_ALLE:
+        if _rel == "auf" and (AUF_ALLE or _gui == "auf"):
             # AUF JEDEN KOERPER (s. AUF_ALLE): Platten und alle Objekte der Szene.
             _kand = [nm for nm in dict.fromkeys(list(state.STUETZEN)
                                                 + [nm for _l, nm, _m in state.OBJECTS])
@@ -3094,6 +3225,21 @@ def run_self_learning_steering(headless=False):
                                 and REACH_XY[0][1] <= _q[1] <= REACH_XY[1][1]
                                 and float(np.linalg.norm(_q)) >= BASE_CLEAR)
                 _kand = [nm for nm in _kand if _erreichbar(nm)]
+        if _gui in RICHTUNGS_WOERTER:
+            # DIE GUI HAT DAS WORT FEST GEWAEHLT: nur Bezugskoerper, neben denen es erreichbar ist
+            # (dieselbe Pruefung wie bei den Zellen oben).
+            from pc_cvnn.pc_act14 import REACH_XY
+            from pc_cvnn.pc_act16 import BASE_CLEAR
+            def _erreichbar_g(nm):
+                _pp = sim.obj_pos(nm)[:2]
+                _dw, _ = _wort_richtung(_gui, _pp, laut=False)
+                if _dw is None:
+                    return False
+                _q = _pp + ZIEL_ABSTAND * _dw
+                return bool(REACH_XY[0][0] <= _q[0] <= REACH_XY[1][0]
+                            and REACH_XY[0][1] <= _q[1] <= REACH_XY[1][1]
+                            and float(np.linalg.norm(_q)) >= BASE_CLEAR)
+            _kand = [nm for nm in _kand if _erreichbar_g(nm)]
         if not _kand:
             return _kein("kein Bezugskoerper verfuegbar"
                          + (" (keine Stuetze in der Szene)" if _rel == "auf" else ""))
@@ -3142,8 +3288,9 @@ def run_self_learning_steering(headless=False):
                 if (REACH_XY[0][0] <= _q[0] <= REACH_XY[1][0] and REACH_XY[0][1] <= _q[1] <= REACH_XY[1][1]
                         and float(np.linalg.norm(_q)) >= BASE_CLEAR):
                     _ok.append(_w)
-            if _zwort is not None:
-                _ok = [w for w in _ok if w == _zwort]
+            _fix = _zwort or (_gui if _gui in RICHTUNGS_WOERTER else None)
+            if _fix is not None:
+                _ok = [w for w in _ok if w == _fix]
             if not _ok:
                 return _kein(f"{_b}: keine Richtung erreichbar"
                              + (f" ('{_zwort}')" if _zwort else ""))
@@ -3153,7 +3300,8 @@ def run_self_learning_steering(headless=False):
         state.ziel_bezug = {"tripel": _tri, "mess": _mess, "peilungen": _peil, "body": _b,
                             "relation": _rel, "wort": _wort,
                             "label": ("auf " + _txt if _rel == "auf"
-                                      else f"{_wort} von {_txt}" if _wort else _txt)}
+                                      else f"{_wort if _wort in ('vor', 'hinter') else _wort + ' von'} {_txt}"
+                                      if _wort else _txt)}
         return _tri
 
     colour_of_body = dict(_loaded.get("colour_of_body", {})) if _loaded is not None else {}
@@ -7390,6 +7538,10 @@ def run_self_learning_steering(headless=False):
         verb = "träumt Ziel" if DREAM else "neues Ziel"
         lang_info = f" | {lgoal_lang.format_latent_message(best_z, tag='z_g')}" if DREAM and best_z is not None else ""
         _sig = f"Neuheit={sd_best:.2f}" if NOVELTY_DIRECT else f"σ={sd_best:.2f}"
+        try:
+            lbl = state.anzeige(k)                         # farbneutral + aktuelle Farbe (s. anzeige)
+        except Exception:
+            pass
         return (f"[curiosity] übt '{lbl}' (Fortschritt {lp_best:+.2f}, {_sig})"
                 + (f", {verb} [{best_p[0]:.2f},{best_p[1]:.2f}]"
                    + (f" (Latent-Neuheit {best_nov:.2f}){lang_info}" if DREAM else "")
@@ -7459,7 +7611,11 @@ def run_self_learning_steering(headless=False):
             _farbe_wuerfeln()                                  # VOR der Wahrnehmung, s. Docstring
             if force_list:
                 want = force_list[ep % len(force_list)]
-                ks = [k for k, (l, _n, _m) in enumerate(state.OBJECTS) if want.lower() in l.lower()]
+                # auch ueber den Koerpernamen und die alten Farbnamen ("Gruenes" = obj_green), die
+                # es seit den farbneutralen Namen nicht mehr gibt
+                _alt = {"rotes": "obj_red", "gruenes": "obj_green"}.get(want.lower().split()[0], "")
+                ks = [k for k, (l, _n, _m) in enumerate(state.OBJECTS)
+                      if want.lower() in l.lower() or want.lower() == _n.lower() or _n == _alt]
                 if not ks:
                     raise SystemExit(f"ACT23_AUTO_OBJ '{want}' matcht kein Objekt")
                 state.sel = ks[0]
@@ -7593,7 +7749,7 @@ def run_self_learning_steering(headless=False):
         return
 
     act16.run_combined._quiet = True
-    panel.update(sim.render(CAM), "bereit — Objekt wählen, Greifer Teacher/Selbst-gelernt, Ausführen")
+    panel.update(sim.render(CAM), "bereit — Objekt und Ziel wählen, dann Ausführen")
     ep = 0
     bilanz = {"fsm": [], "netz": []}                           # rolling per-mode delivery record: without
     #   a scoreboard slow DAgger progress is indistinguishable from noise (user: "so la la")
@@ -7625,6 +7781,7 @@ def run_self_learning_steering(headless=False):
         # auch im Hand-Befehl wirkt.  Der Wurf gilt je Episode; ohne Zielmodus "koerper" ist er
         # eine sofortige Rueckkehr und der Marker bleibt das Ziel.
         _ziel_adresse_wuerfeln()
+        panel._refresh()                                       # Aufgabenzeile zeigt den gewuerfelten Bezug
         state.go = False
         tag = "Auto" if state.auto else "Befehl"
         print(f"  [{tag} {ep}] {state.label()} ...")
