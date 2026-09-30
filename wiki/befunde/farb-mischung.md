@@ -138,3 +138,17 @@ Farbklassen**, und die vier Episoden liefern 3 von 4.
 * [Farb-Rueckhalte-Test](/befunde/farbe-form-rueckhalt.md) - die Begruendung
 * [Projektziel](/ziel.md) - warum Kombinationen zaehlen
 * [Zwei Laeufe sind dieselbe Rechnung](/befunde/laeufe-sind-reproduzierbar.md)
+
+# Beobachtung im GUI-Lauf 2026-09-30: die Knopf-Namen luegen
+
+Der Nutzer sah "[Auto 83] Gruenes Wuerfel", obwohl kein gruener Wuerfel in der Szene lag, und
+vermutete einen Auswahlfehler. Am Log (`log/pc_act23_2026-09-30_08-21-56_16080.txt`) geprueft:
+kein Auswahlfehler - obj_green lag auf dem Tisch (nicht geparkt), wurde in Ep 82 und 83 wirklich
+gegriffen und getragen (Griffdruck 6 N). Die Ursache ist die Benennung: `OBJECTS` traegt feste
+Namen mit FARBWORT ("Rotes Wuerfel", "Gruenes Wuerfel"), waehrend `FARB_MISCHUNG` (Vorgabe 1) die
+Farben je Szene unter den Koerpern permutiert. "Gruenes Wuerfel" heisst nur noch "der Koerper
+obj_green", und der kann gerade rot, blau oder gelb sein. Nebenbefund derselben Episode:
+"Selbst-Urteil: noch keine eigene Klasse fuer obj_green" - die Farbbindung je Episode hatte den
+Koerper nicht gebunden; das passt zur suchenden Fovea (vermutet, nicht geprueft).
+Abhilfe (nicht gebaut): Anzeige-Name aus der aktuell gesehenen Farbe bilden oder farbneutral
+("Wuerfel A/B").

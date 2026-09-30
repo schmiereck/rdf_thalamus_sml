@@ -7,6 +7,10 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-30
 
+* **Ergaenzung**: [Farb-Mischung](/befunde/farb-mischung.md) - Nutzerbeobachtung im GUI-Lauf
+  ("Gruenes Wuerfel" ohne gruenen Wuerfel): kein Auswahlfehler, die festen Knopf-Namen tragen
+  Farbwoerter, waehrend FARB_MISCHUNG die Farben je Szene permutiert.
+
 * **Ergaenzung**: [Ablage beim echten Oeffnen](/befunde/ablage-beim-oeffnen.md) - Farbtoleranz
   0,08: 70 statt 49 Blicke gesehen (4 falsch), nachgefuehrt 25 statt 18, geliefert 59 gegen 59
   (p = 1,00), gegen Kontrolle 59 gegen 56 (p = 0,65). Hinschau-Linie ausgeschoepft.
