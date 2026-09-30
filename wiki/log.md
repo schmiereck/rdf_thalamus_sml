@@ -7,6 +7,9 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-09-30
 
+* **Ergaenzung**: [Steuer-GUI](/mechanismen/gui-bedienung.md) - Bezugskoerper waehlbar
+  (Klappliste), Klick ins Kamerabild (links Objekt, rechts Ziel/Punkt), lesbare Klapplisten.
+
 * **Neu**: [Steuer-GUI](/mechanismen/gui-bedienung.md) - Umbau nach Nutzerbeobachtungen im
   GUI-Lauf: farbneutrale Wuerfelnamen, aktuelle Farbe in Log und GUI, drei Gruppen mit
   Klapplisten, Aufgabenzeile, Relation fest waehlbar.

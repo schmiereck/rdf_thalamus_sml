@@ -52,3 +52,24 @@ Nutzerbeobachtungen im GUI-Lauf vom 30.09.:
 Geprueft: Rendering ohne Fenster (Agg) mit offenen Klapplisten; kopfloser Lauf 3 Episoden ohne
 Fehler. Das Verhalten des Agenten ist unveraendert, solange in der GUI keine Relation fest gewaehlt
 wird (dann greift `ACT23_ZIEL_RELATION` wie bisher).
+
+# Ergaenzung 2026-09-30: selbst waehlen statt nur wuerfeln
+
+Nutzerfrage: "ich habe keine Moeglichkeit, den Zielkoerper oder Punkt manuell anzugeben". Neu:
+
+* **Klappliste "Bezug"** (Gruppe Ziel): "zufaellig" oder ein Koerper auf dem Tisch
+  (`state.ziel_body_fix`). Die ADRESSE bildet der Agent weiter selbst aus der Detektion; von
+  aussen kommt nur, WELCHER Koerper. Passt der gewaehlte Koerper nicht (ist selbst das Objekt,
+  geparkt, Relation dort nicht erreichbar), sagt `[Zielwurf] keine Adresse: gewaehlter Bezug ...`
+  warum, und der Marker bleibt das Ziel.
+* **Klicks ins Kamerabild**: links = zu transportierendes Objekt (naechster Koerper, <= 40 mm),
+  rechts = Ziel (bei Koerper-Ziel der naechste Koerper als Bezug, bei "Art: Ort" wandert der Marker
+  an die Stelle; ausserhalb des Arbeitsbereichs abgewiesen). Pixel -> Tisch ueber die Homographie
+  der Wahrnehmung (`shape_clf._px_to_world`).
+* Die Objektliste markiert Koerper, die nicht auf dem Tisch stehen.
+* Klapplisten mit weisser Schrift (Nutzerbefund: schwarz auf dunkel unlesbar).
+
+Geprueft ohne Fenster: Klicks mit synthetischen Ereignissen (Marker landet auf der geklickten
+Tischstelle, Bezug wird gesetzt), Rendering der Listen; kopfloser Lauf 2 Episoden ohne Fehler.
+Nicht am Bildschirm angeklickt.
+

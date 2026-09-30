@@ -1649,6 +1649,7 @@ class CommandState23:
         # shape_clf und colours und kann deshalb nicht hier stehen).
         self.ziel_modus = "koerper" if ZIEL_ADRESSE else "ort"
         self.ziel_art = None       # GUI: None = wie ACT23_ZIEL_RELATION; "an"/"auf"/Richtungswort fest
+        self.ziel_body_fix = None  # GUI: fest gewaehlter Bezugskoerper (None = wuerfeln)
         self.ziel_bezug = None
         self.ziel_loeser = None
         # STUETZEN sind MOEBEL, keine Objekte: Koerper, auf die etwas gestellt werden kann, die aber
@@ -1775,6 +1776,8 @@ class CommandState23:
         if self.ziel_modus != "koerper":
             return f"Ort: Marker {self.target_idx + 1}"
         if self.ziel_bezug is None:
+            if self.ziel_body_fix is not None:
+                return f"Bezug {self.koerper_hinweis(self.ziel_body_fix)}; Adresse beim Start"
             return "Bezug wird beim Start gewürfelt"
         return f"'{self.ziel_bezug['label']}' -> {self.koerper_hinweis(self.ziel_bezug['body'])}"
 
@@ -1786,7 +1789,9 @@ class CommandState23:
         elif self.ziel_bezug is None:
             _art = {None: "Relation zufällig", "an": "neben", "auf": "auf", "vor": "vor",
                     "hinter": "hinter"}.get(self.ziel_art, f"{self.ziel_art} von")
-            wo = f"{_art} einem Körper (wird gewürfelt)"
+            wo = (f"{_art} {KOERPER_NAME.get(self.ziel_body_fix, self.ziel_body_fix)} "
+                  f"({self.farbname(self.ziel_body_fix)})" if self.ziel_body_fix is not None
+                  else f"{_art} einem Körper (wird gewürfelt)")
         else:
             _bz = self.ziel_bezug
             ref = f"{KOERPER_NAME.get(_bz['body'], _bz['body'])} ({self.farbname(_bz['body'])})"
@@ -1823,6 +1828,9 @@ class CommandState23:
 
 
 EIG_ONLY = os.environ.get("ACT23_EIG_ONLY", "0") != "0"   # alte Objektzeile ausblenden
+
+
+MARK = "● "   # Auswahlpunkt in den Klapplisten
 
 
 class _Auswahl:
@@ -1888,10 +1896,11 @@ class _Auswahl:
             sp, zl = divmod(j, pro_spalte)
             ax = self.p.fig.add_axes([x + sp * (w + 0.004), y + h + 0.003 + zl * hh, w, hh - 0.002])
             ax.set_zorder(50)
-            b = Button(ax, ("● " if s == k0 else "") + t, color="#1c2630", hovercolor="#35506a")
-            b.label.set_fontsize(self.fontsize)
+            b = Button(ax, (MARK if s == k0 else "") + t, color="#2a3644", hovercolor="#46607e")
+            b.label.set_fontsize(max(self.fontsize, 7.5))
+            b.label.set_color("w")                         # Nutzerbefund: schwarz auf dunkel unlesbar
             if self.farbe is not None:
-                self._faerben(b, self.farbe(s), "#1c2630")
+                self._faerben(b, self.farbe(s), "#2a3644")
             b.on_clicked(lambda _e, s=s: self._waehlen(s))
             self._popup.append(b)
         self.p.fig.canvas.draw_idle()
@@ -1966,7 +1975,10 @@ class CommandPanel23:
         self._eig_da = [None, None, None]
         self._obj_btns = {}                      # (Altlast: add_discovered pflegt sie nicht mehr)
         self.aObj = self._auswahl([0.028, 0.195, 0.33, 0.042], "per Name",
-                                  lambda: [(i, self.state.anzeige(i)) for i in range(len(self.state.OBJECTS))],
+                                  lambda: [(i, self.state.anzeige(i)
+                                            + ("" if self.state.OBJECTS[i][1] in self._tisch()
+                                               else "  – nicht auf dem Tisch"))
+                                           for i in range(len(self.state.OBJECTS))],
                                   lambda: self.state.sel, self._set_obj)
         self.aEig = []
         for i, titel in enumerate(("Farbe", "Form", "Größe")):
@@ -1983,12 +1995,14 @@ class CommandPanel23:
         self.eig_status = self.obj_info                  # Rueckmeldung der Eigenschaftswahl
         # ---------------- 2 ZIEL ----------------
         gruppe(0.375, 0.655, "2  Ziel  (wohin)")
-        self.aArt = self._auswahl([0.383, 0.195, 0.175, 0.042], "Art", lambda: self.ZIEL_ARTEN,
+        self.aArt = self._auswahl([0.383, 0.195, 0.14, 0.042], "Art", lambda: self.ZIEL_ARTEN,
                                   self._ziel_art_wert, self._ziel_art_setzen)
-        self.aMarker = self._auswahl([0.563, 0.195, 0.085, 0.042], "Ort",
+        self.aBezug = self._auswahl([0.527, 0.195, 0.121, 0.042], "Bezug", self._bezug_optionen,
+                                    lambda: self.state.ziel_body_fix, self._bezug_setzen)
+        self.aMarker = self._auswahl([0.515, 0.145, 0.133, 0.036], "Ort",
                                      lambda: [(i, f"Marker {i + 1}") for i in range(len(self.state.MARKERS))],
                                      lambda: self.state.target_idx, self._set_tgt)
-        axZN = self.fig.add_axes([0.383, 0.145, 0.13, 0.036])
+        axZN = self.fig.add_axes([0.383, 0.145, 0.127, 0.036])
         self.bZN = Button(axZN, "Ziel neu würfeln", color="#5a4a7a", hovercolor="#7a64a0")
         self.bZN.label.set_fontsize(7); self.bZN.on_clicked(self._ziel_neu)
         self.ziel_info = self.fig.text(0.383, 0.115, "", color="#9fb4c8", fontsize=7, family="monospace")
@@ -2009,7 +2023,14 @@ class CommandPanel23:
         # ---------------- UNTERE LEISTE ----------------
         self._introduce_fn = None
         self._ziel_fn = None
+        self._pix2welt = None          # Kamerapixel (Spalte, Zeile) -> Tisch xy (von aussen verdrahtet)
+        self._auf_tisch = None         # -> Koerper, die gerade auf dem Tisch stehen (von aussen)
         self._pending_introduce = False; self._pending_randomize = False   # deferred mid-episode clicks
+        # KLICK INS KAMERABILD (Nutzerwunsch 2026-09-30): links = zu transportierendes Objekt,
+        # rechts = Ziel (Koerper, oder bei "Art: Ort" die Stelle).
+        self.axCam.set_title(f"Arm — {cam} Kamera   (Linksklick: Objekt  ·  Rechtsklick: Ziel)",
+                             color="w", fontsize=9)
+        self.fig.canvas.mpl_connect("button_press_event", self._kamera_klick)
         axAuto = self.fig.add_axes([0.02, 0.02, 0.15, 0.06])
         self.bAuto = Button(axAuto, "Auto: aus", color="#3a3a5a", hovercolor="#50507a")
         self.bAuto.on_clicked(self._toggle_auto)
@@ -2091,6 +2112,79 @@ class CommandPanel23:
         if self._ziel_fn is not None and not self.state.busy:
             self._ziel_fn()                              # gleich wuerfeln: die Aufgabenzeile zeigt den Bezug
 
+    def _tisch(self):
+        try:
+            if self._auf_tisch is not None:
+                return list(self._auf_tisch())
+        except Exception:
+            pass
+        return [nm for _l, nm, _m in self.state.OBJECTS]
+
+    def _bezug_optionen(self):
+        sel = self.state.selected()[1]
+        return [(None, "zufällig")] + [(b, self.state.koerper_hinweis(b)) for b in self._tisch() if b != sel]
+
+    def _bezug_setzen(self, b):
+        self.state.ziel_body_fix = b
+        if b is not None and self.state.ziel_modus != "koerper":
+            self.state.ziel_modus = "koerper"             # ein Bezug ergibt nur mit Koerper-Ziel Sinn
+        self.state.ziel_bezug = None
+        if self.state.ziel_modus == "koerper" and self._ziel_fn is not None and not self.state.busy:
+            self._ziel_fn()
+
+    def _kamera_klick(self, ev):
+        """Links: das Objekt, das dem Klick am naechsten liegt, wird transportiert.  Rechts: Ziel --
+        bei Koerper-Ziel der naechste Koerper als Bezug, sonst wandert der Marker an die Stelle.
+        Die Umrechnung Pixel -> Tisch ist die Homographie der Wahrnehmung (nur Bedienung)."""
+        if ev.inaxes is not self.axCam or ev.xdata is None or self._pix2welt is None:
+            return
+        self._popups_schliessen()
+        xy = self._pix2welt((float(ev.xdata), float(ev.ydata)))
+        if xy is None:
+            return
+        xy = np.asarray(xy, float)[:2]
+        sim = self.state.sim
+
+        def naechster(kand):
+            kand = [b for b in kand if b]
+            if not kand:
+                return None, 1.0
+            b = min(kand, key=lambda o: float(np.linalg.norm(sim.obj_pos(o)[:2] - xy)))
+            return b, float(np.linalg.norm(sim.obj_pos(b)[:2] - xy))
+
+        if ev.button == 1:
+            b, d = naechster([nm for nm in self._tisch() if nm not in self.state.STUETZEN])
+            if b is None or d > 0.04:
+                self.live.set_text("Kein Objekt an dieser Stelle"); self.fig.canvas.draw_idle()
+                return
+            ks = [k for k, (_l, nm, _m) in enumerate(self.state.OBJECTS) if nm == b]
+            ks = sorted(ks, key=lambda k: self.state.OBJECTS[k][2] == "eigenschaft")   # Name vor Adresse
+            if not ks:
+                return
+            self._set_obj(ks[0])
+            if self.state.ziel_body_fix == b:
+                self.state.ziel_body_fix = None
+            self.live.set_text(f"Objekt: {self.state.anzeige(ks[0])}")
+        elif ev.button == 3:
+            if self.state.ziel_modus == "koerper":
+                b, d = naechster([nm for nm in self._tisch() if nm != self.state.selected()[1]])
+                if b is None or d > 0.04:
+                    self.live.set_text("Kein Körper an dieser Stelle"); self.fig.canvas.draw_idle()
+                    return
+                self._bezug_setzen(b)
+                self.live.set_text(f"Bezug: {self.state.koerper_hinweis(b)}")
+            else:
+                from pc_cvnn.pc_act14 import REACH_XY
+                from pc_cvnn.pc_act16 import BASE_CLEAR
+                if not (REACH_XY[0][0] <= xy[0] <= REACH_XY[1][0] and REACH_XY[0][1] <= xy[1] <= REACH_XY[1][1]
+                        and float(np.linalg.norm(xy)) >= BASE_CLEAR):
+                    self.live.set_text("Stelle ausserhalb des Arbeitsbereichs"); self.fig.canvas.draw_idle()
+                    return
+                self.state.set_marker_xy(self.state.target_idx, xy); self.state.sync_active()
+                self.update(sim.render(self._cam), f"Marker {self.state.target_idx + 1} -> "
+                                                   f"[{xy[0]:+.3f}, {xy[1]:+.3f}]")
+        self._refresh()
+
     def _set_tgt(self, i):
         self.state.target_idx = i; self.state.sync_active()
         self.update(self.state.sim.render(self._cam), f"Marker {i + 1} gewählt")
@@ -2140,6 +2234,8 @@ class CommandPanel23:
                 a.aktiv = True
             elif a is self.aMarker:
                 a.aktiv = st.ziel_modus != "koerper"
+            elif a is self.aBezug:
+                a.aktiv = st.ziel_modus == "koerper"
             a.refresh()
         # die Eigenschaftsfelder: bei einer NAMENS-Wahl blass, damit "Farbe: beliebig" nicht als
         # Teil des Befehls gelesen wird (Nutzerbefund 2026-09-30)
@@ -3240,6 +3336,13 @@ def run_self_learning_steering(headless=False):
                             and REACH_XY[0][1] <= _q[1] <= REACH_XY[1][1]
                             and float(np.linalg.norm(_q)) >= BASE_CLEAR)
             _kand = [nm for nm in _kand if _erreichbar_g(nm)]
+        _fix_b = state.ziel_body_fix
+        if _fix_b is not None:
+            # IN DER GUI FEST GEWAEHLT: nur dieser Koerper, wenn er passt -- sonst sagen, warum nicht
+            if _fix_b not in _kand:
+                return _kein(f"gewaehlter Bezug {_fix_b} passt nicht (transportiertes Objekt, geparkt, "
+                             f"oder Relation dort nicht erreichbar)")
+            _kand = [_fix_b]
         if not _kand:
             return _kein("kein Bezugskoerper verfuegbar"
                          + (" (keine Stuetze in der Szene)" if _rel == "auf" else ""))
@@ -5227,6 +5330,11 @@ def run_self_learning_steering(headless=False):
         panel._randomize_fn = randomize_objects     # wire "Objekte neu" (panel built before randomize_objects existed)
         panel._introduce_fn = introduce_object      # wire "Objekt hinzufügen" (open-set discovery)
         panel._ziel_fn = _ziel_adresse_wuerfeln     # wire "Ziel: an Körper" (s. ZIEL_ADRESSE)
+        panel._pix2welt = (lambda px: shape_clf._px_to_world(np.asarray(px, float))[0]
+                           if getattr(shape_clf, "Hinv", None) is not None else None)
+        panel._auf_tisch = lambda: [nm for nm in dict.fromkeys(list(state.STUETZEN)
+                                                               + [n for _l, n, _m in state.OBJECTS])
+                                    if not _geparkt_jetzt(nm)]
         panel._refresh()                            # Zielmodus aus der Umgebung sichtbar machen
     # CONTINUITY: make run_combined treat ALL objects as its scene -> with SCENE_N = all, keep=all so it never
     # PARKS a distractor off-table, and reposition_strays never fires (nothing is a stray) -> nothing teleports.
