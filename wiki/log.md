@@ -7,6 +7,12 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-10-01
 
+* **Widerlegung**: [Platte ausblenden - A/B](/befunde/platte-ausblenden-ab.md) - vorab
+  festgelegte Replikation auf 6 neuen Seeds kehrt die erste Lesart um (mit Platte 55,7 gegen
+  49,3 %); ueber alle 9 Seeds 54,9 gegen 52,9 %, p = 0,41, Seeds 5:3. Kein Effekt. Neue Falle in
+  der [Messvorschrift](/messungen/act23-headless-ab.md): Episoden-McNemar ueberschaetzt, weil
+  der Agent im Lauf weiterlernt.
+
 * **Anlage**: [Platte ausblenden - A/B](/befunde/platte-ausblenden-ab.md) - gepaartes act23-A/B,
   Marker-Ablage, 3 x 50 Episoden je Arm: ohne Platte 60,0 %, mit 53,3 %, McNemar 20:10, p = 0,099.
   Neuer Schalter `ACT23_SOCKEL_AUS` (1 ausgeblendet, 2 dazu gleiche Zielverteilung) und

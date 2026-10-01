@@ -111,7 +111,8 @@ echter Koerper in jeder Detektion; ob ihr Ausblenden etwas an Quoten aendert, is
 (`ebene: code`).
 
 **Nachtrag, gemessen:** [Platte ausblenden - A/B](/befunde/platte-ausblenden-ab.md) -
-ohne Platte 60,0 gegen 53,3 % bei der Marker-Ablage, p = 0,099. Startschalter dafuer:
+erster Durchgang ohne Platte 60,0 gegen 53,3 %, in der Replikation umgekehrt;
+ueber 9 Seeds 52,9 gegen 54,9 %, p = 0,41 - **kein Effekt**. Startschalter dafuer:
 `ACT23_SOCKEL_AUS=1` (Platte beginnt ausgeblendet, in der GUI wieder einblendbar).
 
 Geprueft ohne Fenster (echte GUI, Agg, synthetische Aufrufe und ein Mittelklick ueber die

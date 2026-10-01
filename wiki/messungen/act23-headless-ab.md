@@ -104,6 +104,12 @@ Lernzustands-Diffs).
   Ursachen suchen.**
 
 
+* **McNemar ueber Episoden ueberschaetzt, weil der Agent im Lauf weiterlernt.** Eine fruehe
+  Abweichung zwischen den Armen pflanzt sich in alle spaeteren Episoden desselben Seeds fort; die
+  Episoden sind nicht unabhaengig. Gemessen am 2026-10-01 ([Platte ausblenden](/befunde/platte-ausblenden-ab.md)):
+  3 Seeds gaben p = 0,099 in die eine Richtung, 6 neue p = 0,023 in die andere, zusammen
+  p = 0,41. **Massgeblich ist das Vorzeichen ueber SEEDS**; Episoden-p nur als Beiwerk, und nie
+  ohne Replikation auf neuen Seeds als Befund melden.
 * **Gleicher Seed erzwingt in act23 keine gleiche Objektfolge** - das gilt fuer zwei
   **verschiedene** Konfigurationen: die Arme laufen identisch, bis der Schalter zum ersten Mal
   eine Entscheidung aendert, und danach voellig auseinander (gemessen: identisch bis Episode 18,
