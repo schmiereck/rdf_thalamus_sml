@@ -104,6 +104,9 @@ und duerfte das Netz verwirren; und von den Magenta-Zielscheiben sind immer alle
   Scheibe `target_marker`; bei Koerper-Ziel vor dem Start gar keine, bis `run_combined` sie beim
   Festlegen auf die aufgeloeste Stelle holt. `ACT23_EIN_MARKER=0` stellt das alte Bild her.
 
+**Gemessen:** [Nur ein Marker - A/B](/befunde/ein-marker-ab.md) - kein Effekt (58,2 gegen 55,8 %
+zugunsten "vier sichtbar", Seeds 5:3, p = 0,73).
+
 **Erwartung, ehrlich:** fuer die WAHRNEHMUNG aendert der Marker-Umbau wenig - `perceive_all`,
 `select` und die Fovea-Einstiege parken die Marker ohnehin vor jedem Blick (`_park_markers`).
 Er wirkt auf das Kamerabild der GUI und auf Pfade, die nicht parken. Die Platte dagegen ist ein

@@ -5,6 +5,11 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-10-02
+
+* **Anlage**: [Nur ein Marker - A/B](/befunde/ein-marker-ab.md) - gepaart, 8 Seeds x 50, Seed als
+  Einheit vorab festgelegt: vier sichtbar 58,2 %, einer 55,8 %, Seeds 5:3, p = 0,73. Kein Effekt.
+
 ## 2026-10-01
 
 * **Widerlegung**: [Platte ausblenden - A/B](/befunde/platte-ausblenden-ab.md) - vorab

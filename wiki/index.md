@@ -164,5 +164,6 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 # Chronik der Entwicklung
 
 * [act23-Entwicklungslinie](chronik/act23.md) - Juni bis September 2026, verdichtet: Etappen, Anlaesse, Messungen
+* [Nur ein Marker - A/B](befunde/ein-marker-ab.md) - **kein Effekt: 8 Seeds, vier Scheiben sichtbar 58,2 gegen einer 55,8 % (Seeds 5:3, p = 0,73). Die Wahrnehmung parkt die Marker ohnehin.** `ACT23_EIN_MARKER` bleibt 1 der Lesbarkeit wegen.
 * [Platte ausblenden - A/B](befunde/platte-ausblenden-ab.md) - **bringt nichts: 9 Seeds, ohne Platte 52,9 gegen 54,9 % (p = 0,41). Erste Lesart (3 Seeds, 60 gegen 53 %) in der Replikation widerlegt; Lehre: Episoden-McNemar ueberschaetzt, Seeds zaehlen.** `ACT23_SOCKEL_AUS`.
 * [Steuer-GUI](mechanismen/gui-bedienung.md) - **Umbau 2026-09-30: farbneutrale Namen mit aktueller Farbe in Log/GUI, drei Gruppen (Objekt/Ziel/Ausfuehrung), Klapplisten, Aufgabenzeile; Relation im Ziel fest waehlbar.** Seit 2026-10-01: Platte ein-/ausblenden, versetzen, umfaerben; nur EIN Magenta-Marker sichtbar (`ACT23_EIN_MARKER`).

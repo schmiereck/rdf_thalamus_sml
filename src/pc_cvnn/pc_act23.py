@@ -1636,6 +1636,8 @@ KOERPER_NAME = {"obj_red": "Würfel A", "obj_green": "Würfel B", "obj_blue": "B
 # FUER DIE WAHRNEHMUNG AENDERT SICH WENIG: perceive_all/select parken die Marker ohnehin vor
 # jedem Blick (_park_markers).  Sichtbar bleiben sie dort, wo nicht geparkt wird -- im
 # Kamerabild der GUI und in der Fovea-Anzeige.  ACT23_EIN_MARKER=0 stellt das alte Bild her.
+# GEMESSEN (wiki/befunde/ein-marker-ab.md, 8 Seeds x 50): KEIN Effekt auf die Quote (vier
+# sichtbar 58,2 %, einer 55,8 %, Seeds 5:3, p = 0,73).  Vorgabe bleibt 1 -- der Lesbarkeit wegen.
 EIN_MARKER = os.environ.get("ACT23_EIN_MARKER", "1") == "1"
 MARKER_UNTER = -0.05                       # dieselbe Tiefe wie _park_markers
 
