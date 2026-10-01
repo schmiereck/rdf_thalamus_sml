@@ -7,6 +7,11 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-10-01
 
+* **Anlage**: [Platte ausblenden - A/B](/befunde/platte-ausblenden-ab.md) - gepaartes act23-A/B,
+  Marker-Ablage, 3 x 50 Episoden je Arm: ohne Platte 60,0 %, mit 53,3 %, McNemar 20:10, p = 0,099.
+  Neuer Schalter `ACT23_SOCKEL_AUS` (1 ausgeblendet, 2 dazu gleiche Zielverteilung) und
+  Aufgaben-Abdruck fuer Paarungen ueber Arme mit verschiedenen Stuetzen.
+
 * **Ergaenzung**: [Steuer-GUI](/mechanismen/gui-bedienung.md) - Platte (Stapelauflage) in der GUI
   ein-/ausblendbar, versetzbar (wuerfeln, Mittelklick) und umfaerbbar; "Objekte neu" respektiert
   die Wahl. Nur noch die aktive Magenta-Zielscheibe sichtbar (`ACT23_EIN_MARKER`, Vorgabe 1).

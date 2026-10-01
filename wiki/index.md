@@ -164,4 +164,5 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 # Chronik der Entwicklung
 
 * [act23-Entwicklungslinie](chronik/act23.md) - Juni bis September 2026, verdichtet: Etappen, Anlaesse, Messungen
+* [Platte ausblenden - A/B](befunde/platte-ausblenden-ab.md) - **ohne feste Stapelplatte 60,0 gegen 53,3 % (gepaart 20:10, p = 0,099, 3/3 Seeds gleiche Richtung) - Richtung stimmt, nicht signifikant.** `ACT23_SOCKEL_AUS`.
 * [Steuer-GUI](mechanismen/gui-bedienung.md) - **Umbau 2026-09-30: farbneutrale Namen mit aktueller Farbe in Log/GUI, drei Gruppen (Objekt/Ziel/Ausfuehrung), Klapplisten, Aufgabenzeile; Relation im Ziel fest waehlbar.** Seit 2026-10-01: Platte ein-/ausblenden, versetzen, umfaerben; nur EIN Magenta-Marker sichtbar (`ACT23_EIN_MARKER`).

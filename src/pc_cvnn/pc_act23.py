@@ -1082,6 +1082,12 @@ ZIEL_MISCH = float(_zm) if _zm else None
 # Selbst-Imitation.
 SELBST_STAPEL = os.environ.get("ACT23_SELBST_STAPEL", "0") == "1"
 SOCKEL_WANDERT = os.environ.get("ACT23_SOCKEL_WANDERT", "0") == "1"
+# DIE PLATTE AUSGEBLENDET STARTEN (ACT23_SOCKEL_AUS, Vorgabe 0) -- derselbe Zustand wie
+# "Platte: ausgeblendet" in der GUI.  1 = geparkt, der Platz ist frei.  2 = geparkt, aber die
+# Marker-Ziele meiden die Plattenstelle WEITER wie mit Platte: das ist der Messarm fuer das A/B
+# "verwirrt die Platte das Netz?" (wiki/befunde/platte-ausblenden-ab.md).  Ohne die 2 saehe der
+# Arm ohne Platte andere Ziele (bis zu 10 cm um die Platte), und man maesse die Zielverteilung.
+SOCKEL_AUS = int(os.environ.get("ACT23_SOCKEL_AUS", "0"))
 # ZWEI GRUNDRISSE (ACT23_SOCKEL2, Vorgabe 0).  Die 50-mm-Platte `sockel2` kommt dazu, und je
 # Szene steht EINE der beiden in der Welt.  Sie ist die Bewaehrungsprobe fuer den
 # HoehenSchaetzer: der liest die Oberkante aus der scheinbaren Flaeche, und die haengt am
@@ -1684,6 +1690,7 @@ class CommandState23:
         # OBJECTS -- sonst koennte die Neugier sie zum Greifen auswaehlen -, werden aber von der
         # Szene aufgebaut und nach jeder Episode wiederhergestellt wie jeder andere Koerper.
         self.STUETZEN = []
+        self.ZIEL_SPERRE = []      # zusaetzliche Stellen, die Marker-Ziele meiden (s. SOCKEL_AUS=2)
         self.EIG_NEG = {}          # Koerper -> [(Formeinbettung, Spanne), ...] Gegenbeispiele (EIG_GEGEN)
         self.EIG_MESS_EX = {}      # Koerper -> [(Formeinbettung, Spanne), ...] nachgefuehrt (EIG_NACHFUEHREN)
         self.EIG_EINDEUTIG = {}    # Koerper -> loeste die Adresse in DIESER Episode eindeutig auf?
@@ -1768,7 +1775,9 @@ class CommandState23:
             if (float(np.linalg.norm(p)) >= BASE_CLEAR
                     and all(float(np.linalg.norm(p - self.sim.obj_pos(o)[:2])) > 0.05 for o in bodies)
                     and all(float(np.linalg.norm(p - self.sim.obj_pos(o)[:2])) > 0.10
-                            for o in self.STUETZEN)):
+                            for o in self.STUETZEN)
+                    and all(float(np.linalg.norm(p - np.asarray(q, float))) > 0.10
+                            for q in self.ZIEL_SPERRE)):
                 break
             p = _rand_xy(rng)
         self.set_marker_xy(self.target_idx, p); self.sync_active()
@@ -4383,7 +4392,7 @@ def run_self_learning_steering(headless=False):
     # DIE PLATTE VON HAND (GUI, Nutzerwunsch 2026-10-01): "aus" parkt sie wie ein nicht stehendes
     # Objekt, "xy" ist die zuletzt gewaehlte Stelle.  _sockel_setzen respektiert beides, damit
     # "Objekte neu" eine ausgeblendete oder versetzte Platte nicht zurueckholt.
-    platte = {"aus": False, "aktiv": SOCKEL_FORMEN[0], "xy": np.asarray(SOCKEL_XY, float),
+    platte = {"aus": SOCKEL_AUS > 0, "aktiv": SOCKEL_FORMEN[0], "xy": np.asarray(SOCKEL_XY, float),
               "farbe": (0.05, 0.05, 1.0)}
 
     def _platte_stellen(steht_xy):
@@ -4424,7 +4433,10 @@ def run_self_learning_steering(headless=False):
             if _s != _aktiv or platte["aus"]:
                 scene[_s] = (np.array(PARK_XY, float), 0.004, 0.0)
         if platte["aus"]:
-            print("  [Sockel] neue Szene: Platte bleibt ausgeblendet (GUI)", flush=True)
+            state.ZIEL_SPERRE = [platte["xy"].copy()] if SOCKEL_AUS == 2 else []
+            print("  [Sockel] neue Szene: Platte ausgeblendet"
+                  + (" (Ziele meiden ihre Stelle, ACT23_SOCKEL_AUS=2)" if SOCKEL_AUS == 2 else ""),
+                  flush=True)
             return
         _bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, _aktiv)
         _g = int(sim.m.body_geomadr[_bid])
@@ -4485,6 +4497,7 @@ def run_self_learning_steering(headless=False):
             sim.set_object(_akt, q, z=_hz, yaw=0.0)
             scene[_akt] = (np.asarray(q, float).copy(), _hz, 0.0)
             platte["xy"] = np.asarray(q, float).copy(); platte["aus"] = False
+            state.ZIEL_SPERRE = []
 
         if aktion == "aus":
             if platte["aus"]:
@@ -6889,8 +6902,20 @@ def run_self_learning_steering(headless=False):
                     pass
             _teile.append("farben=" + ",".join(f"{k}:{v}" for k, v in sorted(colour_of_body.items())))
             _abdruck = _hl.sha1("|".join(_teile).encode()).hexdigest()[:12]
-            print(f"  [Szenen-Abdruck] {_abdruck}  cmd={state.selected()[1]} ziel={state.target_idx}",
-                  flush=True)
+            # AUFGABEN-ABDRUCK: dasselbe OHNE Stuetzen und ohne Farbbindungen -- die Aufgabe
+            # (Objekt, Ziel, Objektlagen), wie sie zwischen einem Arm mit und einem ohne Platte
+            # gleich sein muss.  Die Farbbindung ist Wahrnehmung und darf von der Platte abhaengen.
+            #   GEPARKTE Koerper zaehlen nicht: sie liegen ausserhalb des Bildes auf einem Haufen,
+            #   und eine dort geparkte Platte hebt sie an (z 12 -> 19 mm), ohne dass es eine
+            #   Aufgabe aendert.
+            _aufg = [t for t in _teile if not t.startswith(("sockel", "farben="))
+                     and not (("=" in t and "," in t and t.split("=")[0] in scene)
+                              and _geparkt_jetzt(t.split("=")[0]))]
+            _aufg_h = _hl.sha1("|".join(_aufg).encode()).hexdigest()[:12]
+            print(f"  [Szenen-Abdruck] {_abdruck}  cmd={state.selected()[1]} ziel={state.target_idx}"
+                  f"  aufgabe={_aufg_h}", flush=True)
+            if os.environ.get("ACT23_ABDRUCK_TEXT", "0") == "1":   # Messausgabe: was ging ein
+                print("    [Abdruck-Text] " + "|".join(_aufg), flush=True)
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_fn,
                            policy_fn=(_policy_ueber_ports if use_net else None),

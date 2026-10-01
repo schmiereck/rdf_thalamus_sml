@@ -110,6 +110,10 @@ Er wirkt auf das Kamerabild der GUI und auf Pfade, die nicht parken. Die Platte 
 echter Koerper in jeder Detektion; ob ihr Ausblenden etwas an Quoten aendert, ist NICHT gemessen
 (`ebene: code`).
 
+**Nachtrag, gemessen:** [Platte ausblenden - A/B](/befunde/platte-ausblenden-ab.md) -
+ohne Platte 60,0 gegen 53,3 % bei der Marker-Ablage, p = 0,099. Startschalter dafuer:
+`ACT23_SOCKEL_AUS=1` (Platte beginnt ausgeblendet, in der GUI wieder einblendbar).
+
 Geprueft ohne Fenster (echte GUI, Agg, synthetische Aufrufe und ein Mittelklick ueber die
 Homographie): ausblenden (0 blaue Pixel, Platte aus `_tisch()`), einblenden an alter Stelle,
 wuerfeln, Mittelklick auf [0,08; 0,17] -> Platte bei [0,082; 0,168] mit 80-mm-Warnung, Umfaerben,
