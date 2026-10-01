@@ -5,6 +5,13 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-10-01
+
+* **Ergaenzung**: [Steuer-GUI](/mechanismen/gui-bedienung.md) - Platte (Stapelauflage) in der GUI
+  ein-/ausblendbar, versetzbar (wuerfeln, Mittelklick) und umfaerbbar; "Objekte neu" respektiert
+  die Wahl. Nur noch die aktive Magenta-Zielscheibe sichtbar (`ACT23_EIN_MARKER`, Vorgabe 1).
+  Wirkung auf Quoten nicht gemessen.
+
 ## 2026-09-30
 
 * **Ergaenzung**: [Steuer-GUI](/mechanismen/gui-bedienung.md) - Bezugskoerper waehlbar

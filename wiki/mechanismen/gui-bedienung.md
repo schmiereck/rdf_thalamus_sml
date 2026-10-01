@@ -73,3 +73,46 @@ Geprueft ohne Fenster: Klicks mit synthetischen Ereignissen (Marker landet auf d
 Tischstelle, Bezug wird gesetzt), Rendering der Listen; kopfloser Lauf 2 Episoden ohne Fehler.
 Nicht am Bildschirm angeklickt.
 
+
+# Ergaenzung 2026-10-01: Platte von Hand, nur EIN Marker sichtbar
+
+Nutzerbefund: die blaue 70-mm-Platte (`sockel`, Stapelziel seit Stufe 2) steht mit
+`ACT23_SOCKEL=1` in JEDER Szene an derselben Stelle `[-0.018, +0.149]`, nimmt viel Tisch ein
+und duerfte das Netz verwirren; und von den Magenta-Zielscheiben sind immer alle sichtbar.
+
+* **Klappliste "Platte"** (untere Leiste): sichtbar | ausgeblendet | an neue Stelle | per Klick
+  setzen. **Mittelklick** ins Kamerabild setzt die Platte direkt. Ausgeblendet heisst geparkt wie
+  ein nicht stehendes Objekt (`PARK_XY`); ein Bezug auf die Platte wird dabei geloescht.
+  "an neue Stelle" nimmt dasselbe Raster wie `ACT23_SOCKEL_WANDERT` (>= 80 mm zu jedem stehenden
+  Objekt, ausserhalb der Armfreiheit). Ein Klick naeher als Halbbreite + 17 mm an einem Objekt
+  wird abgewiesen (die Platte laege im Objekt), unter 80 mm erlaubt, aber mit Warnung
+  (gemessene Verschmelzungsschranke, [Sockel braucht 80 mm](/befunde/sockel-braucht-80mm-freiraum.md)).
+* **Klappliste "Farbe"**: fuenf GESAETTIGTE Plattenfarben (`PLATTEN_FARBEN`: tiefblau, mint,
+  lachs, oliv, himmelblau). Gelb flog nach der Probe raus: auf der RGBA 0,14 von Orange entfernt,
+  gerendert aber von der orangen L-Form kaum zu unterscheiden. Grau gibt es mit Absicht nicht: die Saettigungsmaske
+  (`SAT_TH=0,15`) sieht keine graue Platte, sie waere fuer den Agenten weg. Die Meldung nennt den
+  Chroma-Abstand zur naechsten Objektfarbe und warnt unter 0,12 (= `colour_openset.TH`): dann
+  teilt die Platte die Farbklasse eines Objekts. Gerechnet auf der RGBA - massgeblich ist die
+  gerenderte Chroma (Lehre aus obj_Y).
+* **"Objekte neu" respektiert die Wahl**: `_sockel_setzen` laesst eine ausgeblendete Platte
+  geparkt und behaelt eine versetzte Stelle; stellt die neue Szene ein Objekt naeher als 80 mm
+  daneben, rueckt die Platte auf die naechste freie Rasterstelle. Ohne GUI-Eingriff unveraendert.
+* Waehrend einer Episode wird vorgemerkt und danach ausgefuehrt (wie "Objekte neu").
+* **EIN Marker** (`ACT23_EIN_MARKER`, Vorgabe 1): die drei waehlbaren Scheiben `target_sel_1..3`
+  liegen unter dem Tisch (z = -0,05, auch im Modell, weil `mj_resetData` die mocap-Lage aus
+  `body_pos` neu laedt) und behalten ihre xy als Ortsgedaechtnis. Sichtbar ist nur die aktive
+  Scheibe `target_marker`; bei Koerper-Ziel vor dem Start gar keine, bis `run_combined` sie beim
+  Festlegen auf die aufgeloeste Stelle holt. `ACT23_EIN_MARKER=0` stellt das alte Bild her.
+
+**Erwartung, ehrlich:** fuer die WAHRNEHMUNG aendert der Marker-Umbau wenig - `perceive_all`,
+`select` und die Fovea-Einstiege parken die Marker ohnehin vor jedem Blick (`_park_markers`).
+Er wirkt auf das Kamerabild der GUI und auf Pfade, die nicht parken. Die Platte dagegen ist ein
+echter Koerper in jeder Detektion; ob ihr Ausblenden etwas an Quoten aendert, ist NICHT gemessen
+(`ebene: code`).
+
+Geprueft ohne Fenster (echte GUI, Agg, synthetische Aufrufe und ein Mittelklick ueber die
+Homographie): ausblenden (0 blaue Pixel, Platte aus `_tisch()`), einblenden an alter Stelle,
+wuerfeln, Mittelklick auf [0,08; 0,17] -> Platte bei [0,082; 0,168] mit 80-mm-Warnung, Umfaerben,
+Vormerken waehrend `busy` und Nachholen, "Objekte neu" mit Ausweichen auf die naechste freie
+Stelle. Marker: bei "Ort" genau eine Scheibe, bei Koerper-Ziel keine (alle z = -0,05). Kein
+Lauf mit Episoden, nicht am Bildschirm angeklickt.

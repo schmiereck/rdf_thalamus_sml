@@ -1603,10 +1603,35 @@ def eig_split_teil(sim, shape_clf, colours, ckey, form, groesse, det_blob):
 # farbneutrale Koerpernamen fuer den Beobachter.
 FARB_NAMEN = [((0.9, 0.1, 0.1), "rot"), ((0.1, 0.85, 0.1), "grün"), ((0.15, 0.3, 0.95), "blau"),
               ((0.95, 0.55, 0.1), "orange"), ((0.1, 0.8, 0.85), "türkis"), ((0.45, 0.12, 0.9), "violett"),
-              ((0.65, 0.95, 0.15), "gelbgrün")]
+              ((0.65, 0.95, 0.15), "gelbgrün"), ((0.05, 0.05, 1.0), "tiefblau")]
+# PLATTENFARBEN fuer die GUI (Nutzerwunsch 2026-10-01: die Platte umfaerben).  Alle GESAETTIGT --
+# eine graue Platte faellt durch die Saettigungsmaske der Wahrnehmung (SAT_TH=0,15) und waere fuer
+# den Agenten unsichtbar, also kein Stapelziel mehr.  Die Zahl ist der Mindestabstand in der
+# normierten Chroma zu den sieben Objektfarben (Rechnung auf der RGBA; was zaehlt, ist die
+# GERENDERTE Chroma, s. obj_Y).  Unter 0,12 (= colour_openset.TH) teilt die Platte die Farbklasse
+# eines Objekts -- das ist erlaubt, aber dann ein anderes Experiment.
+PLATTEN_FARBEN = [((0.05, 0.05, 1.0), "tiefblau"), ((0.3, 1.0, 0.6), "mint"),
+                  ((1.0, 0.5, 0.4), "lachs"), ((0.5, 0.5, 0.0), "oliv"),
+                  ((0.3, 0.65, 1.0), "himmelblau")]
+# GELB (1,0.85,0) STAND HIER UND FLOG RAUS: auf der RGBA 0,14 von Orange entfernt, GERENDERT aber
+# von der orangen L-Form kaum zu unterscheiden (GUI-Probe 2026-10-01, Bild nebeneinander).
+FARB_NAMEN = FARB_NAMEN + [f for f in PLATTEN_FARBEN if f not in FARB_NAMEN]
 KOERPER_NAME = {"obj_red": "Würfel A", "obj_green": "Würfel B", "obj_blue": "Balken", "obj_L": "L-Form",
                 "obj_U": "U-Form", "obj_T": "T-Form", "obj_X": "Kreuz", "obj_Zyl": "Zylinder",
-                "obj_V": "V-Form", "obj_Stern": "Stern"}
+                "obj_V": "V-Form", "obj_Stern": "Stern", "sockel": "Platte 70",
+                "sockel2": "Platte 50", "sockel3": "Platte 60"}
+
+
+# EIN MARKER STATT VIER (ACT23_EIN_MARKER, Vorgabe 1; Nutzerbefund 2026-10-01).  Bisher lagen
+# immer alle drei waehlbaren Zielscheiben target_sel_1..3 halbtransparent auf dem Tisch und dazu
+# die helle aktive Scheibe target_marker -- drei magentafarbene Flecken, von denen einer gilt.
+# Jetzt ist nur die AKTIVE sichtbar; die drei waehlbaren liegen unter dem Tisch und behalten ihre
+# xy als Ortsgedaechtnis.  Bei Koerper-Ziel ist vor dem Start gar keine sichtbar.
+# FUER DIE WAHRNEHMUNG AENDERT SICH WENIG: perceive_all/select parken die Marker ohnehin vor
+# jedem Blick (_park_markers).  Sichtbar bleiben sie dort, wo nicht geparkt wird -- im
+# Kamerabild der GUI und in der Fovea-Anzeige.  ACT23_EIN_MARKER=0 stellt das alte Bild her.
+EIN_MARKER = os.environ.get("ACT23_EIN_MARKER", "1") == "1"
+MARKER_UNTER = -0.05                       # dieselbe Tiefe wie _park_markers
 
 
 class CommandState23:
@@ -1628,6 +1653,8 @@ class CommandState23:
 
     def __init__(self, sim):
         self.sim = sim; self.sel = 0; self.action = "grasp"; self.target_idx = 0
+        if EIN_MARKER:
+            self._marker_verstecken()
         self.policy = "self"          # "self" -> world-model wrist (long obj); "teacher" -> WRIST_ALIGN
         self.choreo = "fsm"           # "fsm" -> scripted choreography (collects DAgger data);
         #                               "netz" -> the LEARNED runtime policy drives the sub-goals (Stufe 2)
@@ -1706,8 +1733,26 @@ class CommandState23:
     def set_marker_xy(self, idx, xy):
         self.sim.d.mocap_pos[self._mocap(self.MARKERS[idx])][:2] = xy
 
+    def _marker_verstecken(self):
+        """Die drei waehlbaren Marker UNTER DEN TISCH (s. EIN_MARKER).  Nur z: ihre xy bleiben die
+        Ortsgedaechtnisse, aus denen marker_xy liest.  Auch im MODELL (body_pos), weil
+        reset_home -> mj_resetData die mocap_pos aus body_pos neu laedt."""
+        for nm in self.MARKERS:
+            _b = mujoco.mj_name2id(self.sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)
+            self.sim.m.body_pos[_b][2] = MARKER_UNTER
+            self.sim.d.mocap_pos[self.sim.m.body_mocapid[_b]][2] = MARKER_UNTER
+        mujoco.mj_forward(self.sim.m, self.sim.d)
+
     def sync_active(self):
-        self.sim.d.mocap_pos[self._mocap("target_marker")][:2] = self.marker_xy(self.target_idx)
+        _tm = self.sim.d.mocap_pos[self._mocap("target_marker")]
+        _tm[:2] = self.marker_xy(self.target_idx)
+        if EIN_MARKER:
+            # MIT KOERPER-ZIEL zeigt die Scheibe vor dem Start NICHTS Gueltiges -- sie stuende auf
+            # dem zuletzt gewaehlten Ort.  Darum unter den Tisch; run_combined holt sie beim
+            # Festlegen des Ziels (set_target_marker, z=0,001) auf die aufgeloeste Stelle.
+            _tm[2] = MARKER_UNTER if self.ziel_modus == "koerper" else 0.001
+            for nm in self.MARKERS:                    # reset_home hat sie ggf. hochgeholt
+                self.sim.d.mocap_pos[self._mocap(nm)][2] = MARKER_UNTER
         mujoco.mj_forward(self.sim.m, self.sim.d)
 
     def place_selected_random(self, rng):
@@ -2026,19 +2071,38 @@ class CommandPanel23:
         self._pix2welt = None          # Kamerapixel (Spalte, Zeile) -> Tisch xy (von aussen verdrahtet)
         self._auf_tisch = None         # -> Koerper, die gerade auf dem Tisch stehen (von aussen)
         self._pending_introduce = False; self._pending_randomize = False   # deferred mid-episode clicks
+        # DIE PLATTE (Stapelauflage, ACT23_SOCKEL=1) VON HAND: ein-/ausblenden, versetzen, umfaerben
+        # (Nutzerwunsch 2026-10-01).  _platte_fn(aktion, **kw) -> Meldung wird von aussen verdrahtet;
+        # ohne Sockel bleiben beide Klapplisten grau.  Waehrend einer Episode wird vorgemerkt.
+        self._platte_fn = None
+        self._platte_zustand = None    # -> {"aus": bool, "farbe": rgb}
+        self._platte_klick = False     # der naechste Klick ins Kamerabild setzt die Platte
+        self._pending_platte = []
         # KLICK INS KAMERABILD (Nutzerwunsch 2026-09-30): links = zu transportierendes Objekt,
-        # rechts = Ziel (Koerper, oder bei "Art: Ort" die Stelle).
-        self.axCam.set_title(f"Arm — {cam} Kamera   (Linksklick: Objekt  ·  Rechtsklick: Ziel)",
+        # rechts = Ziel (Koerper, oder bei "Art: Ort" die Stelle), Mitte = Platte hierher.
+        self.axCam.set_title(f"{cam} Kamera  (links: Objekt · rechts: Ziel · Mitte: Platte)",
                              color="w", fontsize=9)
         self.fig.canvas.mpl_connect("button_press_event", self._kamera_klick)
-        axAuto = self.fig.add_axes([0.02, 0.02, 0.15, 0.06])
+        axAuto = self.fig.add_axes([0.02, 0.02, 0.105, 0.06])
         self.bAuto = Button(axAuto, "Auto: aus", color="#3a3a5a", hovercolor="#50507a")
         self.bAuto.on_clicked(self._toggle_auto)
-        axO = self.fig.add_axes([0.18, 0.02, 0.15, 0.06])
+        axO = self.fig.add_axes([0.13, 0.02, 0.105, 0.06])
         self.bO = Button(axO, "Objekte neu", color="#5c7aae", hovercolor="#78a0d0"); self.bO.on_clicked(self._objects)
-        axN = self.fig.add_axes([0.34, 0.02, 0.17, 0.06])
+        axN = self.fig.add_axes([0.24, 0.02, 0.135, 0.06])
         self.bN = Button(axN, "Objekt hinzufügen", color="#8a7430", hovercolor="#a89040")
         self.bN.on_clicked(self._introduce)
+        self.aPlatte = self._auswahl([0.38, 0.02, 0.11, 0.06], "Platte",
+                                     lambda: [("an", "sichtbar"), ("aus", "ausgeblendet"),
+                                              ("wuerfeln", "an neue Stelle"), ("klick", "per Klick setzen")],
+                                     lambda: (None if self._platte_zustand is None
+                                              else ("aus" if self._platte_zustand()["aus"] else "an")),
+                                     self._platte_waehlen)
+        self.aPlattenFarbe = self._auswahl([0.495, 0.02, 0.08, 0.06], "Farbe",
+                                           lambda: [(rgb, n) for rgb, n in PLATTEN_FARBEN],
+                                           lambda: (None if self._platte_zustand is None
+                                                    else self._platte_zustand()["farbe"]),
+                                           lambda rgb: self._platte("farbe", rgb=rgb),
+                                           farbe=lambda rgb: rgb)
         axG = self.fig.add_axes([0.58, 0.02, 0.2, 0.06])
         self.bG = Button(axG, "Ausführen", color="#1f8a5b", hovercolor="#27a96f"); self.bG.on_clicked(self._go)
         axX = self.fig.add_axes([0.79, 0.02, 0.19, 0.06])
@@ -2105,8 +2169,12 @@ class CommandPanel23:
     def _ziel_art_setzen(self, v):
         if v == "ort":
             self.state.ziel_modus = "ort"; self.state.ziel_bezug = None
+            self.state.sync_active()                     # die Scheibe taucht wieder auf (EIN_MARKER)
+            self.update(self.state.sim.render(self._cam))
             return
         self.state.ziel_modus = "koerper"
+        self.state.sync_active()                         # ... und verschwindet bei Koerper-Ziel
+        self.update(self.state.sim.render(self._cam))
         self.state.ziel_art = None if v == "zufall" else v
         self.state.ziel_bezug = None
         if self._ziel_fn is not None and not self.state.busy:
@@ -2128,6 +2196,7 @@ class CommandPanel23:
         self.state.ziel_body_fix = b
         if b is not None and self.state.ziel_modus != "koerper":
             self.state.ziel_modus = "koerper"             # ein Bezug ergibt nur mit Koerper-Ziel Sinn
+            self.state.sync_active()
         self.state.ziel_bezug = None
         if self.state.ziel_modus == "koerper" and self._ziel_fn is not None and not self.state.busy:
             self._ziel_fn()
@@ -2144,6 +2213,10 @@ class CommandPanel23:
             return
         xy = np.asarray(xy, float)[:2]
         sim = self.state.sim
+        if ev.button == 2 or (self._platte_klick and ev.button in (1, 3)):
+            self._platte_klick = False
+            self._platte("setzen", xy=xy)
+            return
 
         def naechster(kand):
             kand = [b for b in kand if b]
@@ -2198,6 +2271,34 @@ class CommandPanel23:
             self.update(self.state.sim.render(self._cam), f"Marker {self.state.target_idx + 1} neu platziert")
         self._refresh()
 
+    # ---------------- Platte ----------------
+    def _platte_waehlen(self, v):
+        if v == "klick":
+            if self._platte_fn is None:
+                return
+            self._platte_klick = True
+            self.live.set_text("Nächster Klick ins Kamerabild setzt die Platte"); self.fig.canvas.draw_idle()
+            return
+        self._platte(v)
+
+    def _platte(self, aktion, **kw):
+        if self._platte_fn is None:
+            self.live.set_text("Keine Platte in diesem Lauf (ACT23_SOCKEL=1 fehlt)"); self.fig.canvas.draw_idle()
+            return
+        if self.state.busy:                                    # mid-episode -> defer (see state.busy)
+            self._pending_platte.append((aktion, kw))
+            self.live.set_text("Platte — nach der laufenden Episode"); self.fig.canvas.draw_idle()
+            return
+        txt = self._platte_fn(aktion, **kw)
+        self.update(self.state.sim.render(self._cam), txt or "")
+        self._refresh()
+
+    def platte_nachholen(self):
+        """Waehrend einer Episode vorgemerkte Plattenwuensche JETZT ausfuehren (zwischen Episoden)."""
+        _q, self._pending_platte = self._pending_platte, []
+        for aktion, kw in _q:
+            self._platte(aktion, **kw)
+
     # ---------------- untere Leiste ----------------
     def _go(self, _e): self.state.go = True
     def _exit(self, _e): self.state.exit = True
@@ -2236,6 +2337,8 @@ class CommandPanel23:
                 a.aktiv = st.ziel_modus != "koerper"
             elif a is self.aBezug:
                 a.aktiv = st.ziel_modus == "koerper"
+            elif a is self.aPlatte or a is self.aPlattenFarbe:
+                a.aktiv = self._platte_fn is not None
             a.refresh()
         # die Eigenschaftsfelder: bei einer NAMENS-Wahl blass, damit "Farbe: beliebig" nicht als
         # Teil des Befehls gelesen wird (Nutzerbefund 2026-09-30)
@@ -4277,6 +4380,26 @@ def run_self_learning_steering(headless=False):
                       "nicht (85 gegen 88 %) -- die Fehlschlaege sind seitlich, nicht senkrecht. "
                       " s. wiki/befunde/drei-auflagen-im-lauf.md", flush=True)
 
+    # DIE PLATTE VON HAND (GUI, Nutzerwunsch 2026-10-01): "aus" parkt sie wie ein nicht stehendes
+    # Objekt, "xy" ist die zuletzt gewaehlte Stelle.  _sockel_setzen respektiert beides, damit
+    # "Objekte neu" eine ausgeblendete oder versetzte Platte nicht zurueckholt.
+    platte = {"aus": False, "aktiv": SOCKEL_FORMEN[0], "xy": np.asarray(SOCKEL_XY, float),
+              "farbe": (0.05, 0.05, 1.0)}
+
+    def _platte_stellen(steht_xy):
+        """Alle Rasterstellen im Arbeitsraum mit >= SOCKEL_FREI zu jedem stehenden Objekt und
+        ausserhalb der Sockelfreiheit des Arms (dasselbe Raster wie SOCKEL_WANDERT)."""
+        from pc_cvnn.pc_act14 import REACH_XY as _RX
+        _kand = []
+        for _gx in np.linspace(_RX[0][0] + 0.035, _RX[1][0] - 0.035, 25):
+            for _gy in np.linspace(_RX[0][1] + 0.035, _RX[1][1] - 0.035, 25):
+                _q = np.array([_gx, _gy])
+                if float(np.linalg.norm(_q)) < 0.10:
+                    continue
+                if all(float(np.linalg.norm(_q - np.asarray(s, float))) >= SOCKEL_FREI for s in steht_xy):
+                    _kand.append(_q)
+        return _kand
+
     def _sockel_setzen(steht_xy):
         """Den Sockel fuer eine NEUE SZENE setzen: Stelle und Hoehe (s. SOCKEL_WANDERT/_HOEHEN).
 
@@ -4296,9 +4419,13 @@ def run_self_learning_steering(headless=False):
         # von selbst aus der Kandidatenliste von `_ziel_adresse_wuerfeln` (die filtert ueber
         # `_geparkt_jetzt`), und die Adresse bleibt eindeutig.
         _aktiv = SOCKEL_FORMEN[int(crng.integers(len(SOCKEL_FORMEN)))]
+        platte["aktiv"] = _aktiv
         for _s in SOCKEL_FORMEN:
-            if _s != _aktiv:
+            if _s != _aktiv or platte["aus"]:
                 scene[_s] = (np.array(PARK_XY, float), 0.004, 0.0)
+        if platte["aus"]:
+            print("  [Sockel] neue Szene: Platte bleibt ausgeblendet (GUI)", flush=True)
+            return
         _bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, _aktiv)
         _g = int(sim.m.body_geomadr[_bid])
         _h = SOCKEL_HOEHEN[int(crng.integers(len(SOCKEL_HOEHEN)))] if len(SOCKEL_HOEHEN) > 1 \
@@ -4307,26 +4434,120 @@ def run_self_learning_steering(headless=False):
         sim.m.geom_rbound[_g] = float(np.linalg.norm(sim.m.geom_size[_g]))
         _xy = np.asarray(scene.get(_aktiv, (np.asarray(SOCKEL_XY, float),))[0], float)
         if float(np.linalg.norm(_xy - np.asarray(PARK_XY, float))) < 0.05:
-            _xy = np.asarray(SOCKEL_XY, float)             # kam gerade aus dem Parkhaus
+            _xy = platte["xy"].copy()                      # kam gerade aus dem Parkhaus: an die zuletzt
+            #   gewaehlte Stelle (ohne GUI-Eingriff ist das SOCKEL_XY, wie bisher)
+        if not SOCKEL_WANDERT and any(float(np.linalg.norm(_xy - np.asarray(q, float))) < SOCKEL_FREI
+                                      for q in steht_xy):
+            # VON HAND VERSETZT, und die neue Szene stellt ein Objekt daneben (die Slots wissen von
+            # der Platte nichts).  An der festen Vorgabestelle tritt das nie ein (86 mm, s. oben).
+            _kand = _platte_stellen(steht_xy)
+            if _kand:
+                _xy = min(_kand, key=lambda q: float(np.linalg.norm(q - _xy)))
+                print(f"  [Sockel] gewaehlte Stelle kollidiert mit der neuen Szene -- naechste freie "
+                      f"[{_xy[0]:+.3f},{_xy[1]:+.3f}]", flush=True)
         if SOCKEL_WANDERT:
-            from pc_cvnn.pc_act14 import REACH_XY as _RX
-            _kand = []
-            for _gx in np.linspace(_RX[0][0] + 0.035, _RX[1][0] - 0.035, 25):
-                for _gy in np.linspace(_RX[0][1] + 0.035, _RX[1][1] - 0.035, 25):
-                    _q = np.array([_gx, _gy])
-                    if float(np.linalg.norm(_q)) < 0.10:
-                        continue
-                    if all(float(np.linalg.norm(_q - np.asarray(s, float))) >= SOCKEL_FREI for s in steht_xy):
-                        _kand.append(_q)
+            _kand = _platte_stellen(steht_xy)
             if _kand:
                 _xy = _kand[int(crng.integers(len(_kand)))]
             else:
                 print(f"  [Sockel] KEINE Stelle mit {1000 * SOCKEL_FREI:.0f} mm Freiraum -- bleibt, wo er "
                       f"war.  Mit ACT23_SCENE_N=4 ist der Arbeitsraum dafuer zu klein.", flush=True)
         scene[_aktiv] = (_xy.copy(), _h / 2.0, 0.0)
+        platte["xy"] = _xy.copy()
         print(f"  [Sockel] neue Szene: {_aktiv} "
               f"({2000 * float(sim.m.geom_size[_g][0]):.0f} mm Grundriss) bei "
               f"[{_xy[0]:+.3f},{_xy[1]:+.3f}], Hoehe {1000 * _h:.0f} mm", flush=True)
+
+    def platte_steuern(aktion, xy=None, rgb=None):
+        """GUI: die Platte ein-/ausblenden, versetzen, umfaerben.  Liefert die Meldung fuer die Zeile.
+
+        Das ist UMGEBUNGSGESTALTUNG wie "Objekte neu" oder ein versetzter Marker -- der Agent
+        bekommt davon nichts gesagt, er sieht nur die veraenderte Szene.  Laeuft nur zwischen
+        Episoden (die GUI merkt waehrend einer Episode vor), der Arm steht dann zu Hause.
+        Ein Objekt, das AUF der Platte liegt, bleibt, wo es ist, und faellt beim Versetzen oder
+        Ausblenden auf den Tisch."""
+        _akt = platte["aktiv"]
+        _bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, _akt)
+        _hz = float(sim.m.geom_size[int(sim.m.body_geomadr[_bid])][2])
+        _halb = float(sim.m.geom_size[int(sim.m.body_geomadr[_bid])][0])
+        # was STEHT gerade: echte Lage, nicht `scene` (gelieferte Objekte sind gewandert); was auf
+        # der Platte liegt (hoeher als ein Tischobjekt), zaehlt nicht als Hindernis
+        _steht = []
+        for nm in dict.fromkeys(n for _l, n, _m in state.OBJECTS):
+            _p = sim.obj_pos(nm)
+            if float(np.linalg.norm(_p[:2] - np.asarray(PARK_XY, float))) < 0.05:
+                continue
+            if float(_p[2]) > 0.016 and float(np.max(np.abs(_p[:2] - sim.obj_pos(_akt)[:2]))) < _halb:
+                continue
+            _steht.append(_p[:2].copy())
+
+        def _hinstellen(q):
+            sim.set_object(_akt, q, z=_hz, yaw=0.0)
+            scene[_akt] = (np.asarray(q, float).copy(), _hz, 0.0)
+            platte["xy"] = np.asarray(q, float).copy(); platte["aus"] = False
+
+        if aktion == "aus":
+            if platte["aus"]:
+                return "Platte ist schon ausgeblendet"
+            for _s in SOCKEL_FORMEN:
+                sim.set_object(_s, np.asarray(PARK_XY, float), z=0.004, yaw=0.0)
+                scene[_s] = (np.array(PARK_XY, float), 0.004, 0.0)
+            platte["aus"] = True
+            if state.ziel_body_fix in SOCKEL_FORMEN:     # ein Bezug auf eine unsichtbare Platte
+                state.ziel_body_fix = None
+            if state.ziel_bezug is not None and state.ziel_bezug.get("body") in SOCKEL_FORMEN:
+                state.ziel_bezug = None
+            msg = "Platte ausgeblendet"
+        elif aktion == "an":
+            if not platte["aus"]:
+                return "Platte ist schon sichtbar"
+            q = platte["xy"]
+            if any(float(np.linalg.norm(q - s)) < SOCKEL_FREI for s in _steht):
+                _k = _platte_stellen(_steht)
+                if not _k:
+                    return "Kein Platz für die Platte (80 mm Abstand zu jedem Objekt nötig)"
+                q = min(_k, key=lambda c: float(np.linalg.norm(c - q)))
+            _hinstellen(q)
+            msg = f"Platte eingeblendet bei [{q[0]:+.3f}, {q[1]:+.3f}]"
+        elif aktion == "wuerfeln":
+            _k = _platte_stellen(_steht)
+            if not _k:
+                return "Keine Stelle mit 80 mm Abstand zu allen Objekten frei"
+            q = _k[int(crng.integers(len(_k)))]
+            _hinstellen(q)
+            msg = f"Platte -> [{q[0]:+.3f}, {q[1]:+.3f}]"
+        elif aktion == "setzen":
+            from pc_cvnn.pc_act14 import REACH_XY as _RX
+            q = np.asarray(xy, float)[:2]
+            if not (_RX[0][0] <= q[0] <= _RX[1][0] and _RX[0][1] <= q[1] <= _RX[1][1]) \
+                    or float(np.linalg.norm(q)) < 0.10:
+                return "Stelle ausserhalb des Arbeitsbereichs (oder zu nah am Arm)"
+            _d = min((float(np.linalg.norm(q - s)) for s in _steht), default=1.0)
+            if _d < _halb + 0.017:                       # Halbdiagonale Objekt: die Platte laege IM Objekt
+                return f"Zu nah an einem Objekt ({1000 * _d:.0f} mm) -- die Platte würde es rammen"
+            _hinstellen(q)
+            msg = f"Platte -> [{q[0]:+.3f}, {q[1]:+.3f}]"
+            if _d < SOCKEL_FREI:                         # erlaubt, aber laut: gemessene Schranke
+                msg += f"  (nur {1000 * _d:.0f} mm zum Nachbarn: Blobs verschmelzen unter 80 mm)"
+        elif aktion == "farbe":
+            rgb = tuple(float(v) for v in rgb)
+            for _s in SOCKEL_FORMEN:
+                for _g in _geoms_of(_s):
+                    sim.m.geom_rgba[_g][:3] = rgb
+            platte["farbe"] = rgb
+            _ch = np.asarray(rgb) / sum(rgb)
+            _abst = min(float(np.linalg.norm(_ch - np.asarray(v[:3], float) / float(np.sum(v[:3]))))
+                        for v in _FARB_PALETTE.values())
+            msg = (f"Plattenfarbe {dict((tuple(c), n) for c, n in PLATTEN_FARBEN).get(rgb, rgb)}"
+                   f" (Chroma-Abstand zur naechsten Objektfarbe {_abst:.2f}"
+                   + (" -- unter 0,12: teilt eine Farbklasse!)" if _abst < 0.12 else ")"))
+        else:
+            return f"unbekannte Platten-Aktion {aktion}"
+        mujoco.mj_forward(sim.m, sim.d)
+        sim.step(30)                                     # setzen lassen (Arm steht zu Hause)
+        state.sync_active()
+        print(f"  [Platte] {msg}", flush=True)
+        return msg
 
     # ERFAHRUNGS-GRUPPE fuer den Block-Bootstrap des Welt-Modells (s. world_model._bootstrap_blocks).
     # Eine Gruppe = eine STEHENDE SZENE innerhalb EINES Laufs.  Genau das ist die Einheit, ueber die
@@ -5332,6 +5553,9 @@ def run_self_learning_steering(headless=False):
         panel._ziel_fn = _ziel_adresse_wuerfeln     # wire "Ziel: an Körper" (s. ZIEL_ADRESSE)
         panel._pix2welt = (lambda px: shape_clf._px_to_world(np.asarray(px, float))[0]
                            if getattr(shape_clf, "Hinv", None) is not None else None)
+        if SOCKEL:
+            panel._platte_fn = platte_steuern
+            panel._platte_zustand = lambda: platte
         panel._auf_tisch = lambda: [nm for nm in dict.fromkeys(list(state.STUETZEN)
                                                                + [n for _l, n, _m in state.OBJECTS])
                                     if not _geparkt_jetzt(nm)]
@@ -7911,6 +8135,8 @@ def run_self_learning_steering(headless=False):
         if panel._pending_introduce:
             panel._pending_introduce = False
             introduce_object(); panel._refresh()
+        if panel._pending_platte:
+            panel.platte_nachholen()
     print("  Steering beendet.")
 
 
