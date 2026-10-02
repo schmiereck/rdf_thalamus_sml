@@ -168,6 +168,14 @@ GOAL_Z = os.environ.get("ACT16_GOAL_Z", "0") == "1"
 # Handhoehe, bei der gegriffen wird.  Ohne Schalter oder ohne dritten Wert bleibt sie GRASP_Z
 # und alle Zeilen sind Zeichen fuer Zeichen die alten.
 GRIFF_Z = os.environ.get("ACT16_GRIFF_Z", "0") == "1"
+# DIE GROESSE GESEHEN STATT GEWUSST (von act23 gesetzt, s. ACT23_GROESSE_SEHEN).  Bisher standen im
+# POLICY-ZUSTAND obj_h und obj_fp aus der ECHTEN MuJoCo-Geometrie (geom_half) -- die Policy bekam
+# damit "Wuerfel 12 / Balken 9 / Form 6-7 mm" von aussen gesagt.  GROESSE_FN(cmd, xy_gesehen)
+# liefert (obj_fp, obj_h) aus der Wahrnehmung oder None (dann bleibt das Privileg, und der Aufrufer
+# sagt es laut).  Ersetzt wird NUR, was die Policy sieht (Spalten 5, 9, 10 des Zustands); die
+# Phasen-Buchhaltung, die Kredit-Schwellen und die Laufzeit-Riegel bleiben privilegiert -- sie sind
+# Geruest bzw. eigener Faden (wiki/mechanismen/laufzeit-regeln.md).  None = altes Verhalten.
+GROESSE_FN = None
 # ERFOLGSBEGRIFF "RUHT" STATT "LIEGT TIEF" (ACT16_ERFOLG_RUHT, Vorgabe 0 bis gemessen).
 # Stufe 2 von wiki/fragen/stapeln-als-aufgabe.md: `rested = cz < half + 0,010` heisst woertlich
 # "liegt auf dem Tisch" und verbucht damit jeden GELUNGENEN Stapel als Fehlschlag.  Der Schalter
@@ -523,6 +531,15 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             if mode_perc is not None:                             # affordance decision correctness
                 ideal = "push" if obj_wide.get(cmd, False) else "grasp"
                 dec_ok += int(mode_perc == ideal); dec_n += 1
+        obj_h_s, obj_fp_s = obj_h, obj_fp                     # was die POLICY sieht (s. GROESSE_FN)
+        if GROESSE_FN is not None:
+            try:
+                _gr = GROESSE_FN(cmd, cube_plan)
+            except Exception as _e:
+                print(f"    [Groesse] FEHLER {type(_e).__name__}: {_e}", flush=True); _gr = None
+            if _gr is not None:
+                obj_fp_s, obj_h_s = float(_gr[0]), float(_gr[1])
+        run_combined._groesse = (float(obj_fp_s), float(obj_h_s), float(obj_fp), float(obj_h))
         if goal_fn is not None:                               # PLANNER dreams the place target from the
             obj_xy = cube_plan if cube_plan is not None else sim.obj_pos(cmd)[:2]   # perceived object
             tgt = np.asarray(goal_fn(cmd, obj_xy), float)     # -> commit to it (and SCORE against it)
@@ -902,11 +919,11 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             # POLICY sieht -- und was als Demo-Zustand GELOGGT wird -- wechselt auf beobachtbar.
             _holding = press > 0.3 and _j5q < J5_CLOSED_TH
             if run_combined._cobs is None or phase in ("over", "lower", "close"):
-                run_combined._cobs = (np.asarray(c, float).copy(), float(obj_h))
+                run_combined._cobs = (np.asarray(c, float).copy(), float(obj_h_s))
             if _holding:
                 run_combined._cobs = (np.asarray(hxy, float).copy(), float(hz))
             elif run_combined._held_prev:                       # eben verloren -> am Fallort einfrieren
-                run_combined._cobs = (np.asarray(hxy, float).copy(), float(obj_h))
+                run_combined._cobs = (np.asarray(hxy, float).copy(), float(obj_h_s))
             run_combined._held_prev = _holding
             if OBS_STATE:
                 c_st, cz_st = run_combined._cobs
@@ -920,7 +937,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             # tatsaechlich galt (die Ablagehoehe war bis hierhin diese Konstante).  Der Neutralwert
             # ist hier die Wahrheit, nicht eine Notluege.
             state = np.array([h[0], h[1], h[2], c_st[0], c_st[1], cz_st, tgt_eff[0], tgt_eff[1],
-                              _j5q, obj_h, obj_fp,
+                              _j5q, obj_h_s, obj_fp_s,
                               1.0 if press >= 0 else 0.0, max(press, 0.0)]
                              # DIE ANORDNUNG MUSS EINDEUTIG SEIN.  Mit GRIFF_Z ohne GOAL_Z
                              # laege die GREIFhoehe auf Platz 14 -- genau dort, wo

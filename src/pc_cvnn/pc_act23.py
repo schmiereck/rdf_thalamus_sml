@@ -949,6 +949,16 @@ HOEHE_SEHEN = os.environ.get("ACT23_HOEHE_SEHEN", "0") == "1"
 # das letzte Privileg auch aus dem TRAINING, nicht nur aus der Laufzeit.
 # Der Schalter zieht ACT16_TASTEN NICHT heimlich mit -- der Start sagt, wenn es fehlt.
 HOEHE_TASTEN = os.environ.get("ACT23_HOEHE_TASTEN", "0") == "1"
+# DIE GROESSE DES GREIFOBJEKTS SEHEN STATT WISSEN (ACT23_GROESSE_SEHEN, Vorgabe 0).
+# Der Policy-Zustand traegt obj_h und obj_fp (halbe Hoehe, halbe Kurzachse), und beide kamen aus
+# MuJoCo (pc_act16 run_combined: geom_half).  Hoehe ist heute fuer alle Koerper 12 mm, die
+# Kurzachse aber 12 (Wuerfel) / 9 (Balken) / 6-7 mm (Formen) -- die Policy bekam die Kategorie
+# also gesagt.  Der GroessenSchaetzer liest beides aus der Detektion (Flaeche, Dicke, Spanne, Ort).
+#   0 = Privileg wie bisher; der Schaetzer lernt mit und schreibt seinen Fehler ins Protokoll
+#   1 = die Policy sieht die Schaetzung.  Zu wenige Zeilen oder keine Detektion -> LAUTER Rueckfall.
+# Etiketten: privilegierte Geometrie (Geruest, s. laufzeit-regeln.md).  Ersetzt wird nur, was die
+# POLICY sieht -- Buchhaltung, Kredit und Riegel bleiben, s. pc_act16.GROESSE_FN.
+GROESSE_SEHEN = os.environ.get("ACT23_GROESSE_SEHEN", "0") == "1"
 
 # =========================================================================================
 # STUFE 4: DIE RELATION AUCH IN DER ADRESSE (ACT23_ADR_RELATION, Vorgabe 0).
@@ -1167,6 +1177,7 @@ if ZIEL_RELATION in ("richtung", "alle") and not ZIEL_ADRESSE:
 # Datei nach .bak (s. _validate_loaded).  Genau dieselbe Trennung wie bei den vier
 # anderen Lernern.
 from pc_cvnn.arm_modules.hoehen_schaetzer import HoehenSchaetzer
+from pc_cvnn.arm_modules.groessen_schaetzer import GroessenSchaetzer
 
 
 # ABSTUFUNG STATT PRIVILEG (ACT23_EIG_ABSTUFUNG, Vorgabe 0 bis gemessen).  Trifft das
@@ -2690,6 +2701,126 @@ def run_self_learning_steering(headless=False):
     hoehen_schaetzer = (_loaded or {}).get("hoehe_schaetzer") or HoehenSchaetzer()
     if not isinstance(hoehen_schaetzer, HoehenSchaetzer):        # Klasse hat sich geaendert
         hoehen_schaetzer = HoehenSchaetzer()
+    groessen_schaetzer = (_loaded or {}).get("groessen_schaetzer") or GroessenSchaetzer()
+    if not isinstance(groessen_schaetzer, GroessenSchaetzer):
+        groessen_schaetzer = GroessenSchaetzer()
+    print(f"  [Groesse] Schaetzer mit {len(groessen_schaetzer.X)} Zeilen  -- "
+          + ("die Policy sieht die SCHAETZUNG (ACT23_GROESSE_SEHEN=1)" if GROESSE_SEHEN
+             else "lernt nur mit, die Policy sieht das Privileg"), flush=True)
+
+    def _groesse_wahr(nm):
+        """Das Etikett (Geruest): genau was run_combined bisher in den Zustand schrieb."""
+        _b = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)
+        _h = sim.m.geom_size[sim.m.body_geomadr[_b]]
+        return float(np.min(_h[:2])), float(_h[2])
+
+    def _groesse(cmd, xy):
+        """pc_act16.GROESSE_FN: (obj_fp, obj_h) des kommandierten Objekts aus der Wahrnehmung.
+
+        Ein Blick auf die Szene (Arm zu Hause, Marker geparkt wie bei jedem Blick).  ERST
+        SCHAETZEN, DANN MERKEN: sonst stuende die eigene Zeile schon im Schaetzer.  Gemerkt werden
+        ALLE stehenden Koerper der Szene (Zuordnung Detektion -> Koerper ueber die Lage, <= 20 mm:
+        buchhalterisch privilegiert wie das Etikett selbst), nicht nur das kommandierte -- sonst
+        sammelte er eine Zeile je Episode."""
+        _sv = sim.d.mocap_pos.copy()
+        try:
+            dets = shape_clf.perceive_all(sim)
+        finally:
+            sim.d.mocap_pos[:] = _sv; mujoco.mj_forward(sim.m, sim.d)
+        dets = [d for d in dets if d.get("pos") is not None]
+        _schaetz = None; _grund = None
+        if xy is None:
+            _grund = "kein gesehener Objektort"
+        elif not dets:
+            _grund = "keine Detektion"
+        else:
+            _dc = min(dets, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"], float) - np.asarray(xy, float)[:2])))
+            if float(np.linalg.norm(np.asarray(_dc["pos"], float) - np.asarray(xy, float)[:2])) > 0.03:
+                _grund = "keine Detektion am gesehenen Ort"
+            else:
+                _schaetz = groessen_schaetzer.schaetzen(_dc)
+                if _schaetz is None:
+                    _grund = f"erst {len(groessen_schaetzer.X)} Zeilen (braucht {GroessenSchaetzer.MIN_ZEILEN})"
+        _steht = [n for n in dict.fromkeys(n for _l, n, _m in state.OBJECTS)
+                  if not _geparkt_jetzt(n)]
+        _n0 = len(groessen_schaetzer.X)
+        for d in dets:
+            _q = np.asarray(d["pos"], float)
+            _nah = [(float(np.linalg.norm(sim.obj_pos(n)[:2] - _q)), n) for n in _steht]
+            if not _nah:
+                continue
+            _dd, _nb = min(_nah)
+            if _dd <= 0.02 and sim.obj_pos(_nb)[2] < 0.02:      # nur Tischobjekte (kein Stapel)
+                groessen_schaetzer.merken(d, *_groesse_wahr(_nb))
+        if cmd is None:
+            return None
+        _w = _groesse_wahr(cmd)
+        if _schaetz is not None:
+            print(f"    [Groesse] {cmd}: gesehen fp {1000 * _schaetz[0]:.1f} h {1000 * _schaetz[1]:.1f} mm"
+                  f" | wahr {1000 * _w[0]:.1f}/{1000 * _w[1]:.1f} | Fehler fp "
+                  f"{1000 * abs(_schaetz[0] - _w[0]):.1f} h {1000 * abs(_schaetz[1] - _w[1]):.1f} mm"
+                  f" | {'BENUTZT' if GROESSE_SEHEN else 'nur mitgelernt'} | +{len(groessen_schaetzer.X) - _n0}"
+                  f" Zeilen -> {len(groessen_schaetzer.X)}", flush=True)
+        else:
+            print(f"    [Groesse] {cmd}: keine Schaetzung ({_grund})"
+                  + (" -- RUECKFALL auf das Privileg" if GROESSE_SEHEN else "")
+                  + f" | +{len(groessen_schaetzer.X) - _n0} Zeilen -> {len(groessen_schaetzer.X)}", flush=True)
+        return _schaetz if GROESSE_SEHEN else None
+
+    act16.GROESSE_FN = _groesse
+
+    _nur_groesse = {"an": False}
+
+    def _groesse_sammeln(n):
+        """ACT23_GROESSE_SAMMELN=n: n frisch aufgebaute Szenen nur ANSCHAUEN und beschriften, ohne
+        Arm -- billiger als 50 Episoden.  Je Szene ERST alle Koerper schaetzen, DANN merken: das
+        ist eine Haltemessung ueber die Zeit (nie eine Zeile derselben Szene im Schaetzer).
+        Fester Generator (4242) und danach zurueckgestellt: jeder Arm eines A/B bekommt denselben
+        Schaetzer, und die Szenenfolge des Hauptlaufs bleibt unberuehrt."""
+        _alt = crng.bit_generator.state
+        crng.bit_generator.state = np.random.default_rng(4242).bit_generator.state
+        _blk = []
+        _nur_groesse["an"] = True                      # kein Open-Set-Blick, keine Klassengeburt
+        try:
+            for i in range(n):
+                randomize_objects()
+                _sv = sim.d.mocap_pos.copy()
+                try:
+                    dets = shape_clf.perceive_all(sim)
+                finally:
+                    sim.d.mocap_pos[:] = _sv; mujoco.mj_forward(sim.m, sim.d)
+                _steht = [nm for nm in dict.fromkeys(nm for _l, nm, _m in state.OBJECTS)
+                          if not _geparkt_jetzt(nm)]
+                for d in dets:
+                    if d.get("pos") is None:
+                        continue
+                    _q = np.asarray(d["pos"], float)
+                    _nah = [(float(np.linalg.norm(sim.obj_pos(nm)[:2] - _q)), nm) for nm in _steht]
+                    if not _nah or min(_nah)[0] > 0.02:
+                        continue
+                    _w = _groesse_wahr(min(_nah)[1]); _e = groessen_schaetzer.schaetzen(d)
+                    if _e is not None:
+                        _blk.append((abs(_e[0] - _w[0]), abs(_e[1] - _w[1]),
+                                     min((0.0065, 0.009, 0.012), key=lambda c: abs(c - _e[0]))
+                                     == min((0.0065, 0.009, 0.012), key=lambda c: abs(c - _w[0]))))
+                for d in dets:                                     # erst jetzt merken
+                    if d.get("pos") is None:
+                        continue
+                    _q = np.asarray(d["pos"], float)
+                    _nah = [(float(np.linalg.norm(sim.obj_pos(nm)[:2] - _q)), nm) for nm in _steht]
+                    if _nah and min(_nah)[0] <= 0.02:
+                        groessen_schaetzer.merken(d, *_groesse_wahr(min(_nah)[1]))
+                if (i + 1) % 25 == 0 and _blk:
+                    _a = np.asarray(_blk, float)
+                    print(f"  [Groesse] Sammeln {i + 1}/{n}: {len(groessen_schaetzer.X)} Zeilen | gehalten "
+                          f"(Szenen {i - 23}-{i + 1}): fp-Fehler {1000 * _a[:, 0].mean():.2f} mm, "
+                          f"h-Fehler {1000 * _a[:, 1].mean():.2f} mm, richtige Gruppe "
+                          f"{100 * _a[:, 2].mean():.0f} % (n={len(_a)})", flush=True)
+                    _blk = []
+        finally:
+            crng.bit_generator.state = _alt
+            _nur_groesse["an"] = False
+        randomize_objects()
     # DIE GELERNTEN WORTBEDEUTUNGEN (s. RICHTUNG_QUELLE): Wort -> Liste von Welt-Einheitsvektoren,
     # je einer pro eigener Ablage, die der Agent im Nachhinein unter diesem Wort gesehen hat.
     # Ein schlichtes dict aus Listen -- pickelbar ohne Klasse, additiv wie der Hoehenschaetzer.
@@ -3951,6 +4082,7 @@ def run_self_learning_steering(headless=False):
                     "dream_seen": [np.asarray(z) for z in dream_nov.seen],
                     "self_eval": seval,
                     "hoehe_schaetzer": hoehen_schaetzer,
+                    "groessen_schaetzer": groessen_schaetzer,
                     "wort_bedeutung": {w: [np.asarray(v, float) for v in l]
                                        for w, l in wort_bedeutung.items()},
                     "blick_daten": list(blick_daten),
@@ -5424,6 +5556,8 @@ def run_self_learning_steering(headless=False):
         """One open-set LOOK at the current scene: unknown blobs feed the novelty buffer, a young class's
         exemplar set grows over new poses (observe_scene); a class born here becomes a commandable object.
         Runs at scene EVENTS (placement, after a command), not per tracked frame."""
+        if _nur_groesse["an"]:                         # Groessen-Sammeln (s. _groesse_sammeln):
+            return []                                  #   dort soll NUR der Groessenschaetzer lernen
         if shape_clf.novel_th is None:
             return []
         saved = sim.d.mocap_pos.copy()                         # observe_scene parks the markers -> restore
@@ -7923,6 +8057,8 @@ def run_self_learning_steering(headless=False):
         return ("    [Bilanz] letzte 30 je Modus: " + ", ".join(parts)
                 + (f"  |  je Objekt: {objs}" if objs else ""))
 
+    if int(os.environ.get("ACT23_GROESSE_SAMMELN", "0")) > 0:
+        _groesse_sammeln(int(os.environ["ACT23_GROESSE_SAMMELN"]))
     if headless and int(os.environ.get("ACT23_AUTO_N", "0")) > 0:
         # HEADLESS AUTO-RUN (for A/B measurement without the GUI): run N curiosity-picked episodes in
         # the requested choreo mode with the rolling Bilanz scoreboard -- the same loop the GUI Auto
