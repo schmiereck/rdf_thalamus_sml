@@ -87,3 +87,37 @@ Schliess-Entscheidung dreifach gemessen nicht tragen.
 
 * [Projektziel](/ziel.md)
 * [Modullandschaft](/mechanismen/act23-modullandschaft.md)
+
+# Bestandsaufnahme 2026-10-02 (am Code geprueft)
+
+Was sich seit dem 25.08. bewegt hat, und was nicht:
+
+**Gefallen:** die Oberkante der Auflage (`geom_size`) beim Stapeln - der `HoehenSchaetzer` liest
+sie aus der Detektion und lernt seine Etiketten aus der Beruehrung
+([Oberkante ohne Privileg](/befunde/oberkante-ohne-privileg.md),
+[Tastetikett gegen Privileg](/befunde/tastetikett-gegen-privileg.md)).
+
+**Unveraendert zur Laufzeit an** (`pc_act16.py`): `CLOSE_GUARD` (:216), `REFLEX` (:122),
+`SOFT_RELEASE` (:212), `WRIST_ALIGN`, `PHASE_STALL`, `MAX_REACQ`, die Phasen-Buchhaltung.
+
+**Unveraendert privilegiert:** `obj_h = cmd_half[2]` und `obj_fp` aus der ECHTEN Geometrie
+(`run_combined`, :484) - daran haengen `grasp_z`, `carry_z`, `lift_thresh` (:318-320) UND die
+Hoehenschwelle des Riegels. Die Groesse kommt also beim GREIFEN noch aus MuJoCo, waehrend sie beim
+ABLEGEN auf einen Stapel schon geschaetzt wird - dasselbe Werkzeug ist vorhanden, nur nicht auf
+das Greifobjekt angewandt. Dazu der privilegierte Wahrnehmungs-Rueckfall (pc_act23 :5895/:5915,
+zuletzt gemessen 4-6 %).
+
+**Inzwischen gemessen negativ** fuer den Ersatz des Riegels: Fingerdruck (dreifach, 08/2026),
+Codex D0b "visueller Greifzustand" mit fester Rohregel (Precision 0,786 unter dem Tor 0,80,
+zurueckgestellt), Codex S1 komplexer PC-Vorwaertsexperte auf Servo-Uebergaengen (MSE 150-fach
+schlechter als Persistenz).
+
+**Geruest, nicht Regel, aber nach [Ziel](/ziel.md) abzubauen:** `perceive_all`
+(CC-Segmentierung + Homographie + PCA), die Greifpunkt-Heuristiken, die Diskretisierung von
+Farbe/Form/Groesse/Wrist (`wrist_grid=8`), die Kredit-Schwellen (20 mm Hub, 25/22/15 mm Toleranz).
+
+Reihenfolge-Vorschlag nach Hebel und Risiko: (1) `obj_h`/`obj_fp` beim Greifen aus derselben
+Detektion schaetzen wie die Oberkante beim Stapeln - kleinster Schritt, Werkzeug existiert, und er
+ist die Voraussetzung dafuer, dass ein Riegel ueberhaupt ohne Privileg denkbar wird; (2) den
+privilegierten Rueckfall durch "nicht gefunden -> erneut schauen" ersetzen und messen, was er
+kostet; (3) erst danach die Schliess-Entscheidung selbst.

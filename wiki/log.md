@@ -7,6 +7,10 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-10-02
 
+* **Ergaenzung**: [Laufzeitregeln](/mechanismen/laufzeit-regeln.md) - Bestandsaufnahme am Code:
+  was seit 25.08. gefallen ist (Oberkante beim Stapeln), was weiter laeuft (Riegel, Reflex & Co.),
+  dass `obj_h` beim GREIFEN noch aus MuJoCo kommt, und die gemessenen Negative fuer den Riegel-Ersatz.
+
 * **Anlage**: [Nur ein Marker - A/B](/befunde/ein-marker-ab.md) - gepaart, 8 Seeds x 50, Seed als
   Einheit vorab festgelegt: vier sichtbar 58,2 %, einer 55,8 %, Seeds 5:3, p = 0,73. Kein Effekt.
 
