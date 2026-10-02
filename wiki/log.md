@@ -2,6 +2,12 @@
 
 ## 2026-10-02
 
+* **PC-Engine mathematisch geprüft**: [Audit](/befunde/pc-engine-mathematik-audit.md)
+  findet drei Abweichungen vom Energiegradientenvertrag; zwölf Zustandskontrollen scheitern,
+  unabhängige Referenzen bestehen. Exakter Gegenfall erhöht Energie 0,50 → 0,61.
+  Ein-Eingang-W-Lernen, temporaler Gradient und acht Vektorregressionen bestehen.
+  Engine unverändert; Reparaturfolge E0–E4 vor erneutem S1-Urteil dokumentiert.
+
 * **S1-Ursachenurteil korrigiert**: [Gegenprüfung](/befunde/s1-vorwaertsmodell-gegenpruefung.md)
   reproduziert den alten Fehler, findet aber fehlendes commit_step im Test und eine fehlende
   Konjugation im linearen Fehlergradienten. Kein Nachweis einer brauchbaren Motorik; zuerst

@@ -17,6 +17,10 @@ sources:
 
 # Aufbau
 
+Fortsetzung: Der [isolierte Engine-Audit](/befunde/pc-engine-mathematik-audit.md) bestätigt
+die Konjugationsabweichung und ergänzt fehlenden Aktivierungs-Jacobian sowie Mittelungsfaktoren.
+Die globale Engine ist weiterhin unverändert; die Reparaturfolge ist dort dokumentiert.
+
 Unverändertes S1-Rezept: Seed 17, 24 latente Dimensionen, zwölf Epochen, 40/10 ganze
 Trainings-/Testrollouts. Vier Diagnosen verwenden Kopien desselben trainierten Modells.
 Datensatz-SHA256: d4086fec6f20b12c447540a006767ca7e846bda357979d49b723eae6ced01ea0.

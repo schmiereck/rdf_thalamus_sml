@@ -31,6 +31,8 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 # Befunde
 
+* [PC-Engine: mathematischer Audit](befunde/pc-engine-mathematik-audit.md) - Konjugation, Aktivierungs-Jacobian und Mittelung fehlen in der Zustandsinferenz; Lern- und Vektor-Gegenkontrollen sowie Reparaturfolge E0–E4
+* [PC-Engine: Audit ausführen](messungen/pc-engine-mathematik-audit.md) - unabhängige numerische und analytische Gradientenprüfung ohne Roboter oder PKL
 * [S1-Gegenprüfung](befunde/s1-vorwaertsmodell-gegenpruefung.md) - alter Fehler reproduziert, aber zeitliche Inferenz asymmetrisch und komplexe Rückgabe nicht gradientenkonform; Architektururteil zurückgenommen
 
 * [D0: Ungebunden ist nicht unbekannt](befunde/dream-rsi-d0-lernaufgabe.md) - gewachsen kein Y-Lernen; frisch schnelle Y-Erkennung mit T-Verwechslung, beide Pilotvarianten ungeeignet; D0-Tor offen
