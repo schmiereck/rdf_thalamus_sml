@@ -1,5 +1,12 @@
 # Chronik
 
+## 2026-10-02
+
+* **S1-Ursachenurteil korrigiert**: [Gegenprüfung](/befunde/s1-vorwaertsmodell-gegenpruefung.md)
+  reproduziert den alten Fehler, findet aber fehlendes commit_step im Test und eine fehlende
+  Konjugation im linearen Fehlergradienten. Kein Nachweis einer brauchbaren Motorik; zuerst
+  isolierte Engine-Validierung, bevor ein neuer Architekturvergleich sinnvoll ist.
+
 ## 2026-09-27
 
 * **S1-PC-Vorwärtsmodell verworfen**: [Vorwärtsmodell](/befunde/s1-pc-vorwaertsmodell.md) -

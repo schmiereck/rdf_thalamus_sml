@@ -3,7 +3,7 @@ type: Befund
 title: S1-PC-Vorwärtsmodell - generativer Ein-Latent-Experte verliert klar gegen Persistenz
 description: Der isolierte komplexe PC-Experte rekonstruiert die Servoübergänge besser als eine Konstante, verfehlt aber die kurzfristige Encoder-Persistenz um Faktor 154.
 tags: [act23, dream-rsi, s1, servo, propriozeption, pc-cvnn]
-status: stable
+status: widerlegt
 evidenz: einzelmessung
 ebene: pruefstand
 generated: { by: codex, at: 2026-09-27T09:00:00Z }
@@ -23,6 +23,12 @@ sources:
 ---
 
 # Behauptung
+
+**Korrektur 2026-10-02:** Die Zahlen unten bleiben reproduzierbar. Das daraus abgeleitete
+Architektur- und Ursachenurteil ist jedoch nicht abgesichert: Die
+[Gegenprüfung](/befunde/s1-vorwaertsmodell-gegenpruefung.md) findet eine Inferenzasymmetrie
+und eine Abweichung vom komplexen Gradienten. `status: widerlegt` betrifft dieses Urteil,
+nicht die gemessenen Fehlerwerte. Zuerst ist der Prüfaufbau zu validieren.
 
 Der erste komplexe PC-Vorwärtsmodellexperte ist für die direkte Servoaufgabe ungeeignet. Seine
 gemeinsame generative Rekonstruktion von Kontext und Folgezustand bildet die sehr kleine

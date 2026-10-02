@@ -31,6 +31,8 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 # Befunde
 
+* [S1-Gegenprüfung](befunde/s1-vorwaertsmodell-gegenpruefung.md) - alter Fehler reproduziert, aber zeitliche Inferenz asymmetrisch und komplexe Rückgabe nicht gradientenkonform; Architektururteil zurückgenommen
+
 * [D0: Ungebunden ist nicht unbekannt](befunde/dream-rsi-d0-lernaufgabe.md) - gewachsen kein Y-Lernen; frisch schnelle Y-Erkennung mit T-Verwechslung, beide Pilotvarianten ungeeignet; D0-Tor offen
 * [D0: Y/T-Trennbarkeit](befunde/dream-rsi-yt-trennbarkeit.md) - lokales Deskriptorsignal vorhanden, aber 59/64 T-Sichten von einer Dreisicht-Y-Klasse beansprucht; keine geeignete D0-Lernaufgabe
 * [D0-Wrist-Audit](befunde/dream-rsi-d0-wrist-audit.md) - objektrelatives Gitter und kausale Negativkredite vorhanden; D0 braucht einen eigenen nichtmutierenden Evaluator und Selbst-Labels
