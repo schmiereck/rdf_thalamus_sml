@@ -7,6 +7,11 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-10-02
 
+* **Anlage**: [Konstante Spalte sprengt die Policy](/befunde/konstante-spalte-sprengt-policy.md) -
+  im A/B "Groesse sehen" gefunden: im Training konstante Policy-Spalten (obj_h, Greifhoehe) werden
+  mit 1e6 verstaerkt. Schutz gebaut und offline belegt; das laufende A/B war ungueltig (zudem
+  wegen Speichermangel gestoppt).
+
 * **Ergaenzung**: [Laufzeitregeln](/mechanismen/laufzeit-regeln.md) - Bestandsaufnahme am Code:
   was seit 25.08. gefallen ist (Oberkante beim Stapeln), was weiter laeuft (Riegel, Reflex & Co.),
   dass `obj_h` beim GREIFEN noch aus MuJoCo kommt, und die gemessenen Negative fuer den Riegel-Ersatz.

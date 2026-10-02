@@ -121,3 +121,8 @@ Detektion schaetzen wie die Oberkante beim Stapeln - kleinster Schritt, Werkzeug
 ist die Voraussetzung dafuer, dass ein Riegel ueberhaupt ohne Privileg denkbar wird; (2) den
 privilegierten Rueckfall durch "nicht gefunden -> erneut schauen" ersetzen und messen, was er
 kostet; (3) erst danach die Schliess-Entscheidung selbst.
+
+**Schritt 1, Stand 2026-10-02:** `GroessenSchaetzer` + `ACT23_GROESSE_SEHEN` gebaut (7b697ee);
+gehalten 95-98 % richtige Gruppe, 0,13 mm. Das erste A/B fand stattdessen einen Fehler in der
+Policy-Normierung ([Konstante Spalte](/befunde/konstante-spalte-sprengt-policy.md)) und ist neu zu
+fahren.
