@@ -1,7 +1,7 @@
 ---
 type: Befund
 title: Eine im Training konstante Eingabespalte sprengt die Policy
-description: Die act19-Policy normiert ihre Eingaben mit std + 1e-6. Spalten, die im Training nie variierten - obj_h (immer 12,0 mm) und die Greifhoehe (Spalte 14) -, verstaerken damit jede Laufzeitabweichung um 10^6. 0,1 mm mehr obj_h verschiebt die Ausgabe um 813 mm (im Lauf 848 mm, Episode 0 scheitert). Behoben mit ACT19_KONST_SPALTEN (Vorgabe 1). Betraf ausserdem latent jeden Netz-Griff auf einer Auflage.
+description: Die act19-Policy normiert ihre Eingaben mit std + 1e-6. Spalten, die im Training nie variierten - obj_h (immer 12,0 mm) und die Greifhoehe (Spalte 14) -, verstaerken damit jede Laufzeitabweichung um 10^6. 0,1 mm mehr obj_h verschiebt die Ausgabe um 813 mm (im Lauf 848 mm, Episode 0 scheitert). Behoben mit ACT19_KONST_SPALTEN (Vorgabe 1): Spalten mit weniger als 0,5 mm Streuung sind stumm - die erste Fassung (Schwelle 1e-5) hielt nur bis zum ersten Nachtraining. Betraf ausserdem latent jeden Netz-Griff auf einer Auflage.
 tags: [act23, policy, normierung, fehler, groesse]
 status: stable
 evidenz: gemessen
@@ -45,16 +45,32 @@ Offline am gespeicherten Netz, 40 Pufferzeilen:
 
 Unveraenderte Eingaben: Ausgaben mit und ohne Schutz gleich bis 2e-10.
 
-# Behebung
+# Behebung (zweite Fassung - die erste hielt nur bis zum ersten Nachtraining)
 
-`ACT19_KONST_SPALTEN` (Vorgabe 1): Spalten mit `isd < 1e-5` gehen mit dem Trainingswert (0 nach
-der Normierung) ein, in `predict` und gleichlautend in `fit`. Begruendung: eine Spalte, die nie
-variiert hat, kann nichts gelernt haben; ihre Laufzeitabweichung ist reine Extrapolation.
+`ACT19_KONST_SPALTEN` (Vorgabe 1), `MIN_SD = 5e-4`: eine Spalte, deren Streuung im
+Trainingspuffer unter einem halben Millimeter liegt, ist **stumm** - sie geht mit ihrem Mittelwert
+ein (0 nach der Normierung), in `fit` und `predict`, nach jedem Nachtraining neu entschieden.
+
+Die Geschichte dahin, weil sie lehrreich ist:
+
+| Fassung | gespeichertes Netz, obj_h + 0,3 mm | nach Nachtraining mit verrauschtem obj_h |
+|---|---|---|
+| ohne Schutz | 915 mm | 64 mm (max 167) |
+| 1: stumm, wenn isd < 1e-5 | 0 mm | **versagt** - das Schaetzrauschen (0,15 mm) hebt isd auf 3e-5 ueber die Schwelle; im Lauf Episoden 2-8 mit 38-130 mm Netz-Teacher-Abstand |
+| Bodenstreuung 1e-3 | 37 mm | 28 mm - die Gewichte einer immer-null-Spalte sind nie trainiert |
+| **2: stumm, wenn isd < 5e-4** | **0 mm** | **0 mm** |
+
+Unveraenderte Eingaben: gleich bis 2e-10. Die Grundflaeche (Spalte 10, Streuung 2e-3) bleibt
+aktiv (0,5 mm -> 1,4 mm Ausgabe). Die kleinste echte Streuung im Zustand (1,1e-3, Welt-Modell)
+liegt ueber der Schwelle. Eine Groesse, die wirklich zu variieren beginnt (Greifhoehe auf
+Auflagen, kuenftig verschieden hohe Objekte), wird aktiv, sobald ihre Streuung im Puffer 0,5 mm
+uebersteigt - dann muss das Netz sie ab da lernen.
 
 # Folgen
 
 * Das erste A/B "Groesse sehen" ist **ungueltig** (Seed 9961 vollstaendig, 9962 halb, beide mit
-  dem Fehler im Arm S). Neu zu fahren.
+  dem Fehler im Arm S), ebenso der Neustart mit Fassung 1 (abgebrochen nach ~33 Episoden je Arm).
+  Neu gefahren mit Fassung 2.
 * **Latent auch ausserhalb dieses Umbaus:** die Greifhoehe (Spalte 14) weicht ab, sobald ein Objekt
   auf einer Auflage liegt. Ein Netz-Griff auf einem Stapel (Choreo `netz`, `ACT16_GRIFF_Z=1`) lief
   damit in dieselbe Explosion. Die Stufe-4-Messungen liefen mit `ACT23_CHOREO=fsm` und sind davon

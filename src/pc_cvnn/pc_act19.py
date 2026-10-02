@@ -34,11 +34,22 @@ from pc_cvnn.pc_act14 import BracketArmSim, ArmBodyModel3D
 import pc_cvnn.pc_act16 as act16
 
 
-# KONSTANTE SPALTEN NICHT VERSTAERKEN (ACT19_KONST_SPALTEN, Vorgabe 1), s. Policy.predict.
-# Schwelle 1e-5: konstante Spalten liegen bei 1e-6 (das +1e-6 der Normierung), die kleinste echte
-# Streuung im gelernten act23-Zustand bei 1,1e-3 (Welt-Modell) bzw. 2,0e-3 (Policy).
+# MINDESTSTREUUNG DER EINGAENGE (ACT19_KONST_SPALTEN, Vorgabe 1), s. Policy.predict.
+# Die Normierung teilt durch std + 1e-6.  Eine im Training konstante Spalte verstaerkt damit jede
+# Laufzeitabweichung um 10^6 (wiki/befunde/konstante-spalte-sprengt-policy.md).  Erste Fassung
+# setzte solche Spalten auf 0 -- das hielt nur bis zum ersten Nachtraining: dann stand die
+# Schaetzung im Puffer, die Spalte streute um 0,1 mm, galt nicht mehr als konstant und
+# verstaerkte das Schaetzrauschen wieder (gemessen: |Netz-Teacher| 38-130 mm in den Episoden
+# 2-8, danach normal).  Eine blosse BODENSTREUUNG (1e-3) reicht auch nicht: die Gewichte einer
+# immer-null-Spalte sind nie trainiert worden, 0,3 mm verschoben die Ausgabe dann noch um 37 mm.
+# DESHALB: eine Spalte, deren Streuung im Trainingspuffer unter MIN_SD liegt, wird STUMM
+# geschaltet (geht mit ihrem Mittelwert ein) -- in fit und predict, nach jedem Nachtraining neu
+# entschieden.  Schaetzrauschen (~0,15 mm) bleibt darunter; die kleinste ECHTE Streuung im
+# gelernten act23-Zustand liegt bei 1,1e-3 (Welt-Modell) bzw. 2,0e-3 (Policy) und bleibt aktiv.
+# Eine Groesse, die wirklich zu variieren beginnt (Greifhoehe auf Auflagen, kuenftig verschieden
+# hohe Objekte), wird aktiv, sobald ihre Streuung im Puffer MIN_SD uebersteigt.
 KONST_SPALTEN = os.environ.get("ACT19_KONST_SPALTEN", "1") == "1"
-KONST_SD = 1e-5
+MIN_SD = 5e-4
 
 
 class Policy:
@@ -60,8 +71,8 @@ class Policy:
             self.imu, self.isd = X.mean(0), X.std(0) + 1e-6
             self.omu, self.osd = Y.mean(0), Y.std(0) + 1e-6
         Xn = (X - self.imu) / self.isd; Yn = (Y - self.omu) / self.osd
-        if KONST_SPALTEN:                                     # s. predict: gleiche Regel im Training
-            Xn = np.where(self.isd[None, :] < KONST_SD, 0.0, Xn)
+        if KONST_SPALTEN:                                     # stumme Spalten, s. MIN_SD
+            Xn = np.where(self.isd[None, :] < MIN_SD, 0.0, Xn)
         n = len(Xn); w = np.ones(n) if w is None else np.asarray(w, float)
         for ep in range(epochs):
             idx = rng.permutation(n)
@@ -81,14 +92,8 @@ class Policy:
 
     def predict(self, x):
         xn = (np.asarray(x, float) - self.imu) / self.isd
-        if KONST_SPALTEN:
-            # EINE SPALTE, DIE IM TRAINING NIE VARIIERT HAT, TRAEGT KEIN GELERNTES WISSEN.  Ihre
-            # Normierung ist std + 1e-6, eine Abweichung von 0,1 mm wird damit zu 100 Standard-
-            # abweichungen und sprengt die Ausgabe (gemessen 2026-10-02: |Netz-Teacher| 848 statt
-            # 10 mm, sobald obj_h aus einer Schaetzung kam und 12,1 statt 12,0 mm las).  Dasselbe
-            # traefe die Greifhoehe (Spalte 14), sobald ein Objekt auf einer Auflage liegt.
-            # Solche Spalten bekommen den Trainingswert, also 0 nach der Normierung.
-            xn = np.where(self.isd < KONST_SD, 0.0, xn)
+        if KONST_SPALTEN:                                     # stumme Spalten, s. MIN_SD
+            xn = np.where(self.isd < MIN_SD, 0.0, xn)
         h = np.tanh(self.W1 @ xn + self.b1)
         return (self.W2 @ h + self.b2) * self.osd + self.omu
 
