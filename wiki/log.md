@@ -2,6 +2,11 @@
 
 ## 2026-10-03
 
+* **S1 mit korrekter Energie-Inferenz abgeschlossen**: [Befund](/befunde/s1-energie-inferenz.md).
+  128 Schritte im Test zu kurz; lange Inferenz und unabhängiger reduzierter Solver stimmen
+  auf 2,01e-8 rad überein. MSE 0,000599 gegen 0,000138 Persistenz, 2/5 Gelenke besser.
+  Tor verfehlt, Trainingskonvergenz bleibt Vorbehalt; kein Gesamturteil gegen PC-CVNN.
+
 * **Isolierte Energie-Inferenz gebaut und validiert**: [Vertrag](/messungen/s1-energie-inferenz.md).
   18 unabhängige Gradientenkontrollen, analytische Inferenz und Lebenszyklus bestehen.
   S1-Rezept vor dem Lauf festgelegt; Claudes Normalisierungsfund 59c85c4 berücksichtigt.

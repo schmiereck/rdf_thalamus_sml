@@ -123,5 +123,12 @@ Clipping, Pickle-Wiederaufbau und separater Prozesse. Maximale numerische Differ
    mit bekannter Lösung und Konvergenzkontrollen; anschließend S1 nach festem Vertrag erneut
    gegen Persistenz prüfen. Keine Architektur-/Hyperparametersuche auf dem bisherigen Testsatz.
 
-E0–E4 sind offen. Dieser Audit begründet die Reparatur, setzt sie noch nicht um. Globale
-Engine-Änderungen vor Beginn über das Board mit paralleler ACT23-Arbeit koordinieren.
+Stand 2026-10-02: E0–E4 offen; der Audit selbst setzt die Reparatur nicht um.
+
+Fortsetzung 2026-10-03: [Isolierte Energie-Inferenz](/messungen/s1-energie-inferenz.md)
+erfüllt E0/E1 für den ungewichteten Vertrag. E2 ist für den explizit zeitlosen Modus geprüft;
+lernende/eingefrorene Zeitmodelle bleiben ausgenommen. E3 (Produktions-Vektorpfad und Migration)
+bleibt offen, da die Referenz bewusst separat ist. Analytische lineare Inferenz und
+nichtlineares Decoderlernen bestehen als E4-Gegenkontrollen; der abgeschlossene
+[S1-Vergleich](/befunde/s1-energie-inferenz.md) verfehlt trotz bestätigter Testinferenz das Leistungstor.
+Globale Engine-Änderungen weiterhin vor Beginn über das Board koordinieren.

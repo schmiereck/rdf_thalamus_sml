@@ -83,3 +83,17 @@ Neue Ergebnisverzeichnisse erforderlich. Manifest mit Daten-/Code-SHA und Rezept
 W-Checkpoint als eigenes NPZ, Vorhersagen und Ergebnis-JSON. Kein Simulator, keine PKL.
 Vor Start 4,18 GiB physischer RAM frei; zwei fremde Python-Läufe je etwa 0,56 GiB.
 Nur ein zusätzlicher Prozess mit einem BLAS-Thread vorgesehen.
+
+# Ergebnis und zusätzliche Solver-Gegenprüfung
+
+Der [Befund](/befunde/s1-energie-inferenz.md) enthält die abgeschlossenen Zahlen und Grenzen.
+Wegen unvollständiger Konvergenz der Testinferenz wurde nach dem festgelegten Lauf derselbe
+Checkpoint ohne Nachtraining zusätzlich mit exakt eliminiertem freiem Ausgabeknoten geprüft:
+
+```powershell
+& ..\rdf_thalamus_sml\.venv\Scripts\python.exe src\pc_cvnn\act23_s1_energy_checkpoint.py --checkpoint-dir log\s1-energy-20261003 --output-dir log\s1-energy-checkpoint-neu
+```
+
+Dies ist eine nachträgliche technische Solver-Diagnose, kein Teil des vorab fixierten primären
+Leistungstors und keine Auswahl eines anderen Modells. Der Audit bricht ab, wenn eine Probe
+die ursprüngliche Gradiententoleranz 1e-5 verfehlt oder sich der Checkpoint verändert.
