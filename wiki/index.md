@@ -31,6 +31,8 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 # Befunde
 
+* [S1: lokaler Online-Kopf besteht](befunde/s1-online-kopf.md) - 91,26 Prozent weniger Fehler als Persistenz, 5/5 Gelenke besser; kein Batch-Warmstart, unabhängige Rollouts als nächstes Tor
+* [S1: lokales Online-Kopftraining](messungen/s1-online-kopf.md) - festes Rezept auf eingefrorenen Kontextmerkmalen, Batch-Lösung ausschließlich Referenz
 * [S1: Lernziel-Audit abgeschlossen](befunde/s1-lernziel-audit.md) - konvergiertes generatives Training weiter negativ; bedingter Kopf auf gleichem Encoder schlägt Persistenz auf 5/5 Gelenken, Nullprior entfernen degeneriert
 * [S1: Lernziel-Audit](messungen/s1-lernziel-audit.md) - konvergiertes Training, lineare Referenz, Nullprior und bedingter Kopf in festem Diagnosevergleich
 * [S1: Ergebnis der korrekten Energie-Inferenz](befunde/s1-energie-inferenz.md) - Mathematik/Lebenszyklus bestehen; unabhängiger Solver bestätigt 4,35-fachen Persistenzfehler, kein Motorpolicy-Tor

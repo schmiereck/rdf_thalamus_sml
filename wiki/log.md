@@ -2,6 +2,15 @@
 
 ## 2026-10-03
 
+* **S1-Online-Kopftraining abgeschlossen**: [Befund](/befunde/s1-online-kopf.md).
+  Lokale komplexe Updates aus zufälliger Initialisierung erreichen 1,20244e-5 rad²,
+  Faktor 0,0874 gegen Persistenz, 5/5 Gelenke besser. Batch bleibt genauer; nächstes Tor
+  ist ein neuer unabhängiger Rolloutsatz bei eingefrorenem Modell, kein weiteres Diagnosesplit-Tuning.
+
+* **S1-Online-Kopftraining festgelegt**: [Vertrag](/messungen/s1-online-kopf.md).
+  Zwölf Epochen lokaler komplexer Updates aus zufälliger Kopfinitialisierung; gleicher
+  eingefrorener Kontextencoder, kein Batch-Warmstart und keine Parametersuche.
+
 * **S1-Vorhersagesignal erschlossen**: [Lernziel-Audit](/befunde/s1-lernziel-audit.md).
   Konvergiertes generatives Training bleibt bei Faktor 4,36 gegen Persistenz; bedingter
   Batch-Kopf auf identischer kontextinferierter Repräsentation erreicht 9,49e-8 rad² (5/5 besser).

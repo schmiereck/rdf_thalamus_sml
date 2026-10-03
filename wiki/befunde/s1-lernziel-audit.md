@@ -123,6 +123,10 @@ rechnerübergreifende/physische Übertragungsbehauptung aus diesen einzelnen Mes
 
 # Entscheidung und nächster Schritt
 
+Fortsetzung: Das [lokale Online-Kopftraining](/befunde/s1-online-kopf.md) ist inzwischen
+abgeschlossen und besteht das Diagnosetor auch ohne Batch-Warmstart. Die folgende Planung
+beschreibt den Stand vor diesem Lauf; neue unabhängige Rollouts bleiben offen.
+
 Der Forschungszweig direkte Servo-Vorhersage bleibt offen, jetzt mit konkretem Lernsignalnachweis.
 Nächster kontrollierter Schritt: Den bedingten Kopf auf denselben f(z(x))-Trainingsmerkmalen
 mit einer lokalen Online-Lernregel trainieren, mit der Batch-Lösung als Referenz. Dadurch
