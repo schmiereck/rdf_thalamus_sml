@@ -2,6 +2,10 @@
 
 ## 2026-10-03
 
+* **S1-Lernzielvergleich festgelegt**: [Vertrag](/messungen/s1-lernziel-audit.md).
+  Konvergiertes Training gegen analytische lineare Referenzen, mit/ohne Nullprior;
+  bedingte Köpfe und direkter linearer Vergleich trennen verbleibende Hypothesen.
+
 * **S1 mit korrekter Energie-Inferenz abgeschlossen**: [Befund](/befunde/s1-energie-inferenz.md).
   128 Schritte im Test zu kurz; lange Inferenz und unabhängiger reduzierter Solver stimmen
   auf 2,01e-8 rad überein. MSE 0,000599 gegen 0,000138 Persistenz, 2/5 Gelenke besser.
