@@ -1,5 +1,11 @@
 # Chronik
 
+## 2026-10-03
+
+* **Isolierte Energie-Inferenz gebaut und validiert**: [Vertrag](/messungen/s1-energie-inferenz.md).
+  18 unabhängige Gradientenkontrollen, analytische Inferenz und Lebenszyklus bestehen.
+  S1-Rezept vor dem Lauf festgelegt; Claudes Normalisierungsfund 59c85c4 berücksichtigt.
+
 ## 2026-10-02
 
 * **PC-Engine mathematisch geprüft**: [Audit](/befunde/pc-engine-mathematik-audit.md)
