@@ -145,6 +145,11 @@ lernt direkt aus den Phasen auf Encoder-/Kamerapaaren. Sein Vorhersagetor ist ve
 (Test-MSE 1,28× Mittelbild). Positionsinformation bleibt erhalten. Vor weiterem Training
 Abdeckung und Generalisierung auditieren; autonome Steuerung bleibt offen.
 
+**Audit abgeschlossen:** [B1-Abdeckung](/befunde/s1-koerpermodell-abdeckung.md): beide Klauen
+in 145/224 Posen außerhalb der Kamera; dünne Gelenkraumabdeckung erklärt den Testfehler nicht
+allein. Nächster Schritt: geeigneten festen Körperblick am Einrichtungs-/Trainingssatz prüfen,
+danach neuer B2-Vertrag mit frischen Testposen. Kein Nachtraining auf B1.
+
 - [ ] Bei unbekannter Last/Daempfung autonom lernend gegen denselben eingefrorenen Motor
   vergleichen, mit identischem Startzustand und ohne neue Teacher-Labels.
 - [ ] Danach ein Segment der ACT23-Handlung ersetzen, etwa Anfahrt im freien Raum. Klar

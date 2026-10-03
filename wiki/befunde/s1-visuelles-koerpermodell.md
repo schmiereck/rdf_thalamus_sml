@@ -96,6 +96,11 @@ und prüfbar gemacht, aber in dieser ersten Ausführung noch nicht bestanden.
 
 # Artefakte
 
+**Nachfolgender Audit:** [Kamera- und Gelenkraumabdeckung](/befunde/s1-koerpermodell-abdeckung.md)
+ist geprüft. Beide Klauen liegen in 145/224 Posen außerhalb des Bildes. Der RGB-Fehler bleibt
+auch innerhalb der Trainingshülle über dem Mittelbild; Sichtbarkeit erklärt ihn nicht allein.
+Nächster Schritt ist ein geeigneter Körperblick vor einem neuen Trainingsvertrag.
+
 `log/s1-visual-body-20261003/`: Rohbilder, gleichzeitig gemessene q/qvel, Gelenkphasen,
 Zeitstempel und Zielbilder in `train401/samples.npz` und `test409/samples.npz`; zugehörige
 Manifeste enthalten SHA256. `fit/model.npz`, `shuffled-model.npz`, `predictions.npz`,

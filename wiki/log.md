@@ -2,6 +2,16 @@
 
 ## 2026-10-03
 
+* **B1-Abdeckung geprüft**: [Befund](/befunde/s1-koerpermodell-abdeckung.md).
+  224/224 RGB-/Encoder-Replays exakt; in 145 Posen liegen beide Klauen außerhalb der Kamera,
+  beide sichtbar nur 20/224. 36/64 Testposen außerhalb der Trainingshülle, aber selbst innerhalb
+  Fehlerfaktor 1,12482 gegen Mittelbild. Kein Nachtraining. Erst Körperblick/Erhebung korrigieren,
+  dann neuer B2-Vertrag mit frischen Testposen; bloße Auflösungserhöhung behebt den Blickfehler nicht.
+
+* **B1-Abdeckungsaudit festgelegt**: [Vorgehen](/messungen/s1-koerpermodell-abdeckung.md).
+  Vorhandene 224 Posen ohne Fit: nächste Gelenknachbarn und konvexe Hülle, danach RGB-identischer
+  Replay mit ausschließlich evaluativer Geometriesegmentierung und Kameraprojektion.
+
 * **B1 ausgeführt, Vorhersagetor verfehlt**: [Befund](/befunde/s1-visuelles-koerpermodell.md).
   Erster lernender Positions-Latent-Verbraucher, 160 Trainings-/64 neue Testposen: Bild-MSE
   Faktor 1,28015 gegen Mittelbild; variable Pixel 1,28056, vertauschte Kontrolle 0,37562.
