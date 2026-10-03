@@ -7,6 +7,11 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-10-03
 
+* **Anlage**: [Die Schliess-Entscheidung offline](/befunde/schliessen-offline.md) - Schritt 3,
+  Pruefstand: die Riegel-Lesart "schliesst zu hoch" ist ein Zaehlartefakt; echt sind ein 4-mm-Band
+  und ein im Zustand unsichtbarer Stillstand. Neue Schalter `ACT16_IMIT_AUSGEFUEHRT`,
+  `ACT23_IMIT_UMETIKETT`, Zaehler `frueh zu`.
+
 * **Anlage**: [Der privilegierte Rueckfall rettet nichts](/befunde/rueckfall-privileg-gemessen.md) -
   Schritt 2: Rueckfall sichtbar gemacht und gemessen (1/400 Namensbetrieb, 2/200 Eigenschaften,
   1 Lieferung gerettet). Zweiter Kanal (Wiederfinden in der Episode) gefunden und geschlossen.

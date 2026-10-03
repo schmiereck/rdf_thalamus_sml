@@ -3040,6 +3040,24 @@ def run_self_learning_steering(headless=False):
     except Exception as _e:
         print(f"  [Persistenz] Koerpermodell-Pruefung uebersprungen: {_e}", flush=True)
     runtime = _loaded["runtime"] if _loaded is not None else RuntimePolicyModule(rng=np.random.default_rng(4))
+    # SELBST-IMITATION BEREINIGEN (ACT23_IMIT_UMETIKETT, Vorgabe 0).  Der Puffer traegt die Wuensche
+    # der Policy VOR dem Riegel (s. pc_act16.IMIT_AUSGEFUEHRT).  Einmalig beim Laden: wo der Riegel
+    # gegriffen HAETTE -- Hand ueber dem ruhenden Objekt, Klaue offen, mehr als 12 mm ueber dem
+    # Greifpunkt --, wird das Etikett auf "offen" gesetzt, also auf das, was ausgefuehrt wurde.
+    # Danach einmal nachtrainieren.  Trainingsdaten-Geruest, keine Laufzeitregel.
+    if os.environ.get("ACT23_IMIT_UMETIKETT", "0") == "1" and getattr(runtime, "_Xi", None):
+        _n = 0
+        for _x, _y in zip(runtime._Xi, runtime._Yi):
+            _x = np.asarray(_x, float)
+            _hg = max(0.0, float(_x[14]) - act16.GRASP_Z) if len(_x) > 14 else 0.0
+            _gz = float(_x[9]) + act16.GRASP_OFFSET + _hg
+            if (float(np.linalg.norm(_x[0:2] - _x[3:5])) < act16.NEAR and float(_x[5]) < 0.02
+                    and float(_x[8]) > 0.45 and float(_x[2]) > _gz + 0.012 and float(_y[3]) < act16.J5_OPEN):
+                _y[3] = act16.J5_OPEN; _n += 1
+        print(f"  [Selbst-Imitation] {_n} von {len(runtime._Xi)} Etiketten bereinigt (vom Riegel "
+              f"abgefangene Schliesswuensche -> offen); Policy wird nachtrainiert", flush=True)
+        if _n:
+            runtime.train(epochs=400)
     _n_rt = runtime.ensure_state_dim(13) if hasattr(runtime, "ensure_state_dim") else 0
     if _n_rt:
         # TASTSINN-Migration (11 -> 13): das Netz wird in ensure_state_dim mit NULL-Spalten

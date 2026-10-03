@@ -226,6 +226,13 @@ CLOSE_GUARD = os.environ.get("ACT16_CLOSE_GUARD", "1") == "1"   # in the grasp a
 #   SLOWLY, so the policy/reflex would otherwise close ~15mm too HIGH and miss -- the hand CAN reach the object,
 #   it is just not DOWN yet (verified by a pure forced-open reach test).  Mirrors the teacher's own close rule
 #   (hz <= grasp_z + 0.012), now ENFORCED on the learned policy too.  Disable with ACT16_CLOSE_GUARD=0.
+# SELBST-IMITATION AUS DEM AUSGEFUEHRTEN statt aus dem Wunsch (ACT16_IMIT_AUSGEFUEHRT, Vorgabe 0).
+# policy_log_fn bekam bisher die Ausgabe der Policy VOR Reflex und Riegel.  Gemessen am Puffer
+# (wiki/befunde/schliessen-offline.md): die Selbst-Imitation etikettiert 12-16 mm ueber dem
+# Greifpunkt zu 48 % "schliessen", der Teacher zu 0 % -- abgefangene Wuensche wurden als Vorbild
+# gelernt.  Mit dem Schalter geht das AUSGEFUEHRTE (aim, j5) nach den Regeln in den Puffer: die
+# Regel stuetzt dann die Trainingsdaten, wie laufzeit-regeln.md es erlaubt.
+IMIT_AUSGEFUEHRT = os.environ.get("ACT16_IMIT_AUSGEFUEHRT", "0") == "1"
 RULEDIAG = os.environ.get("ACT16_RULEDIAG", "0") == "1"      # RIEGEL-DIAGNOSE (Vorgabe AUS): je Episode
 #   zaehlen, wie oft Reflex und Schliess-Riegel die Entscheidung der Policy tatsaechlich UEBERSCHRIEBEN
 #   haben -- und, davon getrennt, wie oft sie es GETAN HAETTEN.  Anlass: beide sind Laufzeitregeln
@@ -585,7 +592,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         wrist_hold = None                                    # last aligned joint_4 (held through the grip)
         guard_minz = 1.0; guard_stall = 0                    # close-guard: deepest descent + stall counter
         run_combined._rule = {"schritte": 0, "reflex": 0, "reflex_wuerde": 0,
-                              "riegel": 0, "riegel_wuerde": 0}   # RIEGEL-DIAGNOSE (s. RULEDIAG)
+                              "riegel": 0, "riegel_wuerde": 0,   # RIEGEL-DIAGNOSE (s. RULEDIAG)
+                              "frueh": 0}                        # ECHTER Schliesswunsch zu hoch (j5 < 0,45)
         run_combined._glaub = {"n": 0, "wahrn": 0.0, "orts": 0.0, "orts_max": 0.0,   # GLAUBENS-DIAGNOSE
                                "hoehe": 0.0, "phantom": 0, "phantom_ab": None,
                                "anfahrt": 0, "anfahrt_orts": 0.0,
@@ -1009,10 +1017,14 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             # aim).  Decoupled, the wrist is independently learnable/planner-optimisable (stage 3).  Default None
             # -> the teacher's heuristic WRIST_ALIGN, exactly as before.
             policy_wrist = float(wrist_fn(state)) if wrist_fn is not None else None
+            _imit_out = None
             if policy_fn is not None and not route_carry:     # planned waypoints (FSM servo); the LEARNED
                 out = policy_fn(state); aim = np.asarray(out[:3], float); j5 = float(out[3]); via = "policy"
                 if policy_log_fn is not None:                  # SELF-IMITATION (act23 step 3): log the state
-                    policy_log_fn(state, np.asarray(out, float))   # + the action the POLICY ITSELF drove
+                    if IMIT_AUSGEFUEHRT:                       #   (s. IMIT_AUSGEFUEHRT: erst nach den Regeln)
+                        _imit_out = np.asarray(out, float).copy()
+                    else:
+                        policy_log_fn(state, np.asarray(out, float))   # + the action the POLICY ITSELF drove
             elif route_carry:                                 # policy carries to a STATIC goal only, so it
                 via = "route"                                 # cannot follow side-waypoints -> servo the route
             # (#4) GRASP REFLEX -- active-inference framing: once the hand is positioned OVER the object the
@@ -1069,6 +1081,9 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                             _t["close_p"] = float(max(press, 0.0))
                     else:                                      # Druck, den der OFFENE Greifer schon spuert
                         _t["p_max_offen"] = max(_t["p_max_offen"], float(max(press, 0.0)))
+                if hz > gz + 0.012 and j5 < 0.45 and np.linalg.norm(hxy - c) < NEAR:
+                    run_combined._rule["frueh"] += 1          # der Riegel zaehlt schon 0,53 statt 0,54 --
+                    #   hier nur ein ECHTER Schliesswunsch (s. wiki/befunde/schliessen-offline.md)
                 if hz > gz + 0.012 and guard_stall < HOVER_LIMIT:   # closes (the reflex) and never DEADLOCKS open
                     if j5 < J5_OPEN:                          # nur zaehlen, wenn die Klaue WIRKLICH
                         run_combined._rule["riegel_wuerde"] += 1   # aufgerissen wuerde -- sonst zaehlte
@@ -1078,6 +1093,9 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                         j5 = max(j5, J5_OPEN)
             else:
                 guard_minz = 1.0; guard_stall = 0             # not in the grasp approach -> reset the tracker
+            if _imit_out is not None:                         # Selbst-Imitation: das AUSGEFUEHRTE
+                _imit_out[:3] = aim; _imit_out[3] = j5
+                policy_log_fn(state, _imit_out)
             if log_fn is not None:                            # log the EXECUTED (state -> subgoal)
                 log_fn(state, np.asarray(aim, float), float(j5))
             if macro_log_fn is not None:                      # EXECUTED step + the FSM phase (for macro
@@ -1238,7 +1256,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             _r = run_combined._rule                            # fuehrt run_combined stumm, und genau dort
             print(f"    [Riegel] Schritte {_r['schritte']:4d} | Reflex {_r['reflex']:3d}"   # soll gezaehlt
                   f" (haette {_r['reflex_wuerde']:3d}) | Riegel {_r['riegel']:3d}"          # werden
-                  f" (haette {_r['riegel_wuerde']:3d})", flush=True)
+                  f" (haette {_r['riegel_wuerde']:3d}) | frueh zu {_r['frueh']:3d}", flush=True)
         if GLAUBDIAG:
             _g = run_combined._glaub
             _m = max(1, _g["n"]); _a = max(1, _g["anfahrt"])

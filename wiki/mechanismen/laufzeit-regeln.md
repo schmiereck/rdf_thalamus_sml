@@ -134,3 +134,7 @@ Offen: Etiketten aus dem Tasten; `obj_h` in Buchhaltung, Kredit und Riegel.
 **Schritt 2 erledigt (2026-10-03):** [Der privilegierte Rueckfall rettet nichts](/befunde/rueckfall-privileg-gemessen.md) -
 `ACT23_RUECKFALL=aufgeben` ist Vorgabe; nicht gefunden heisst kein Versuch, auch beim Wiederfinden.
 Naechster Schritt: die Schliess-Entscheidung (`CLOSE_GUARD`/`REFLEX`).
+
+**Schritt 3, Pruefstand (2026-10-03):** [Die Schliess-Entscheidung offline](/befunde/schliessen-offline.md) -
+**korrigiert die Lesart oben** ("die Policy kommandiert das Schliessen zu hoch, 29 %"): das war
+ueberwiegend ein Zaehlartefakt des Riegel-Zaehlers. Echt: ein 4-mm-Band und der Stillstand.
