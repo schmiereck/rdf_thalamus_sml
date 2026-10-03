@@ -116,6 +116,11 @@ Eigenes W-Checkpoint-NPZ unter `log/s1-energy-20261003/weights.npz`; Logs bleibe
 
 # Entscheidung
 
+Fortsetzung: Der [Lernziel-/Nullprior-Audit](/befunde/s1-lernziel-audit.md) ist abgeschlossen.
+Konvergiertes Training allein behebt den Fehler kaum; ein bedingter Batch-Kopf auf denselben
+Kontextmerkmalen erschließt dagegen das Vorhersagesignal. Die folgenden Entscheidungen
+beschreiben den Stand vor diesem zusätzlichen Vergleich.
+
 * Die isolierte mathematische Referenz wird behalten, aber nicht automatisch in ACT23 eingebaut.
 * S1 erhält keine Motorpolicy-Freigabe: das festgelegte Leistungstor ist verfehlt.
 * Kein weiteres blindes Verlängern der Testinferenz: der unabhängige Solver bestätigt deren Ergebnis.

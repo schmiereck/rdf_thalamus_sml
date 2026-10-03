@@ -118,7 +118,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 | D6 | Curriculum fuer einen einzelnen lernenden Arm | D5 | offen | - |
 | D7 | Verteilung auf getrennte Rechner | D1; Integration nach D5 | offen | - |
 | S0 | Semantik und Messaufgabe fuer direkte Servosteuerung | D0 | in Arbeit | [S0-Servogrundaudit](/befunde/s0-servo-grundaudit.md): Aktuatorvertrag für fünf direkte, druckfreie Gelenkkanäle geprüft; Lernaufgabe und Kontrolle noch offen |
-| S1 | Motorisches Lernsignal und autonomer kurzer Regelkreis | S0, D1 | in Arbeit | [Isolierte korrekte Inferenz](/befunde/s1-energie-inferenz.md) validiert; erneuter S1-Vergleich 4,35-facher Persistenzfehler, durch unabhängigen Solver bestätigt. Keine Motorpolicy; Lernziel/Nullprior und Trainingskonvergenz als nächste kontrollierte Untersuchung offen |
+| S1 | Motorisches Lernsignal und autonomer kurzer Regelkreis | S0, D1 | in Arbeit | [Lernziel-Audit](/befunde/s1-lernziel-audit.md): bedingter Batch-Kopf erschließt auf gleichem Encoder Vorhersagesignal (5/5 Gelenke besser), generatives Training weiter negativ. Als Nächstes lokale Online-Lernregel auf gleichen Merkmalen; unabhängige neue Rollouts vor Freigabe, noch keine Motorpolicy |
 | S2 | Eigene Anpassung und ACT23-Integration | S1 | offen | - |
 | S3 | Optional: Geschwindigkeit oder Drehmoment statt Winkelvorgabe | S2, eigener Befund zum Bedarf | offen | - |
 | F0 | Vorhandene Netzzustaende fuer neue Wahrnehmungsaufgaben pruefen | keine | zurückgestellt | D0b-F1a/F1b und feste Hubantwort verworfen; ein neuer F0-Zweig braucht eine eigenständige Repräsentationshypothese und Vertrag |

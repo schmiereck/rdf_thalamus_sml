@@ -4,7 +4,7 @@ title: S1 - Lernziel, Nullprior und konvergiertes Training trennen
 description: Drei festgelegte generative Varianten, bedingte Köpfe mit identischer Parametrisierung und direkte lineare Referenz.
 tags: [s1, pc-cvnn, audit, lernziel]
 status: stable
-evidenz: vermutung
+evidenz: gemessen
 ebene: pruefstand
 sources:
   - resource: /befunde/s1-energie-inferenz.md
@@ -60,3 +60,18 @@ Nicht beste Variante auswählen und weiter tunen. Bei Befund erst neuen Vertrag 
 
 Eigenes Ergebnisverzeichnis und NPZ, keine PKL oder Simulation; ein BLAS-Thread.
 Vor Start 4,06 GiB RAM frei bei zwei aktiven fremden Python-Läufen.
+
+# Ausführen und Ergebnis
+
+```powershell
+$env:OPENBLAS_NUM_THREADS='1'
+$env:OMP_NUM_THREADS='1'
+& ..\rdf_thalamus_sml\.venv\Scripts\python.exe src\pc_cvnn\act23_s1_objective_audit.py --output-dir log\s1-objective-neu
+& ..\rdf_thalamus_sml\.venv\Scripts\python.exe src\pc_cvnn\test_s1_objective_audit.py --run-dir log\s1-objective-neu --output log\s1-objective-neu\leakage-controls.json
+```
+
+Der zweite Befehl ist die nachträglich ergänzte Zielvergiftungs-/Replay-Kontrolle und eine
+Negativkontrolle mit vertauschten Trainingszielen. Er verändert keine Modelle oder Quelldaten.
+Neue Ergebnisverzeichnisse/-dateien erforderlich. Abbruch bei verfehltem Konvergenztor.
+Abgeschlossener [Befund](/befunde/s1-lernziel-audit.md): generatives Training weiter negativ,
+bedingte Köpfe erschließen das Signal; Prior entfernen allein degeneriert.

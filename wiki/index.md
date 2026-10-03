@@ -31,6 +31,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 # Befunde
 
+* [S1: Lernziel-Audit abgeschlossen](befunde/s1-lernziel-audit.md) - konvergiertes generatives Training weiter negativ; bedingter Kopf auf gleichem Encoder schlägt Persistenz auf 5/5 Gelenken, Nullprior entfernen degeneriert
 * [S1: Lernziel-Audit](messungen/s1-lernziel-audit.md) - konvergiertes Training, lineare Referenz, Nullprior und bedingter Kopf in festem Diagnosevergleich
 * [S1: Ergebnis der korrekten Energie-Inferenz](befunde/s1-energie-inferenz.md) - Mathematik/Lebenszyklus bestehen; unabhängiger Solver bestätigt 4,35-fachen Persistenzfehler, kein Motorpolicy-Tor
 * [S1: isolierte Energie-Inferenz](messungen/s1-energie-inferenz.md) - geprüfte mathematische Referenz und Lebenszyklus; festes Rezept für den erneuten Offlinevergleich

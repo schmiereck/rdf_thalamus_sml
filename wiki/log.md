@@ -2,6 +2,12 @@
 
 ## 2026-10-03
 
+* **S1-Vorhersagesignal erschlossen**: [Lernziel-Audit](/befunde/s1-lernziel-audit.md).
+  Konvergiertes generatives Training bleibt bei Faktor 4,36 gegen Persistenz; bedingter
+  Batch-Kopf auf identischer kontextinferierter Repräsentation erreicht 9,49e-8 rad² (5/5 besser).
+  Zielvergiftung/Replay bestehen; Nullprior entfernen ergibt perfekte Rekonstruktion ohne
+  Lernen. Nächster Schritt: gleiche bedingte Merkmale mit lokaler Online-Lernregel.
+
 * **S1-Lernzielvergleich festgelegt**: [Vertrag](/messungen/s1-lernziel-audit.md).
   Konvergiertes Training gegen analytische lineare Referenzen, mit/ohne Nullprior;
   bedingte Köpfe und direkter linearer Vergleich trennen verbleibende Hypothesen.
