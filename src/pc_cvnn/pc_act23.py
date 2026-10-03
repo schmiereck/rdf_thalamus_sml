@@ -7088,7 +7088,18 @@ def run_self_learning_steering(headless=False):
 
         def _perceive_vorblick(cmd):
             _r, _vorblick["r"] = _vorblick["r"], None
-            return _r if _r is not None else perceive(cmd)
+            if _r is not None:
+                return _r
+            # JEDER SPAETERE AUFRUF ist das Wiederfinden mitten in der Episode (run_combined,
+            # "stochern", wenn der Servo das Objekt verliert).  Auch dort lieferte der Rueckfall
+            # die WAHRE Lage -- ein zweiter Kanal fuer dasselbe Privileg (gemessen 2026-10-03:
+            # Arm "aufgeben" bekam so trotzdem die Wahrheit).  Mit RUECKFALL=aufgeben heisst ein
+            # gescheitertes Wiederfinden: nichts Neues, die Hand behaelt ihren Glauben.
+            _vorblick["fehlt"] = None
+            _r = perceive(cmd)
+            if RUECKFALL == "aufgeben" and _vorblick["fehlt"] is not None:
+                return None, None, None
+            return _r
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=_perceive_vorblick, track_fn=track_fn,
                            policy_fn=(_policy_ueber_ports if use_net else None),
