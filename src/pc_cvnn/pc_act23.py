@@ -962,6 +962,18 @@ HOEHE_TASTEN = os.environ.get("ACT23_HOEHE_TASTEN", "0") == "1"
 # Etiketten: privilegierte Geometrie (Geruest, s. laufzeit-regeln.md).  Ersetzt wird nur, was die
 # POLICY sieht -- Buchhaltung, Kredit und Riegel bleiben, s. pc_act16.GROESSE_FN.
 GROESSE_SEHEN = os.environ.get("ACT23_GROESSE_SEHEN", "1") == "1"
+# DER PRIVILEGIERTE WAHRNEHMUNGS-RUECKFALL (ACT23_RUECKFALL, Vorgabe "privileg").  Findet perceive
+# das kommandierte Objekt nicht (Formklasse/Farbklasse/Eigenschaften treffen nichts), nahm es bisher
+# still die WAHRE Lage aus MuJoCo.  Schritt 2 aus wiki/mechanismen/laufzeit-regeln.md.
+#   privileg = wie bisher, aber jetzt IMMER protokolliert ("[Rueckfall] ...")
+#   aufgeben = nicht gefunden heisst: kein Versuch.  Der Arm bewegt sich nicht, gelernt wird nichts,
+#              die Episode zaehlt als nicht geliefert.  Die Differenz der beiden Arme ist genau das,
+#              was das Privileg heute einbringt.
+# Die Wahrnehmung laeuft dafuer in BEIDEN Faellen einmal VOR run_combined (s. run_one, _vorblick)
+# und wird dort wiederverwendet -- sonst haette nur ein Arm einen zusaetzlichen Blick.
+RUECKFALL = os.environ.get("ACT23_RUECKFALL", "privileg").strip().lower()
+if RUECKFALL not in ("privileg", "aufgeben"):
+    raise SystemExit(f"ACT23_RUECKFALL={RUECKFALL!r}: erlaubt sind privileg | aufgeben")
 
 # =========================================================================================
 # STUFE 4: DIE RELATION AUCH IN DER ADRESSE (ACT23_ADR_RELATION, Vorgabe 0).
@@ -5913,6 +5925,15 @@ def run_self_learning_steering(headless=False):
               f"{1000 * _ob:.1f}mm -> Greifhoehe {1000 * _gz:.1f}mm", flush=True)
         return _oben_d, _gz
 
+    _vorblick = {"fehlt": None, "r": None}
+
+    def _rueckfall(body, method, grund):
+        """Jeder privilegierte Rueckfall wird gemerkt und IMMER protokolliert (s. RUECKFALL)."""
+        _vorblick["fehlt"] = (body, method, grund)
+        print(f"    [Rueckfall] {body} ({method}): {grund} -> "
+              + ("WAHRE Lage (privilegiert)" if RUECKFALL == "privileg" else "NICHT GEFUNDEN"),
+              flush=True)
+
     def perceive(cmd):
         _l, body, method = state.selected()
         if ADR_RELATION:
@@ -6027,9 +6048,7 @@ def run_self_learning_steering(headless=False):
                     perception.seed_priv = False   # ehrlich wahrgenommen, nur unschaerfer adressiert
                     return _off(_gp(_det, body)), None, "grasp"
                 _pos = None                        # Abstufung hat nicht getragen -> wie bisher
-            if os.environ.get("ACT23_DEBUG", "0") == "1":
-                print(f"    [dbg] {body}: EIGENSCHAFTEN ({_f}, {_fo}, {_g}) treffen nichts "
-                      f"-> privilegierter Rueckfall", flush=True)
+            _rueckfall(body, method, f"Eigenschaften ({_f}, {_fo}, {_g}) treffen nichts")
             _pw = sim.obj_pos(body)[:2]
             if KEIM_RUECKFALL:
                 # Ohne Keim startet der Tracker blind auf dem wahrscheinlichsten gleichklassigen
@@ -6068,8 +6087,7 @@ def run_self_learning_steering(headless=False):
                           f"{np.round(_off(_gp(det, body)), 3).tolist()} "
                           f"(wahr {np.round(sim.obj_pos(body)[:2], 3).tolist()})", flush=True)
                 return _off(_gp(det, body)), None, "grasp"
-            if os.environ.get("ACT23_DEBUG", "0") == "1":
-                print(f"    [dbg] {body}: Formklasse NICHT gefunden -> privilegierter Rückfall", flush=True)
+            _rueckfall(body, method, f"Formklasse '{state.SHAPE_KEY.get(body)}' nicht gefunden")
             return _off(sim.obj_pos(body)[:2]), None, "grasp"  # perception missed -> privileged fallback
         if method in ("long", "color"):                        # STAGE 3 de-crutching, now for the CUBES too:
             # localise by the SELF-LABELLED colour class (bound at discovery) instead of the trained vc
@@ -6103,6 +6121,8 @@ def run_self_learning_steering(headless=False):
                         print(f"    [dbg] {body} via Farbklasse '{cname}' lokalisiert", flush=True)
                     return _off(best["grasp_xy"]), None, "grasp"
             if method == "long":
+                _rueckfall(body, method, f"Farbklasse {cname!r} " + ("ungeboren" if cname is None
+                                                                     else "nicht im Bild"))
                 p0 = np.asarray(sim.obj_pos(body)[:2], float)  # fallback: class unborn / not in sight
                 try:
                     perception.publish_seed(None, p0,
@@ -7055,8 +7075,22 @@ def run_self_learning_steering(headless=False):
                   f"  aufgabe={_aufg_h}", flush=True)
             if os.environ.get("ACT23_ABDRUCK_TEXT", "0") == "1":   # Messausgabe: was ging ein
                 print("    [Abdruck-Text] " + "|".join(_aufg), flush=True)
+        # DER VORBLICK (s. RUECKFALL): einmal wahrnehmen, BEVOR run_combined startet.  Das Ergebnis
+        # geht unveraendert an run_combined (dessen perceive_fn liefert es beim ersten Aufruf aus
+        # dem Merker).  Mit RUECKFALL=aufgeben endet die Episode hier, wenn nichts gefunden wurde.
+        _vorblick["fehlt"] = None
+        _vorblick["r"] = perceive(state.cmd_fn(None))
+        if RUECKFALL == "aufgeben" and _vorblick["fehlt"] is not None:
+            _vorblick["r"] = None
+            print(f"    [Nicht gefunden] {body}: kein Versuch, die Episode zaehlt als nicht geliefert "
+                  f"({_vorblick['fehlt'][2]})", flush=True)
+            return False, float("nan")
+
+        def _perceive_vorblick(cmd):
+            _r, _vorblick["r"] = _vorblick["r"], None
+            return _r if _r is not None else perceive(cmd)
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
-                           goal_fn=state.goal_fn, perceive_fn=perceive, track_fn=track_fn,
+                           goal_fn=state.goal_fn, perceive_fn=_perceive_vorblick, track_fn=track_fn,
                            policy_fn=(_policy_ueber_ports if use_net else None),
                            log_fn=(None if use_net else choreo_log),
                            teacher_log_fn=(choreo_log if use_net else None),
