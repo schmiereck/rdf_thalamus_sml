@@ -5,6 +5,13 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-10-04
+
+* **Widerlegung**: [Riegel und Reflex entfernt](/befunde/riegel-reflex-entfernt.md) - gepaart,
+  8 Seeds x 50: an 196/400, aus 196/400, Intervall [-7, +7]. Die Riegel-Messung vom 25.08.
+  ("nicht abschalten") gilt fuer den heutigen Zustand nicht mehr. Riegel und Reflex sind im
+  Netzbetrieb aus (`ACT23_REGELN_NETZ`, Vorgabe 0).
+
 ## 2026-10-03
 
 * **Anlage**: [Die Schliess-Entscheidung offline](/befunde/schliessen-offline.md) - Schritt 3,

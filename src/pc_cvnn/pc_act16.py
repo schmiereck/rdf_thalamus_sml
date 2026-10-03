@@ -1081,9 +1081,11 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                             _t["close_p"] = float(max(press, 0.0))
                     else:                                      # Druck, den der OFFENE Greifer schon spuert
                         _t["p_max_offen"] = max(_t["p_max_offen"], float(max(press, 0.0)))
-                if hz > gz + 0.012 and j5 < 0.45 and np.linalg.norm(hxy - c) < NEAR:
+                if (hz > gz + 0.012 and j5 < 0.45 and np.linalg.norm(hxy - c) < NEAR
+                        and float(sim.d.qpos[sim.jqadr["joint_5"]]) > 0.45):
                     run_combined._rule["frueh"] += 1          # der Riegel zaehlt schon 0,53 statt 0,54 --
-                    #   hier nur ein ECHTER Schliesswunsch (s. wiki/befunde/schliessen-offline.md)
+                    #   hier nur ein ECHTER Schliesswunsch bei noch OFFENER Klaue (die erste Fassung
+                    #   zaehlte auch das leere Anheben nach einem Fehlgriff mit; s. schliessen-offline.md)
                 if hz > gz + 0.012 and guard_stall < HOVER_LIMIT:   # closes (the reflex) and never DEADLOCKS open
                     if j5 < J5_OPEN:                          # nur zaehlen, wenn die Klaue WIRKLICH
                         run_combined._rule["riegel_wuerde"] += 1   # aufgerissen wuerde -- sonst zaehlte

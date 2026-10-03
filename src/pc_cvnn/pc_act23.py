@@ -975,6 +975,14 @@ GROESSE_SEHEN = os.environ.get("ACT23_GROESSE_SEHEN", "1") == "1"
 # Episoden (er rettete 1 Lieferung), im Eigenschaftsbetrieb 2 Rueckfall-Episoden in 200, beide auch
 # mit Privileg gescheitert (Quote 111 gegen 114 von 200).  Das Privileg rettet praktisch nichts.
 RUECKFALL = os.environ.get("ACT23_RUECKFALL", "aufgeben").strip().lower()
+# RIEGEL UND REFLEX NUR NOCH IM TRAINING (ACT23_REGELN_NETZ, Vorgabe 0 seit 2026-10-04).
+# Mit Choreo "netz" faehrt die gelernte Policy allein -- CLOSE_GUARD und REFLEX sind aus.  Mit
+# Choreo "fsm" (der Teacher, der die Trainingsdaten erzeugt) bleiben sie als Geruest an.  Das
+# ist das act21-Prinzip ACT21_RULES_TRAIN_ONLY, das act23 nie mitgemacht hatte.
+# GEMESSEN (wiki/befunde/riegel-reflex-entfernt.md, 8 Seeds x 50, gepaart): an 196/400, aus
+# 196/400, 95 %-Intervall der Differenz [-7, +7] -- das vorab festgelegte Kriterium (Schaden
+# > 10 Punkte ausgeschlossen) ist erfuellt.  ACT23_REGELN_NETZ=1 = altes Verhalten.
+REGELN_NETZ = os.environ.get("ACT23_REGELN_NETZ", "0") == "1"
 if RUECKFALL not in ("privileg", "aufgeben"):
     raise SystemExit(f"ACT23_RUECKFALL={RUECKFALL!r}: erlaubt sind privileg | aufgeben")
 
@@ -5947,6 +5955,10 @@ def run_self_learning_steering(headless=False):
         return _oben_d, _gz
 
     _vorblick = {"fehlt": None, "r": None}
+    _regeln_basis = (bool(act16.CLOSE_GUARD), bool(act16.REFLEX))   # wie beim Start eingestellt
+    print(f"  [Regeln] Riegel/Reflex: Teacher-Betrieb {'an' if all(_regeln_basis) else _regeln_basis}, "
+          f"Netzbetrieb {'an (ACT23_REGELN_NETZ=1)' if REGELN_NETZ else 'AUS -- die Policy entscheidet allein'}",
+          flush=True)
 
     def _rueckfall(body, method, grund):
         """Jeder privilegierte Rueckfall wird gemerkt und IMMER protokolliert (s. RUECKFALL)."""
@@ -7099,6 +7111,10 @@ def run_self_learning_steering(headless=False):
         # DER VORBLICK (s. RUECKFALL): einmal wahrnehmen, BEVOR run_combined startet.  Das Ergebnis
         # geht unveraendert an run_combined (dessen perceive_fn liefert es beim ersten Aufruf aus
         # dem Merker).  Mit RUECKFALL=aufgeben endet die Episode hier, wenn nichts gefunden wurde.
+        # REGELN NUR IM TRAINING (s. REGELN_NETZ): im Netzbetrieb aus, im Teacher-Betrieb wie
+        # eingestellt (ACT16_CLOSE_GUARD / ACT16_REFLEX, Vorgabe an).
+        act16.CLOSE_GUARD = _regeln_basis[0] and (REGELN_NETZ or not use_net)
+        act16.REFLEX = _regeln_basis[1] and (REGELN_NETZ or not use_net)
         _vorblick["fehlt"] = None
         _vorblick["r"] = perceive(state.cmd_fn(None))
         if RUECKFALL == "aufgeben" and _vorblick["fehlt"] is not None:

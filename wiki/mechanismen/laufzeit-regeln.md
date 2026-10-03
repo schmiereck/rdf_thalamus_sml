@@ -60,6 +60,10 @@ Regeln. Zur Laufzeit entscheidet also das gelernte `MotorModule` allein.
 
 # Der offene Fall (act23)
 
+> **WIDERLEGT fuer den heutigen Zustand (2026-10-04):** [Riegel und Reflex entfernt](/befunde/riegel-reflex-entfernt.md) -
+> beide aus kostet gemessen nichts (196/400 gegen 196/400, Intervall [-7, +7]). Die Entwoehnung ist
+> nachgeholt: im Netzbetrieb aus, im Teacher-Betrieb Geruest. Der Abschnitt bleibt als Herkunft.
+
 **act23 hat die Entwoehnung nie mitgemacht** (geprueft 2026-08-25 am Code):
 `ACT21_RULES_TRAIN_ONLY` steht ausschliesslich in `pc_act21.py`; in `pc_act23.py` kommt
 `CLOSE_GUARD` nur in einem Kommentar vor ("guards stay on by default"). In der act23-GUI laufen
@@ -138,3 +142,7 @@ Naechster Schritt: die Schliess-Entscheidung (`CLOSE_GUARD`/`REFLEX`).
 **Schritt 3, Pruefstand (2026-10-03):** [Die Schliess-Entscheidung offline](/befunde/schliessen-offline.md) -
 **korrigiert die Lesart oben** ("die Policy kommandiert das Schliessen zu hoch, 29 %"): das war
 ueberwiegend ein Zaehlartefakt des Riegel-Zaehlers. Echt: ein 4-mm-Band und der Stillstand.
+
+**Schritt 3 erledigt (2026-10-04):** [Riegel und Reflex entfernt](/befunde/riegel-reflex-entfernt.md) -
+im Netzbetrieb aus (`ACT23_REGELN_NETZ`, Vorgabe 0). Offen: das 4-mm-Band und der unsichtbare
+Stillstand; `SOFT_RELEASE`, `WRIST_ALIGN`, `PHASE_STALL`, `MAX_REACQ` laufen weiter.
