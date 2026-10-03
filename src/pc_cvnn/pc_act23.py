@@ -962,7 +962,7 @@ HOEHE_TASTEN = os.environ.get("ACT23_HOEHE_TASTEN", "0") == "1"
 # Etiketten: privilegierte Geometrie (Geruest, s. laufzeit-regeln.md).  Ersetzt wird nur, was die
 # POLICY sieht -- Buchhaltung, Kredit und Riegel bleiben, s. pc_act16.GROESSE_FN.
 GROESSE_SEHEN = os.environ.get("ACT23_GROESSE_SEHEN", "1") == "1"
-# DER PRIVILEGIERTE WAHRNEHMUNGS-RUECKFALL (ACT23_RUECKFALL, Vorgabe "privileg").  Findet perceive
+# DER PRIVILEGIERTE WAHRNEHMUNGS-RUECKFALL (ACT23_RUECKFALL, Vorgabe "aufgeben" seit 2026-10-03).  Findet perceive
 # das kommandierte Objekt nicht (Formklasse/Farbklasse/Eigenschaften treffen nichts), nahm es bisher
 # still die WAHRE Lage aus MuJoCo.  Schritt 2 aus wiki/mechanismen/laufzeit-regeln.md.
 #   privileg = wie bisher, aber jetzt IMMER protokolliert ("[Rueckfall] ...")
@@ -971,7 +971,10 @@ GROESSE_SEHEN = os.environ.get("ACT23_GROESSE_SEHEN", "1") == "1"
 #              was das Privileg heute einbringt.
 # Die Wahrnehmung laeuft dafuer in BEIDEN Faellen einmal VOR run_combined (s. run_one, _vorblick)
 # und wird dort wiederverwendet -- sonst haette nur ein Arm einen zusaetzlichen Blick.
-RUECKFALL = os.environ.get("ACT23_RUECKFALL", "privileg").strip().lower()
+# GEMESSEN (wiki/befunde/rueckfall-privileg-gemessen.md): im Namensbetrieb 1 Rueckfall in 400
+# Episoden (er rettete 1 Lieferung), im Eigenschaftsbetrieb 2 Rueckfall-Episoden in 200, beide auch
+# mit Privileg gescheitert (Quote 111 gegen 114 von 200).  Das Privileg rettet praktisch nichts.
+RUECKFALL = os.environ.get("ACT23_RUECKFALL", "aufgeben").strip().lower()
 if RUECKFALL not in ("privileg", "aufgeben"):
     raise SystemExit(f"ACT23_RUECKFALL={RUECKFALL!r}: erlaubt sind privileg | aufgeben")
 

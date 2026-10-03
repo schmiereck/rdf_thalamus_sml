@@ -130,3 +130,7 @@ fahren.
 **Schritt 1 erledigt (2026-10-03):** [Groesse sehen statt wissen](/befunde/groesse-sehen-ab.md) -
 `obj_fp`/`obj_h` im Policy-Zustand kommen aus der Wahrnehmung, gemessen ohne Verlust, Vorgabe.
 Offen: Etiketten aus dem Tasten; `obj_h` in Buchhaltung, Kredit und Riegel.
+
+**Schritt 2 erledigt (2026-10-03):** [Der privilegierte Rueckfall rettet nichts](/befunde/rueckfall-privileg-gemessen.md) -
+`ACT23_RUECKFALL=aufgeben` ist Vorgabe; nicht gefunden heisst kein Versuch, auch beim Wiederfinden.
+Naechster Schritt: die Schliess-Entscheidung (`CLOSE_GUARD`/`REFLEX`).

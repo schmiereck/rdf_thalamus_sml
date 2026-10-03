@@ -7,6 +7,11 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-10-03
 
+* **Anlage**: [Der privilegierte Rueckfall rettet nichts](/befunde/rueckfall-privileg-gemessen.md) -
+  Schritt 2: Rueckfall sichtbar gemacht und gemessen (1/400 Namensbetrieb, 2/200 Eigenschaften,
+  1 Lieferung gerettet). Zweiter Kanal (Wiederfinden in der Episode) gefunden und geschlossen.
+  `ACT23_RUECKFALL=aufgeben` ist Vorgabe.
+
 * **Anlage**: [Groesse sehen statt wissen - A/B](/befunde/groesse-sehen-ab.md) - 8 Seeds x 50,
   gepaart: Privileg 52,2 %, Schaetzung 53,8 %, Seeds 3:3:2. `ACT23_GROESSE_SEHEN` ist Vorgabe,
   act23 sammelt beim Start selbst, wenn der Schaetzer leer ist.

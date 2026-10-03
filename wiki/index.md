@@ -164,6 +164,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 # Chronik der Entwicklung
 
 * [act23-Entwicklungslinie](chronik/act23.md) - Juni bis September 2026, verdichtet: Etappen, Anlaesse, Messungen
+* [Der privilegierte Rueckfall rettet nichts](befunde/rueckfall-privileg-gemessen.md) - **Namensbetrieb 1 Rueckfall in 400 Episoden, Eigenschaftsbetrieb 2 in 200 (beide auch mit Privileg gescheitert). `ACT23_RUECKFALL=aufgeben` ist Vorgabe.** Zweiter Kanal gefunden: das Wiederfinden mitten in der Episode.
 * [Groesse sehen statt wissen - A/B](befunde/groesse-sehen-ab.md) - **das Privileg obj_fp/obj_h im Policy-Zustand faellt ohne Verlust: 8 Seeds, Privileg 52,2 gegen Schaetzung 53,8 % (Seeds 3:3:2).** `ACT23_GROESSE_SEHEN` seit 2026-10-03 Vorgabe; Schaetzer 95-98 % richtige Gruppe.
 * [Konstante Spalte sprengt die Policy](befunde/konstante-spalte-sprengt-policy.md) - **Normierung std+1e-6: obj_h und Greifhoehe waren im Training konstant, 0,1 mm Abweichung verschiebt die Ausgabe um 813 mm.** Behoben (`ACT19_KONST_SPALTEN`). Erstes A/B "Groesse sehen" damit ungueltig.
 * [Nur ein Marker - A/B](befunde/ein-marker-ab.md) - **kein Effekt: 8 Seeds, vier Scheiben sichtbar 58,2 gegen einer 55,8 % (Seeds 5:3, p = 0,73). Die Wahrnehmung parkt die Marker ohnehin.** `ACT23_EIN_MARKER` bleibt 1 der Lesbarkeit wegen.
