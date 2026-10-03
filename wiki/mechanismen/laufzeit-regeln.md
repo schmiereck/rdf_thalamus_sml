@@ -126,3 +126,7 @@ kostet; (3) erst danach die Schliess-Entscheidung selbst.
 gehalten 95-98 % richtige Gruppe, 0,13 mm. Das erste A/B fand stattdessen einen Fehler in der
 Policy-Normierung ([Konstante Spalte](/befunde/konstante-spalte-sprengt-policy.md)) und ist neu zu
 fahren.
+
+**Schritt 1 erledigt (2026-10-03):** [Groesse sehen statt wissen](/befunde/groesse-sehen-ab.md) -
+`obj_fp`/`obj_h` im Policy-Zustand kommen aus der Wahrnehmung, gemessen ohne Verlust, Vorgabe.
+Offen: Etiketten aus dem Tasten; `obj_h` in Buchhaltung, Kredit und Riegel.

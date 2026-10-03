@@ -949,16 +949,19 @@ HOEHE_SEHEN = os.environ.get("ACT23_HOEHE_SEHEN", "0") == "1"
 # das letzte Privileg auch aus dem TRAINING, nicht nur aus der Laufzeit.
 # Der Schalter zieht ACT16_TASTEN NICHT heimlich mit -- der Start sagt, wenn es fehlt.
 HOEHE_TASTEN = os.environ.get("ACT23_HOEHE_TASTEN", "0") == "1"
-# DIE GROESSE DES GREIFOBJEKTS SEHEN STATT WISSEN (ACT23_GROESSE_SEHEN, Vorgabe 0).
+# DIE GROESSE DES GREIFOBJEKTS SEHEN STATT WISSEN (ACT23_GROESSE_SEHEN, Vorgabe 1 seit 2026-10-03).
 # Der Policy-Zustand traegt obj_h und obj_fp (halbe Hoehe, halbe Kurzachse), und beide kamen aus
 # MuJoCo (pc_act16 run_combined: geom_half).  Hoehe ist heute fuer alle Koerper 12 mm, die
 # Kurzachse aber 12 (Wuerfel) / 9 (Balken) / 6-7 mm (Formen) -- die Policy bekam die Kategorie
 # also gesagt.  Der GroessenSchaetzer liest beides aus der Detektion (Flaeche, Dicke, Spanne, Ort).
 #   0 = Privileg wie bisher; der Schaetzer lernt mit und schreibt seinen Fehler ins Protokoll
 #   1 = die Policy sieht die Schaetzung.  Zu wenige Zeilen oder keine Detektion -> LAUTER Rueckfall.
+# GEMESSEN (wiki/befunde/groesse-sehen-ab.md, 8 Seeds x 50, gepaart): Privileg 52,2 %, Schaetzung
+# 53,8 %, Seeds 3:3:2 -- das Privileg faellt ohne Verlust.  Hat der Schaetzer beim Start weniger
+# als 200 Zeilen, sammelt act23 selbst 200 Szenen ohne Arm (~40 s, s. _groesse_sammeln).
 # Etiketten: privilegierte Geometrie (Geruest, s. laufzeit-regeln.md).  Ersetzt wird nur, was die
 # POLICY sieht -- Buchhaltung, Kredit und Riegel bleiben, s. pc_act16.GROESSE_FN.
-GROESSE_SEHEN = os.environ.get("ACT23_GROESSE_SEHEN", "0") == "1"
+GROESSE_SEHEN = os.environ.get("ACT23_GROESSE_SEHEN", "1") == "1"
 
 # =========================================================================================
 # STUFE 4: DIE RELATION AUCH IN DER ADRESSE (ACT23_ADR_RELATION, Vorgabe 0).
@@ -8059,6 +8062,10 @@ def run_self_learning_steering(headless=False):
 
     if int(os.environ.get("ACT23_GROESSE_SAMMELN", "0")) > 0:
         _groesse_sammeln(int(os.environ["ACT23_GROESSE_SAMMELN"]))
+    elif GROESSE_SEHEN and len(groessen_schaetzer.X) < 200:
+        print(f"  [Groesse] Schaetzer hat erst {len(groessen_schaetzer.X)} Zeilen -- sammle 200 Szenen "
+              f"ohne Arm (einmalig, wird mit dem Zustand gespeichert)", flush=True)
+        _groesse_sammeln(200)
     if headless and int(os.environ.get("ACT23_AUTO_N", "0")) > 0:
         # HEADLESS AUTO-RUN (for A/B measurement without the GUI): run N curiosity-picked episodes in
         # the requested choreo mode with the rolling Bilanz scoreboard -- the same loop the GUI Auto

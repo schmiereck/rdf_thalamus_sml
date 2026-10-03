@@ -5,6 +5,12 @@ fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**
 
 Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
+## 2026-10-03
+
+* **Anlage**: [Groesse sehen statt wissen - A/B](/befunde/groesse-sehen-ab.md) - 8 Seeds x 50,
+  gepaart: Privileg 52,2 %, Schaetzung 53,8 %, Seeds 3:3:2. `ACT23_GROESSE_SEHEN` ist Vorgabe,
+  act23 sammelt beim Start selbst, wenn der Schaetzer leer ist.
+
 ## 2026-10-02
 
 * **Anlage**: [Konstante Spalte sprengt die Policy](/befunde/konstante-spalte-sprengt-policy.md) -
