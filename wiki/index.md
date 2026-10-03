@@ -17,6 +17,9 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 # Mechanismen
 
+* [S1-B1: visuelles Körpermodell](messungen/s1-visuelles-koerpermodell.md) - erster lernender Verbraucher der Gelenkphasen, Kameraansicht als beobachtbares Ziel und feste Kontrollen
+* [S1-B1: Körperdecoder verfehlt neue Posen](befunde/s1-visuelles-koerpermodell.md) - 224 Encoder-/Kamerapaare erhoben; Testfehler 28 % über Mittelbild, keine Integration
+
 * [Servo-Latent-Port](mechanismen/servo-latent-port.md) - gemessene Position reversibel erhalten; aktionsbedingten Latent und Vorhersage getrennt an künftiges Körpermodell liefern
 * [act23 Modullandschaft](mechanismen/act23-modullandschaft.md) - welche Module aktiv sind, was jedes steuert, wo die komplexe Zahl traegt
 * [Invarianten](mechanismen/invarianten.md) - was man nicht verletzen darf; jede Regel aus einem konkreten Schaden

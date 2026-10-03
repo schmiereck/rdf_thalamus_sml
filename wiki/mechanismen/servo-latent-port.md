@@ -103,6 +103,10 @@ Geänderter Befehl bei gleicher Messung lässt Positionslatent exakt gleich, ver
 Übergangs-Latent (Norm 0,0458 im Kontrollfall). Referenzvorhersage stimmt exakt mit dem
 vorherigen S1-Solver überein. Frische, Invalidierung und Parameter-Freeze bestehen.
 
-Offen: lernender Verbraucher mit eigenem Zielsignal, visuelle Zuordnung, Kalibrierung auf
+**Fortschritt 2026-10-03:** Ein [erster lernender Verbraucher B1](/befunde/s1-visuelles-koerpermodell.md)
+liest die Phasen direkt und lernt die gleichzeitig beobachtete Kameraansicht. API und Training
+sind gebaut; sein Vorhersagetor auf neuen Posen ist verfehlt. Keine produktive Verdrahtung.
+
+Offen: bestandener lernender Verbraucher, visuelle Zuordnung, Kalibrierung auf
 Hardware, weitere Gelenke und dynamisch weiterlernender Encoder. Die Bereitstellung der
 Positionsinformation ist gelöst, diese Körpermodell-Aufgaben nicht.

@@ -2,6 +2,16 @@
 
 ## 2026-10-03
 
+* **B1 ausgeführt, Vorhersagetor verfehlt**: [Befund](/befunde/s1-visuelles-koerpermodell.md).
+  Erster lernender Positions-Latent-Verbraucher, 160 Trainings-/64 neue Testposen: Bild-MSE
+  Faktor 1,28015 gegen Mittelbild; variable Pixel 1,28056, vertauschte Kontrolle 0,37562.
+  Erhebung, Gradienten und Checkpoint-Replay bestehen. Nächstes Thema: sichtbare Abdeckung
+  und Generalisierung auditieren; keine Nachoptimierung auf diesem Test und keine ACT23-Integration.
+
+* **Visuellen Körpermodell-Verbraucher festgelegt**: [B1-Vertrag](/messungen/s1-visuelles-koerpermodell.md).
+  Direkter Positions-Latent → Kameraansicht, getrennte Posen und vertauschte Bildzuordnung als
+  Kontrolle. Kein als bestanden angenommener Greifer-Landmark, keine Handpositionsetiketten.
+
 * **Unabhängiger S1-Test bestanden, Latent-Port gebaut**: [Befund](/befunde/s1-unabhaengige-rollouts.md).
   2.400 neue Testübergänge Seeds 211/307 ohne Nachtraining: Faktor 0,09224 gegen Persistenz,
   je 5/5 Gelenke besser. [Portvertrag](/mechanismen/servo-latent-port.md) erhält gemessene
