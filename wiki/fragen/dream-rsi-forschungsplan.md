@@ -118,7 +118,7 @@ ist. Ein Nullresultat kann ein abgeschlossenes, verworfenes Paket ergeben.
 | D6 | Curriculum fuer einen einzelnen lernenden Arm | D5 | offen | - |
 | D7 | Verteilung auf getrennte Rechner | D1; Integration nach D5 | offen | - |
 | S0 | Semantik und Messaufgabe fuer direkte Servosteuerung | D0 | in Arbeit | [S0-Servogrundaudit](/befunde/s0-servo-grundaudit.md): Aktuatorvertrag für fünf direkte, druckfreie Gelenkkanäle geprüft; Lernaufgabe und Kontrolle noch offen |
-| S1 | Motorisches Lernsignal und autonomer kurzer Regelkreis | S0, D1 | in Arbeit | [Lokaler Online-Kopf](/befunde/s1-online-kopf.md) besteht Diagnosetor (Faktor 0,0874 gegen Persistenz, 5/5 Gelenke). Nächstes Tor: neues unabhängiges Rolloutset bei eingefrorenem Modell/Normalisierung, noch keine Motorpolicy |
+| S1 | Motorisches Lernsignal und autonomer kurzer Regelkreis | S0, D1 | in Arbeit | [Unabhängige Rollouts bestanden](/befunde/s1-unabhaengige-rollouts.md): Faktor 0,09224 gegen Persistenz, 5/5 Gelenke. [Positions-Latent-Port](/mechanismen/servo-latent-port.md) für Körpermodell bereit; lernender Verbraucher und geschlossener Regelkreis bleiben offen |
 | S2 | Eigene Anpassung und ACT23-Integration | S1 | offen | - |
 | S3 | Optional: Geschwindigkeit oder Drehmoment statt Winkelvorgabe | S2, eigener Befund zum Bedarf | offen | - |
 | F0 | Vorhandene Netzzustaende fuer neue Wahrnehmungsaufgaben pruefen | keine | zurückgestellt | D0b-F1a/F1b und feste Hubantwort verworfen; ein neuer F0-Zweig braucht eine eigenständige Repräsentationshypothese und Vertrag |

@@ -2,6 +2,15 @@
 
 ## 2026-10-03
 
+* **Unabhängiger S1-Test bestanden, Latent-Port gebaut**: [Befund](/befunde/s1-unabhaengige-rollouts.md).
+  2.400 neue Testübergänge Seeds 211/307 ohne Nachtraining: Faktor 0,09224 gegen Persistenz,
+  je 5/5 Gelenke besser. [Portvertrag](/mechanismen/servo-latent-port.md) erhält gemessene
+  Position reversibel und getrennt von Übergangs-Latent/Forecast für das künftige Körpermodell.
+
+* **Unabhängiger S1-Test festgelegt**: [Vertrag](/messungen/s1-unabhaengige-rollouts.md).
+  Seeds 211/307, je 20x60 neue Testübergänge, kein Nachtraining. Nutzerwunsch als
+  Latent-Port-Vertrag aufgenommen: gemessene Position getrennt vom aktionsbedingten Latent erhalten.
+
 * **S1-Online-Kopftraining abgeschlossen**: [Befund](/befunde/s1-online-kopf.md).
   Lokale komplexe Updates aus zufälliger Initialisierung erreichen 1,20244e-5 rad²,
   Faktor 0,0874 gegen Persistenz, 5/5 Gelenke besser. Batch bleibt genauer; nächstes Tor

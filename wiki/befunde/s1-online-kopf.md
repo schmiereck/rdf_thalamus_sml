@@ -79,6 +79,11 @@ Laufdauer rund 11,9 Sekunden einschließlich Merkmalsinferenz; ein BLAS-Thread, 
 
 # Entscheidung
 
+Fortsetzung: [Neue unabhängige Rollouts](/befunde/s1-unabhaengige-rollouts.md) sind inzwischen
+ohne Nachtraining geprüft und bestehen das Tor. Zusätzlich ist auf Nutzerwunsch ein
+[Positions-Latent-Port](/mechanismen/servo-latent-port.md) für ein künftiges Körpermodell gebaut.
+Die folgende Planung beschreibt den Stand vor dieser Bestätigung.
+
 Der bedingte lokale Lernweg ist für diesen Prüfstand tragfähig und benötigt keinen
 Batch-Warmstart. Die vorherige Frage „ist der Erfolg allein dem Batch-Löser zuzuschreiben?“
 ist damit für das Persistenztor verneint, nicht für das Erreichen der Batch-Genauigkeit.

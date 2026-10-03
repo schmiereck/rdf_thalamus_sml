@@ -133,6 +133,13 @@ Versuchsgrenzen, keine verborgene Aufgabenpolicy; jeder Eingriff wird gezaehlt.
 
 # S2 - Anpassung und ACT23-Integration
 
+**Nutzerergänzung 2026-10-03:** Die Servopositionen von Beginn an als explizite Latent-Information
+für ein lernendes Körpermodell erhalten, statt sie später aus einem unbeschrifteten Übergangs-Latent
+zurücklernen zu müssen. Der [isolierte Portvertrag](/mechanismen/servo-latent-port.md) ist gebaut:
+reversible gemessene Position, Geschwindigkeit, aktionsbedingter gelernter Latent und vorhergesagte
+Position getrennt. [Neue S1-Rollouts](/befunde/s1-unabhaengige-rollouts.md) bestehen das
+Vorhersagetor; ein lernender Körpermodell-Verbraucher und autonome Steuerung bleiben offen.
+
 - [ ] Bei unbekannter Last/Daempfung autonom lernend gegen denselben eingefrorenen Motor
   vergleichen, mit identischem Startzustand und ohne neue Teacher-Labels.
 - [ ] Danach ein Segment der ACT23-Handlung ersetzen, etwa Anfahrt im freien Raum. Klar

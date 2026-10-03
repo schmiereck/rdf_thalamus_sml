@@ -54,9 +54,9 @@ def _park_objects(sim: BracketArmSim) -> None:
         sim.set_object(name, (0.50, -0.60), z=0.012)
 
 
-def collect(output: Path, rollouts: int, transitions: int, seed: int) -> dict:
+def collect(output: Path, rollouts: int, transitions: int, seed: int, *, evaluation_only: bool = False) -> dict:
     rng = np.random.default_rng(seed)
-    output.mkdir(parents=True, exist_ok=True)
+    output.mkdir(parents=True, exist_ok=False)
     path = output / "transitions.jsonl"
     sim = BracketArmSim()
     _park_objects(sim)
@@ -78,7 +78,7 @@ def collect(output: Path, rollouts: int, transitions: int, seed: int) -> dict:
                 row = {
                     "schema": "act23-s1-proprio-transition-v1",
                     "rollout_id": rollout_id,
-                    "split": "test" if rollout_id % 5 == 0 else "train",
+                    "split": "test" if evaluation_only or rollout_id % 5 == 0 else "train",
                     "step_id": step_id,
                     "q_rad": q.tolist(),
                     "qvel_rad_s": qvel.tolist(),
@@ -95,6 +95,8 @@ def collect(output: Path, rollouts: int, transitions: int, seed: int) -> dict:
         "transitions_per_rollout": transitions,
         "rows": rows,
         "seed": seed,
+        "evaluation_only": evaluation_only,
+        "transition_seconds": TRANSITION_STEPS * float(sim.m.opt.timestep),
         "joints": ARM_JOINTS,
         "observation_low_rad": OBS_LOW.tolist(),
         "observation_high_rad": OBS_HIGH.tolist(),
@@ -117,10 +119,12 @@ def main() -> None:
     parser.add_argument("--rollouts", type=int, default=50)
     parser.add_argument("--transitions", type=int, default=60)
     parser.add_argument("--seed", type=int, default=101)
+    parser.add_argument("--evaluation-only", action="store_true")
     args = parser.parse_args()
     if args.rollouts < 5 or args.transitions < 2:
         raise SystemExit("rollouts >= 5 and transitions >= 2 required for a trajectory split")
-    print(json.dumps(collect(args.output, args.rollouts, args.transitions, args.seed), indent=2, sort_keys=True))
+    print(json.dumps(collect(args.output, args.rollouts, args.transitions, args.seed,
+                             evaluation_only=args.evaluation_only), indent=2, sort_keys=True))
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 # Mechanismen
 
+* [Servo-Latent-Port](mechanismen/servo-latent-port.md) - gemessene Position reversibel erhalten; aktionsbedingten Latent und Vorhersage getrennt an künftiges Körpermodell liefern
 * [act23 Modullandschaft](mechanismen/act23-modullandschaft.md) - welche Module aktiv sind, was jedes steuert, wo die komplexe Zahl traegt
 * [Invarianten](mechanismen/invarianten.md) - was man nicht verletzen darf; jede Regel aus einem konkreten Schaden
 * [Laufzeitregeln](mechanismen/laufzeit-regeln.md) - was noch geskriptet ist; act21 hat die Entwoehnung geschafft, act23 nicht
@@ -31,6 +32,8 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 # Befunde
 
+* [S1: neue Rollouts bestanden](befunde/s1-unabhaengige-rollouts.md) - eingefrorener Online-Kopf auf zwei neuen Seeds: 90,78 Prozent weniger Fehler als Persistenz, 5/5 Gelenke, Positions-Latent-Port geprüft
+* [S1: unabhängige Rollouts und Positions-Latent](messungen/s1-unabhaengige-rollouts.md) - eingefrorener Test auf Seeds 211/307 und expliziter Positionsblock für das künftige Körpermodell
 * [S1: lokaler Online-Kopf besteht](befunde/s1-online-kopf.md) - 91,26 Prozent weniger Fehler als Persistenz, 5/5 Gelenke besser; kein Batch-Warmstart, unabhängige Rollouts als nächstes Tor
 * [S1: lokales Online-Kopftraining](messungen/s1-online-kopf.md) - festes Rezept auf eingefrorenen Kontextmerkmalen, Batch-Lösung ausschließlich Referenz
 * [S1: Lernziel-Audit abgeschlossen](befunde/s1-lernziel-audit.md) - konvergiertes generatives Training weiter negativ; bedingter Kopf auf gleichem Encoder schlägt Persistenz auf 5/5 Gelenken, Nullprior entfernen degeneriert
