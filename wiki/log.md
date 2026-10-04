@@ -1,5 +1,13 @@
 # Chronik
 
+## 2026-10-04
+
+* **B1-Schlussfolgerung korrigiert**: [Abdeckung](/befunde/s1-koerpermodell-abdeckung.md).
+  Nutzer verweist auf den erprobten ACT23-Arbeitsraum. Gleiche Simulatorklasse/Kamera,
+  aber B1 zog unabhängige Gelenkstellungen aus der S1-Box statt ACT23-Arbeitsposen.
+  Daher zuerst repräsentative Arbeitsposen bei bestehender Kamera prüfen; keine belegte
+  Notwendigkeit einer zusätzlichen Körperkamera. Messwerte bleiben gültig für B1.
+
 ## 2026-10-03
 
 * **B1-Abdeckung geprüft**: [Befund](/befunde/s1-koerpermodell-abdeckung.md).

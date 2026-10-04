@@ -18,7 +18,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 # Mechanismen
 
 * [B1-Abdeckungsaudit](messungen/s1-koerpermodell-abdeckung.md) - Kamera-/Greifersichtbarkeit per geprüftem Replay und Gelenkraumabdeckung ohne Nachtraining
-* [B1: Klauen meist außerhalb des Bildes](befunde/s1-koerpermodell-abdeckung.md) - 145/224 Posen; höhere Auflösung allein reicht nicht, nächste Aufgabe ist ein geeigneter Körperblick
+* [B1: Klauen meist außerhalb des Bildes](befunde/s1-koerpermodell-abdeckung.md) - 145/224 isolierte S1-Posen; Korrektur: zuerst ACT23-Arbeitsposen bei bestehender Kamera prüfen, kein belegtes ACT23-Kameraproblem
 
 * [S1-B1: visuelles Körpermodell](messungen/s1-visuelles-koerpermodell.md) - erster lernender Verbraucher der Gelenkphasen, Kameraansicht als beobachtbares Ziel und feste Kontrollen
 * [S1-B1: Körperdecoder verfehlt neue Posen](befunde/s1-visuelles-koerpermodell.md) - 224 Encoder-/Kamerapaare erhoben; Testfehler 28 % über Mittelbild, keine Integration

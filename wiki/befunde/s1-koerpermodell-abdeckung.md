@@ -104,6 +104,27 @@ Abdeckungsintervention noch unabhängiger Wirksamkeitsnachweis.
 
 # Entscheidung und nächster Schritt
 
+**Korrektur 2026-10-04 nach Nutzerhinweis:** Die unten ursprünglich empfohlene Änderung
+des Kamerablicks ist nicht als notwendiger nächster Schritt belegt. B1 verwendet zwar dieselbe
+`BracketArmSim`-Klasse und `overview`-Kameradefinition wie ACT23, übernimmt aber unabhängig
+gezogene Gelenkstellungen aus der propriozeptiven S1-Box. Diese sind nicht auf den erprobten
+ACT23-Arbeitsraum beschränkt. ACT23 setzt vor seinen Importen unter anderem `ACT14_DOF=4`
+und die Reichweitengrenzen x=[−0,12;0,12], y=[0,07;0,24]; B1 nutzt diese Handlungskette nicht.
+Seine direkten Befehle bewegen dennoch alle fünf Armservos, auch ohne `ARM3`-Hilfslogik.
+Der Befund betrifft somit den separaten Messaufbau, nicht die Eignung der ACT23-Kamera im
+normalen Arbeitsraum. **Zuerst repräsentative ACT23-Arbeitsposen bei unveränderter Kamera
+übernehmen und deren Abdeckung prüfen.** Erst bei verbleibender Messlücke eine zusätzliche
+Ansicht erwägen. „Körperblick“ war nur die Bezeichnung für eine solche Ansicht, kein Modul.
+
+Quellabgleich mit `../rdf_thalamus_sml` am 2026-10-04: Die dortige XML enthält zusätzlich
+`sockel2`/`sockel3`; Kamera- und Armdefinitionen der XML sind gleich. Es handelt sich deshalb
+nicht um einen vollständig identischen aktuellen ACT23-Checkout. B1 rendert zudem 96×96 und
+poolt auf 24×24, während ACT23 hier 240×240 verwendet. Die Auflösung erklärt kein geometrisches
+Außerhalb-Liegen, ist aber ein weiterer Unterschied des Prüfstands.
+
+Die folgende ursprüngliche Empfehlung bleibt als Verlauf erhalten und ist durch diese
+Präzisierung ersetzt; die gemessenen Sichtbarkeitszahlen bleiben gültig.
+
 **Vor neuem Training zuerst den visuellen Erhebungsaufbau korrigieren und auditieren.**
 Eine feste zusätzliche Körperansicht beziehungsweise ein passender fester Blick soll den
 relevanten Bewegungsraum tatsächlich sehen. Zunächst nur an Trainings-/Einrichtungsposen
