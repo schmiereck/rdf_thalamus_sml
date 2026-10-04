@@ -97,7 +97,28 @@ PRUEF_N = int(os.environ.get("ACT16_PRUEF_N", "2"))
 # und rutschte weg.  Mit dem Schalter wird nach einer Nachfuehrung bis auf die Ablagehoehe abgesenkt
 # (+4 mm, hoechstens OBJ_WARTE Schritte), erst dann geoeffnet.
 PRUEF_ABSETZEN = os.environ.get("ACT16_PRUEF_ABSETZEN", "0") == "1"
-GRASP_OFFSET = float(os.environ.get("ACT16_GRASP_OFFSET", "0.006"))   # (#2) grasp height = obj_half + this
+GRASP_OFFSET = float(os.environ.get("ACT16_GRASP_OFFSET", "0.006"))
+# FLACHE OBJEKTE TIEFER GREIFEN (ACT16_GREIF_FLACH, Vorgabe 0 bis gemessen).  Der Teacher greift
+# 6 mm UEBER der Objektmitte (Etiketten: obj_h + GRASP_OFFSET) bzw. auf fester Handhoehe 14 mm
+# (Phasenmaschine: GRASP_Z).  Bei einem 16-mm-Objekt ist beides 14 mm -- 2 mm unter der Oberkante,
+# die Backen (+-5-6 mm um den Bezugspunkt) fassen nur die Kante.  Gemessen: Teacher 3/9, die
+# Policy lernt 16 mm nicht (wiki/befunde/neue-hoehen-gelernt.md).  Mit dem Schalter greift die
+# Hand hoechstens GREIF_TIEFE unter die Oberkante: fuer 24/32 mm aendert sich NICHTS, nur flachere
+# Objekte werden um die Differenz tiefer gegriffen (16 mm: 14 -> 10 mm).  Teacher-Geometrie, ein
+# Trainingsgeruest (laufzeit-regeln.md) -- die Policy lernt es aus den Etiketten.
+# GEMESSEN WIRKUNGSLOS (2026-10-04, wiki/befunde/greifhoehe-flach.md): Teacher auf lauter 16-mm-
+# Objekten 13/30 alt gegen 11/30 tiefer (p = 0,79).  Die "3 von 9" der Vorprobe waren Rauschen;
+# der Teacher greift 16 mm so gut wie 24 mm.  Bleibt als Schalter, Vorgabe aus.
+GREIF_FLACH = os.environ.get("ACT16_GREIF_FLACH", "0") == "1"
+GREIF_TIEFE = float(os.environ.get("ACT16_GREIF_TIEFE", "0.006"))
+
+
+def greif_abzug(obj_h, basis):
+    """Um wie viel tiefer als `basis` (Greifhoehe ueber der Auflage) gegriffen wird, damit die
+    Hand hoechstens GREIF_TIEFE unter der Oberkante (2*obj_h) steht.  0 ohne GREIF_FLACH."""
+    if not GREIF_FLACH:
+        return 0.0
+    return max(0.0, float(basis) - (2.0 * float(obj_h) - GREIF_TIEFE))   # (#2) grasp height = obj_half + this
 #   (cube -> 0.018, was 0.014): the claw tips sit ~14mm below the contact site, so grasp_z=0.014 put them
 #   AT the floor and any overshoot was blocked/deflected; +4mm lifts them clear while still gripping the cube
 GRASP_MAX_HALF = 0.016                          # footprint half above which an object is too wide to grasp
@@ -331,6 +352,7 @@ def reactive_subgoal(state):
     h_griff = max(0.0, float(state[14]) - GRASP_Z) if len(state) >= 15 else 0.0
     if SIZE_ADAPT:
         grasp_z = obj_h + GRASP_OFFSET + h_griff          # grasp at the object's centre (cube -> 0.014)
+        grasp_z -= greif_abzug(obj_h, obj_h + GRASP_OFFSET)   # flache Objekte tiefer (s. GREIF_FLACH)
         carry_z = max(CARRY_Z, 2.0 * obj_h + 0.02)        # lift high enough to clear a TALL object
         lift_thresh = obj_h + 0.014                       # "lifted off the table" relative to its height
     else:
@@ -547,6 +569,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             if _gr is not None:
                 obj_fp_s, obj_h_s = float(_gr[0]), float(_gr[1])
         run_combined._groesse = (float(obj_fp_s), float(obj_h_s), float(obj_fp), float(obj_h))
+        griff_z -= greif_abzug(obj_h, GRASP_Z)                # flache Objekte tiefer (s. GREIF_FLACH)
         if goal_fn is not None:                               # PLANNER dreams the place target from the
             obj_xy = cube_plan if cube_plan is not None else sim.obj_pos(cmd)[:2]   # perceived object
             tgt = np.asarray(goal_fn(cmd, obj_xy), float)     # -> commit to it (and SCORE against it)
@@ -575,6 +598,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         if post_goal_fn is not None:                          # now the COMMITTED goal is known: e.g. drop an
             obj_now = cube_plan if cube_plan is not None else sim.obj_pos(cmd)[:2]   # obstacle on the carry path
             post_goal_fn(cmd, obj_now, tgt_true)              # (placed AFTER the goal so it can clear both ends)
+        tgt_z -= greif_abzug(obj_h, GRASP_Z)                  # tiefer gegriffen -> tiefer ablegen
         mode = (force(cmd) if callable(force) else force) or mode_perc or "grasp"
         phase = "over" if mode == "grasp" else "approach"
         dwell = 0; via = "grasp"; done = False; grasp_retry = 0
@@ -1031,7 +1055,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             # agent EXPECTS to be grasping; hovering OPEN + HIGH instead is a sustained prediction error that
             # drives a descend+close.  Fires ONLY on a stall (HOVER_LIMIT), so the learned policy still drives
             # normally -- this just guarantees the grasp EXECUTES instead of the policy hovering forever (#4).
-            gz = obj_h + GRASP_OFFSET
+            gz = obj_h + GRASP_OFFSET - greif_abzug(obj_h, obj_h + GRASP_OFFSET)
             at_goal = np.linalg.norm(c - tgt) < tol and cz < 0.035   # object already RESTS at the goal --
             #   re-grasping it is a misfire in ANY flow (the "nachfassen" that shoved a delivered object)
             if (np.linalg.norm(hxy - c) < 0.03 and cz < 0.035 and j5 > J5_REFLEX_TH and hz > gz + 0.012

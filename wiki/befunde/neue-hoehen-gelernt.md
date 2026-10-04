@@ -1,7 +1,7 @@
 ---
 type: Befund
-title: Neue Objekthoehen - 32 mm lernt der Agent selbst, 16 mm nicht (die Teacher-Greifhoehe passt nicht)
-description: Mit ACT23_HOEHEN=16,24,32 bricht die Policy auf den neuen Hoehen zunaechst ein (Hoehenspalte war im Training konstant und stumm). Zwei Seeds x ~140 Episoden - 32 mm lernt sie robust (27 -> 59 % mit gesagter, 26 -> 77 % mit geschaetzter Hoehe), 16 mm nicht (32 -> 45 %, 28 -> 34 %, n. s.). Gesagt und geschaetzt enden gleichauf (26/49 gegen 27/51 auf neuen Hoehen). Der 16-mm-Fehlschlag liegt beim Teacher - seine Greifhoehe Mitte + 6 mm liegt 2 mm unter der Oberkante.
+title: Neue Objekthoehen - der Agent lernt sie selbst bis auf Teacher-Niveau, auch mit geschaetzter Hoehe
+description: Mit ACT23_HOEHEN=16,24,32 bricht die Policy auf neuen Hoehen zunaechst ein (Hoehenspalte war im Training konstant und stumm). Zwei Seeds x ~140 Episoden - 32 mm lernt sie deutlich (27 -> 59 % gesagt, 26 -> 77 % geschaetzt), 16 mm nur wenig (32 -> 45 %, 28 -> 34 %), weil sie dort schon nahe an der Teacher-Obergrenze startet (Teacher 16 mm 43 %, 30 Episoden). Gesagt und geschaetzt enden gleichauf. Die zunaechst vermutete Ursache (Teacher greift an der Kante) ist gemessen widerlegt.
 tags: [act23, hoehe, generalisierung, selbst-lernen, privileg, nutzeridee]
 status: stable
 evidenz: gemessen
@@ -74,19 +74,20 @@ Beide Seeds, je Hoehe, erstes Drittel (Ep 0-49) gegen letztes (Ep 100+):
 Neue Hoehen zusammen: gesagt 29 % -> 53 % (p = 0,016), geschaetzt 27 % -> 53 % (p = 0,005);
 letztes Drittel gesagt gegen geschaetzt 26/49 gegen 27/51 (p = 1,0).
 
-**16 mm scheitert ueberwiegend als "Griff hielt nicht"** (ab Episode 50: 17 bzw. 20 der
-Fehlschlaege) - und der Teacher selbst schaffte in der Vorprobe nur 3/9. Ursache sehr
-wahrscheinlich die Teacher-Geometrie: `grasp_z = obj_h + GRASP_OFFSET` greift **6 mm ueber der
-Mitte**, bei 16 mm also 14 mm - 2 mm unter der Oberkante, ein Griff an der Kante. Ein Schueler, der
-den Lehrer imitiert, wird hier nicht besser als der Lehrer ([Greif-Lerndeckel](/befunde/greif-lerndeckel.md)).
-Nicht gemessen: ob eine Greifhoehe "Mitte, hoechstens Oberkante - x" den 16-mm-Fall loest.
+**16 mm steigt kaum - aber nicht, weil es nicht gelernt wird.** Eine erste Vermutung lautete:
+der Teacher greift dort an der Kante (Mitte + 6 mm = 2 mm unter der Oberkante), gestuetzt auf
+"Teacher 3/9" der Vorprobe. **Gemessen widerlegt** ([Greifhoehe fuer flache Objekte](/befunde/greifhoehe-flach.md)):
+der Teacher liefert auf lauter 16-mm-Objekten 13/30 = 43 %, so gut wie bei 24 mm; tiefer greifen
+aendert nichts (11/30). Die Policy endet bei 16 mm mit 34-45 % also **auf Teacher-Niveau** - sie
+startete dort nur schon nahe daran (~30 %), bei 32 mm dagegen weit darunter. Ein Schueler, der
+den Lehrer imitiert, wird nicht besser als der Lehrer ([Greif-Lerndeckel](/befunde/greif-lerndeckel.md)).
 
 # Lesart
 
 **Der Agent lernt neue Objekthoehen selbst** - fuer 32 mm robust, aus DAgger und
 Selbst-Imitation im laufenden Betrieb, in rund 100 Episoden - und er tut es auch, wenn er die
-Hoehe nur aus dem Kamerabild schaetzt. **Fuer 16 mm nicht**, weil schon der Lehrer dort an der
-Kante greift. Das ist das erste Ergebnis dieser Reihe, das direkt auf das [Projektziel](/ziel.md)
+Hoehe nur aus dem Kamerabild schaetzt. Bei 16 mm steigt die Kurve kaum, weil die Policy dort
+schon nahe am Teacher-Niveau (~43 %) beginnt. Das ist das erste Ergebnis dieser Reihe, das direkt auf das [Projektziel](/ziel.md)
 zahlt: eine neue Eigenschaft der Welt, ohne Etikett zur Laufzeit gelernt.
 
 Vorbehalte, ehrlich:

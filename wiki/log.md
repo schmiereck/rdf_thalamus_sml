@@ -7,6 +7,10 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-10-04
 
+* **Widerlegung**: [Flache Objekte tiefer greifen](/befunde/greifhoehe-flach.md) - Teacher auf
+  16 mm 13/30 alt gegen 11/30 tiefer; die Kanten-Vermutung stand auf 9 Episoden. In
+  [Neue Objekthoehen](/befunde/neue-hoehen-gelernt.md) korrigiert: 16 mm endet auf Teacher-Niveau.
+
 * **Ergaenzung**: [Neue Objekthoehen](/befunde/neue-hoehen-gelernt.md) - zweiter Seed: 32 mm wird
   robust gelernt, 16 mm nicht; Ursache vermutlich die Teacher-Greifhoehe (Mitte + 6 mm = Kante).
   Evidenz auf `gemessen`.
