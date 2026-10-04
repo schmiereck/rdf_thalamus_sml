@@ -7,6 +7,10 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-10-04
 
+* **Ergaenzung**: [Neue Objekthoehen](/befunde/neue-hoehen-gelernt.md) - zweiter Seed: 32 mm wird
+  robust gelernt, 16 mm nicht; Ursache vermutlich die Teacher-Greifhoehe (Mitte + 6 mm = Kante).
+  Evidenz auf `gemessen`.
+
 * **Anlage**: [Neue Objekthoehen selbst gelernt](/befunde/neue-hoehen-gelernt.md) - `ACT23_HOEHEN`;
   die Policy lernt 16/32-mm-Objekte im Betrieb (15 -> 57 % bzw. 24 -> 63 % mit geschaetzter Hoehe).
   Ein Seed; der Lauf wurde wegen Speichermangels abgebrochen.
