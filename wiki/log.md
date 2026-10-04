@@ -2,6 +2,17 @@
 
 ## 2026-10-04
 
+* **Native ACT23-Arbeitsposen geprüft**: [Befund](/befunde/act23-arbeitsposen-kamera.md).
+  Unveränderte Roboterkamera 240×240, vier eingefrorene FSM-Episoden: 16/16 platzierte
+  Objektvorkommen sichtbar, mindestens eine Klaue 238/238 Ansichten, beide 207/238. Alle
+  Arbeitsstellungen außerhalb S1-Box; 24 zudem außerhalb Positionsport-v1-Intervall.
+  Eigene Zustandskopie und Lernparameter unverändert. Nächste Datengrundlage aus ACT23-Bewegungen,
+  explizit erweiterter Positionsvertrag; keine Kameraverschiebung und kein neues Training.
+
+* **ACT23-Arbeitsposenprüfung festgelegt**: [Vertrag](/messungen/act23-arbeitsposen-kamera.md).
+  Nutzer bindet Kamerablick an die reale Hardware. Unverändertes overview 240×240 und native
+  ACT23-Slots/FSM-Bewegungen, vier eingefrorene Episoden auf eigener Zustandskopie; kein Training.
+
 * **B1-Schlussfolgerung korrigiert**: [Abdeckung](/befunde/s1-koerpermodell-abdeckung.md).
   Nutzer verweist auf den erprobten ACT23-Arbeitsraum. Gleiche Simulatorklasse/Kamera,
   aber B1 zog unabhängige Gelenkstellungen aus der S1-Box statt ACT23-Arbeitsposen.

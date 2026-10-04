@@ -104,6 +104,12 @@ Abdeckungsintervention noch unabhängiger Wirksamkeitsnachweis.
 
 # Entscheidung und nächster Schritt
 
+**Arbeitsposen inzwischen geprüft (2026-10-04):** Der [native ACT23-Audit](/befunde/act23-arbeitsposen-kamera.md)
+zeigt bei unveränderter Kamera 238/238 Ansichten mit mindestens einer Klaue und 16/16 sichtbare
+Objektvorkommen vor Ausführung. Alle Arbeitsstellungen liegen außerhalb der alten S1-Box.
+Nächster Schritt sind passende Bewegungsdaten und ein erweiterter Positionsvertrag, keine
+zusätzliche Kamera. Vier Episoden sind keine allgemeine Abdeckungsgarantie.
+
 **Korrektur 2026-10-04 nach Nutzerhinweis:** Die unten ursprünglich empfohlene Änderung
 des Kamerablicks ist nicht als notwendiger nächster Schritt belegt. B1 verwendet zwar dieselbe
 `BracketArmSim`-Klasse und `overview`-Kameradefinition wie ACT23, übernimmt aber unabhängig

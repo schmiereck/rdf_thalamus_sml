@@ -89,6 +89,12 @@ Keine alte Vorhersage wird als frisch ausgegeben.
 
 # Benutzung und Kontrollen
 
+**Integrationsgrenze, 2026-10-04:** Im [nativen ACT23-Arbeitsposen-Audit](/befunde/act23-arbeitsposen-kamera.md)
+liegen 24/238 Messungen geringfügig über pi an joint_3 und damit außerhalb dieses v1-Vertrags.
+Alle 238 liegen außerhalb der alten S1-Trainingsbox. Vor ACT23-Anschluss Positionsintervall
+explizit versioniert erweitern, Greifersensor berücksichtigen und Forecast im Arbeitsbereich
+neu prüfen. Kein stilles Abschneiden oder Extrapolieren; dieser isolierte Port bleibt unverändert.
+
 ```python
 from pc_cvnn.arm_modules.servo_latent import ServoLatentModule
 servo = ServoLatentModule("log/s1-online-readout-20261003/model.npz")

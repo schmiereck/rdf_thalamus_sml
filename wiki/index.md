@@ -17,6 +17,9 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 # Mechanismen
 
+* [ACT23-Arbeitsposen und Roboterkamera](messungen/act23-arbeitsposen-kamera.md) - unveränderter Hardwareblick, native Objektplatzierung und phasenweiser Audit
+* [ACT23-Arbeitsposen sichtbar](befunde/act23-arbeitsposen-kamera.md) - 16/16 platzierte Objektvorkommen und Klaue in 238/238 Ansichten sichtbar; alle Posen außerhalb alter S1-Box
+
 * [B1-Abdeckungsaudit](messungen/s1-koerpermodell-abdeckung.md) - Kamera-/Greifersichtbarkeit per geprüftem Replay und Gelenkraumabdeckung ohne Nachtraining
 * [B1: Klauen meist außerhalb des Bildes](befunde/s1-koerpermodell-abdeckung.md) - 145/224 isolierte S1-Posen; Korrektur: zuerst ACT23-Arbeitsposen bei bestehender Kamera prüfen, kein belegtes ACT23-Kameraproblem
 
