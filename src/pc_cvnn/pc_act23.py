@@ -983,6 +983,13 @@ RUECKFALL = os.environ.get("ACT23_RUECKFALL", "aufgeben").strip().lower()
 # 196/400, 95 %-Intervall der Differenz [-7, +7] -- das vorab festgelegte Kriterium (Schaden
 # > 10 Punkte ausgeschlossen) ist erfuellt.  ACT23_REGELN_NETZ=1 = altes Verhalten.
 REGELN_NETZ = os.environ.get("ACT23_REGELN_NETZ", "0") == "1"
+# NEUE OBJEKTHOEHEN (ACT23_HOEHEN, z. B. "16,24,32" in mm; Vorgabe leer = alle 24 mm wie bisher).
+# Jede neue Szene wuerfelt fuer jedes STEHENDE Objekt eine Hoehe aus der Liste; ALLE Teile eines
+# Koerpers werden gemeinsam gestreckt (Grundriss unveraendert, Masse unveraendert -- MuJoCo
+# rechnet Masse und Traegheit beim Kompilieren).  Die Probe auf das Projektziel nach Schritt 1
+# (wiki/befunde/groesse-sehen-ab.md): bis hierhin war die Hoehe eine Konstante, und die Policy
+# hat sie nie gebraucht (Spalte 9 stumm).  Jetzt muss sie aus der Wahrnehmung kommen.
+HOEHEN = [float(v) / 1000.0 for v in os.environ.get("ACT23_HOEHEN", "").split(",") if v.strip()]
 if RUECKFALL not in ("privileg", "aufgeben"):
     raise SystemExit(f"ACT23_RUECKFALL={RUECKFALL!r}: erlaubt sind privileg | aufgeben")
 
@@ -4814,11 +4821,17 @@ def run_self_learning_steering(headless=False):
         for (nm, m), si in zip(_steht, order):
             p = np.array(SLOTS[si], float) + crng.uniform(-0.002, 0.002, 2)   # small jitter
             z = float(LONG_HALF[2]) if m == "long" else 0.012
+            if HOEHEN:                                         # neue Hoehe je Szene (s. HOEHEN)
+                _hoehe[nm] = float(HOEHEN[int(crng.integers(len(HOEHEN)))]) / 2.0
+                z = _hoehe[nm]
             yaw = crng.uniform(0, np.pi) if m == "long" else crng.uniform(0, 2 * np.pi)
             scene[nm] = (p, z, float(yaw)); scene_slots[nm] = si
         for nm, m in _geparkt:                                 # geparkt: bleibt in `scene` (nichts
             scene[nm] = (np.array(PARK_XY, float),             #   stromabwaerts bricht), steht aber
-                         float(LONG_HALF[2]) if m == "long" else 0.012, 0.0)   #   ausserhalb des Bildes
+                         _hoehe.get(nm, float(LONG_HALF[2]) if m == "long" else 0.012), 0.0)   #   ausserhalb des Bildes
+        if HOEHEN:
+            print("    [Hoehen] " + ", ".join(f"{nm} {2000 * _hoehe[nm]:.0f}mm" for nm, _m in _steht
+                                              if nm in _hoehe), flush=True)
         if _geparkt:
             print(f"    [Szene] {len(_steht)} Objekte auf dem Tisch (min. Abstand "
                   f"{1000*min(np.hypot(a[0]-b[0], a[1]-b[1]) for a, b in __import__('itertools').combinations(SLOTS, 2)):.0f}mm), "
@@ -4850,6 +4863,15 @@ def run_self_learning_steering(headless=False):
 
     _novel_half = {"h": None}          # aktuell erzwungene Proportion des Probe-Koerpers (s. _set_sizes)
 
+    _hoehe = {}                       # Koerper -> halbe Hoehe (s. HOEHEN); leer = Modellhoehe
+
+    def _hoehe_anwenden():
+        """Alle Teile jedes Koerpers in _hoehe auf seine halbe Hoehe setzen (s. HOEHEN)."""
+        for _nm, _h in _hoehe.items():
+            for _g in _geoms_of(_nm):
+                sim.m.geom_size[_g][2] = float(_h)
+                sim.m.geom_rbound[_g] = float(np.linalg.norm(sim.m.geom_size[_g]))
+
     def _set_sizes():
         sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "obj_red")]] = np.array([0.012] * 3)
         sim.m.geom_size[sim.m.body_geomadr[bid]] = np.asarray(LONG_HALF, float)   # obj_blue stays elongated
@@ -4869,6 +4891,7 @@ def run_self_learning_steering(headless=False):
             sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)]] = h0
             #   on a composite body hits only its first geom and silently DEFORMS the shape ("a segment turns
             #   90 deg") -- with PERSIST above this is a no-op, but the shape must never stay deformed.
+        _hoehe_anwenden()                      # NEUE HOEHEN (s. HOEHEN) zuletzt, ueber allem anderen
 
     def place_all():
         _set_sizes()
@@ -5788,7 +5811,7 @@ def run_self_learning_steering(headless=False):
                 # OUT to re-find the class saliency and IN for detail -- sel must stay readable there.
                 vc.fovea.z = (ZOOM_MIN + (ZOOM_MAX - ZOOM_MIN) * crng.random()) if FOVEA_ZOOM else 1.0
                 p = _rand_xy(crng)
-                sim.set_object(body, p, z=0.012, yaw=float(crng.uniform(0, 2 * np.pi)))
+                sim.set_object(body, p, z=_hoehe.get(body, 0.012), yaw=float(crng.uniform(0, 2 * np.pi)))
                 mujoco.mj_forward(sim.m, sim.d)
                 img = sim.render(CAM)
                 try:
@@ -7618,7 +7641,7 @@ def run_self_learning_steering(headless=False):
             if not free:
                 continue
             s = max(free, key=lambda sl: min(float(np.linalg.norm(np.asarray(sl) - q)) for q in occ))
-            zr = scene.get(nm, (None, 0.012, 0.0))[1]
+            zr = scene.get(nm, (None, _hoehe.get(nm, 0.012), 0.0))[1]
             sim.set_object(nm, np.asarray(s, float) + crng.uniform(-0.003, 0.003, 2), z=zr,
                            yaw=float(crng.uniform(0, 2 * np.pi)))
             print(f"    [Szene] {nm} lag außerhalb des Arbeitsbereichs — zurück auf einen freien Platz",
