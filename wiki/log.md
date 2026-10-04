@@ -7,6 +7,10 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-10-04
 
+* **Anlage**: [Neue Objekthoehen selbst gelernt](/befunde/neue-hoehen-gelernt.md) - `ACT23_HOEHEN`;
+  die Policy lernt 16/32-mm-Objekte im Betrieb (15 -> 57 % bzw. 24 -> 63 % mit geschaetzter Hoehe).
+  Ein Seed; der Lauf wurde wegen Speichermangels abgebrochen.
+
 * **Widerlegung**: [Riegel und Reflex entfernt](/befunde/riegel-reflex-entfernt.md) - gepaart,
   8 Seeds x 50: an 196/400, aus 196/400, Intervall [-7, +7]. Die Riegel-Messung vom 25.08.
   ("nicht abschalten") gilt fuer den heutigen Zustand nicht mehr. Riegel und Reflex sind im

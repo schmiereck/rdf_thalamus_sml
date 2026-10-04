@@ -164,6 +164,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 # Chronik der Entwicklung
 
 * [act23-Entwicklungslinie](chronik/act23.md) - Juni bis September 2026, verdichtet: Etappen, Anlaesse, Messungen
+* [Neue Objekthoehen selbst gelernt](befunde/neue-hoehen-gelernt.md) - **16/24/32 mm: Einbruch auf neuen Hoehen, dann gelernt - 15 % -> 57 % (Hoehe gesagt), 24 % -> 63 % (geschaetzt), am Ende gleichauf.** Ein Seed (Einzelmessung). `ACT23_HOEHEN`.
 * [Riegel und Reflex entfernt](befunde/riegel-reflex-entfernt.md) - **8 Seeds: an 196/400, aus 196/400, 95 %-Intervall [-7, +7]. Seit 2026-10-04 im Netzbetrieb aus, im Teacher-Betrieb Geruest.** Widerlegt die Riegel-Lesart vom 25.08. fuer den heutigen Zustand.
 * [Die Schliess-Entscheidung offline](befunde/schliessen-offline.md) - **die Policy kann den Schliesszeitpunkt (ueber 16 mm 0-3 % Schliesswunsch); "30 % zu hoch" war ein Zaehlartefakt.** Echt: ein 4-mm-Band (12-16 mm, 24 %) und ein Stillstand, den der Policy-Zustand nicht sehen kann.
 * [Der privilegierte Rueckfall rettet nichts](befunde/rueckfall-privileg-gemessen.md) - **Namensbetrieb 1 Rueckfall in 400 Episoden, Eigenschaftsbetrieb 2 in 200 (beide auch mit Privileg gescheitert). `ACT23_RUECKFALL=aufgeben` ist Vorgabe.** Zweiter Kanal gefunden: das Wiederfinden mitten in der Episode.
