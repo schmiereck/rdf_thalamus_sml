@@ -1,5 +1,11 @@
 # Chronik
 
+## 2026-10-06
+
+* **Ergaenzung**: [Loslassen am Ziel](/befunde/loslassen.md) - Umetikettierung schadet dem Greifen
+  nicht; "erst bei ruhiger Hand" wirkungslos (Kopf extrapoliert ausserhalb der Teacher-Etiketten);
+  Schritt 3 nicht gefahren. Codex-Integration c745ce6 in main uebernommen (fast-forward).
+
 ## 2026-10-05
 
 * **Integration geprueft**: [ACT23-Worktrees](/befunde/act23-worktree-integration.md) - main efb3ae2 und Codex daa44af vereinigt, neue Lernspeicher in D0-Freeze aufgenommen. FSM-/Netz-Rauchtest und mathematische Regressionen bestehen; eigener Zustand pro Lauf. 15-Kanal-Vertrag fuer aktuellen Claude-Checkpoint dokumentiert. Kein Leistungs-A/B.

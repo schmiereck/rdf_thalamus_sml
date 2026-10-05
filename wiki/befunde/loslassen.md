@@ -79,3 +79,30 @@ Naechste Schritte: (1) offline pruefen, ob die Umetikettierung das Greifen versc
 
 * [Aspekt-Rueckmeldung](/fragen/aspekt-rueckmeldung.md)
 * [Das Episodenende entscheidet der Agent selbst](/befunde/episodenende-selbst.md)
+
+# Nachtrag 2026-10-06: Schritte 1 und 2
+
+**1. Schadet die Umetikettierung dem Greifen?** Nein, kaum. Offline, beide Netze ohne die letzten
+20 % nachtrainiert: Greifen 6,0 gegen 7,5 mm Median-Abstand zum Teacher, Anfahren 5,0 gegen 4,5,
+Tragen und Ablegen gleich. Und im zweiten Seed war der Griff-Unterschied weg ("Griff hielt nicht"
+17 heute gegen 15 selbst) - die Verdopplung in Seed 9061 war Zufall.
+
+**2. Erst bei ruhiger Hand entscheiden** (`ACT23_LOSLASS_RUHIG=5`): im Rauchtest (6 Episoden)
+**wirkungslos** - der Agent oeffnet weiter mit dem Objekt 14-15 mm ueber der Ruhelage und 19-30 mm
+seitlich. Die Hand STEHT dort ruhig; die Policy haelt das Objekt so.
+
+**Warum der Kopf dort oeffnet:** auf dem Pruefsatz gibt es keine Fehlalarme weiter als 25 mm
+seitlich, im Lauf oeffnet er bei 28-43 mm. Die Haltepose im Lauf (ruhig, 14 mm hoch, 30 mm daneben)
+liegt ausserhalb dessen, was der Teacher je etikettiert hat - dort extrapoliert der Kopf. Im Kern
+ist er zudem unsicher (Ausgabe median 0,64), weil der Teacher selbst grosszuegig ist (oeffnet bis
+12 mm hoch, 20 mm seitlich). Ein Hoehenaspekt nach `place_z` statt `tgt_z` aendert nichts, solange
+alle Objekte gleich hoch sind.
+
+**Ehrliche Einordnung des Episodenendes:** das selbst entschiedene Ende ist eine von Hand
+geschriebene Regel auf eigener Wahrnehmung ("Hand innerhalb 25 mm ueber dem eigenen Ziel, unten,
+haelt"), kein gelerntes Urteil. Es ersetzt ein Privileg, ist aber selbst eine Laufzeitregel.
+
+Schritt 3 (neues A/B) **nicht gefahren** - es haette mit hoher Wahrscheinlichkeit den Verlust
+wiederholt. Der naheliegende Weg ist die volle [Aspekt-Rueckmeldung](/fragen/aspekt-rueckmeldung.md):
+den Kopf mit dem **eigenen Ergebnis** etikettieren (Kamera nach dem Loslassen: liegt es im Ziel?)
+statt mit dem Teacher - genau in der Haltepose, die im Lauf vorkommt.
