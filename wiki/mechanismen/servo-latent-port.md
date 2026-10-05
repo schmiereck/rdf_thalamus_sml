@@ -19,6 +19,12 @@ sources:
 
 # Nutzerwunsch und Entscheidung
 
+**Erweiterung 2026-10-05:** Für den tatsächlichen ACT23-Arbeitsbereich steht jetzt ein
+separater [gemessener Positionsport v2](/befunde/act23-bewegungsdaten.md) bereit: sechs Servos
+inklusive Greifer, Intervall `[-0.1,pi+0.1]`, zwölf Re/Im-Werte. Die folgende v1-Dokumentation
+und ihr alter 20-ms-Prädiktor bleiben als isolierter S1-Stand erhalten. V2 behauptet noch
+keinen Forecast, erhält aber sämtliche neuen gemessenen Positionen reversibel.
+
 Servopositionen sollen dem Körpermodell als Latent-Information erhalten bleiben, damit später
 kein inverses Netz allein zur Rückgewinnung dieser Messung trainiert werden muss. Deshalb
 trägt die Schnittstelle einen **expliziten Positionsblock** neben dem gelernten Übergangs-Latent.

@@ -29,16 +29,16 @@ def write_json(path, value):
     path.write_text(json.dumps(value, indent=2, default=scalar)+'\n', encoding='utf-8')
 
 
-def run(source, output):
+def run(source, output, *, seed=421, episodes=4, split=None):
     source, output = source.resolve(), output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     source_hash = sha(source)
     copied = output/'state-input.pkl'
     shutil.copy2(source, copied)
     settings = dict(ACT23_STATE_PATH=str(copied), ACT23_NO_PERSIST='1', ACT23_D0_FREEZE='1',
-                    ACT23_STATE_HEADLESS='1', ACT23_VIZ_HEADLESS='1', ACT23_AUTO_N='4',
+                    ACT23_STATE_HEADLESS='1', ACT23_VIZ_HEADLESS='1', ACT23_AUTO_N=str(episodes),
                     ACT23_AUTO_CURIOUS='0', ACT23_AUTO_OBJ='', ACT23_CHOREO='fsm',
-                    ACT23_SCENE_N='4', ACT23_SCENE_EVERY='1', ACT23_SEED='421',
+                    ACT23_SCENE_N='4', ACT23_SCENE_EVERY='1', ACT23_SEED=str(seed),
                     ACT23_RES='240', ACT23_WM_EVAL='0', ACT21_HEADLESS='1',
                     ACT23_D0_MANIFEST_DIR=str(output/'manifests'),
                     ACT23_D0_EPISODE_JSONL=str(output/'episodes.jsonl'),
@@ -48,6 +48,8 @@ def run(source, output):
     import pc_cvnn.pc_act23 as act23  # ACT23 sets reach and DOF defaults BEFORE simulator import
     from pc_cvnn.act23_s1_transition_collector import OBS_LOW, OBS_HIGH, _q
     from pc_cvnn.arm_modules.d0_integrity import changed_components
+    from pc_cvnn.act23_transition_recorder import TransitionRecorder, audit as audit_transitions
+    recorder = None if split is None else TransitionRecorder(output, split)
     original = act23.act16.run_combined
     records, images, masks, scene_records = [], [], [], []
     episode_number = [0]
@@ -60,6 +62,7 @@ def run(source, output):
             command = command(0)  # ACT23 supplies CommandState23.cmd_fn, not a body-name string.
         prior_hook = kwargs.get('macro_log_fn')
         phase_counts = defaultdict(int)
+        current_phase = ['setup']
         claw_ids = [mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_GEOM, n)
                     for n in ('claw_left', 'claw_right')]
         camera_id = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_CAMERA, act23.CAM)
@@ -101,13 +104,22 @@ def run(source, output):
                                   camera_fovy=float(sim.m.cam_fovy[camera_id])))
 
         def hook(state, aim, j5, phase):
+            current_phase[0] = phase
             if prior_hook is not None:
                 prior_hook(state, aim, j5, phase)
             phase_counts[phase] += 1
             if phase_counts[phase] == 1 or phase_counts[phase] % 15 == 0:
                 capture(phase)
         kwargs['macro_log_fn'] = hook
-        result = original(sim, *args, **kwargs)
+        native_step = sim.step
+        if recorder is not None:
+            def observed_step(n=1):
+                return recorder.step(sim, native_step, n, episode, current_phase[0], act23.CAM)
+            sim.step = observed_step
+        try:
+            result = original(sim, *args, **kwargs)
+        finally:
+            sim.step = native_step
         capture('after')
         scene_records[-1]['phase_steps'] = dict(phase_counts)
         scene_records[-1]['return'] = list(result)
@@ -124,6 +136,8 @@ def run(source, output):
                 act23.run_self_learning_steering(headless=True)
     finally:
         act23.act16.run_combined = original
+        if recorder is not None:
+            recorder.close()
         np.savez_compressed(output/'camera-observations.npz', rgb=np.asarray(images),
                             q_rad=np.asarray([r['q_rad'] for r in records]),
                             gripper_rad=np.asarray([r['gripper_rad'] for r in records]))
@@ -145,8 +159,14 @@ def run(source, output):
                   source_hash=source_hash, source_unchanged=sha(source)==source_hash,
                   copy_unchanged=sha(copied)==source_hash,
                   act23_source_sha256=sha(Path(act23.__file__)), camera='overview', resolution=[240,240])
+    if recorder is not None:
+        result['transitions'] = audit_transitions(output)
+        result['transitions_sha256'] = sha(output/'transitions.jsonl')
+        result['transition_camera_sha256'] = sha(output/'transition-camera.npz')
     write_json(output/'result.json', result)
-    assert result['episodes']==4 and not changes and result['source_unchanged'] and result['copy_unchanged']
+    assert result['episodes']==episodes and not changes and result['source_unchanged'] and result['copy_unchanged']
+    if recorder is not None:
+        assert result['transitions']['passed'], 'Native transition integrity failed; retain all rows for audit'
     print(json.dumps(result, indent=2))
 
 
@@ -154,5 +174,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--seed', type=int, default=421)
+    parser.add_argument('--episodes', type=int, default=4)
+    parser.add_argument('--split', choices=('train','test'), help='Record native transitions for this whole-run split')
     args = parser.parse_args()
-    run(args.state, args.output)
+    if args.episodes < 1:
+        parser.error('episodes must be positive')
+    run(args.state, args.output, seed=args.seed, episodes=args.episodes, split=args.split)

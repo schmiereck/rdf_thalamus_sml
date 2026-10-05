@@ -1,6 +1,19 @@
 # Chronik
 
+## 2026-10-05
+
+* **Native ACT23-Datengrundlage abgeschlossen**: [Befund](/befunde/act23-bewegungsdaten.md).
+  3.035 Trainings-/5.979 Testübergänge und 362 Kamerabildpaare, tatsächliche ACT23-Bewegung
+  bei unveränderter Kamera. Positionsport v2 umfasst sechs Servos und gemessene Grenzüberschreitungen.
+  Zeit-/Sensoranschluss, Rundlauf, Hashes und Lern-Freeze bestehen. Noch kein Modellfit;
+  nächster Vergleich sechs Gelenke/4 ms mit getrennter Episodenbewertung gegen Persistenz.
+
 ## 2026-10-04
+
+* **Umstellung auf tatsächliche ACT23-Bewegungen festgelegt**: [Datenvertrag](/messungen/act23-bewegungsdaten.md).
+  Sechs gemessene Servos inkl. Greifer, reversibler Positionsport v2; native Übergänge mit
+  tatsächlichem Horizont (Bewegungszyklus 4 ms), unveränderte Kamera. Seeds 431/443 nach Läufen
+  getrennt. Keine Extrapolation des alten S1-Forecasts und noch kein neuer Fit.
 
 * **Native ACT23-Arbeitsposen geprüft**: [Befund](/befunde/act23-arbeitsposen-kamera.md).
   Unveränderte Roboterkamera 240×240, vier eingefrorene FSM-Episoden: 16/16 platzierte

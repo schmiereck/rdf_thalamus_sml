@@ -17,6 +17,9 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 # Mechanismen
 
+* [Native ACT23-Bewegungsdaten](messungen/act23-bewegungsdaten.md) - tatsächliche sechs Servo-Kanäle, Positionsport v2 und getrennte native Übergangsläufe
+* [ACT23-Datengrundlage und Positionsport v2 bereit](befunde/act23-bewegungsdaten.md) - 9.014 geprüfte Übergänge, 362 Bildpaare, sechs reversible Servo-Positionen; nächster Schritt ist der 4-ms-Modellvergleich
+
 * [ACT23-Arbeitsposen und Roboterkamera](messungen/act23-arbeitsposen-kamera.md) - unveränderter Hardwareblick, native Objektplatzierung und phasenweiser Audit
 * [ACT23-Arbeitsposen sichtbar](befunde/act23-arbeitsposen-kamera.md) - 16/16 platzierte Objektvorkommen und Klaue in 238/238 Ansichten sichtbar; alle Posen außerhalb alter S1-Box
 
