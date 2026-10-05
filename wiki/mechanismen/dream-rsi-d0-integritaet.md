@@ -1,0 +1,116 @@
+---
+type: Mechanismus
+title: D0-Integritaet - Fingerabdruck und Kreditprotokoll
+description: Der D0-Helfer erzeugt getrennte Fingerabdruecke fuer Voll- und Lernzustand sowie opt-in JSONL-Kreditzeilen; ein zentraler Fovea-Freeze sichert den gefrorenen FSM-L-Preflight gegen alte Aufrufpfade ab.
+tags: [act23, dream-rsi, d0, zustand, kredit, reproduzierbarkeit]
+status: stable
+evidenz: einzelmessung
+ebene: code
+generated: { by: codex, at: 2026-09-18T07:45:00Z }
+sources:
+  - id: module
+    resource: ../../src/pc_cvnn/arm_modules/d0_integrity.py
+    title: Komponentenfingerabdruck und JSONL-Schreiber
+  - id: test
+    resource: ../../src/pc_cvnn/test_d0_integrity.py
+    title: Deterministischer Werkzeugtest
+  - id: training-runner
+    resource: ../../src/pc_cvnn/act23_d0_training_runner.py
+    title: Isolierter D0-Trainingsblock mit Kreditabdeckung
+  - id: audit
+    resource: /befunde/dream-rsi-d0-wrist-audit.md
+    title: Audit, der den Mechanismus verlangt
+  - id: regression
+    resource: /befunde/dream-rsi-d0-preflight-mutation.md
+    title: Fovea-Mutationsdiagnose und Gegenlauf
+---
+
+# Behauptung
+
+Der neue Helfer `d0_integrity.py` macht zwei fuer D0 getrennte Tatsachen pruefbar: ob eine
+wegwerfbare Evaluation einen deklarierten Lerneranteil veraendert hat, und welche Kreditquelle
+eine konkrete Weltmodellzeile hatte. Er aendert keinen ACT23-Vorgabepfad.
+
+# Aufbau
+
+`component_fingerprints()` serialisiert die Komponenten in derselben Darstellungsfamilie wie
+ACT23-Persistenz und bildet je Komponente einen SHA-256. Das Vollmanifest umfasst Bodymodell,
+Formklassifikator, Weltmodell, Runtime, Farben, optionale Fovea, Ziel-/Dynamikmodule,
+Neuheitsspeicher und SelfEval. Fehlende optionale Komponenten werden als `absent` festgehalten,
+nicht still ausgelassen.
+
+Daneben schreibt jedes Manifest `learning_components`. Dieser Fingerabdruck umfasst nur
+Gewichte, Trainingspuffer und persistente Kalibrierung. Fovea-Aktivierungen, Portwerte,
+Diagnosehistorien, episodisches Ziel und Generatorfortschritt bleiben im Vollmanifest sichtbar,
+zaehlen aber nicht als Lernen. Der Runner legt beide Diffs ab; `passed` verlangt einen leeren
+Lernzustands-Diff und einen bitgleichen Pkl-Kopiehash.
+
+`snapshot()` schreibt diese Fingerabdruecke samt Kontext in ein Manifest. `changed_components()`
+liefert die betroffenen Namen mit Vorher-/Nachher-Werten, `assert_unchanged()` verwirft eine
+falsch als eingefroren bezeichnete Auswertung.
+
+`ACT23_D0_CREDIT_JSONL=<wegwerfbarer Pfad>` aktiviert zusaetzlich zu den normalen
+`[Kredit]`-Zeilen ein JSONL-Protokoll. Jede gespeicherte Weltmodellzeile enthaelt mindestens
+Aktions- und Labelquelle, Route, Ausgang, Gewicht, Wrist und relativen Wrist, Griff, SelfEval-
+Distanz, Einfrierstatus und Pufferzeilen. Ohne den Schalter wird keine Datei angelegt und der
+Steuerpfad bleibt unveraendert.
+
+`ACT23_D0_EPISODE_JSONL=<wegwerfbarer Pfad>` schreibt davon getrennt genau eine Zeile fuer
+jede D0-Episode mit der **ausgefuehrten** Selbstaktion, gefaltetem relativem Wrist, Selbst- und
+Welturteil sowie Kreditroute. Auch eine Enthaltung (`credit_outcome: null`) bleibt enthalten.
+Diese Zeilen sind kein Lernpuffer und werden nur auf dem wegwerfbaren Evaluationspfad erzeugt.
+Der Runner verlangt ihre Anzahl gleich der Episodenzahl; eine unvollstaendige Auswertung kann
+damit nicht mehr unbemerkt eine Auswahlmetrik nur auf kreditfaehigen Episoden berichten.
+
+# Pruefung
+
+`src/pc_cvnn/test_d0_integrity.py` hat Komponentenfingerabdruck, erkannte Weltmodellmutation,
+Manifest-Schreiben und JSONL-Kreditzeile in der gemeinsamen venv ausgefuehrt: `D0 integrity:
+OK`. Er prueft nun mit einer realen vektorisierten `HexFovea`, dass `learn=False` W/V und
+Selektionskopf nicht veraendert, und dass ein D0-gesetzter versehentlicher `learn=True`-Aufruf
+ebenso schreibgeschuetzt bleibt. `py_compile` pruefte die geaenderten Python-Dateien.
+
+Das ist ein Werkzeugtest, kein ACT23-Lauf und kein Nachweis, dass die komplette Evaluation
+einfriert. Ein Volltest wird erst nach Abschluss der parallelen Stapelreihe auf einer
+Zustandskopie gefahren.
+
+# Wegwerfbarer Preflight-Runner
+
+`src/pc_cvnn/act23_d0_evaluation_runner.py` kopiert einen explizit genannten Startzustand nach
+`log/d0-preflight/<Zeit>/state-input.pkl`, setzt `ACT23_NO_PERSIST=1` und startet eine feste Zahl
+kopflose FSM-Autoepisoden. Die Quelle wird nie als `ACT23_STATE_PATH` verwendet.
+
+Der Steuerpfad schreibt bei gesetztem `ACT23_D0_MANIFEST_DIR` im **gleichen Prozess** ein
+`before.json` und `after.json`. Der Runner legt Voll- und Lernzustands-Diff ab, prueft zusaetzlich
+den Hash seiner Zustandskopie und schreibt `result.json`, Log und Kredit-JSONL. Eine Lernmutation,
+ein fehlendes Manifest oder ein geaenderter Pkl-Kopiehash ergibt `FAIL` und Exit-Code 2. Damit ist
+ein stilles `NO_PERSIST`-Ergebnis ausgeschlossen: fehlendes Schreiben genuegt nicht zum Bestehen.
+
+`ACT23_D0_FREEZE=1` sperrt die Update-Stellen fuer Weltmodell, Runtime, Form-/Farb-Open-Set,
+Body-Refinement, Latent-Dynamics und SelfEval-Statistik. Die Fovea hat zwei Grenzen: ACT23
+uebergibt fuer die bekannten Aufrufstellen `learn=False`; `HexFovea.step()` und `step_id()`
+setzen im D0-Modus jedoch auch zentral `learn=False` (und `train_sel=False`). Damit kann ein
+noch unerkannter oder aelterer Aufrufpfad mit seinem Default `learn=True` weder W noch V oder
+den Selektionskopf veraendern. Die Steuerung und das Selbsturteil bleiben lesend aktiv, damit
+die eingefrorene Kontrolle dieselbe Aufgabe ausfuehrt.
+
+# Isolierte Trainingslinien
+
+`act23_d0_training_runner.py` ist das Gegenstueck fuer den **mutablen** D0-Trainingsarm. Er
+kopiert den angegebenen Startcheckpoint nach `state-trained.pkl` in ein neues
+Ergebnisverzeichnis und gibt nur dieser Kopie als `ACT23_STATE_PATH` frei. Der Runner erzwingt
+FSM, `L-Form`, objektrelative Wrist und einen expliziten Trainingsseed; `NO_PERSIST` und der
+Freeze werden im Kindprozess auf `0` gesetzt.
+
+Er schreibt Log, Kredit-JSONL und `result.json`. Seine Abdeckungspruefung zaehlt nur volle,
+kausale Selbst/Selbst-Kredite und ihre acht objektsymmetrischen relativen Wrist-Zellen. Ein
+60er-Block verlangt mindestens 20 Zeilen, ein 120er-Block mindestens 40; beide verlangen vier
+Zellen. Damit kann eine Linie am vorab vereinbarten 60er-Tor technisch enden, ohne nach einem
+positiven Resultat weiterzulaufen. Der Test `test_d0_training_runner.py` prueft Filter und
+Wrist-Binning mit synthetischen Daten.
+
+# Naechster Schritt
+
+Der gefrorene FSM-L-Preflight besteht, siehe [D0-Preflight](/befunde/dream-rsi-d0-preflight-mutation.md).
+Als Naechstes werden Wiederholungen, Seeds, Budget und Abbruchregel der Wrist-Messvorschrift
+festgelegt. Erst dann beginnt eine Lernserie.

@@ -1,19 +1,29 @@
 # Chronik
 
-Neueste zuerst. Datumsueberschriften in ISO-Form `YYYY-MM-DD`. Ein Eintrag je Vorgang, das
-fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**, **Ruecknahme**.
-
-Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
-
 ## 2026-10-05
 
+* **Integration geprueft**: [ACT23-Worktrees](/befunde/act23-worktree-integration.md) - main efb3ae2 und Codex daa44af vereinigt, neue Lernspeicher in D0-Freeze aufgenommen. FSM-/Netz-Rauchtest und mathematische Regressionen bestehen; eigener Zustand pro Lauf. 15-Kanal-Vertrag fuer aktuellen Claude-Checkpoint dokumentiert. Kein Leistungs-A/B.
+
 * **Anlage**: [Rueckmeldung je Aspekt](/fragen/aspekt-rueckmeldung.md) - Nutzeridee, mit erstem Beleg.
+
 * **Anlage**: [Loslassen am Ziel](/befunde/loslassen.md) - Teacher-Fehler `ACT16_ABLAGE_FIX`, Loslass-Kopf;
   laesst selbst los, liefert aber weniger (2 Seeds, wegen Speichermangels abgebrochen).
 
 * **Anlage**: [Das Episodenende entscheidet der Agent selbst](/befunde/episodenende-selbst.md) -
   gepaart, 8 Seeds x 50: Orakel 53,1 %, selbst 60,7 %, Seeds 7:1. `ACT16_ENDE_SELBST` ist in act23
   Vorgabe. Gefunden: die Policy laesst am Ziel nicht los (das Orakel nahm es ihr immer ab).
+
+* **Claudes Aspekt-Idee und Branch-Abstand gelesen**: [Analyse](/fragen/aspekte-und-worktree-integration.md).
+  Einzelaspekte passen als Hypothese zum Koerpermodell; Loslassen im Pruefstand stark,
+  im ACT23-Zwischenstand noch schlechter. 119/56 exklusive Commits, sechs gemeinsam
+  bearbeitete Dateien. Kontrollierte Integration in drittem Worktree empfohlen, noch
+  nicht ausgefuehrt; kein neuer Lauf und keine gemeinsamen Zustaende veraendert.
+
+* **Native ACT23-Datengrundlage abgeschlossen**: [Befund](/befunde/act23-bewegungsdaten.md).
+  3.035 Trainings-/5.979 Testübergänge und 362 Kamerabildpaare, tatsächliche ACT23-Bewegung
+  bei unveränderter Kamera. Positionsport v2 umfasst sechs Servos und gemessene Grenzüberschreitungen.
+  Zeit-/Sensoranschluss, Rundlauf, Hashes und Lern-Freeze bestehen. Noch kein Modellfit;
+  nächster Vergleich sechs Gelenke/4 ms mit getrennter Episodenbewertung gegen Persistenz.
 
 ## 2026-10-04
 
@@ -34,6 +44,28 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
   ("nicht abschalten") gilt fuer den heutigen Zustand nicht mehr. Riegel und Reflex sind im
   Netzbetrieb aus (`ACT23_REGELN_NETZ`, Vorgabe 0).
 
+* **Umstellung auf tatsächliche ACT23-Bewegungen festgelegt**: [Datenvertrag](/messungen/act23-bewegungsdaten.md).
+  Sechs gemessene Servos inkl. Greifer, reversibler Positionsport v2; native Übergänge mit
+  tatsächlichem Horizont (Bewegungszyklus 4 ms), unveränderte Kamera. Seeds 431/443 nach Läufen
+  getrennt. Keine Extrapolation des alten S1-Forecasts und noch kein neuer Fit.
+
+* **Native ACT23-Arbeitsposen geprüft**: [Befund](/befunde/act23-arbeitsposen-kamera.md).
+  Unveränderte Roboterkamera 240×240, vier eingefrorene FSM-Episoden: 16/16 platzierte
+  Objektvorkommen sichtbar, mindestens eine Klaue 238/238 Ansichten, beide 207/238. Alle
+  Arbeitsstellungen außerhalb S1-Box; 24 zudem außerhalb Positionsport-v1-Intervall.
+  Eigene Zustandskopie und Lernparameter unverändert. Nächste Datengrundlage aus ACT23-Bewegungen,
+  explizit erweiterter Positionsvertrag; keine Kameraverschiebung und kein neues Training.
+
+* **ACT23-Arbeitsposenprüfung festgelegt**: [Vertrag](/messungen/act23-arbeitsposen-kamera.md).
+  Nutzer bindet Kamerablick an die reale Hardware. Unverändertes overview 240×240 und native
+  ACT23-Slots/FSM-Bewegungen, vier eingefrorene Episoden auf eigener Zustandskopie; kein Training.
+
+* **B1-Schlussfolgerung korrigiert**: [Abdeckung](/befunde/s1-koerpermodell-abdeckung.md).
+  Nutzer verweist auf den erprobten ACT23-Arbeitsraum. Gleiche Simulatorklasse/Kamera,
+  aber B1 zog unabhängige Gelenkstellungen aus der S1-Box statt ACT23-Arbeitsposen.
+  Daher zuerst repräsentative Arbeitsposen bei bestehender Kamera prüfen; keine belegte
+  Notwendigkeit einer zusätzlichen Körperkamera. Messwerte bleiben gültig für B1.
+
 ## 2026-10-03
 
 * **Anlage**: [Die Schliess-Entscheidung offline](/befunde/schliessen-offline.md) - Schritt 3,
@@ -50,6 +82,63 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
   gepaart: Privileg 52,2 %, Schaetzung 53,8 %, Seeds 3:3:2. `ACT23_GROESSE_SEHEN` ist Vorgabe,
   act23 sammelt beim Start selbst, wenn der Schaetzer leer ist.
 
+* **B1-Abdeckung geprüft**: [Befund](/befunde/s1-koerpermodell-abdeckung.md).
+  224/224 RGB-/Encoder-Replays exakt; in 145 Posen liegen beide Klauen außerhalb der Kamera,
+  beide sichtbar nur 20/224. 36/64 Testposen außerhalb der Trainingshülle, aber selbst innerhalb
+  Fehlerfaktor 1,12482 gegen Mittelbild. Kein Nachtraining. Erst Körperblick/Erhebung korrigieren,
+  dann neuer B2-Vertrag mit frischen Testposen; bloße Auflösungserhöhung behebt den Blickfehler nicht.
+
+* **B1-Abdeckungsaudit festgelegt**: [Vorgehen](/messungen/s1-koerpermodell-abdeckung.md).
+  Vorhandene 224 Posen ohne Fit: nächste Gelenknachbarn und konvexe Hülle, danach RGB-identischer
+  Replay mit ausschließlich evaluativer Geometriesegmentierung und Kameraprojektion.
+
+* **B1 ausgeführt, Vorhersagetor verfehlt**: [Befund](/befunde/s1-visuelles-koerpermodell.md).
+  Erster lernender Positions-Latent-Verbraucher, 160 Trainings-/64 neue Testposen: Bild-MSE
+  Faktor 1,28015 gegen Mittelbild; variable Pixel 1,28056, vertauschte Kontrolle 0,37562.
+  Erhebung, Gradienten und Checkpoint-Replay bestehen. Nächstes Thema: sichtbare Abdeckung
+  und Generalisierung auditieren; keine Nachoptimierung auf diesem Test und keine ACT23-Integration.
+
+* **Visuellen Körpermodell-Verbraucher festgelegt**: [B1-Vertrag](/messungen/s1-visuelles-koerpermodell.md).
+  Direkter Positions-Latent → Kameraansicht, getrennte Posen und vertauschte Bildzuordnung als
+  Kontrolle. Kein als bestanden angenommener Greifer-Landmark, keine Handpositionsetiketten.
+
+* **Unabhängiger S1-Test bestanden, Latent-Port gebaut**: [Befund](/befunde/s1-unabhaengige-rollouts.md).
+  2.400 neue Testübergänge Seeds 211/307 ohne Nachtraining: Faktor 0,09224 gegen Persistenz,
+  je 5/5 Gelenke besser. [Portvertrag](/mechanismen/servo-latent-port.md) erhält gemessene
+  Position reversibel und getrennt von Übergangs-Latent/Forecast für das künftige Körpermodell.
+
+* **Unabhängiger S1-Test festgelegt**: [Vertrag](/messungen/s1-unabhaengige-rollouts.md).
+  Seeds 211/307, je 20x60 neue Testübergänge, kein Nachtraining. Nutzerwunsch als
+  Latent-Port-Vertrag aufgenommen: gemessene Position getrennt vom aktionsbedingten Latent erhalten.
+
+* **S1-Online-Kopftraining abgeschlossen**: [Befund](/befunde/s1-online-kopf.md).
+  Lokale komplexe Updates aus zufälliger Initialisierung erreichen 1,20244e-5 rad²,
+  Faktor 0,0874 gegen Persistenz, 5/5 Gelenke besser. Batch bleibt genauer; nächstes Tor
+  ist ein neuer unabhängiger Rolloutsatz bei eingefrorenem Modell, kein weiteres Diagnosesplit-Tuning.
+
+* **S1-Online-Kopftraining festgelegt**: [Vertrag](/messungen/s1-online-kopf.md).
+  Zwölf Epochen lokaler komplexer Updates aus zufälliger Kopfinitialisierung; gleicher
+  eingefrorener Kontextencoder, kein Batch-Warmstart und keine Parametersuche.
+
+* **S1-Vorhersagesignal erschlossen**: [Lernziel-Audit](/befunde/s1-lernziel-audit.md).
+  Konvergiertes generatives Training bleibt bei Faktor 4,36 gegen Persistenz; bedingter
+  Batch-Kopf auf identischer kontextinferierter Repräsentation erreicht 9,49e-8 rad² (5/5 besser).
+  Zielvergiftung/Replay bestehen; Nullprior entfernen ergibt perfekte Rekonstruktion ohne
+  Lernen. Nächster Schritt: gleiche bedingte Merkmale mit lokaler Online-Lernregel.
+
+* **S1-Lernzielvergleich festgelegt**: [Vertrag](/messungen/s1-lernziel-audit.md).
+  Konvergiertes Training gegen analytische lineare Referenzen, mit/ohne Nullprior;
+  bedingte Köpfe und direkter linearer Vergleich trennen verbleibende Hypothesen.
+
+* **S1 mit korrekter Energie-Inferenz abgeschlossen**: [Befund](/befunde/s1-energie-inferenz.md).
+  128 Schritte im Test zu kurz; lange Inferenz und unabhängiger reduzierter Solver stimmen
+  auf 2,01e-8 rad überein. MSE 0,000599 gegen 0,000138 Persistenz, 2/5 Gelenke besser.
+  Tor verfehlt, Trainingskonvergenz bleibt Vorbehalt; kein Gesamturteil gegen PC-CVNN.
+
+* **Isolierte Energie-Inferenz gebaut und validiert**: [Vertrag](/messungen/s1-energie-inferenz.md).
+  18 unabhängige Gradientenkontrollen, analytische Inferenz und Lebenszyklus bestehen.
+  S1-Rezept vor dem Lauf festgelegt; Claudes Normalisierungsfund 59c85c4 berücksichtigt.
+
 ## 2026-10-02
 
 * **Anlage**: [Konstante Spalte sprengt die Policy](/befunde/konstante-spalte-sprengt-policy.md) -
@@ -63,6 +152,17 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 * **Anlage**: [Nur ein Marker - A/B](/befunde/ein-marker-ab.md) - gepaart, 8 Seeds x 50, Seed als
   Einheit vorab festgelegt: vier sichtbar 58,2 %, einer 55,8 %, Seeds 5:3, p = 0,73. Kein Effekt.
+
+* **PC-Engine mathematisch geprüft**: [Audit](/befunde/pc-engine-mathematik-audit.md)
+  findet drei Abweichungen vom Energiegradientenvertrag; zwölf Zustandskontrollen scheitern,
+  unabhängige Referenzen bestehen. Exakter Gegenfall erhöht Energie 0,50 → 0,61.
+  Ein-Eingang-W-Lernen, temporaler Gradient und acht Vektorregressionen bestehen.
+  Engine unverändert; Reparaturfolge E0–E4 vor erneutem S1-Urteil dokumentiert.
+
+* **S1-Ursachenurteil korrigiert**: [Gegenprüfung](/befunde/s1-vorwaertsmodell-gegenpruefung.md)
+  reproduziert den alten Fehler, findet aber fehlendes commit_step im Test und eine fehlende
+  Konjugation im linearen Fehlergradienten. Kein Nachweis einer brauchbaren Motorik; zuerst
+  isolierte Engine-Validierung, bevor ein neuer Architekturvergleich sinnvoll ist.
 
 ## 2026-10-01
 
@@ -180,7 +280,21 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
   Abweichung vom Teacher steigt). Ursache am Code: 24000 alte Etiketten, 8000 davon geschuetzt.
   Vorschlag: den ganzen Puffer mit dem neuen Teacher neu etikettieren.
 
-## 2026-09-26 (Fortsetzung)
+* **Entscheidung + Ergaenzung**: [Die Direkt-Adresse verkuerzt die Aneignung](/befunde/direkt-adresse-verkuerzt-aneignung.md) -
+  `ACT23_EIG_DAUERHAFT` ist Vorgabe 1 (Nutzerauftrag, 82b9aa5). `ACT23_EIG_NACHFUEHREN` gebaut und
+  gemessen: 7 Nachfuehrungen in 400 Ep, alle 0,15-0,62 Toleranzen von der alten Adresse; Lieferungen
+  gleich (21 gegen 19), Fehlaufloesungen > 40 mm 16/67 gegen 9/56, mehrdeutig 51 gegen 26. Bleibt
+  Vorgabe 0. Folgerung: Gegenbeispiele statt mehr Beispiele.
+
+* **S1-PC-Vorwärtsmodell verworfen**: [Vorwärtsmodell](/befunde/s1-pc-vorwaertsmodell.md) -
+  der 24er komplexe Ein-Latent-Experte erreicht 0,021131 statt 0,000138 rad² Persistenz-MSE
+  und ist auf 0/5 Gelenken besser. Keine Parameter- oder Architektursuche unter diesem Vertrag.
+
+* **S1-PC-Vorwärtsvertrag**: [Vorwärtsmodell](/messungen/s1-pc-vorwaertsmodell.md) - der
+  isolierte 24-dimensionale komplexe PC-Experte erhält nur Encoderzustand und direkte
+  Stellwerte. Zwölf Epochen und die Tore gegen Persistenz sind vor dem Lauf festgelegt.
+
+## 2026-09-26
 
 * **Ergaenzung**: [Ablage-Schwelle im Teacher](/befunde/ablage-schwelle-im-teacher.md) - A/B unter FSM,
   117 Paare: `ACT16_NEAR_ABLAGE` 8 statt 20 mm -> Abstand beim Loslassen 22 -> 10 mm, entlang der
@@ -193,19 +307,10 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 * **Anlage**: [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md) - Nutzerfrage,
   am Code: Objekt laufend beobachtet, Ziel einmal je Episode, Ablage gegenueber dem Ziel offen.
+
 * **Anlage**: [Ablage-Schwelle im Teacher](/befunde/ablage-schwelle-im-teacher.md) - 224 Ablagen
   zerlegt: 25-31 mm beim Loslassen kommen aus NEAR = 20 mm im Teacher (loslassen nach Hoehe, nicht
   nach seitlicher Ankunft). Schalter `ACT16_NEAR_ABLAGE` gebaut, Vorgabe zeichengleich.
-
-## 2026-09-27
-
-* **Entscheidung + Ergaenzung**: [Die Direkt-Adresse verkuerzt die Aneignung](/befunde/direkt-adresse-verkuerzt-aneignung.md) -
-  `ACT23_EIG_DAUERHAFT` ist Vorgabe 1 (Nutzerauftrag, 82b9aa5). `ACT23_EIG_NACHFUEHREN` gebaut und
-  gemessen: 7 Nachfuehrungen in 400 Ep, alle 0,15-0,62 Toleranzen von der alten Adresse; Lieferungen
-  gleich (21 gegen 19), Fehlaufloesungen > 40 mm 16/67 gegen 9/56, mehrdeutig 51 gegen 26. Bleibt
-  Vorgabe 0. Folgerung: Gegenbeispiele statt mehr Beispiele.
-
-## 2026-09-26
 
 * **Ergaenzung**: [Die Direkt-Adresse verkuerzt die Aneignung](/befunde/direkt-adresse-verkuerzt-aneignung.md) -
   Nutzerauftrag, die cube-Luecke geschlossen: `ACT23_EIG_DAUERHAFT` (b94bb66). Ursache zweiteilig
@@ -218,6 +323,23 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
   Kommando Ep 8/22/8/20 statt nie/43/80/76, 4 von 4 Paaren (p = 0,125). Lieferquote auf dem neuen
   Koerper gleich. Eine Adresse `'cube'` trifft den neuen Koerper nicht (V/11: 0 von 15).
 
+* **S1-Übergangssatz gültig**: [Propriozeptionsübergänge](/befunde/s1-proprio-uebergaenge.md) -
+  3.000 druckfreie, freie Servoübergänge bestehen nach dem neuen inneren Stellbereich die
+  harte Encoderschranke. Der erste Satz mit Randüberschwinger bleibt vom Training ausgeschlossen.
+
+* **S1-Übergangssammler gebaut**: [Propriozeptionsübergänge](/messungen/s1-proprio-uebergaenge.md) -
+  50 ganze freie Rollouts erfassen nur direkte Stellwerte und Encoderfolgen. Der Testsplit ist
+  trajektoriengetrennt; Druck, Kontakt, Kamera, Objekt, IK und Teacher sind ausgeschlossen.
+
+* **S0-Aktuatorvertrag bestanden**: [Servogrundaudit](/befunde/s0-servo-grundaudit.md) - fünf
+  begrenzte direkte Gelenkimpulse folgen innerhalb maximal 0,19°; Greifer, Drucksensor,
+  IK und Teacher sind ausgeschlossen. Lernaufgabe und Kontrollvergleich bleiben als S0 offen.
+
+* **S0 gestartet**: [Servogrundaudit](/messungen/s0-servo-grundaudit.md) - der direkte
+  Motorzweig beginnt mit einem begrenzten, druckfreien Gelenkimpuls. Kein IK, Teacher,
+  Objekt-, Kontakt- oder Drucksignal ist zulässig; erst der bestandene Aktuatorvertrag öffnet
+  selbst gesammelte Propriozeptionsübergänge.
+
 ## 2026-09-25
 
 * **Anlage**: [Lerngeschwindigkeit mit neuem Koerper](/befunde/lerngeschwindigkeit-neuer-koerper.md) -
@@ -228,12 +350,30 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 * **Anlage**: [Lernkurven in der Rueckschau](/befunde/lernkurven-rueckschau.md) - Nutzerauftrag
   "aus der Lerngeschwindigkeit lernen". Prequentiell ueber die beiden Langlaeufe des Live-Zustands:
   alle Lerner flach; Weltmodell AUC 0,60 im Lauf (0,76 nach eigener Angabe), ueberzuversichtlich.
+
 * **Anlage**: [Ruecksetz-Versuch](/befunde/ruecksetz-versuch.md) - je ein Lerner frisch gegen die
   Kontrolle, 100 Ep. Policy: 60 -> 0 %, Erholung auf 25-30 %, stockt bei 21 mm vom Teacher.
   Weltmodell leer: 26 gegen 26 in den ersten 50 Ep. Fovea: sichtbare Online-Lernkurve, ohne
   Quotenwirkung. Spaete Rueckgaenge bei Weltmodell/Fovea unter Bonferroni. Deutung: satt am Teacher.
+
 * **Ergaenzung**: [Struktur-Experte](/fragen/struktur-experte.md) - Lerngeschwindigkeit nur auf
   NEUEM eine sinnvolle Fitness.
+
+* **D0b-Hubantwort, feste Rohregel verworfen**: [Hubantwort](/befunde/d0b-hubantwort.md) -
+  Seed 103 erfüllt die technische Abdeckung mit 17 Trajektorien, verfehlt aber mit 11 TP,
+  3 FP, 1 FN und 0 TN die fixierte Precision 0,80 (erreicht 0,786). Kein Schwellen-Tuning,
+  keine zweite Rettungsfamilie und keine Integration als Greifzustand.
+
+* **D0b-Hubantwort, Replikationsvertrag v1**: [Messvorschrift](/messungen/d0b-hubantwort.md) -
+  zwei neue 20-Episoden-Familien (Seeds 103/107) prüfen ausschließlich die nun fixierte
+  Schwerpunktantwort: getragen ab 1,50, nicht getragen bis 0,75 Zellen, sonst Enthaltung.
+  Der neue Auswerter prüft ID-Gleichheit und liest die getrennte Wahrheit erst nach dem Label.
+
+* **D0b-Hubantwort, Beobachtbarkeit belegt**: [Hubantwort](/befunde/d0b-hubantwort.md) -
+  zwölf eingefrorene Episoden liefern 389/389 Liftframes mit festem Blick und vollständigem
+  Fovea-Schwerpunkt. Bei sechs getragenen gegen vier nicht getragenen Trajektorien beträgt die
+  Schwerpunktänderung Median 3,89 gegen 0,60 Zellen (explorativ einseitig p=0,057). Das ist
+  eine Einzelmessung und noch kein Klassifikator; eine vorab festgelegte Replikation folgt.
 
 ## 2026-09-24
 
@@ -249,6 +389,7 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
   getragene Koerper landen auf Platte 10/14, Wuerfel 9/16, Balken 10/18 auf dem Ziel, liegen bleiben
   10/4/3. Meine Vorhersage war fuer die Ablage falsch. Wertungsfehler behoben: stabil auf der Platte
   liegende Koerper, 25-26 mm neben der Mitte losgelassen, galten als nicht abgelegt.
+
 * **Ergaenzung**: [Die Auflagenhoehe ertasten](/mechanismen/hoehe-ertasten.md) - Nutzervorgabe
   Kamera statt Tasten; das Tasten wird nicht weiter ausgebaut.
 
@@ -288,7 +429,72 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
   nicht gestuetzt markiert.** Die Relation traegt auch hier nichts (11 zu 10) und loest neben der
   Mitte seltener auf (47 statt 63 Episoden).
 
-## 2026-09-19
+* **D0b-F1b, zeitlicher Expertenpfad verworfen**: [F1b-Vertrag](/messungen/d0b-fovea-zeitbindung.md) -
+  die echte Bildfolge vor/nach eigenem Fingerimpuls erreicht in drei Seeds Median 42,4 px und
+  2/29, 5/29 bzw. 4/29 Klauen innerhalb 24 px. Zeitinformation allein löst die Bindung nicht.
+
+* **D0b-F1a, Architektur-Experte verworfen**: [F1a-Vertrag](/messungen/d0b-fovea-selbstbewegung.md) -
+  der neue räumliche Fovea-Crop-MLP verfehlt auf demselben 64/32-Positionssplit in allen drei
+  Initialisierungen beide Tore (Median 42,4/42,4/46,3 px; jeweils 5/29 innerhalb 24 px). Keine
+  Nachoptimierung; nächste Hypothese braucht zeitliche Selbstbewegungsbindung.
+
+* **Architektur als Forschungsvariable**: [Architektur-Expertenpfad](/entscheidungen/architektur-evolution-expertenpfad.md) -
+  PC-CVNN und gewachsene Module sind veränderbar. Neue Experten bauen isolierte Varianten,
+  prüfen sie gegen vorab gesetzte Tore und integrieren nur reproduzierbare Gewinne.
+
+* **D0b-Fovea-Raumbindung negativ**: [Selbstbewegung](/befunde/d0b-hand-selbstbewegung.md) -
+  auf 64/32 ganzen Trainings-/Testpositionen verbessert der eingefrorene komplexe Fovea-Topzustand
+  die Sakkadenwahl gegenüber der Bildmitte (Median 53,5 statt 80,5 px), erreicht aber nur 4/29
+  sichtbare Klauen innerhalb 24 px. Kein Kopf; ein neuer Selbstbewegungs-Fovea-Zweig braucht
+  einen getrennten Lernvertrag.
+
+* **D0b-Handmaske, lokaler Ausleser negativ**: [Selbstbewegung](/befunde/d0b-hand-selbstbewegung.md) -
+  auf 64/32 ganzen Trainings-/Testpositionen senkt der ausschließlich visuell trainierte
+  Patch-Ausleser die Masken-MSE um 10,1 %, verfehlt aber den Landmark-Ort (Median 57,8 px,
+  5/29 innerhalb 20 px). Keine Epochen-/Schwellensuche; Fovea-Raumbindung ist das nächste Tor.
+
+* **D0b-Handlandmark, erster Audit**: [Selbstbewegung](/befunde/d0b-hand-selbstbewegung.md) -
+  36 ausgeführte Öffnen/Schließen-Impulse erzeugen 36 sichtbare Kameradifferenzen. Deren fester
+  Schwerpunkt erreicht aber nur 12/31 sichtbare Klauen innerhalb 20 px (Median 24,2 px).
+  Selbstbewegung bleibt als Trainingsziel offen; fester Punktdetektor und Greifzustandskopf nicht.
+
+## 2026-09-23
+
+* **D0b-Selbstetikett angehalten**: [Portaudit](/befunde/d0b-fovea-portaudit.md) - die neue
+  12-Episoden-Serie ordnet 3.329 Fovea-Frames und getrennte Evaluationszeilen exakt zu; 2.809
+  enthalten eine echte Fovea-Auswahl. Ein Fehlgriff hat dennoch 125/125 sichtbare Carry-Frames.
+  Ohne Bildraumreferenz der eigenen Hand ist Mitbewegung nicht berechenbar; kein Lernkopf und
+  zuerst Audit eines Hand-Landmarks oder einer 3D-Kameraprojektion.
+
+* **D0b-Portaudit**: [eingefrorene Fovea-Frames](/befunde/d0b-fovea-portaudit.md) - 200 vollständige,
+  rein agentensichtbare Bildraum-/Topzustands-/Hand-Frames, keine Lernmutation. Die Wegwerfepisode
+  hatte keinen Hub; damit ist nur die Sonde, nicht ein Greifzustandssignal belegt.
+
+* **D0b-Hubabdeckung**: [Portaudit](/befunde/d0b-fovea-portaudit.md) - zwölf eingefrorene Episoden
+  liefern 3.329 vollständige Frames, darunter 358 Hub- und 338 Trageframes bei 95,4 % sichtbaren
+  Beobachtungen. Der Trace erhält eine äußere Episoden-ID für gruppierte Auswertung.
+
+* **Neue D0-Entscheidung**: [D0b: visueller Greifzustand](/entscheidungen/d0b-visueller-greifzustand.md) -
+  nach dem negativen Wrist-Pilot folgt kein Tuning, sondern die Vorprüfung eines selbstbeobachteten
+  Objekt-im-Greifer-Signals aus Fovea-Bildfolge und eigener Hubbewegung. Servopfad und höhere
+  Auflösung bleiben getrennte, nachgelagerte Entscheidungen.
+
+## 2026-09-22
+
+* **D0 negativ geschlossen**: [D0 Seed 29: Wrist-Evaluation](/befunde/dream-rsi-d0-seed29-wrist-evaluation.md) -
+  auch der zweite unabhängige Trainingsseed besteht den Wrist-Pilotvertrag nicht. Seed 101
+  verliert Lieferung und Selbsturteil, Seed 103 gewinnt Lieferung, aber nur +7,5 statt +20
+  Punkte Ausrichtung; gepoolt betragen beide primären Gewinne +3,75 Punkte. Kein Nachtraining.
+
+* **Seed-29-Basis Seed 103 bestätigt**: [D0 Seed 29: Wrist-Evaluation](/befunde/dream-rsi-d0-seed29-wrist-evaluation.md) -
+  die zweite gefrorene Basisfamilie ist vollständig und integer (40/40 Episoden, keine
+  Lernmutation, Basis-SHA unverändert) und liefert 26/40 Welt-Lieferungen, 3/40 ausgerichtete
+  Wrist-Wahlen sowie 9/40 Enthaltungen. Der Checkpointvergleich folgt.
+
+* **Seed-29-Zwischenbefund negativ**: [D0 Seed 29: Wrist-Evaluation](/befunde/dream-rsi-d0-seed29-wrist-evaluation.md) -
+  der eingefrorene Checkpointvergleich auf Seed 101 ist integer, verändert aber die ausgerichtete
+  Wahl nicht (6/40 -> 6/40), senkt Lieferung (21/40 -> 19/40) und Selbsturteil (23/40 -> 20/40).
+  Die vorab festgelegte Familie Seed 103 bleibt offen.
 
 ## 2026-09-20
 
@@ -810,6 +1016,41 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
   Selbstrichter sagt bei allen 12 "geliefert", entgegen meiner Vorhersage - ob aus dem richtigen
   Grund, ist Frage 3. **Kein Lernnachweis**: Teacher fahrend.
 
+* **Seed-29-Basis bestätigt**: [D0 Seed 29: Wrist-Evaluation](/befunde/dream-rsi-d0-seed29-wrist-evaluation.md) -
+  die gefrorene Seed-101-Familie ist vollständig und integer (40/40 Episoden, keine
+  Lernmutation, Basis-SHA unverändert). Ihre vorregistrierten Zähler reproduzieren die frühere
+  Basisfamilie exakt: Lieferung 21/40, ausgerichtete Wrist 6/40, Enthaltungen 8/40.
+
+* **Seed-29-Training**: [D0 Seed 29: Wrist-Evaluation](/befunde/dream-rsi-d0-seed29-wrist-evaluation.md) -
+  das unveraenderte 120-Episoden-Rezept besteht mit 92 vollen Selbst-Krediten in fuenf Wrist-
+  Zellen. Die Checkpoint-Kopie ist erwartungsgemaess mutiert, die D0-Basis unveraendert;
+  Wirkungsnachweis erst nach den beiden gefrorenen Testfamilien.
+
+* **Negative Linie geschlossen**: [D0 Seed 17: Wrist-Evaluation](/befunde/dream-rsi-d0-seed17-wrist-evaluation.md) -
+  auch auf Seed 103 verschiebt der Checkpoint die Wrist-Wahl Richtung Ausrichtung (3/40 -> 7/40),
+  verliert aber Lieferung (26/40 -> 23/40). Gepoolt: Auswahl +10 statt +20 Punkte, Lieferung
+  -3,75 Punkte. Seed 29 folgt nach unveraendertem Vertrag; kein Nachtraining von Seed 17.
+
+* **Negativer Zwischenbefund**: [D0 Seed 17: Wrist-Evaluation](/befunde/dream-rsi-d0-seed17-wrist-evaluation.md) -
+  nach 120 Trainingsfolgen liefert der Checkpoint auf der vollstaendig protokollierten
+  Seed-101-Familie wie die Basis 21/40. Ausgerichtete Wrist-Wahl steigt nur 6/40 auf 8/40,
+  das Selbsturteil 23/40 auf 21/40. Die zweite festgelegte Testfamilie folgt; kein
+  Wirkungsurteil und kein Nachtraining nach diesem Zwischenstand.
+
+## 2026-09-19
+
+* **Messluecke geschlossen**: [D0-Integritaet](/mechanismen/dream-rsi-d0-integritaet.md) und
+  [D0-Wrist-Lernaufgabe](/messungen/dream-rsi-d0-wrist-lernaufgabe.md) verlangen nun ein
+  getrenntes `episodes.jsonl` fuer alle ausgefuehrten Aktionen. Die erste Seed-17-Auswertung
+  liefert 21/40 wie die Basis, protokollierte aber nur 32 Kreditzeilen und kann daher die
+  primaere Wrist-Auswahlmetrik nicht beantworten. Kein Wirkungsurteil vor der Wiederholung.
+
+* **Reparatur und Preflight**: [D0-Zustandsmutation](/befunde/dream-rsi-d0-preflight-mutation.md) -
+  der gefrorene 40-Episoden-Test fand eine Fovea-Lernmutation (1883 W, 65 V). Der isolierte
+  `learn=False`-Test besteht; `HexFovea` erzwingt deshalb im D0-Modus zentral einen
+  schreibgeschuetzten Schritt. Ein neuer FSM-L-Form-Gegenlauf auf eigener Pkl-Kopie besteht mit
+  **0 Lernzustandsdifferenzen**, auch ueber die volle Seed-101-Familie von 40 Episoden.
+
 ## 2026-09-18
 
 * **Anlage**: [Die Relation "auf", gebaut](/mechanismen/relation-auf-gebaut.md) - **Stufe 2 steht**,
@@ -845,6 +1086,79 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
   Objekt bleibt oben liegen, ab dem ersten Stapel ist der Sockel-Blob per Bauart verschmolzen - das
   ist die Aufgabe, nicht ein Layoutfehler, und genau dafuer ist die Farbstreuung da. Der Start sagt
   es laut, damit niemand die spaeteren Mehrdeutigkeiten fuer einen Fehler haelt.
+
+* **Technische Validierung**: [D0 Seed 17](/befunde/dream-rsi-d0-seed17-block60.md) - der erste 60er-Block ist kein Lernbefund: sein neuer Filter liess `sicher geliefert` aus und meldete daher 4 statt 40 gueltige Selbst-Kredite. Die Rohdaten erreichen nach dem getesteten Filter fuenf Wrist-Zellen, bleiben aber nur Werkzeugvalidierung; Seed 17 wird auf neuer Kopie wiederholt.
+
+* **Bau**: [D0-Integritaet](/mechanismen/dream-rsi-d0-integritaet.md) um den isolierten
+  Trainingslinien-Runner ergaenzt. Er schreibt nur eine neue Checkpoint-Kopie, filtert die
+  vorab definierten Selbst-Kredite und prueft die Wrist-Abdeckung an den 60-/120-Episoden-
+  Toren. Kompilierung, Hilfe und ein synthetischer Filtertest sind OK; kein ACT23-Lauf gestartet.
+
+* **Messvertrag**: [D0-Wrist-Lernaufgabe](/messungen/dream-rsi-d0-wrist-lernaufgabe.md) -
+  Pilotvertrag v1 vor dem ersten Lernlauf festgelegt: zwei Linien (Seeds 17/29), je 120
+  Trainingsepisoden, zwei getrennte 40er-Testfamilien (101/103), Selbst-Kreditfilter,
+  Freeze-Kontrolle, Effekt- und technische Abbruchregeln. Die fehlende serialisierte
+  Szenenliste ist als D0-Pilotgrenze explizit dokumentiert.
+
+* **Freeze-Preflight**: [D0-Zustandsmutation](/befunde/dream-rsi-d0-preflight-mutation.md) - eine
+  eingefrorene FSM-L-Form-Episode besteht: Pkl-Kopie bitgleich und **0 geaenderte
+  Lernkomponenten**. Sechs Vollzustandsdifferenzen bleiben als Diagnose sichtbar und sind
+  explizit von Gewichten, Puffern und dauerhaften Kalibrierungen getrennt. Werkzeugtest und
+  Kompilierung OK; noch kein Lernvergleich.
+
+* **Wiederholung**: [D0-Zustandsmutation](/befunde/dream-rsi-d0-preflight-mutation.md) fuer die
+  nun exakt gepinnte L-Form. Die Kreditzeile ist ein sauberer eigener Aktion- und Selbsturteil-
+  Fehlgriff (Gewicht 1,0, relativer Wrist 22,5 Grad); Pkl weiter bitgleich, dieselben 9/10
+  beobachteten Komponenten mutieren. Der Preflight gilt damit fuer die D0-L-Aufgabe, ist aber
+  kein Lernvergleich.
+
+* **Preflight**: [D0-Zustandsmutation](/befunde/dream-rsi-d0-preflight-mutation.md) - erste
+  kopflose FSM-Episode auf einer Kopie der D0-Basis: Pkl bitgleich, aber **9/10** beobachtete
+  In-Process-Komponenten veraendert. Der erwartete FAIL belegt unmittelbar, dass `NO_PERSIST`
+  keine eingefrorene Evaluation ist. Die Kreditzeile ist Selbst/Selbst und voll gewichtet; der
+  Objektfilter traf wegen Teilwort `L` allerdings den roten Wuerfel. Runner auf `L-Form`
+  korrigiert; noch kein L-Wrist-Vorversuch und kein Lernbefund.
+
+* **Bau**: [D0-Integritaet](/mechanismen/dream-rsi-d0-integritaet.md) um den
+  `D0EvaluationRunner` erweitert. Er kopiert die Pkl, startet eine begrenzte kopflose
+  FSM-Evaluation, vergleicht In-Process-Manifeste und den Pkl-Hash und schreibt ein maschinell
+  pruefbares Ergebnis. Runner-Hilfe, Integritaetstest und Kompilierung OK; kein ACT23-Lauf
+  gestartet. Der erste Lauf ist bewusst ein Preflight auf Mutation, nicht schon die Kontrolle.
+
+* **Bau**: [D0-Integritaet](/mechanismen/dream-rsi-d0-integritaet.md) - der Wegwerfpfad hat jetzt
+  SHA-256-Fingerabdruecke je Lernkomponente und ein opt-in JSONL-Kreditprotokoll
+  (`ACT23_D0_CREDIT_JSONL`). Werkzeugtest und Python-Kompilierung sind erfolgreich; kein
+  ACT23-Lauf gestartet. Der noch fehlende Runner muss die Fingerabdruecke um feste Testepisoden
+  legen und jede Mutation abbrechen.
+
+* **Codeaudit**: [D0-Wrist-Audit](/befunde/dream-rsi-d0-wrist-audit.md) - das aktuelle
+  Weltmodell kann Wrist-Kandidaten um den wahrgenommenen Objekt-Yaw bilden; Drucksensor- und
+  FSM-Anfahrtsrouten liefern heute kausale Negativkredite. Zwei Bedingungen korrigieren den
+  Entwurf: Primaerer Selbstlernbeleg zaehlt nur `Label Selbst`, weil sonst `s_ok=None` auf die
+  privilegierte Welt faellt; `ACT23_NO_PERSIST` und `EXV_FREEZE` belegen keine vollstaendige,
+  nichtmutierende D0-Kontrolle. Vor einer Serie wird deshalb ein wegwerfbarer Evaluator mit
+  Komponentenhash und Kreditprotokoll gebaut. Kein Lauf gestartet.
+
+Neueste zuerst. Datumsueberschriften in ISO-Form `YYYY-MM-DD`. Ein Eintrag je Vorgang, das
+fuehrende fette Wort ist Konvention: **Anlage**, **Ergaenzung**, **Widerlegung**, **Ruecknahme**.
+
+Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
+
+* **Entscheidung**: [D0-Kandidat: Wrist-Lernaufgabe](/messungen/dream-rsi-d0-wrist-lernaufgabe.md)
+  ausgewaehlt. Der historische `act23-ab`-Befund zeigt echte eigene Verbesserung der
+  objektrelativen Wrist-Wahl; Formpiloten, sofortige Direktadressen, Stapeln und Fovea erfuellen
+  die D0-Anforderung derzeit nicht. Noch kein Lauf: Kredit- und Zustandsaudit stehen davor.
+
+* **Anlage**: [D0: Y/T-Trennbarkeit](/befunde/dream-rsi-yt-trennbarkeit.md) - zwei neue
+  Klassifikator-Seeds: ein LOO-Nachbar trennt Y/T lokal zu 90,6 bzw. 92,2 %, die tatsaechliche
+  Dreisicht-Open-Set-Klasse beansprucht aber 59/64 T-Sichten. Das lokalisiert die Grenze beim
+  aktuellen Anspruchspfad; keine Aussage ueber Armleistung. D0 bleibt offen.
+
+* **Ergaenzung**: [D0-Gegenprobe](/befunde/dream-rsi-d0-lernaufgabe.md) abgeschlossen:
+  frischer Grundform-Lerner erkennt Y in beiden Seeds ab drei Sichten zu 24/24, beansprucht
+  aber jeweils alle vier T-Kontrollen. Freeze 0/24; Gewichte und Live-Zustand unveraendert.
+  Beide Varianten als Scheduler-Benchmark verworfen; D0 bleibt offen. Messwerkzeug und
+  Rohbelegverweise gesichert, keine D1-Implementierung und kein Arm-Lernnachweis.
 
 ## 2026-09-17
 
@@ -1033,6 +1347,33 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
   der Farbe, eine Achse weiter. **Das ist kein Hindernis, sondern der Inhalt der Aufgabe:** bei
   r = 1,00 ist die Hoehe rekonstruierbar, sie steckt im Widerspruch zwischen Ort und scheinbarer
   Groesse. Eine zweite Homographie fuer z=0,036 waere Geruest, kein Selbstlernen.
+
+* **Anlage**: [D0: Ungebunden ist nicht unbekannt](/befunde/dream-rsi-d0-lernaufgabe.md) -
+  erster vorab festgelegter Komponentenpilot: beide Seeds nach 24 Y-Sichtungen ohne neue
+  Klasse, gehaltene Wiedererkennung 0/24 gegen 0/24. Kein Schaden an bekannten Formen,
+  aber auch kein Lernsignal. Eine frische Grundform-Basis wird als separate Gegenprobe
+  vorangemeldet; kein Nachstellen der v1-Kriterien. D0-Tor bleibt offen.
+
+* **Anlage**: [D0-Pilotvertrag](/messungen/dream-rsi-d0-pilot.md), vor dem ersten Lernlauf
+  festgelegt. Gemeinsame Basis `b351207` integriert main `15c063e`, eigener Startzustand
+  `ad9d768c` per Hash geprueft. Message Board informiert. Der erste Technik-Rauchtest des
+  isolierten Wahrnehmungsvergleichs besteht seine Integritaetspruefungen; nach drei
+  Y-Sichten noch keine Klasse. **Kein ACT23-Lernbefund.** Der vorhandene EXV-Freeze schaltet
+  nicht alle Lerner ab; deshalb zuerst ein explizit begrenzter Komponentenpilot.
+
+* **Anlage**: [Dream-RSI: Forschungs- und Entwicklungsplan](/fragen/dream-rsi-forschungsplan.md)
+  samt [Evaluationsvertrag](/messungen/dream-rsi-evaluation.md),
+  [Servo-Zweig](/fragen/dream-rsi-servosteuerung.md) und
+  [Fovea-Zweig](/fragen/dream-rsi-fovea.md). Nutzerauftrag: Konzept schrittweise umsetzen und
+  evaluieren; alle ACT23-Bausteine duerfen untersucht werden. **Nur Planung**, alle
+  Entwicklungspakete offen, `evidenz: vermutung`, `ebene: code`.
+  Praezisierung der Gespraechsanalyse: historische Trainingsepisoden sind wegen geaenderter
+  Lernzustaende nicht beliebig neu kombinierbar; zuerst Budgetverteilung auf getrennte echte
+  Trainingslinien, erst spaeter adaptives Curriculum. D0-D7 erhalten Abhaengigkeiten und Tore;
+  S0-S3 pruefen Eigenanpassung eines direkten Motorpfads, F0-F3 erst weitere Wahrnehmung auf
+  vorhandenen Netzzustaenden, danach Detailausbau mit Bestandserhalt. Der historische
+  F20/RES480-Versuch wird als Codehinweis mit Konfounder eingeordnet. Keine bisherigen
+  Negativbefunde widerrufen, keine Trainingslaeufe und keine Implementierung gestartet.
 
 ## 2026-09-16
 
@@ -1851,6 +2192,7 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
   **und nicht ueber die GROESSE.** Das bestaetigt
   [Formfaktorisierung](/befunde/formfaktorisierung.md) und beziffert erstmals, was daran haengt:
   die Haelfte aller Verallgemeinerungsfaelle.
+
 * **Klarstellung (Nutzerfrage)**: die Formklassen entstehen **nicht** aus der Fovea, sondern aus
   dem vollen Kamerabild - `perceive_all` -> `_render_u8` (240x240, Arm ausgeblendet) ->
   Saettigungsmaske -> CC-Segmentierung -> komplexe Winkelharmonische auf Polarringen (`RW`
@@ -1924,6 +2266,7 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
   vergeben" - **eine Vergabe-Engstelle, kein Wahrnehmungsproblem.** Nebenbefund: drei neue
   FARBklassen geboren (erwartet waren null), eine davon an obj_U gebunden - bei den Farben
   funktioniert, was bei den Formen stockt.
+
 * **Relativierung**: [Farbe und Form entkoppelt](/befunde/farb-mischung.md) - der dortige
   Quotenbefund (57,5 -> 47,6 %) ist durch den Langlauf entkraeftet.
 
@@ -1961,6 +2304,7 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
   Farbe nur in 4 von 8 Lagen** und wird meist als "cube" gelesen - die "wandernde
   Deskriptor"-Hypothese, erstmals ausserhalb einer Verschmelzungsszene belegt. Folge fuer die
   Entkopplung: sie wuerde die Formerkennung nicht brechen, sondern diese Schwaeche **aufdecken**.
+
 * **Widerlegung (eigene)**: [Der Nachbar-Block traegt nichts](/befunde/merkmale-kommen-zu-spaet.md)
   - Weg 2a gefahren (Fit nur auf den 690 gueltigen Zeilen, Halteteil nach Zeit mit Luecke, 5
   Seeds): MIT Block AUC 0,603 +- 0,025, OHNE Block 0,599 +- 0,023. **+0,004, also nichts.** Meine
@@ -2094,12 +2438,14 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
   200 Episoden **identisch** - Szene, Objekt, Ausgang, Millimeter. Innerhalb eines Laufs
   wiederholt sich dagegen nichts (94,5 % verschiedene Szenen). Ein Lauf ist damit **eine**
   Stichprobe; die Replikate sind die Seeds.
+
 * **Ergaenzung/Praezisierung**: [Rechnerlast](/befunde/rechnerlast.md) (die 26 Punkte sind
   Schwankung INNERHALB eines Laufs, es gibt keine Wiederholungsstreuung),
   [Kopfloses A/B](/messungen/act23-headless-ab.md) (die Seed-Warnung praeziser gefasst, plus die
   Regel "die Replikate sind die Seeds") und [Sparsamer Welt-Fit,
   A/B](/befunde/welt-fit-plan-ab.md) (beide Arme mit gleichem Seed - bis Ep 18 identisch,
   Reichweite enger als dargestellt).
+
 * **Befund, nicht behoben**: ohne gesetztes `ACT23_SEED` meldet die Kopfzeile `SEED=11`,
   gefahren wird aber mit **7** (`_source_defaults()` nimmt den ersten von drei Treffern im
   Quelltext; die 11 stammt aus zwei Diagnose-Pruefstaenden, die im Steuerungslauf nicht laufen).
@@ -2151,15 +2497,18 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
   (p = 0,51), Griffdruck je Objekt in verschiedene Richtungen, `qpos` auf 17 Stellen identisch.
   Die Seite traegt die **Nachweisgrenze fuer act23-A/Bs**: ein 50-Episoden-Fenster schwankt
   allein aus Zufall um 26 Punkte.
+
 * **Anlage**: [Episodendauer](/befunde/episodendauer.md) - die `Lernen`-Phase ist exakt
   `world.train(600)` (173/173 gegen 759/759 trennscharf) und steigt unter Last von 77 auf 130 s.
   Ein Sprung, keine Rampe: **die Verlangsamung kommt nicht vom wachsenden Wissen.** Nennt den
   ungenutzten Hebel - 600 Epochen ueber 10500 Zeilen je Episode fuer eine neue Zeile.
+
 * **Anlage**: [Ablenker-Bindung in der Anfahrt](/befunde/ablenker-anfahrt.md) - aus einer
   Nutzerbeobachtung zu `[Auto 810]`. Die Adressierung ist entlastet (Median 2 mm, 914/920
   eindeutig), der Fehler sitzt in der Ausfuehrung: 63 von 932 Episoden fahren die erste Anfahrt
   >80 mm daneben und liefern dann 1 von 63. Enthaelt die ehrliche Schwaeche der
   Permutationskontrolle.
+
 * **Ergaenzung**: [Invarianten](/mechanismen/invarianten.md) um zwei Regeln aus dem Startabsturz
   vom 06.09. - `state.OBJECTS` haelt **Adressen, nicht Koerper**, und eine Aenderung am
   persistierten Zustand braucht eine Speichern-Neustart-Runde (alle Sonden liefen mit
@@ -2171,10 +2520,12 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
   `act23_split_probe.py` (in [Rohbelege](/raw/index.md) als Messwerkzeuge gelistet, bis dahin als
   einzige der acht nicht im Repo). Ein frischer Klon kann die
   [Messvorschriften](/messungen/exekutionsvarianz-exv.md) damit nachvollziehen.
+
 * **Ergaenzung**: Nutzerentscheid zur offenen Frage aus
   [Wissensbasis als Wiki](/entscheidungen/wissensbasis-als-wiki.md) - **der act23-Teil des
   Memory-Bestands wandert ins Wiki**, die aelteren Akte (act5-act22) bleiben liegen; die alten
   Markdown-Dateien im Wurzelverzeichnis bleiben, wo sie sind, und werden nur referenziert.
+
 * **Anlage**: Uebertragung der act23-Notizen. Neue Mechanismus-Seiten
   [Invarianten](/mechanismen/invarianten.md),
   [Wahrnehmungs-Splits](/mechanismen/wahrnehmungs-splits.md),
@@ -2183,6 +2534,7 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
   [Fovea und Blick](/mechanismen/fovea-und-blick.md),
   [Eigenschafts-Kommando](/mechanismen/eigenschafts-kommando.md),
   [Ports und Takte](/mechanismen/ports-und-takte.md).
+
 * **Anlage**: neue Befunde [Wrist-Ausrichtung](/befunde/wrist-ausrichtung.md),
   [U-Form-Engpass](/befunde/u-form-engpass.md), [Imitationspuffer](/befunde/imitationspuffer.md),
   [Ablage und Platzieren](/befunde/ablage-und-platzieren.md),
@@ -2192,25 +2544,32 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
   [Formfaktorisierung](/befunde/formfaktorisierung.md),
   [Latent-Etappen](/befunde/latent-etappen.md); dazu
   [Latente Augmentierung](/fragen/latente-augmentierung.md).
+
 * **Anlage**: neues Verzeichnis `chronik/` mit der
   [act23-Entwicklungslinie](/chronik/act23.md) - Verdichtung der 1001-zeiligen Volltext-Chronik
   aus dem Memory-Bestand.
+
 * **Anlage**: Wiki aufgesetzt nach [Das Verfahren](/wiki.md) - Struktur, Frontmatter mit
   `evidenz` und `ebene`, Katalog und Chronik. Vorlagen: LLM Wiki (Karpathy) fuer die Idee,
   Open Knowledge Format v0.2 fuer das Format; angepasst darauf, dass das Wissen hier selbst
   erzeugt wird statt von aussen zu kommen.
+
 * **Anlage**: [Projektziel](/ziel.md), [Die Wissensbasis wird ein Wiki im Repo](/entscheidungen/wissensbasis-als-wiki.md).
+
 * **Anlage**: Mechanismen - [Modullandschaft](/mechanismen/act23-modullandschaft.md),
   [Laufzeitregeln](/mechanismen/laufzeit-regeln.md),
   [Pruefstandsfalle](/mechanismen/pruefstandsfalle.md).
+
 * **Anlage**: Befunde - [Exekutionsvarianz](/befunde/exekutionsvarianz.md),
   [1109 Episoden ohne Lernfortschritt](/befunde/langlauf-ohne-fortschritt.md),
   [Selbst-Aneignung stockt](/befunde/selbstaneignung-stockt.md),
   [Greif-Lerndeckel](/befunde/greif-lerndeckel.md). Alle vier verdichtet aus dem
   Memory-Bestand, nicht neu gemessen.
+
 * **Anlage**: Messvorschriften [kopfloses A/B](/messungen/act23-headless-ab.md) und
   [EXV](/messungen/exekutionsvarianz-exv.md); [offene Faeden](/fragen/offene-faeden-act23.md);
   [Rohbelege](/raw/index.md).
+
 * **Anlage**: `CLAUDE.md` im Wurzelverzeichnis als Schemaschicht - sie verpflichtet jeden
   Agenten, das Wiki zu lesen und fortzuschreiben.
 

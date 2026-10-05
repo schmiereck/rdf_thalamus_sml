@@ -4,8 +4,12 @@ okf_version: "0.2"
 
 # Einstieg
 
+* [ACT23-Worktrees integriert](befunde/act23-worktree-integration.md) - Merge mit erweitertem Freeze; FSM-/Netz-Rauchtests bestanden, Checkpoint-Konfiguration dokumentiert
+
+* [Aspekt-Rueckmeldung und Worktree-Integration](fragen/aspekte-und-worktree-integration.md) - Claudes Idee eingeordnet; Git-Divergenz und Vorschlag einer getrennt geprueften Zusammenfuehrung
 * [Das Verfahren](wiki.md) - wie dieses Wiki funktioniert: Aufbau, Frontmatter, Operationen
 * [Projektziel und Erfolgskriterium](ziel.md) - die Architektur soll selbst lernen; den Teacher zu schlagen ist nicht verlangt
+* [Dream-RSI: Forschungs- und Entwicklungsplan](fragen/dream-rsi-forschungsplan.md) - Arbeitsliste D0-D7 mit Entscheidungstoren; optionale Zweige fuer direkte Servosteuerung und Fovea, noch keine Umsetzung
 * [Chronik](log.md) - was wann ins Wiki eingetragen wurde
 * [Rohbelege](raw/index.md) - Laufprotokolle, Werkzeuge, Zustaende, aeltere Dokumente
 
@@ -16,6 +20,19 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 # Mechanismen
 
+* [Native ACT23-Bewegungsdaten](messungen/act23-bewegungsdaten.md) - tatsächliche sechs Servo-Kanäle, Positionsport v2 und getrennte native Übergangsläufe
+* [ACT23-Datengrundlage und Positionsport v2 bereit](befunde/act23-bewegungsdaten.md) - 9.014 geprüfte Übergänge, 362 Bildpaare, sechs reversible Servo-Positionen; nächster Schritt ist der 4-ms-Modellvergleich
+
+* [ACT23-Arbeitsposen und Roboterkamera](messungen/act23-arbeitsposen-kamera.md) - unveränderter Hardwareblick, native Objektplatzierung und phasenweiser Audit
+* [ACT23-Arbeitsposen sichtbar](befunde/act23-arbeitsposen-kamera.md) - 16/16 platzierte Objektvorkommen und Klaue in 238/238 Ansichten sichtbar; alle Posen außerhalb alter S1-Box
+
+* [B1-Abdeckungsaudit](messungen/s1-koerpermodell-abdeckung.md) - Kamera-/Greifersichtbarkeit per geprüftem Replay und Gelenkraumabdeckung ohne Nachtraining
+* [B1: Klauen meist außerhalb des Bildes](befunde/s1-koerpermodell-abdeckung.md) - 145/224 isolierte S1-Posen; Korrektur: zuerst ACT23-Arbeitsposen bei bestehender Kamera prüfen, kein belegtes ACT23-Kameraproblem
+
+* [S1-B1: visuelles Körpermodell](messungen/s1-visuelles-koerpermodell.md) - erster lernender Verbraucher der Gelenkphasen, Kameraansicht als beobachtbares Ziel und feste Kontrollen
+* [S1-B1: Körperdecoder verfehlt neue Posen](befunde/s1-visuelles-koerpermodell.md) - 224 Encoder-/Kamerapaare erhoben; Testfehler 28 % über Mittelbild, keine Integration
+
+* [Servo-Latent-Port](mechanismen/servo-latent-port.md) - gemessene Position reversibel erhalten; aktionsbedingten Latent und Vorhersage getrennt an künftiges Körpermodell liefern
 * [act23 Modullandschaft](mechanismen/act23-modullandschaft.md) - welche Module aktiv sind, was jedes steuert, wo die komplexe Zahl traegt
 * [Invarianten](mechanismen/invarianten.md) - was man nicht verletzen darf; jede Regel aus einem konkreten Schaden
 * [Laufzeitregeln](mechanismen/laufzeit-regeln.md) - was noch geskriptet ist; act21 hat die Entwoehnung geschafft, act23 nicht
@@ -23,12 +40,39 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Wahrnehmungs-Splits](mechanismen/wahrnehmungs-splits.md) - verschmolzene Blobs, drei Reparaturen, der am besten belegte Gewinn der Wahrnehmungslinie
 * [Formklassen-Lebenszyklus](mechanismen/formklassen-lebenszyklus.md) - Geburt, namenloses Fenster, Bindung, Anspruch, Verhungern, Einfrieren
 * [Kredit und Selbst-Urteil](mechanismen/kredit-und-selbsturteil.md) - der Agent beurteilt sich selbst und verteilt die Schuld; drei Regeln aus drei Vergiftungen
+* [D0-Integritaet](mechanismen/dream-rsi-d0-integritaet.md) - Voll- und Lernzustandsfingerabdruck, vollstaendige Episoden- und Kreditprotokolle, Freeze-Preflight und isolierte Trainingslinien
 * [Fovea und Blicksteuerung](mechanismen/fovea-und-blick.md) - detektorfreier Blick, Drift 38 → 8,5 px; kein Lieferhebel
 * [Eigenschafts-Kommando](mechanismen/eigenschafts-kommando.md) - Farbe + Form + Groesse statt Name; Eindeutigkeit ist nicht Richtigkeit
 * [Ports und Takte](mechanismen/ports-und-takte.md) - der Port-Umbau und die Bitgleichheits-Pruefung; Traegheit nur im Planer
 
 # Befunde
 
+* [S1: neue Rollouts bestanden](befunde/s1-unabhaengige-rollouts.md) - eingefrorener Online-Kopf auf zwei neuen Seeds: 90,78 Prozent weniger Fehler als Persistenz, 5/5 Gelenke, Positions-Latent-Port geprüft
+* [S1: unabhängige Rollouts und Positions-Latent](messungen/s1-unabhaengige-rollouts.md) - eingefrorener Test auf Seeds 211/307 und expliziter Positionsblock für das künftige Körpermodell
+* [S1: lokaler Online-Kopf besteht](befunde/s1-online-kopf.md) - 91,26 Prozent weniger Fehler als Persistenz, 5/5 Gelenke besser; kein Batch-Warmstart, unabhängige Rollouts als nächstes Tor
+* [S1: lokales Online-Kopftraining](messungen/s1-online-kopf.md) - festes Rezept auf eingefrorenen Kontextmerkmalen, Batch-Lösung ausschließlich Referenz
+* [S1: Lernziel-Audit abgeschlossen](befunde/s1-lernziel-audit.md) - konvergiertes generatives Training weiter negativ; bedingter Kopf auf gleichem Encoder schlägt Persistenz auf 5/5 Gelenken, Nullprior entfernen degeneriert
+* [S1: Lernziel-Audit](messungen/s1-lernziel-audit.md) - konvergiertes Training, lineare Referenz, Nullprior und bedingter Kopf in festem Diagnosevergleich
+* [S1: Ergebnis der korrekten Energie-Inferenz](befunde/s1-energie-inferenz.md) - Mathematik/Lebenszyklus bestehen; unabhängiger Solver bestätigt 4,35-fachen Persistenzfehler, kein Motorpolicy-Tor
+* [S1: isolierte Energie-Inferenz](messungen/s1-energie-inferenz.md) - geprüfte mathematische Referenz und Lebenszyklus; festes Rezept für den erneuten Offlinevergleich
+* [PC-Engine: mathematischer Audit](befunde/pc-engine-mathematik-audit.md) - Konjugation, Aktivierungs-Jacobian und Mittelung fehlen in der Zustandsinferenz; Lern- und Vektor-Gegenkontrollen sowie Reparaturfolge E0–E4
+* [PC-Engine: Audit ausführen](messungen/pc-engine-mathematik-audit.md) - unabhängige numerische und analytische Gradientenprüfung ohne Roboter oder PKL
+* [S1-Gegenprüfung](befunde/s1-vorwaertsmodell-gegenpruefung.md) - alter Fehler reproduziert, aber zeitliche Inferenz asymmetrisch und komplexe Rückgabe nicht gradientenkonform; Architektururteil zurückgenommen
+
+* [D0: Ungebunden ist nicht unbekannt](befunde/dream-rsi-d0-lernaufgabe.md) - gewachsen kein Y-Lernen; frisch schnelle Y-Erkennung mit T-Verwechslung, beide Pilotvarianten ungeeignet; D0-Tor offen
+* [D0: Y/T-Trennbarkeit](befunde/dream-rsi-yt-trennbarkeit.md) - lokales Deskriptorsignal vorhanden, aber 59/64 T-Sichten von einer Dreisicht-Y-Klasse beansprucht; keine geeignete D0-Lernaufgabe
+* [D0-Wrist-Audit](befunde/dream-rsi-d0-wrist-audit.md) - objektrelatives Gitter und kausale Negativkredite vorhanden; D0 braucht einen eigenen nichtmutierenden Evaluator und Selbst-Labels
+* [D0-Preflight: Lernzustand eingefroren](befunde/dream-rsi-d0-preflight-mutation.md) - ein 40er-Audit fand Fovea-Mutation; zentraler Fovea-Freeze besteht Ein- und 40-Episoden-Gegenlauf ohne Lernmutation
+* [D0 Seed 17: technische Runner-Validierung](befunde/dream-rsi-d0-seed17-block60.md) - positive Selbst-Lieferungen fehlten im ersten Filter; Rohdaten zeigen Abdeckung, werden aber nicht als Linie gewertet
+* [D0 Seed 17: Wrist-Evaluation](befunde/dream-rsi-d0-seed17-wrist-evaluation.md) - 120 Trainingsfolgen: ueber beide Familien +10 statt +20 Punkte ausgerichtete Wahl, Lieferung -3,75 Punkte; Linie negativ geschlossen
+* [D0 Seed 29: Wrist-Evaluation](befunde/dream-rsi-d0-seed29-wrist-evaluation.md) - 120 Trainingsfolgen: Seed 101 verliert Lieferung, Seed 103 erreicht nur +7,5 statt +20 Punkte Wrist-Ausrichtung; gepoolt +3,75 Punkte, Linie negativ geschlossen
+* [D0b: visueller Greifzustand](entscheidungen/d0b-visueller-greifzustand.md) - neuer Kandidat nach D0: Fovea-Bildfolge und eigene Hubbewegung sollen Objekt-im-Greifer ohne Simulatoretikett sichtbar machen; erst danach ein Handlungsverbraucher
+* [D0b-Portaudit](befunde/d0b-fovea-portaudit.md) - Fovea-Auswahl und externe Evaluation sind getrennt vollständig; sichtbare Auswahl trennt den Fehlgriff nicht und benötigt eine Hand-Bildraumreferenz
+* [D0b-Hand-Selbstbewegung](befunde/d0b-hand-selbstbewegung.md) - Fingerimpuls erzeugt ein eigenes Kamerasignal, doch Schwerpunkt, lokale Maske und eingefrorene Fovea verfehlen den Greifer; neuer Fovea-Lernzweig braucht einen isolierten Vertrag
+* [D0b-Hubantwort](befunde/d0b-hubantwort.md) - feste Schwerpunktantwort scheitert auf neuer Seed-103-Familie an Precision 0,786 statt 0,80; kein Tuning und keine Integration
+* [S0-Servogrundaudit](befunde/s0-servo-grundaudit.md) - fünf Armservos folgen einem direkten druckfreien Impuls; kein IK oder Teacher im Kanal
+* [S1-Propriozeptionsübergänge](befunde/s1-proprio-uebergaenge.md) - 3.000 sichere direkte Servoübergänge, nach ganzen Rollouts geteilt und ohne Druck, Kontakt, IK oder Teacher
+* [S1-PC-Vorwärtsmodell](befunde/s1-pc-vorwaertsmodell.md) - generativer komplexer PC-Experte verliert gegen die Persistenzreferenz um Faktor 154; keine Motorpolicy
 * [Exekutionsvarianz](befunde/exekutionsvarianz.md) - ICC 0,61, Obergrenze 82 % gegen Grundrate 54 %; der Deckel sitzt in der Situationsrepraesentation
 * [1109 Episoden ohne Lernfortschritt](befunde/langlauf-ohne-fortschritt.md) - 43 h GUI-Lauf, vier unabhaengige Groessen flach
 * [Selbst-Aneignung stockt](befunde/selbstaneignung-stockt.md) - 17/17 und 14/14 selbst geborene Klassen verhungern, keine je kommandiert
@@ -87,14 +131,28 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Vorgaben 2026-08-30](entscheidungen/defaults-2026-08-30.md) - der 1053-Episoden-Zustand wird Standard, samt ehrlichem Vorbehalt zur Greifergeometrie
 * [Die Wissensbasis wird ein Wiki im Repo](entscheidungen/wissensbasis-als-wiki.md) - warum, und was daran noch offen ist
 * [ACT23_WORLD_FULL_EVERY](entscheidungen/welt-fit-plan.md) - der Welt-Fit laeuft nur noch jede vierte Episode voll; **Vorgabe seit 2026-09-08**, Rueckfall mit n=1
+* [Architektur-Expertenpfad](entscheidungen/architektur-evolution-expertenpfad.md) - neue Netzstrukturen sind erlaubt, werden aber erst isoliert gegen feste Tore geprüft und nur bei reproduzierbarem Gewinn integriert
 
 # Messvorschriften
 
+* [S0-Servogrundaudit](messungen/s0-servo-grundaudit.md) - direkter druckfreier Gelenkimpuls; prüft Aktuatorvertrag und Propriozeptionsantwort ohne IK oder Teacher
+* [S1-Propriozeptionsübergänge](messungen/s1-proprio-uebergaenge.md) - ganze freie Servo-Rollouts liefern `(q, ctrl, q')` ohne Druck, Kontakt, IK oder Teacher
+* [S1-PC-Vorwärtsmodell](messungen/s1-pc-vorwaertsmodell.md) - isolierter komplexer PC-Experte gegen Persistenz auf ganzen Servo-Rollouts
+* [D0b-Hubantwort](messungen/d0b-hubantwort.md) - fester Blick während des Hubs; getrennte Tragewahrheit und Rohantwort ohne Klassifikator
+* [D0-Pilot: Wiedererkennung einer neuen Form](messungen/dream-rsi-d0-pilot.md) - vorab fixierter Komponentenvergleich eingefroren/lernend; kein Arm-Lernnachweis
+* [D0-Pilot: Y/T-Trennbarkeit](messungen/dream-rsi-yt-trennbarkeit.md) - frische Y/T-Szenen, Dreisicht-Open-Set-Anspruch und explorative lokale Deskriptordiagnose
+* [D0-Kandidat: Wrist-Lernaufgabe](messungen/dream-rsi-d0-wrist-lernaufgabe.md) - signalreiche L-Wrist-Aufgabe; Freeze bestanden, Pilotvertrag v1 mit Seeds, Budget, Kontrolle und Abbruchregel fixiert
+* [Dream-RSI: Evaluationsvertrag](messungen/dream-rsi-evaluation.md) - Entwurf: Zustand/Replay, unabhaengige Testdaten, Lernfortschritt und Gesamtkosten; in D0 vor dem ersten Experiment konkretisieren
 * [Kopfloses A/B im vollen act23-Lauf](messungen/act23-headless-ab.md) - die einzige Ebene, auf der Wirkung behauptet werden darf
 * [Wiederholungsmessung EXV](messungen/exekutionsvarianz-exv.md) - trennt Ausfuehrungsstreuung von Situationssignal
+* [D0b-F1a Selbstbewegungs-Fovea](messungen/d0b-fovea-selbstbewegung.md) - räumlicher Crop-Kopf auf Eigenbewegung, vorab getornt und in 3/3 Seeds verworfen
+* [D0b-F1b zeitliche Selbstbewegungs-Fovea](messungen/d0b-fovea-zeitbindung.md) - Zweibild-Crop-Kopf vorab getornt und in 3/3 Seeds verworfen
 
 # Offene Fragen
 
+* [Dream-RSI: Forschungsplan](fragen/dream-rsi-forschungsplan.md) - replaygestuetzte Trainingssteuerung zuerst ueber getrennte Trainingslinien, danach Curriculum eines Arms; zentrale Paketstatus-Tabelle
+* [Direkte Servosteuerung](fragen/dream-rsi-servosteuerung.md) - S0-S3: eigener Motorpfad ohne kartesische Zwischenziele, spaeter optional Geschwindigkeits-/Drehmomentsteuerung; Eigenanpassung statt Teacher-Ueberbietung
+* [Fovea: neue Aufgaben und mehr Detail](fragen/dream-rsi-fovea.md) - F0-F3: Netzzustaende nutzen, Detailbedarf pruefen, Bestand beim Ausbau erhalten; bisherige Gegenbefunde bleiben gueltig
 * [Offene Faeden in act23](fragen/offene-faeden-act23.md) - geordnet nach belegter Wichtigkeit, mit den ausdruecklich geschlossenen Faeden am Ende
 * [Latente Augmentierung](fragen/latente-augmentierung.md) - die Nutzeridee; Voraussetzungsmessung gemacht, Bau erfolgt
 * [Stetig adressieren statt Klassen vergeben](fragen/stetige-adressierung.md) - **Nutzeridee, zielnah:** die Aneignungsprobleme (Geburt, Knopf, Verhungern, Saettigung) sind Artefakte der Diskretisierung; `desc_embed` existiert fuer jedes Objekt und stirbt nie

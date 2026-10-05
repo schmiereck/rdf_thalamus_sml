@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import os
 import sys
+import json
 import time as _time_mod
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -85,6 +86,12 @@ from pc_cvnn.arm_modules.latent_attractor import LatentAttractorController
 from pc_cvnn.arm_modules.curiosity import DistanceNovelty
 from pc_cvnn.arm_modules.self_eval import SelfEvalModule
 from pc_cvnn.arm_modules.object_memory import ObjectMemoryModule
+from pc_cvnn.arm_modules.d0_integrity import (
+    append_credit as _d0_append_credit,
+    changed_components as _d0_changed_components,
+    snapshot as _d0_snapshot,
+    write_manifest as _d0_write_manifest,
+)
 import pc_cvnn.pc_act16 as act16
 
 CAM = "overview"
@@ -333,6 +340,22 @@ def welt_fit_epochen():
 # Nebeneffekt (erwuenscht): eine Messung verschmutzt den ueber Wochen gewachsenen Zustand nicht.
 EXV_N = max(1, int(os.environ.get("ACT23_EXV", "1")))
 EXV_FREEZE = EXV_N > 1 and os.environ.get("ACT23_EXV_FREEZE", "1") == "1"
+D0_FREEZE = os.environ.get("ACT23_D0_FREEZE", "0") == "1"
+# D0 writes structured credit lines only when an explicit disposable artifact path is supplied.
+# The normal human-readable log and all default behaviour remain unchanged.
+D0_CREDIT_JSONL = os.environ.get("ACT23_D0_CREDIT_JSONL", "")
+# One immutable record per executed D0 episode.  Unlike credit.jsonl this also retains the
+# action for an intentional abstention, so evaluation can measure the selected wrist rather
+# than only the subset that the world model was allowed to learn from.
+D0_EPISODE_JSONL = os.environ.get("ACT23_D0_EPISODE_JSONL", "")
+D0_MANIFEST_DIR = os.environ.get("ACT23_D0_MANIFEST_DIR", "")
+# D0b stores only the agent-visible Fovea/hand time series.  It never reads simulator pose,
+# contact or weld state; those remain an external evaluation channel.
+D0B_TRACE_JSONL = os.environ.get("ACT23_D0B_TRACE_JSONL", "")
+D0B_LIFT_PROBE = os.environ.get("ACT23_D0B_LIFT_PROBE", "0") == "1"
+# Separate ground-truth channel for evaluating a prospective D0b self-label.  It must never be
+# read by the trace consumer or a learner; keeping a distinct file makes that boundary auditable.
+D0B_EVAL_JSONL = os.environ.get("ACT23_D0B_EVAL_JSONL", "")
 # MuJoCo selbst ist deterministisch: bleibt das Objekt liegen und der Arm kehrt in dieselbe
 # Ruhelage zurueck, wiederholt sich eine Episode BIS AUF DEN MILLIMETER (im Rauchtest gemessen:
 # 63+-0 mm ueber drei Laeufe).  Der einzige natuerliche Streukanal ist die ARMSTELLUNG beim Start
@@ -2796,7 +2819,7 @@ def run_self_learning_steering(headless=False):
             if not _nah:
                 continue
             _dd, _nb = min(_nah)
-            if _dd <= 0.02 and sim.obj_pos(_nb)[2] < 0.02:      # nur Tischobjekte (kein Stapel)
+            if not D0_FREEZE and _dd <= 0.02 and sim.obj_pos(_nb)[2] < 0.02:      # nur Tischobjekte (kein Stapel)
                 groessen_schaetzer.merken(d, *_groesse_wahr(_nb))
         if cmd is None:
             return None
@@ -3071,7 +3094,7 @@ def run_self_learning_steering(headless=False):
     # DIE AUFGESETZTE ABLAGE NEU ETIKETTIEREN (s. pc_act16.ABLAGE_FIX).  Teacher-Etiketten sind eine
     # Funktion des Zustands: wo die Korrektur das Etikett aendert, wird es ersetzt -- einmal beim
     # Laden, fuer DAgger- und Selbst-Imitationszeilen.  Danach einmal nachtrainieren.
-    if act16.ABLAGE_FIX and len(getattr(runtime, "_X", [])):
+    if not D0_FREEZE and act16.ABLAGE_FIX and len(getattr(runtime, "_X", [])):
         _n_d = _n_s = 0
         for _buf_x, _buf_y, _zaehl in ((runtime._X, runtime._Y, "d"),
                                        (getattr(runtime, "_Xi", []) or [], getattr(runtime, "_Yi", []) or [], "s")):
@@ -3093,7 +3116,7 @@ def run_self_learning_steering(headless=False):
     loslass_kopf = (_loaded or {}).get("loslass_kopf") or LoslassKopf()
     if not isinstance(loslass_kopf, LoslassKopf):
         loslass_kopf = LoslassKopf()
-    if LOSLASS_KOPF:
+    if LOSLASS_KOPF and not D0_FREEZE:
         if not act16.ABLAGE_FIX:
             print("  [Loslassen] WARNUNG: ACT23_LOSLASS_KOPF ohne ACT16_ABLAGE_FIX -- die Teacher-"
                   "Etiketten am Ziel widersprechen sich, der Kopf lernt Unsinn", flush=True)
@@ -3106,7 +3129,7 @@ def run_self_learning_steering(headless=False):
     # gegriffen HAETTE -- Hand ueber dem ruhenden Objekt, Klaue offen, mehr als 12 mm ueber dem
     # Greifpunkt --, wird das Etikett auf "offen" gesetzt, also auf das, was ausgefuehrt wurde.
     # Danach einmal nachtrainieren.  Trainingsdaten-Geruest, keine Laufzeitregel.
-    if os.environ.get("ACT23_IMIT_UMETIKETT", "0") == "1" and getattr(runtime, "_Xi", None):
+    if not D0_FREEZE and os.environ.get("ACT23_IMIT_UMETIKETT", "0") == "1" and getattr(runtime, "_Xi", None):
         _n = 0
         for _x, _y in zip(runtime._Xi, runtime._Yi):
             _x = np.asarray(_x, float)
@@ -3433,11 +3456,11 @@ def run_self_learning_steering(headless=False):
                 if _af is not None and _st.get("area") and _af < 0.5 * float(_st["area"]):
                     print(f"    [Hoehe] belegtes Aussehen VERWORFEN: {_af:.0f}px gegen leer "
                           f"{float(_st['area']):.0f}px -- nicht dieselbe Auflage", flush=True)
-                elif hoehen_schaetzer.merken(_dl, float(_st["oben"])):
+                elif not D0_FREEZE and hoehen_schaetzer.merken(_dl, float(_st["oben"])):
                     print(f"    [Hoehe] belegtes Aussehen gelernt: {_af:.0f}px (leer war "
                           f"{float(_st['area']):.0f}px), Etikett {1000 * _st['oben']:.1f}mm "
                           f"aus der Tast-Episode ({len(hoehen_schaetzer.X)} Zeilen)", flush=True)
-            elif _eins and not HOEHE_TASTEN:
+            elif not D0_FREEZE and _eins and not HOEHE_TASTEN:
                 hoehen_schaetzer.merken(_det, _wahr_oben)
             elif not _eins:
                 print(f"    [Hoehe] Auflage sieht belegt aus (Farbstreuung {float(_cs0):.3f}) -- "
@@ -4204,7 +4227,8 @@ def run_self_learning_steering(headless=False):
             print(f"  [Persistenz] Speichern fehlgeschlagen: {e}", flush=True)
 
     def choreo_log(s, _aim, _j5):
-        runtime.observe(s, act16.reactive_subgoal(s))      # label the VISITED state, ignore the FSM's own
+        if not D0_FREEZE:
+            runtime.observe(s, act16.reactive_subgoal(s))  # label visited states for lifelong DAgger
         #   (aim, j5): the reactive teacher is a pure function of state, the phase machine is not
 
     def situation_feats(cmd):
@@ -5672,7 +5696,7 @@ def run_self_learning_steering(headless=False):
         Runs at scene EVENTS (placement, after a command), not per tracked frame."""
         if _nur_groesse["an"]:                         # Groessen-Sammeln (s. _groesse_sammeln):
             return []                                  #   dort soll NUR der Groessenschaetzer lernen
-        if shape_clf.novel_th is None:
+        if D0_FREEZE or shape_clf.novel_th is None:
             return []
         saved = sim.d.mocap_pos.copy()                         # observe_scene parks the markers -> restore
         _prot = set(state.SHAPE_KEY.values())                  # bound commands never starve
@@ -5885,7 +5909,7 @@ def run_self_learning_steering(headless=False):
     #   "chroma" tags the sel PRIMITIVE the classes were trained with: step_id switched from the
     #   cosine match (grey table leaked through vs unsaturated class centroids) to _match_chroma,
     #   so a fovea class-trained on the old cosine-sel retrains once.
-    if (FOVEA_NET and os.environ.get("ACT23_FOVEA_TRAIN", "1") == "1"
+    if (FOVEA_NET and not D0_FREEZE and os.environ.get("ACT23_FOVEA_TRAIN", "1") == "1"
             and (not _fovea_loaded                 # a loaded fovea was already class-trained -> skip,
                  or getattr(vc.fovea, "_zoom_trained", "nie") != _zoom_span)):   # UNLESS zoom span or
         if _fovea_loaded:                          # sel primitive changed since it was trained
@@ -6292,6 +6316,7 @@ def run_self_learning_steering(headless=False):
         #   with a net obs / a detector obs, and |net - detector| mm where both exist (shadow metric)
 
         def _track():
+            vc._d0b_frame = None                              # trace only a frame sampled on THIS call
             _kkey = key if (seed_key is _WIE_KEY or not KEIM_FIX) else seed_key
             if mem["px"] is None and (_sd := perception.seed_for(_kkey)) is not None:
                 mem["xy"], mem["px"] = _sd[0], _sd[1]                              # lazy: perceive() runs
@@ -6365,6 +6390,7 @@ def run_self_learning_steering(headless=False):
                     mem["px"] = np.asarray(near["px"], float)
             if mem["px"] is not None:                          # form tracker drives the hex fovea view
                 lo, hi = HEX_F * vc.fovea.K, RES - HEX_F * vc.fovea.K
+                _d0b_lift = D0B_LIFT_PROBE and getattr(act16.run_combined, "_d0b_phase", "") == "lift"
                 # IDENTITY-CONDITIONED net gaze: point the hex fovea at the commanded object's OWN
                 # self-labelled COLOUR CLASS (centroid chroma) -- fovea_gradient then drives toward THAT
                 # object (no detector needed for the drive's identity, only a light occlusion re-anchor).
@@ -6380,23 +6406,55 @@ def run_self_learning_steering(headless=False):
                     mem["_fc"] = mem.get("_fc", 0) + 1
                     if not FOVEA_MEM and mem["_fc"] % FOVEA_ANCHOR == 0:
                         mem["gaze"] = 0.5 * mem["gaze"] + 0.5 * np.asarray(mem["px"], float)
-                    gaze = np.clip(mem["gaze"], lo, hi)
+                    if _d0b_lift:
+                        if mem.get("_d0b_lift_gaze") is None:
+                            mem["_d0b_lift_gaze"] = np.asarray(mem["gaze"], float).copy()
+                        gaze = np.asarray(mem["_d0b_lift_gaze"], float)
+                    else:
+                        mem.pop("_d0b_lift_gaze", None)
+                        gaze = np.clip(mem["gaze"], lo, hi)
                 else:
                     gaze = np.clip(mem["px"], lo, hi)              # detector-set gaze (default, unchanged)
                 vc._P["state"]["gaze"] = gaze
                 img = sim.render(CAM)
                 if id_mu is not None:                              # class-conditioned perception (sel = the
-                    arr = vc.fovea.step_id(img, gaze, id_mu, True)  #   commanded colour class' saliency)
+                    arr = vc.fovea.step_id(img, gaze, id_mu, not D0_FREEZE)
                 else:
-                    arr = vc.fovea.step(img, gaze, vc._P["state"]["cmd"], True)
+                    arr = vc.fovea.step(img, gaze, vc._P["state"]["cmd"], not D0_FREEZE)
+                # D0b trace payload before any consumer interprets it.  `px` and `gaze` stay in
+                # image coordinates: above the table, the homography is deliberately invalid.
+                # The callback in run_combined adds only phase and proprioception after this real
+                # camera observation.  No simulator truth enters this structure.
+                _top_d0b = np.asarray(vc.fovea.net.node("top").mu)
+                vc._d0b_frame = {
+                    "gaze_px": [float(x) for x in np.asarray(gaze, float)],
+                    "follow_px": None if mem.get("px") is None else
+                                 [float(x) for x in np.asarray(mem["px"], float)],
+                    "sensor_error": float((vc.fovea.last_diag or {}).get("sensor_error", 0.0)),
+                    "top_re": [float(x) for x in np.real(_top_d0b)],
+                    "top_im": [float(x) for x in np.imag(_top_d0b)],
+                    "id_conditioned": bool(id_mu is not None),
+                    "frozen": bool(D0_FREEZE),
+                    "lift_probe_fixed_gaze": bool(_d0b_lift),
+                }
+                _d0b_sel_px = None; _d0b_sel_mass = 0.0
                 if FOVEA_NET:
                     ctr = (HEX_F - 1) / 2.0
                     sel = np.real(arr[:, :, 0]) if id_mu is not None else None
                     if sel is not None and float(sel.sum()) > 0.3:  # IDENTITY drive: class-colour saliency
                         mem["_lost"] = 0                            #   present -> fovea_gradient toward it
                         com = com2d(sel)
-                        drive = -fovea_gradient(vc.fovea.cells)     # net active-inference gaze drive
+                        _d0b_sel_mass = float(sel.sum())
                         if com is not None:
+                            _d0b_sel_px = np.asarray(gaze, float) + warp_gaze_delta(com, ctr, vc.fovea._ek())
+                        vc._d0b_frame.update({
+                            "selection_px": None if _d0b_sel_px is None else
+                                            [float(x) for x in _d0b_sel_px],
+                            "selection_mass": _d0b_sel_mass,
+                            "selection_cell_com": None if com is None else [float(x) for x in com],
+                        })
+                        drive = -fovea_gradient(vc.fovea.cells)     # net active-inference gaze drive
+                        if com is not None and not _d0b_lift:
                             mem["gaze"] = np.clip(np.asarray(gaze, float)
                                                   + warp_gaze_delta(com, ctr, vc.fovea._ek())
                                                   + np.clip(drive * 6.0, -2, 2), lo, hi)
@@ -6664,8 +6722,14 @@ def run_self_learning_steering(headless=False):
             from PIL import Image
             Image.fromarray(sim.render(CAM)).save(os.path.join(_dbgimg, f"stage_{tag}.png"))
 
+    # `run_combined` receives one inner episode per outer AUTO episode and restarts its own
+    # counter at zero.  D0b needs the outer trajectory identity for a scene/trajectory split.
+    d0b_trace_episode = [0]
+
     def run_one():
         import time as _time
+        d0b_trace_episode[0] += 1
+        _d0b_episode_id = d0b_trace_episode[0]
         # ZEITKONTO je Episode (Nutzerwunsch 2026-08-02: sehen, wann die CPU nicht mehr reicht).
         # Grob nach BLOECKEN, nicht nach Funktionen -- die Frage ist "welcher Teil wird teuer", und
         # genau auf dieser Ebene kann man handeln (Fovea-Aufloesung, Trainings-Epochen, Episodenlaenge).
@@ -7005,6 +7069,44 @@ def run_self_learning_steering(headless=False):
                 return xy, 0.0                                 # gehalten: nicht noch einmal ziehen
             return xy, c
 
+        def _d0b_track_log(_inner_ep, phase, tr):
+            """Append an agent-visible D0b frame after a real camera track step.
+
+            This is instrumentation only.  It neither changes the track return nor writes an
+            outcome into any learner.  The later self-label is constructed offline from valid
+            image-space sequences and own hand movement, not here.
+            """
+            if not D0B_TRACE_JSONL:
+                return
+            frame = getattr(vc, "_d0b_frame", None)
+            if frame is None:
+                return
+            try:
+                h = np.asarray(sim.grasp_pos(), float)
+                q = np.asarray(sim.arm_angles_full(), float)
+                rec = {"schema": "act23-d0b-fovea-frame-v1", "episode_id": int(_d0b_episode_id),
+                       "phase": str(phase),
+                       "hand_xyz": [float(x) for x in h],
+                       "joint_angles": [float(x) for x in q],
+                       "track_confidence": float(tr[1]) if isinstance(tr, tuple) and len(tr) > 1 else 0.0,
+                       **frame}
+                with open(D0B_TRACE_JSONL, "a", encoding="utf-8") as fh:
+                    fh.write(json.dumps(rec, sort_keys=True) + "\n")
+                if D0B_EVAL_JSONL:
+                    # Strictly external evaluation: geometric simulator truth is written only here,
+                    # after the agent-visible trace.  It is never returned to the tracker or learner.
+                    rest_z = float(snap[body][1])
+                    obj = np.asarray(sim.obj_pos(body), float)
+                    attached = bool(obj[2] > rest_z + 0.02 and np.linalg.norm(obj[:2] - h[:2]) <= 0.045)
+                    ev = {"schema": "act23-d0b-eval-v1", "episode_id": int(_d0b_episode_id),
+                          "phase": str(phase), "truth_lifted": bool(obj[2] > rest_z + 0.02),
+                          "truth_attached": attached}
+                    with open(D0B_EVAL_JSONL, "a", encoding="utf-8") as fh:
+                        fh.write(json.dumps(ev, sort_keys=True) + "\n")
+            except Exception as _e:
+                if os.environ.get("ACT23_DEBUG", "0") == "1":
+                    print(f"    [D0b-Trace] uebersprungen: {_e}", flush=True)
+
         track_fn = _wahrnehmung_ueber_ports
         if a_exec is not None:                                 # SELF: the model's grip + gentle dims
             grip_exec = float(np.clip(a_exec[4], 0.0, 0.45)); gentle_exec = bool(a_exec[5] > 0.5)
@@ -7043,7 +7145,8 @@ def run_self_learning_steering(headless=False):
                 _imit_verworfen[0] += 1
                 return
             pol_trace.append((s.copy(), out.copy()))
-        runtime.begin_episode()                                # PEND the teacher rows; committed only if
+        if not D0_FREEZE:
+            runtime.begin_episode()                            # pend teacher rows for lifelong DAgger
         #   this episode is NOT a self-validated success (teacher corrects failures, see end_episode)
         # dir_ref wurde ggf. oben aus der gewaehlten AKTION gekippt -- Originalwert sichern und nach
         # der Episode zuruecksetzen, damit die Neigung NUR fuer diesen Griff gilt und nicht dauerhaft
@@ -7239,8 +7342,8 @@ def run_self_learning_steering(headless=False):
                            ziel_nachsehen_fn=(_ziel_nachsehen if ZIEL_NACHSEHEN else None),
                            objekt_sehen_fn=(_objekt_sehen if OBJ_SEHEN else None),
                            objekt_merken_fn=(_objekt_merken if OBJ_EIG >= 2 else None),
-                           lifelong=True, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
-                           arm_reset=False)
+                           lifelong=not D0_FREEZE, carry_gentle=gentle_exec, grip_close=grip_exec, wrist_fn=wf,
+                           arm_reset=False, track_log_fn=_d0b_track_log if D0B_TRACE_JSONL else None)
         _T["nach_ausfuehrung"] = _time.perf_counter()
         if _dir_ref_orig is not None:
             bm.body.dir_ref = _dir_ref_orig                    # Neigung galt nur fuer diese Episode
@@ -7316,8 +7419,9 @@ def run_self_learning_steering(headless=False):
                     if _bv["p"] is not None:
                         _txt += (f" | gelernt daneben {1000.0 * float(np.linalg.norm(np.asarray(_bv['p']) - _y)):.0f}mm"
                                  + (" (benutzt)" if BLICK_LERNEN >= 2 else " (Schatten)"))
-                    blick_daten.append((_bv["f"].copy(), _y.copy()))
-                    del blick_daten[:-BLICK_MAX]
+                    if not D0_FREEZE:
+                        blick_daten.append((_bv["f"].copy(), _y.copy()))
+                        del blick_daten[:-BLICK_MAX]
                     print(f"    [Blick-Lernen] {_txt} | {len(blick_daten)} Beispiele", flush=True)
                 else:
                     print("    [Blick-Lernen] abgelegtes Objekt nicht gesehen -- kein Etikett", flush=True)
@@ -7489,7 +7593,7 @@ def run_self_learning_steering(headless=False):
                     # AUS DER BERUEHRUNG LERNEN (s. HOEHE_TASTEN).  Das Etikett ist die
                     # Handhoehe beim Aufsetzen minus GRASP_Z -- propriozeptiv, ohne geom_size.
                     # Es faellt hier und nicht bei der Adressierung, weil es die Episode braucht.
-                    if HOEHE_TASTEN and _bz.get("_det_hoehe") is not None:
+                    if not D0_FREEZE and HOEHE_TASTEN and _bz.get("_det_hoehe") is not None:
                         _tst = getattr(act16.run_combined, "_tast", None)
                         _hk = None if _tst is None else _tst.get("hz_kontakt")
                         if _hk is None:
@@ -7637,7 +7741,7 @@ def run_self_learning_steering(headless=False):
                 _txt += f"  {'=' if _ges == _wel else '!='}  Welt: {_wel}"
                 if _soll:
                     _txt += f"  | {'TRIFFT' if _ges == _soll else 'VERFEHLT'} das Wort"
-                if 0.02 <= _dist <= 0.10:
+                if not D0_FREEZE and 0.02 <= _dist <= 0.10:
                     wort_bedeutung[_ges].append(_v / _dist)
                     _txt += f"  | gemerkt unter '{_ges}' ({len(wort_bedeutung[_ges])} Beispiele)"
                 else:
@@ -7646,7 +7750,7 @@ def run_self_learning_steering(headless=False):
         if s_ok is None:
             print(f"    [Selbst-Urteil] enthalten -- noch keine eigene Klasse für {body}", flush=True)
         else:
-            tally = seval.record(s_ok, res.get("ok", False))
+            tally = seval.record(s_ok, res.get("ok", False)) if not D0_FREEZE else "eingefroren"
             ref = (seval._last or {}).get("ref_mm", 0.0)   # self-calibrated perception radius applied
             refs = f", Ref-Korrektur {ref:.0f}mm" if ref >= 1.0 else ""
             if (seval._last or {}).get("merged"):
@@ -7671,7 +7775,7 @@ def run_self_learning_steering(headless=False):
         # z_end) transition, skip teacher episodes (a_exec None), and errors are LOGGED not swallowed.
         # NOTE: this is an EPISODE-LEVEL transition (one per episode), not per-step -- coarse but honest;
         # a_exec is the 6-dim world-model action (the dynamics module truncates to its action_dim).
-        if a_exec is not None:
+        if a_exec is not None and not D0_FREEZE:
             try:
                 _a_dyn = np.asarray(a_exec, float)
                 z_start_dyn = lgoal.encode_world(snap[body][0][:2])
@@ -7862,6 +7966,21 @@ def run_self_learning_steering(headless=False):
         else:                                                   # old gate: FSM only, privileged label
             outcome = bool(res.get("ok", False)) if not use_net else None
             route = "FSM" if not use_net else "Netz (aus)"
+        if D0_EPISODE_JSONL and fe is not None and a_exec is not None:
+            # The action trace is deliberately independent of credit eligibility.  A policy
+            # abstention is no world-model training data, but it remains an executed wrist choice
+            # and therefore belongs in the D0 before/after metric.
+            _yaw_trace = 0.5 * np.arctan2(float(fe[3]), float(fe[2]))
+            _rel_trace = abs((np.degrees(wrist_of(a_exec) - _yaw_trace) + 90.0) % 180.0 - 90.0)
+            _d0_append_credit(D0_EPISODE_JSONL, {
+                "schema": "act23-d0-episode-v1", "body": body, "action_source": "Selbst",
+                "label_source": lbl_src, "route": route, "credit_outcome": outcome,
+                "self_delivered": bool(delivered), "world_delivered": bool(res.get("ok", False)),
+                "self_found": bool(s_found), "frozen": bool(EXV_FREEZE or D0_FREEZE),
+                "wrist_deg": float(np.degrees(wrist_of(a_exec)) % 180.0),
+                "relative_wrist_deg": float(_rel_trace), "grip": float(a_exec[4]),
+                "gentle": bool(a_exec[5] > 0.5), "self_distance_m": s_d,
+            })
         if fe is not None and outcome is not None:
             if a_exec is not None:
                 a_obs, src = a_exec, "Selbst"
@@ -7877,7 +7996,7 @@ def run_self_learning_steering(headless=False):
                 _qd = s_d if (lbl_src == "Selbst" and s_d is not None) else None
                 _we = WORLD_EPOCHS               # bleibt so, wenn das Lernen eingefroren ist
                 _naug = 0                        # auch bei eingefrorenem Lernen definiert
-                if not EXV_FREEZE:
+                if not EXV_FREEZE and not D0_FREEZE:
                     # PUNKT 3, GEPRUEFT UND NICHT NOETIG: diese Paarung ist von den logischen
                     # Raten unberuehrt.  `fe` entsteht in situation_feats VOR run_combined (also
                     # ausserhalb des Bild-Takts), `a_obs` ist die EINE Wahl dieser Episode
@@ -7923,6 +8042,17 @@ def run_self_learning_steering(headless=False):
                       f"{', sanft' if a_obs[5] > 0.5 else ''}, "
                       f"{'geliefert' if outcome else 'nicht geliefert'}{_qs}) -> {world.n()} Versuche",
                       flush=True)
+                if D0_CREDIT_JSONL:
+                    _yaw = 0.5 * np.arctan2(float(fe[3]), float(fe[2]))
+                    _rel = abs((np.degrees(wrist_of(a_obs) - _yaw) + 90.0) % 180.0 - 90.0)
+                    _d0_append_credit(D0_CREDIT_JSONL, {
+                        "body": body, "action_source": src, "label_source": lbl_src,
+                        "route": route, "outcome": bool(outcome), "weight": float(obs_w),
+                        "frozen": bool(EXV_FREEZE or D0_FREEZE), "world_rows": int(world.n()),
+                        "wrist_deg": float(np.degrees(wrist_of(a_obs)) % 180.0),
+                        "relative_wrist_deg": float(_rel), "grip": float(a_obs[4]),
+                        "gentle": bool(a_obs[5] > 0.5), "self_distance_m": _qd,
+                    })
         elif fe is not None:
             print(f"    [Kredit] {route} -- Welt-Modell enthält sich (Aktion nicht schuld)", flush=True)
         # STEP 3: SELF-IMITATION GATE.  On a Netz episode the POLICY drove; if the agent self-judges a
@@ -7975,7 +8105,7 @@ def run_self_learning_steering(headless=False):
         imit_ok = (s_d is not None and s_d < imit_bar) and (delivered or _ifail)
         imitated = False
         if (use_net and pol_trace and lifted and imit_ok and not slipped
-                and not EXV_FREEZE
+                and not EXV_FREEZE and not D0_FREEZE
                 and os.environ.get("ACT23_SELFIMIT", "1") == "1"):
             _q = wm_quality(s_d) if _gimit else 1.0
             added = runtime.imitate([s for s, _a in pol_trace], [a for _s, a in pol_trace],
@@ -8001,7 +8131,8 @@ def run_self_learning_steering(headless=False):
         # the teacher's correction rows stays tied to the STRICT confident bar (imit_tol) -- a merely-ok
         # episode now contributes its own demos AND keeps the teacher's correction, which is exactly the
         # regime where both signals are useful.  keep-behaviour is therefore unchanged from before.
-        runtime.end_episode(keep=not (imitated and confident) and not EXV_FREEZE)  # failure/uncertain -> the teacher's
+        if not D0_FREEZE:
+            runtime.end_episode(keep=not (imitated and confident) and not EXV_FREEZE)
         #   correction rows enter DAgger; a self-validated success keeps ONLY its own actions
         # STAGE 2 lifelong: refit the choreography on the aggregated teacher labels; report the SHADOW
         # divergence |policy - teacher| over this episode's VISITED states in BOTH modes -- on FSM
@@ -8032,7 +8163,7 @@ def run_self_learning_steering(headless=False):
             except Exception as _e:
                 if os.environ.get("ACT23_DEBUG", "0") == "1":
                     print(f"    [ModulViz] push uebersprungen: {_e}", flush=True)
-        if not EXV_FREEZE:
+        if not EXV_FREEZE and not D0_FREEZE:
             runtime.train(epochs=200)                          # act19's DAgger refits used 300; 80 underfit
             if LOSLASS_KOPF:                                   # der Loslass-Kopf lernt mit (s. LOSLASS_KOPF)
                 loslass_kopf.lernen(runtime._X, runtime._Y, epochs=60)
@@ -8232,12 +8363,37 @@ def run_self_learning_steering(headless=False):
         return ("    [Bilanz] letzte 30 je Modus: " + ", ".join(parts)
                 + (f"  |  je Objekt: {objs}" if objs else ""))
 
-    if int(os.environ.get("ACT23_GROESSE_SAMMELN", "0")) > 0:
+    if not D0_FREEZE and int(os.environ.get("ACT23_GROESSE_SAMMELN", "0")) > 0:
         _groesse_sammeln(int(os.environ["ACT23_GROESSE_SAMMELN"]))
-    elif GROESSE_SEHEN and len(groessen_schaetzer.X) < 200:
+    elif not D0_FREEZE and GROESSE_SEHEN and len(groessen_schaetzer.X) < 200:
         print(f"  [Groesse] Schaetzer hat erst {len(groessen_schaetzer.X)} Zeilen -- sammle 200 Szenen "
               f"ohne Arm (einmalig, wird mit dem Zustand gespeichert)", flush=True)
         _groesse_sammeln(200)
+
+    def _d0_components():
+        """The complete in-process learner set at an AUTO-evaluation boundary.
+
+        This is intentionally a declaration, not a freeze switch: a preflight must first expose
+        every component that still learns during an evaluation before it is suppressed.
+        """
+        return {"bm": bm, "shape_clf": shape_clf, "world": world, "runtime": runtime,
+                "colours": colours, "fovea": getattr(vc, "fovea", None), "latent_goal": lgoal,
+                "latent_dynamics": lat_dyn, "dream_seen": dream_nov.seen, "self_eval": seval,
+                "hoehe_schaetzer": hoehen_schaetzer, "groessen_schaetzer": groessen_schaetzer,
+                "loslass_kopf": loslass_kopf, "wort_bedeutung": wort_bedeutung, "blick_daten": blick_daten}
+
+    def _d0_boundary(name, **context):
+        if not D0_MANIFEST_DIR:
+            return None
+        data = _d0_snapshot(_d0_components(), context={
+            "boundary": name, "seed": os.environ.get("ACT23_SEED", "7"),
+            "choreo": state.choreo, "auto_n": os.environ.get("ACT23_AUTO_N", "0"),
+            **context,
+        })
+        _d0_write_manifest(os.path.join(D0_MANIFEST_DIR, f"{name}.json"), data)
+        print(f"  [D0-Integritaet] {name}: Manifest geschrieben", flush=True)
+        return data
+
     if headless and int(os.environ.get("ACT23_AUTO_N", "0")) > 0:
         # HEADLESS AUTO-RUN (for A/B measurement without the GUI): run N curiosity-picked episodes in
         # the requested choreo mode with the rolling Bilanz scoreboard -- the same loop the GUI Auto
@@ -8265,6 +8421,7 @@ def run_self_learning_steering(headless=False):
                       flush=True)
         bilanz = {"fsm": [], "netz": []}
         obj_hist = []
+        _d0_before = _d0_boundary("before")
         force_list = [s.strip() for s in os.environ.get("ACT23_AUTO_OBJ", "").split(",") if s.strip()]
         #   measurement knob: pin the auto pick to one object (label substring) or CYCLE a comma list
         #   ("U-Form,Gruenes" = interleaved practice, the interference probe); curiosity mix confounds
@@ -8385,6 +8542,16 @@ def run_self_learning_steering(headless=False):
                       flush=True)
             if (ep + 1) % 10 == 0:
                 print(bilanz_line(bilanz, obj_hist), flush=True)
+        _d0_after = _d0_boundary("after")
+        if _d0_before is not None:
+            _d0_changed = _d0_changed_components(_d0_before, _d0_after)
+            _d0_learn_changed = _d0_changed_components(_d0_before, _d0_after, learning_only=True)
+            print(f"  [D0-Integritaet] Vollzustand: "
+                  f"{'MUTATION: ' + ', '.join(_d0_changed) if _d0_changed else 'unveraendert'}",
+                  flush=True)
+            print(f"  [D0-Integritaet] Lernzustand: "
+                  f"{'MUTATION: ' + ', '.join(_d0_learn_changed) if _d0_learn_changed else 'unveraendert'}",
+                  flush=True)
         return
 
     if headless:
