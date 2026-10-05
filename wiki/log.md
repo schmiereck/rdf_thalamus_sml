@@ -2,6 +2,12 @@
 
 ## 2026-10-05
 
+* **Claudes Aspekt-Idee und Branch-Abstand gelesen**: [Analyse](/fragen/aspekte-und-worktree-integration.md).
+  Einzelaspekte passen als Hypothese zum Koerpermodell; Loslassen im Pruefstand stark,
+  im ACT23-Zwischenstand noch schlechter. 119/56 exklusive Commits, sechs gemeinsam
+  bearbeitete Dateien. Kontrollierte Integration in drittem Worktree empfohlen, noch
+  nicht ausgefuehrt; kein neuer Lauf und keine gemeinsamen Zustaende veraendert.
+
 * **Native ACT23-Datengrundlage abgeschlossen**: [Befund](/befunde/act23-bewegungsdaten.md).
   3.035 Trainings-/5.979 Testübergänge und 362 Kamerabildpaare, tatsächliche ACT23-Bewegung
   bei unveränderter Kamera. Positionsport v2 umfasst sechs Servos und gemessene Grenzüberschreitungen.

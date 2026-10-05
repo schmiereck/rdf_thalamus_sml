@@ -4,6 +4,7 @@ okf_version: "0.2"
 
 # Einstieg
 
+* [Aspekt-Rueckmeldung und Worktree-Integration](fragen/aspekte-und-worktree-integration.md) - Claudes Idee eingeordnet; Git-Divergenz und Vorschlag einer getrennt geprueften Zusammenfuehrung
 * [Das Verfahren](wiki.md) - wie dieses Wiki funktioniert: Aufbau, Frontmatter, Operationen
 * [Projektziel und Erfolgskriterium](ziel.md) - die Architektur soll selbst lernen; den Teacher zu schlagen ist nicht verlangt
 * [Dream-RSI: Forschungs- und Entwicklungsplan](fragen/dream-rsi-forschungsplan.md) - Arbeitsliste D0-D7 mit Entscheidungstoren; optionale Zweige fuer direkte Servosteuerung und Fovea, noch keine Umsetzung
