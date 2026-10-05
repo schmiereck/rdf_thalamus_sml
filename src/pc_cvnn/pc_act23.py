@@ -1024,6 +1024,11 @@ REGELN_NETZ = os.environ.get("ACT23_REGELN_NETZ", "0") == "1"
 # Etiketten am Ziel widerspruechlich (der Start sagt es).  Mit ACT16_ABLAGE_FIX=1 werden die alten
 # Pufferzeilen, deren Etikett sich dadurch aendert, beim Laden einmal neu etikettiert.
 LOSLASS_KOPF = os.environ.get("ACT23_LOSLASS_KOPF", "0") == "1"
+# AUS DEM EIGENEN ERGEBNIS (ACT23_LOSLASS_SELBST, Vorgabe 0).  Jede Episode, in der getragen wurde,
+# liefert eine Zeile: die Haltepose beim Loslassen (vom Kopf, oder die letzte vor der
+# Aufraeumbewegung) -> Selbst-Urteil der Kamera.  Gesammelt wird auch OHNE ACT23_LOSLASS_KOPF; mit
+# ihm entscheidet das Erfolgsnetz, sobald es bereit ist (s. LoslassKopf.erfolg_bereit).
+LOSLASS_SELBST = os.environ.get("ACT23_LOSLASS_SELBST", "0") == "1"
 LOSLASS_RUHIG = int(os.environ.get("ACT23_LOSLASS_RUHIG", "5"))   # Schritte ruhige Hand vor dem Urteil (0 = aus)
 HOEHEN = [float(v) / 1000.0 for v in os.environ.get("ACT23_HOEHEN", "").split(",") if v.strip()]
 if RUECKFALL not in ("privileg", "aufgeben"):
@@ -7297,11 +7302,12 @@ def run_self_learning_steering(headless=False):
                   f"({_vorblick['fehlt'][2]})", flush=True)
             return False, float("nan")
 
-        _lk = {"n": 0, "auf": 0, "ruhig": 0, "vor": None}
+        _lk = {"n": 0, "auf": 0, "ruhig": 0, "vor": None, "pose": None, "letzt": None, "quelle": None}
 
         def _policy_mit_kopf(s):
             """Netzbetrieb: die Policy entscheidet, der LOSLASS-KOPF entscheidet das Loslassen."""
             out = _policy_ueber_ports(s)
+            _lk["letzt"] = np.asarray(s, float).copy()        # letzte Pose (s. LOSLASS_SELBST)
             if LOSLASS_KOPF and loslass_kopf.trained:
                 # EINRASTEN: der Kopf urteilt nur, solange gehalten wird (Klaue < 0,27).  Ohne
                 # Einrasten verstummte er, sobald die Klaue aufging, die Policy sagte wieder "zu",
@@ -7317,9 +7323,14 @@ def run_self_learning_steering(headless=False):
                                 and float(np.linalg.norm(_h - _lk["vor"])) < 0.001 else 0)
                 _lk["vor"] = _h
                 if not _lk["auf"] and LoslassKopf.haelt(s) and _lk["ruhig"] >= LOSLASS_RUHIG:
-                    _lk["n"] = _lk["n"] + 1 if loslass_kopf.p(s) > 0.5 else 0
+                    # WER ENTSCHEIDET: sobald genug eigene Erfahrung da ist das ERFOLGSNETZ ("klappt
+                    # Loslassen hier?"), vorher der Teacher-Kopf.
+                    _eigen = LOSLASS_SELBST and loslass_kopf.erfolg_bereit
+                    _p = loslass_kopf.p_erfolg(s) if _eigen else loslass_kopf.p(s)
+                    _lk["n"] = _lk["n"] + 1 if _p > 0.5 else 0
                     if _lk["n"] >= 3:
-                        _lk["auf"] = 1
+                        _lk["auf"] = 1; _lk["pose"] = np.asarray(s, float).copy()
+                        _lk["quelle"] = "Erfolgsnetz" if _eigen else "Teacher-Kopf"
                 if _lk["auf"]:
                     out = np.array(out, float).copy(); out[3] = act16.J5_OPEN
             return out
@@ -7757,6 +7768,24 @@ def run_self_learning_steering(headless=False):
                 else:
                     _txt += "  | nicht neben dem Bezug, kein Beispiel"
                 print(f"    [Richtung] {_txt}", flush=True)
+        # LOSLASSEN AUS DEM EIGENEN ERGEBNIS (s. LOSLASS_SELBST): die Pose, in der losgelassen wurde,
+        # bekommt das Selbst-Urteil als Etikett.  Nur wenn wirklich getragen wurde: vom Kopf
+        # geoeffnet, oder die letzte Pose hielt noch (dann oeffnete die Aufraeumbewegung dort).
+        if LOSLASS_SELBST and not D0_FREEZE and s_ok is not None:
+            _pose = _lk["pose"] if _lk["pose"] is not None else (
+                _lk["letzt"] if _lk["letzt"] is not None and LoslassKopf.haelt(_lk["letzt"]) else None)
+            if _pose is not None:
+                loslass_kopf.erfolg_merken(_pose, bool(s_ok))
+                _bereit_vor = loslass_kopf.erfolg_bereit
+                loslass_kopf.erfolg_lernen()
+                _ye = np.asarray(loslass_kopf.ye, float)
+                _a = LoslassKopf.aspekte(_pose)[0]
+                print(f"    [Loslass-Erfolg] losgelassen von {_lk['quelle'] or 'Aufraeumbewegung'} bei "
+                      f"{1000 * _a[0]:.0f} mm neben dem Ziel, {1000 * _a[1]:.0f} mm ueber Ablage -> "
+                      f"Selbst-Urteil {'geliefert' if s_ok else 'nicht geliefert'} | Erfahrung "
+                      f"{len(_ye)} ({int(_ye.sum())} gut)"
+                      + (" -- ERFOLGSNETZ entscheidet ab jetzt" if loslass_kopf.erfolg_bereit and not _bereit_vor else ""),
+                      flush=True)
         if s_ok is None:
             print(f"    [Selbst-Urteil] enthalten -- noch keine eigene Klasse für {body}", flush=True)
         else:

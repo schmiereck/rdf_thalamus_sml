@@ -67,3 +67,39 @@ class LoslassKopf:
         if not self.trained:
             return 0.0
         return float(self.net.predict(self.aspekte(s)[0])[0])
+
+    # ---- AUS DEM EIGENEN ERGEBNIS LERNEN (ACT23_LOSLASS_SELBST, Nutzeridee 2026-10-06) ----------
+    # Der Teacher-Kopf oben ahmt einen grosszuegigen Teacher nach und raet in Halteposen, die der
+    # Teacher nie etikettiert hat (im Lauf: ruhig, 14 mm hoch, 30 mm neben dem Ziel).  Hier lernt ein
+    # ZWEITES Netz aus DERSELBEN Pose, in der tatsaechlich losgelassen wurde, und dem SELBST-URTEIL
+    # der Kamera danach: "Loslassen hier hat geklappt / nicht geklappt".  Genau die Posen, die im
+    # Lauf vorkommen -- und kein Teacher.
+    ERFOLG_MIN = 20                  # Faelle, ab denen das Erfolgsnetz entscheidet
+    ERFOLG_MIN_KLASSE = 5            # je Ausgang mindestens
+
+    def erfolg_merken(self, s, ok):
+        if getattr(self, "Xe", None) is None:
+            self.Xe, self.ye = [], []
+        self.Xe.append(self.aspekte(s)[0]); self.ye.append(1.0 if ok else 0.0)
+        if len(self.Xe) > 2000:
+            self.Xe = self.Xe[-2000:]; self.ye = self.ye[-2000:]
+
+    @property
+    def erfolg_bereit(self):
+        y = np.asarray(getattr(self, "ye", None) or [], float)
+        return (len(y) >= self.ERFOLG_MIN and y.sum() >= self.ERFOLG_MIN_KLASSE
+                and (len(y) - y.sum()) >= self.ERFOLG_MIN_KLASSE and getattr(self, "net_e", None) is not None)
+
+    def erfolg_lernen(self, epochs=150):
+        y = np.asarray(getattr(self, "ye", None) or [], float)
+        if len(y) < self.ERFOLG_MIN or y.sum() < self.ERFOLG_MIN_KLASSE or len(y) - y.sum() < self.ERFOLG_MIN_KLASSE:
+            return False
+        from pc_cvnn.pc_act19 import Policy
+        self.net_e = Policy(din=5, dout=1, hid=16, rng=np.random.default_rng(11))
+        self.net_e.fit(np.asarray(self.Xe, float), y[:, None], epochs=epochs, quiet=True)
+        return True
+
+    def p_erfolg(self, s):
+        if getattr(self, "net_e", None) is None:
+            return 0.0
+        return float(self.net_e.predict(self.aspekte(s)[0])[0])
