@@ -994,6 +994,13 @@ REGELN_NETZ = os.environ.get("ACT23_REGELN_NETZ", "0") == "1"
 # rechnet Masse und Traegheit beim Kompilieren).  Die Probe auf das Projektziel nach Schritt 1
 # (wiki/befunde/groesse-sehen-ab.md): bis hierhin war die Hoehe eine Konstante, und die Policy
 # hat sie nie gebraucht (Spalte 9 stumm).  Jetzt muss sie aus der Wahrnehmung kommen.
+# DER LOSLASS-KOPF (ACT23_LOSLASS_KOPF, Vorgabe 0 bis gemessen).  Ein eigener kleiner Lerner fuer
+# EINEN Aspekt -- "jetzt loslassen?" -- aus Einzelaspekten (s. arm_modules/loslass_kopf.py).  Im
+# Netzbetrieb setzt er den Greiferwunsch der Policy auf "offen", wenn er drei Schritte in Folge
+# "loslassen" sagt.  Gelernt aus den Teacher-Etiketten; braucht ACT16_ABLAGE_FIX=1, sonst sind die
+# Etiketten am Ziel widerspruechlich (der Start sagt es).  Mit ACT16_ABLAGE_FIX=1 werden die alten
+# Pufferzeilen, deren Etikett sich dadurch aendert, beim Laden einmal neu etikettiert.
+LOSLASS_KOPF = os.environ.get("ACT23_LOSLASS_KOPF", "0") == "1"
 HOEHEN = [float(v) / 1000.0 for v in os.environ.get("ACT23_HOEHEN", "").split(",") if v.strip()]
 if RUECKFALL not in ("privileg", "aufgeben"):
     raise SystemExit(f"ACT23_RUECKFALL={RUECKFALL!r}: erlaubt sind privileg | aufgeben")
@@ -1216,6 +1223,7 @@ if ZIEL_RELATION in ("richtung", "alle") and not ZIEL_ADRESSE:
 # anderen Lernern.
 from pc_cvnn.arm_modules.hoehen_schaetzer import HoehenSchaetzer
 from pc_cvnn.arm_modules.groessen_schaetzer import GroessenSchaetzer
+from pc_cvnn.arm_modules.loslass_kopf import LoslassKopf
 
 
 # ABSTUFUNG STATT PRIVILEG (ACT23_EIG_ABSTUFUNG, Vorgabe 0 bis gemessen).  Trifft das
@@ -3060,6 +3068,39 @@ def run_self_learning_steering(headless=False):
     except Exception as _e:
         print(f"  [Persistenz] Koerpermodell-Pruefung uebersprungen: {_e}", flush=True)
     runtime = _loaded["runtime"] if _loaded is not None else RuntimePolicyModule(rng=np.random.default_rng(4))
+    # DIE AUFGESETZTE ABLAGE NEU ETIKETTIEREN (s. pc_act16.ABLAGE_FIX).  Teacher-Etiketten sind eine
+    # Funktion des Zustands: wo die Korrektur das Etikett aendert, wird es ersetzt -- einmal beim
+    # Laden, fuer DAgger- und Selbst-Imitationszeilen.  Danach einmal nachtrainieren.
+    if act16.ABLAGE_FIX and len(getattr(runtime, "_X", [])):
+        _n_d = _n_s = 0
+        for _buf_x, _buf_y, _zaehl in ((runtime._X, runtime._Y, "d"),
+                                       (getattr(runtime, "_Xi", []) or [], getattr(runtime, "_Yi", []) or [], "s")):
+            for _i, _x in enumerate(_buf_x):
+                act16.ABLAGE_FIX = False
+                _alt = np.asarray(act16.reactive_subgoal(_x), float)
+                act16.ABLAGE_FIX = True
+                _neu = np.asarray(act16.reactive_subgoal(_x), float)
+                if not np.allclose(_alt, _neu):
+                    _buf_y[_i] = _neu
+                    if _zaehl == "d":
+                        _n_d += 1
+                    else:
+                        _n_s += 1
+        print(f"  [Ablage] Teacher-Korrektur (ACT16_ABLAGE_FIX): {_n_d} DAgger- und {_n_s} "
+              f"Selbst-Imitationszeilen neu etikettiert; Policy wird nachtrainiert", flush=True)
+        if _n_d + _n_s:
+            runtime.train(epochs=400)
+    loslass_kopf = (_loaded or {}).get("loslass_kopf") or LoslassKopf()
+    if not isinstance(loslass_kopf, LoslassKopf):
+        loslass_kopf = LoslassKopf()
+    if LOSLASS_KOPF:
+        if not act16.ABLAGE_FIX:
+            print("  [Loslassen] WARNUNG: ACT23_LOSLASS_KOPF ohne ACT16_ABLAGE_FIX -- die Teacher-"
+                  "Etiketten am Ziel widersprechen sich, der Kopf lernt Unsinn", flush=True)
+        _ok = loslass_kopf.lernen(runtime._X, runtime._Y)
+        print(f"  [Loslassen] Loslass-Kopf {'gelernt' if _ok else 'NICHT gelernt (zu wenig Zeilen)'} "
+              f"aus {loslass_kopf.n_fit} Halte-Zustaenden -- er entscheidet im Netzbetrieb das "
+              f"Loslassen", flush=True)
     # SELBST-IMITATION BEREINIGEN (ACT23_IMIT_UMETIKETT, Vorgabe 0).  Der Puffer traegt die Wuensche
     # der Policy VOR dem Riegel (s. pc_act16.IMIT_AUSGEFUEHRT).  Einmalig beim Laden: wo der Riegel
     # gegriffen HAETTE -- Hand ueber dem ruhenden Objekt, Klaue offen, mehr als 12 mm ueber dem
@@ -4139,6 +4180,7 @@ def run_self_learning_steering(headless=False):
                     "self_eval": seval,
                     "hoehe_schaetzer": hoehen_schaetzer,
                     "groessen_schaetzer": groessen_schaetzer,
+                    "loslass_kopf": loslass_kopf,
                     "wort_bedeutung": {w: [np.asarray(v, float) for v in l]
                                        for w, l in wort_bedeutung.items()},
                     "blick_daten": list(blick_daten),
@@ -7151,6 +7193,24 @@ def run_self_learning_steering(headless=False):
                   f"({_vorblick['fehlt'][2]})", flush=True)
             return False, float("nan")
 
+        _lk = {"n": 0, "auf": 0}
+
+        def _policy_mit_kopf(s):
+            """Netzbetrieb: die Policy entscheidet, der LOSLASS-KOPF entscheidet das Loslassen."""
+            out = _policy_ueber_ports(s)
+            if LOSLASS_KOPF and loslass_kopf.trained:
+                # EINRASTEN: der Kopf urteilt nur, solange gehalten wird (Klaue < 0,27).  Ohne
+                # Einrasten verstummte er, sobald die Klaue aufging, die Policy sagte wieder "zu",
+                # und die Klaue pendelte um 0,27 (Rauchtest 2026-10-05).  Einmal "loslassen" heisst
+                # loslassen bis zum Ende der Episode.
+                if not _lk["auf"] and LoslassKopf.haelt(s):
+                    _lk["n"] = _lk["n"] + 1 if loslass_kopf.p(s) > 0.5 else 0
+                    if _lk["n"] >= 3:
+                        _lk["auf"] = 1
+                if _lk["auf"]:
+                    out = np.array(out, float).copy(); out[3] = act16.J5_OPEN
+            return out
+
         def _perceive_vorblick(cmd):
             _r, _vorblick["r"] = _vorblick["r"], None
             if _r is not None:
@@ -7167,7 +7227,7 @@ def run_self_learning_steering(headless=False):
             return _r
         act16.run_combined(sim, bm.body, panel, CAM, episodes=1, cmd_fixed=state.cmd_fn, force=state.force_fn,
                            goal_fn=state.goal_fn, perceive_fn=_perceive_vorblick, track_fn=track_fn,
-                           policy_fn=(_policy_ueber_ports if use_net else None),
+                           policy_fn=(_policy_mit_kopf if use_net else None),
                            log_fn=(None if use_net else choreo_log),
                            teacher_log_fn=(choreo_log if use_net else None),
                            policy_log_fn=(_imit_log_frisch if use_net else None),
@@ -7974,6 +8034,8 @@ def run_self_learning_steering(headless=False):
                     print(f"    [ModulViz] push uebersprungen: {_e}", flush=True)
         if not EXV_FREEZE:
             runtime.train(epochs=200)                          # act19's DAgger refits used 300; 80 underfit
+            if LOSLASS_KOPF:                                   # der Loslass-Kopf lernt mit (s. LOSLASS_KOPF)
+                loslass_kopf.lernen(runtime._X, runtime._Y, epochs=60)
         #   the shifting aggregate (user watched the net under-CLOSE the gripper -- the BC smoothing
         #   artefact that stronger refits + DAgger labels at the visited close-states sharpen)
         if np.isfinite(div):

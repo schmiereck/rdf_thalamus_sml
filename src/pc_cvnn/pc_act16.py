@@ -120,8 +120,22 @@ GREIF_FLACH = os.environ.get("ACT16_GREIF_FLACH", "0") == "1"
 # hinfahren", die Policy wuerde das eben Abgelegte neu greifen.  Zeitbudgets (PHASE_STALL, cap)
 # bleiben -- auch ein echter Roboter hat eine Uhr.
 ENDE_SELBST = os.environ.get("ACT16_ENDE_SELBST", "0") == "1"
+# DER TEACHER ETIKETTIERTE DAS LOSLASSEN FAST NIE (ACT16_ABLAGE_FIX, Vorgabe 0 bis gemessen).
+# `grasped` verlangte cz > lift_thresh (obj_h + 14 mm = 26 mm Objektmitte).  Beim Absenken auf die
+# Ablagehoehe faellt die Objektmitte darunter, BEVOR die Hand die Ablagehoehe erreicht -- ab dort
+# hielt der Teacher das Objekt fuer "nicht gegriffen" und etikettierte "Klaue zu -> anheben", als
+# laege es an der Greifstelle.  Die Loslass-Regel war geometrisch nur im Uebergang erreichbar
+# (1,7 % der DAgger-Zeilen); die Policy hat Loslassen deshalb nie gelernt
+# (wiki/befunde/loslassen.md).  Im Teacher-Betrieb loest die Phasenmaschine los, im Netzbetrieb
+# deckte das Orakel es zu.  Dieselbe Korrektur steht fuer die AUFLAGE (h_auf) schon darunter.
+# Mit dem Schalter gilt: in Zielnaehe (Objekt und Hand innerhalb SENK_NAH) und Klaue zu ist das
+# Objekt GEGRIFFEN, auch wenn es schon aufsetzt.  An der Greifstelle greift das nie -- das Ziel
+# liegt dort mindestens 6 cm entfernt.
+ABLAGE_FIX = os.environ.get("ACT16_ABLAGE_FIX", "0") == "1"
 ENDE_TRAG_Z = 0.04                       # Hand sicher ueber jedem Tischobjekt (hoechstens 32 mm)
-ENDE_OFFEN = 5                           # Schritte am Ziel abgesetzt (oder offen + drucklos)
+ENDE_OFFEN = 5                           # Schritte offen + drucklos -> "losgelassen"
+ENDE_HALTEN = int(os.environ.get("ACT16_ENDE_HALTEN", "5"))   # Schritte am Ziel gehalten -> "am Ziel
+#   abgesetzt".  Mit einem Loslass-Kopf (ACT23_LOSLASS_KOPF) laenger, damit das LOSLASSEN Vorrang hat.
 ENDE_HOEHE = 0.015                       # Hand hoechstens so weit ueber der Ablagehoehe tgt_z: die
 #   Policy setzt einen Wuerfel mit der Hand bei 18-24 mm ab (gegriffen 6 mm ueber der Mitte), tgt_z
 #   ist 14 mm -- mit 10 mm Spielraum lag sie genau auf der Kante (Rauchtest 2026-10-05)
@@ -396,6 +410,9 @@ def reactive_subgoal(state):
         lift_thresh = lift_thresh + h_griff
     place_z = grasp_z - h_griff + h_auf                   # abgelegt wird OHNE die Griff-Auflage
     grasped = (cz > lift_thresh) and (j5 < J5_CLOSED_TH)  # object lifted off the table AND gripper closed
+    if (ABLAGE_FIX and not grasped and j5 < J5_CLOSED_TH
+            and np.linalg.norm(c - t) < SENK_NAH and np.linalg.norm(hxy - t) < SENK_NAH):
+        grasped = True                                    # am Ziel abgesetzt, noch gehalten (s. ABLAGE_FIX)
     if grasped:                                           # CARRY -> place -> release
         if np.linalg.norm(hxy - t) > SENK_NAH:           # carry over the target (s. NEAR_ABLAGE, SENK_NAH)
             return np.array([tx, ty, carry_z, J5_GRIP])
@@ -793,12 +810,19 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 # Loslassen bleibt -- wie bisher -- die Aufraeumbewegung.
                 _am_ziel = (_p_e > 0.3 and float(np.linalg.norm(hxy - tgt)) < tol
                             and hz < tgt_z + ENDE_HOEHE)
-                if run_combined._ende["trug"] and (_am_ziel or (_q5 > J5_OPEN_TH and _p_e < 0.1)):
-                    run_combined._ende["offen"] += 1
-                else:
-                    run_combined._ende["offen"] = 0
+                # NUR UEBER DEM EIGENEN ZIEL: eine offene, leere Klaue anderswo ist ein NEUER ANLAUF
+                # (Objekt beim Heben verloren, die Policy oeffnet zum Nachgreifen) -- im Rauchtest
+                # 2026-10-05 beendete das sonst die Episode 168 mm neben dem Ziel.
+                _offen_jetzt = (run_combined._ende["trug"] and _q5 > J5_OPEN_TH and _p_e < 0.1
+                                and float(np.linalg.norm(hxy - tgt)) < tol)
+                _halt_jetzt = run_combined._ende["trug"] and _am_ziel
+                run_combined._ende["offen"] = run_combined._ende["offen"] + 1 if _offen_jetzt else 0
+                run_combined._ende["halten"] = run_combined._ende.get("halten", 0) + 1 if _halt_jetzt else 0
                 if run_combined._ende["offen"] >= ENDE_OFFEN:
-                    run_combined._ende["grund"] = "am Ziel abgesetzt" if _q5 <= J5_OPEN_TH else "losgelassen"
+                    run_combined._ende["grund"] = "losgelassen"
+                    break
+                if run_combined._ende["halten"] >= ENDE_HALTEN:
+                    run_combined._ende["grund"] = "am Ziel abgesetzt"
                     break
             elif policy_fn is not None and np.linalg.norm(c_true - tgt_true) < tol and cz < 0.035:
                 run_combined._ende["grund"] = "orakel"
