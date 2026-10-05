@@ -1024,6 +1024,7 @@ REGELN_NETZ = os.environ.get("ACT23_REGELN_NETZ", "0") == "1"
 # Etiketten am Ziel widerspruechlich (der Start sagt es).  Mit ACT16_ABLAGE_FIX=1 werden die alten
 # Pufferzeilen, deren Etikett sich dadurch aendert, beim Laden einmal neu etikettiert.
 LOSLASS_KOPF = os.environ.get("ACT23_LOSLASS_KOPF", "0") == "1"
+LOSLASS_RUHIG = int(os.environ.get("ACT23_LOSLASS_RUHIG", "5"))   # Schritte ruhige Hand vor dem Urteil (0 = aus)
 HOEHEN = [float(v) / 1000.0 for v in os.environ.get("ACT23_HOEHEN", "").split(",") if v.strip()]
 if RUECKFALL not in ("privileg", "aufgeben"):
     raise SystemExit(f"ACT23_RUECKFALL={RUECKFALL!r}: erlaubt sind privileg | aufgeben")
@@ -7296,7 +7297,7 @@ def run_self_learning_steering(headless=False):
                   f"({_vorblick['fehlt'][2]})", flush=True)
             return False, float("nan")
 
-        _lk = {"n": 0, "auf": 0}
+        _lk = {"n": 0, "auf": 0, "ruhig": 0, "vor": None}
 
         def _policy_mit_kopf(s):
             """Netzbetrieb: die Policy entscheidet, der LOSLASS-KOPF entscheidet das Loslassen."""
@@ -7306,7 +7307,16 @@ def run_self_learning_steering(headless=False):
                 # Einrasten verstummte er, sobald die Klaue aufging, die Policy sagte wieder "zu",
                 # und die Klaue pendelte um 0,27 (Rauchtest 2026-10-05).  Einmal "loslassen" heisst
                 # loslassen bis zum Ende der Episode.
-                if not _lk["auf"] and LoslassKopf.haelt(s):
+                # ERST RUHIG, DANN ENTSCHEIDEN (2026-10-06): im ersten Lauf oeffnete der Kopf am RAND
+                # seiner Zone -- mitten im Absenken, Objekt 14-15 mm hoch, 15-43 mm seitlich -- und
+                # lieferte 46/100 gegen 54/100.  Jetzt urteilt er erst, wenn die Hand LOSLASS_RUHIG
+                # Schritte lang weniger als 1 mm je Schritt bewegt (Propriozeption).  Wohin die Hand
+                # faehrt, entscheidet weiter die Policy; OB losgelassen wird, weiter der Kopf.
+                _h = np.asarray(s[:3], float)
+                _lk["ruhig"] = (_lk["ruhig"] + 1 if _lk["vor"] is not None
+                                and float(np.linalg.norm(_h - _lk["vor"])) < 0.001 else 0)
+                _lk["vor"] = _h
+                if not _lk["auf"] and LoslassKopf.haelt(s) and _lk["ruhig"] >= LOSLASS_RUHIG:
                     _lk["n"] = _lk["n"] + 1 if loslass_kopf.p(s) > 0.5 else 0
                     if _lk["n"] >= 3:
                         _lk["auf"] = 1
