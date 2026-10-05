@@ -146,3 +146,7 @@ ueberwiegend ein Zaehlartefakt des Riegel-Zaehlers. Echt: ein 4-mm-Band und der 
 **Schritt 3 erledigt (2026-10-04):** [Riegel und Reflex entfernt](/befunde/riegel-reflex-entfernt.md) -
 im Netzbetrieb aus (`ACT23_REGELN_NETZ`, Vorgabe 0). Offen: das 4-mm-Band und der unsichtbare
 Stillstand; `SOFT_RELEASE`, `WRIST_ALIGN`, `PHASE_STALL`, `MAX_REACQ` laufen weiter.
+
+**Episodenende (2026-10-05):** [Das Episodenende entscheidet der Agent selbst](/befunde/episodenende-selbst.md) -
+das Orakel aus der wahren Objektlage ist im Netzbetrieb ersetzt (Vorgabe). Offen: selbst loslassen
+(bleibt die Aufraeumbewegung) und ein "ich gebe auf" statt des Zeitbudgets.

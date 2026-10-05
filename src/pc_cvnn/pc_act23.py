@@ -57,6 +57,11 @@ os.environ.setdefault("ACT14_DOF", "4")   # act23 runs the 4-DOF arm: joint_3 fr
 for _k, _v in (("ACT_REACH_X0", "-0.12"), ("ACT_REACH_X1", "0.12"),
                ("ACT_REACH_Y0", "0.07"), ("ACT_REACH_Y1", "0.24")):
     os.environ.setdefault(_k, _v)
+os.environ.setdefault("ACT16_ENDE_SELBST", "1")   # DAS EPISODENENDE ENTSCHEIDET DER AGENT (seit 2026-10-05):
+#   getragen + Hand ueber dem EIGENEN Ziel auf Ablagehoehe statt Orakel aus der wahren Objektlage.
+#   Gemessen (wiki/befunde/episodenende-selbst.md, 8 Seeds x 50): Orakel 53,1 %, selbst 60,7 %,
+#   Seeds 7:1, Intervall [+0,7, +14,4].  Nur in act23 gesetzt -- andere act16-Nutzer bleiben beim
+#   Orakel.  ACT16_ENDE_SELBST=0 stellt es her.
 os.environ.setdefault("ACT_GOAL_ROPE", "1")   # STAGE 4a: RoPE goal-latent (near-linear in position ->
 #   the learned latent-inverse is near-exact; measured in act21: servo isolated ~0mm vs 4.4mm blob)
 from pc_cvnn.pc_act14 import BracketArmSim, HOME, ARM3, ArmBodyModel3D
