@@ -7,6 +7,10 @@ Fuer eine schnelle Uebersicht: `grep "^## " wiki/log.md | head -5`
 
 ## 2026-10-05
 
+* **Anlage**: [Rueckmeldung je Aspekt](/fragen/aspekt-rueckmeldung.md) - Nutzeridee, mit erstem Beleg.
+* **Anlage**: [Loslassen am Ziel](/befunde/loslassen.md) - Teacher-Fehler `ACT16_ABLAGE_FIX`, Loslass-Kopf;
+  laesst selbst los, liefert aber weniger (2 Seeds, wegen Speichermangels abgebrochen).
+
 * **Anlage**: [Das Episodenende entscheidet der Agent selbst](/befunde/episodenende-selbst.md) -
   gepaart, 8 Seeds x 50: Orakel 53,1 %, selbst 60,7 %, Seeds 7:1. `ACT16_ENDE_SELBST` ist in act23
   Vorgabe. Gefunden: die Policy laesst am Ziel nicht los (das Orakel nahm es ihr immer ab).

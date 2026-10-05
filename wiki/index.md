@@ -164,6 +164,8 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 # Chronik der Entwicklung
 
 * [act23-Entwicklungslinie](chronik/act23.md) - Juni bis September 2026, verdichtet: Etappen, Anlaesse, Messungen
+* [Loslassen am Ziel](befunde/loslassen.md) - **Teacher-Fehler gefunden (aufgesetztes Objekt galt als nicht gegriffen); Loslass-Kopf aus Einzelaspekten laesst selbst los, liefert aber 46/100 gegen 54/100 (zu frueh, zu seitlich).** Zwei Seeds, abgebrochen. Vorgabe aus.
+* [Rueckmeldung je Aspekt](fragen/aspekt-rueckmeldung.md) - **Nutzeridee: Aspekte statt Gesamturteil.** Erster Beleg: Loslass-Kopf aus 5 Aspekten 99 %/0 % gegen ganzer Zustand 35 %/22 %.
 * [Das Episodenende entscheidet der Agent selbst](befunde/episodenende-selbst.md) - **Orakel aus der wahren Objektlage ersetzt durch Tastsinn + eigene Hand am eigenen Ziel: 53,1 -> 60,7 %, Seeds 7:1, Intervall [+0,7, +14,4].** Das Orakel endete zu frueh. Nebenbefund: die Policy laesst nicht los. Vorgabe in act23.
 * [Flache Objekte tiefer greifen](befunde/greifhoehe-flach.md) - **ehrliches Negativ: Teacher auf 16 mm 13/30 alt gegen 11/30 tiefer.** Die Vermutung stand auf 9 Episoden. `ACT16_GREIF_FLACH` bleibt aus.
 * [Neue Objekthoehen selbst gelernt](befunde/neue-hoehen-gelernt.md) - **16/24/32 mm, zwei Seeds: neue Hoehen bis auf Teacher-Niveau gelernt (32 mm 27 -> 59/77 %), auch mit geschaetzter Hoehe.** 16 mm startet schon nahe am Teacher-Deckel (43 %). `ACT23_HOEHEN`.
