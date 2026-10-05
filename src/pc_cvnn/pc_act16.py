@@ -110,6 +110,21 @@ GRASP_OFFSET = float(os.environ.get("ACT16_GRASP_OFFSET", "0.006"))
 # Objekten 13/30 alt gegen 11/30 tiefer (p = 0,79).  Die "3 von 9" der Vorprobe waren Rauschen;
 # der Teacher greift 16 mm so gut wie 24 mm.  Bleibt als Schalter, Vorgabe aus.
 GREIF_FLACH = os.environ.get("ACT16_GREIF_FLACH", "0") == "1"
+# DAS EPISODENENDE SELBST ENTSCHEIDEN (ACT16_ENDE_SELBST, Vorgabe 0 bis gemessen).  Im Netzbetrieb
+# endete die Episode bisher, sobald die WAHRE Objektlage im Ziel lag (ein Orakel aus MuJoCo), oder
+# nach der Zaehlung der Phasenmaschine in "release".  Mit dem Schalter entscheidet der Agent aus
+# Propriozeption und Tastsinn: "ich habe etwas GETRAGEN (Druck in der geschlossenen Klaue, Hand
+# ueber ENDE_TRAG_Z) und halte es jetzt ueber MEINEM Ziel auf Ablagehoehe (oder habe die Klaue
+# geoeffnet), ENDE_OFFEN Schritte lang -> fertig".  Ob es geliefert war, urteilt danach wie bisher das Selbst-Urteil aus der Kamera.
+# Das Ende MUSS beim Oeffnen kommen: danach etikettiert der Teacher "offene Klaue, Objekt da ->
+# hinfahren", die Policy wuerde das eben Abgelegte neu greifen.  Zeitbudgets (PHASE_STALL, cap)
+# bleiben -- auch ein echter Roboter hat eine Uhr.
+ENDE_SELBST = os.environ.get("ACT16_ENDE_SELBST", "0") == "1"
+ENDE_TRAG_Z = 0.04                       # Hand sicher ueber jedem Tischobjekt (hoechstens 32 mm)
+ENDE_OFFEN = 5                           # Schritte am Ziel abgesetzt (oder offen + drucklos)
+ENDE_HOEHE = 0.015                       # Hand hoechstens so weit ueber der Ablagehoehe tgt_z: die
+#   Policy setzt einen Wuerfel mit der Hand bei 18-24 mm ab (gegriffen 6 mm ueber der Mitte), tgt_z
+#   ist 14 mm -- mit 10 mm Spielraum lag sie genau auf der Kante (Rauchtest 2026-10-05)
 GREIF_TIEFE = float(os.environ.get("ACT16_GREIF_TIEFE", "0.006"))
 
 
@@ -656,10 +671,12 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         #   they route the outcome to the learner whose prediction broke: never arrived -> choreography
         #   (policy); closed at the object + no lift OR slip -> the world-model action; held but
         #   off-goal -> the place aim (policy).
+        run_combined._ende = {"trug": False, "offen": 0, "grund": "budget"}   # s. ENDE_SELBST
         for k in range(cap):
             phase_age = phase_age + 1 if phase == last_phase else 0
             last_phase = phase
             if phase_age > PHASE_STALL:                       # stuck (e.g. can't reach the believed object)
+                run_combined._ende["grund"] = "stillstand"
                 break                                         # -> give up this episode instead of looping
             c_true = sim.obj_pos(cmd)[:2]; cz = sim.obj_pos(cmd)[2]; h = sim.grasp_pos(); hxy = h[:2]; hz = h[2]
             if cz > run_combined._maxcz:
@@ -747,7 +764,44 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 #                                               down -> the grasp was TESTED (see header)
             if via == "push" and np.linalg.norm(c - tgt) < tol:  # pushed home -> done
                 break
-            if policy_fn is not None and np.linalg.norm(c_true - tgt_true) < tol and cz < 0.035:
+            if ENDE_SELBST and policy_fn is not None:
+                # SELBST ENTSCHEIDEN (s. ENDE_SELBST): nur Gelenkwinkel, Handhoehe und Fingerdruck.
+                try:
+                    _p_e = float(sim.grip_pressure("left"))
+                except Exception:
+                    _p_e = 0.0
+                _q5 = float(sim.d.qpos[sim.jqadr["joint_5"]])
+                _E = run_combined._ende
+                if hz > ENDE_TRAG_Z:
+                    _E["p_max_oben"] = max(_E.get("p_max_oben", 0.0), _p_e)
+                if _E["trug"]:
+                    _E["q5_max_danach"] = max(_E.get("q5_max_danach", 0.0), _q5)
+                    _E["p_min_danach"] = min(_E.get("p_min_danach", 9.9), _p_e)
+                    _E["hz_min_danach"] = min(_E.get("hz_min_danach", 9.9), float(hz))
+                    _E["lauf"] = _E.get("lauf", 0) + 1 if _p_e < 0.1 else 0
+                    if _E["lauf"] > _E.get("lauf_max", 0):
+                        _E["lauf_max"] = _E["lauf"]; _E["hz_lauf"] = float(hz)
+                if _p_e > 0.3 and _q5 < J5_CLOSED_TH and hz > ENDE_TRAG_Z:
+                    run_combined._ende["trug"] = True
+                # AM EIGENEN ZIEL ABGESETZT: getragen, die Hand steht ueber dem SELBST gewaehlten
+                # Ziel (tgt, nicht die wahre Objektlage) auf Ablagehoehe (tgt_z + ENDE_HOEHE) und haelt
+                # noch.  Gemessen 2026-10-05: die Policy LAESST NICHT LOS -- sie senkt bis zur
+                # Ablagehoehe und haelt fest (Druck faellt hoechstens einen Schritt lang), denn das
+                # Orakel beendete jede Episode VOR dem Loslassen; geoeffnet hat immer die
+                # Aufraeumbewegung danach.  Die Selbst-Imitation etikettiert Ablage-Zustaende zu 0 %
+                # mit "oeffnen" (Teacher 98 %).  Darum entscheidet der Agent hier nur das ENDE; das
+                # Loslassen bleibt -- wie bisher -- die Aufraeumbewegung.
+                _am_ziel = (_p_e > 0.3 and float(np.linalg.norm(hxy - tgt)) < tol
+                            and hz < tgt_z + ENDE_HOEHE)
+                if run_combined._ende["trug"] and (_am_ziel or (_q5 > J5_OPEN_TH and _p_e < 0.1)):
+                    run_combined._ende["offen"] += 1
+                else:
+                    run_combined._ende["offen"] = 0
+                if run_combined._ende["offen"] >= ENDE_OFFEN:
+                    run_combined._ende["grund"] = "am Ziel abgesetzt" if _q5 <= J5_OPEN_TH else "losgelassen"
+                    break
+            elif policy_fn is not None and np.linalg.norm(c_true - tgt_true) < tol and cz < 0.035:
+                run_combined._ende["grund"] = "orakel"
                 break                                            # learned policy: object placed -> done
             d = tgt - c; n = np.linalg.norm(d); d = d / n if n > 1e-6 else np.array([1.0, 0.0])
 
@@ -899,14 +953,16 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                             _zr0 = float(run_combined._tast.get("z_rel", tgt_z))
                         zr = _zr0 if dwell <= 40 else OVER_Z   # object); then retreat UP already open
                         aim = np.array([tgt[0], tgt[1], zr])
-                        if dwell > 65:
+                        if dwell > 65 and not (ENDE_SELBST and policy_fn is not None):
+                            run_combined._ende["grund"] = "phase"
                             break
                     else:
                         _zr0 = tgt_z
                         if TASTEN and run_combined._tast is not None:
                             _zr0 = float(run_combined._tast.get("z_rel", tgt_z))
                         j5, aim, dwell = J5_OPEN, np.array([tgt[0], tgt[1], _zr0]), dwell + 1
-                        if dwell > 50:
+                        if dwell > 50 and not (ENDE_SELBST and policy_fn is not None):
+                            run_combined._ende["grund"] = "phase"
                             break
             else:  # PUSH: get behind the object (OVER it, since the arm can't go through), push
                 via = "push"
@@ -1278,6 +1334,13 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             narrow_n += 1; narrow_ok += ok
         if episode_end_fn is not None:                       # self-improvement: reward = f(ok, err)
             episode_end_fn(ep, bool(ok), float(err))
+        _E = run_combined._ende
+        print(f"    [Ende] {_E['grund']} nach {k + 1} Schritten"
+              + (f" (selbst entschieden; trug {_E['trug']}, Druck oben max {_E.get('p_max_oben', 0):.2f} N,"
+                 f" danach Klaue max {_E.get('q5_max_danach', 0):.2f} / offen ab {J5_OPEN_TH:.2f},"
+                 f" Druck min {_E.get('p_min_danach', 9.9):.2f} N, Hand min {1000*_E.get('hz_min_danach', 9.9):.0f} mm,"
+                 f" laengste drucklose Strecke {_E.get('lauf_max', 0)} Schritte bei {1000*_E.get('hz_lauf', 0):.0f} mm)"
+                 if ENDE_SELBST and policy_fn is not None else ""), flush=True)
         if RULEDIAG:                                          # bewusst NICHT an _quiet gehaengt: act23
             _r = run_combined._rule                            # fuehrt run_combined stumm, und genau dort
             print(f"    [Riegel] Schritte {_r['schritte']:4d} | Reflex {_r['reflex']:3d}"   # soll gezaehlt
