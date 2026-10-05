@@ -7323,14 +7323,18 @@ def run_self_learning_steering(headless=False):
                                 and float(np.linalg.norm(_h - _lk["vor"])) < 0.001 else 0)
                 _lk["vor"] = _h
                 if not _lk["auf"] and LoslassKopf.haelt(s) and _lk["ruhig"] >= LOSLASS_RUHIG:
-                    # WER ENTSCHEIDET: sobald genug eigene Erfahrung da ist das ERFOLGSNETZ ("klappt
-                    # Loslassen hier?"), vorher der Teacher-Kopf.
+                    # WER ENTSCHEIDET: der Teacher-Kopf SCHLAEGT VOR, wo Loslassen ueberhaupt in Frage
+                    # kommt; sobald genug eigene Erfahrung da ist, hat das ERFOLGSNETZ ("klappt
+                    # Loslassen hier?") ein VETO.  Erste Fassung liess das Erfolgsnetz ALLEIN
+                    # entscheiden: aus 30 guten und 6 schlechten Faellen nahe am Ziel lernte es
+                    # pauschal "klappt schon" und liess bei 93 und 54 mm neben dem Ziel los
+                    # (Lauf 2026-10-06, 11/30 gegen 18/30) -- es weiss nicht, was es nicht weiss.
                     _eigen = LOSLASS_SELBST and loslass_kopf.erfolg_bereit
-                    _p = loslass_kopf.p_erfolg(s) if _eigen else loslass_kopf.p(s)
-                    _lk["n"] = _lk["n"] + 1 if _p > 0.5 else 0
+                    _ja = loslass_kopf.p(s) > 0.5 and (not _eigen or loslass_kopf.p_erfolg(s) > 0.5)
+                    _lk["n"] = _lk["n"] + 1 if _ja else 0
                     if _lk["n"] >= 3:
                         _lk["auf"] = 1; _lk["pose"] = np.asarray(s, float).copy()
-                        _lk["quelle"] = "Erfolgsnetz" if _eigen else "Teacher-Kopf"
+                        _lk["quelle"] = "Teacher-Kopf + Erfolgs-Veto" if _eigen else "Teacher-Kopf"
                 if _lk["auf"]:
                     out = np.array(out, float).copy(); out[3] = act16.J5_OPEN
             return out
@@ -7784,7 +7788,7 @@ def run_self_learning_steering(headless=False):
                       f"{1000 * _a[0]:.0f} mm neben dem Ziel, {1000 * _a[1]:.0f} mm ueber Ablage -> "
                       f"Selbst-Urteil {'geliefert' if s_ok else 'nicht geliefert'} | Erfahrung "
                       f"{len(_ye)} ({int(_ye.sum())} gut)"
-                      + (" -- ERFOLGSNETZ entscheidet ab jetzt" if loslass_kopf.erfolg_bereit and not _bereit_vor else ""),
+                      + (" -- ERFOLGSNETZ hat ab jetzt ein Veto" if loslass_kopf.erfolg_bereit and not _bereit_vor else ""),
                       flush=True)
         if s_ok is None:
             print(f"    [Selbst-Urteil] enthalten -- noch keine eigene Klasse für {body}", flush=True)
