@@ -68,7 +68,7 @@ ueber 0,26, die Policy schloss wieder. Jetzt bis "offen" gefuehlt.
 # Lesart (vorlaeufig)
 
 Der Tastsinn allein trifft 73 % - als Vorschlag brauchbar. Die Decke ist aber klein: ~8 echte
-Verluste je 100 Episoden. Ob neu greifen sie rettet, misst das laufende A/B (Modus 2 gegen 3).
+Verluste je 100 Episoden. Ob neu greifen sie rettet, sollte ein A/B (Modus 2 gegen 3, Seed 9112) messen - es wurde nach 13 Episoden je Arm wegen Speichermangels beendet (je 7/13 geliefert, ohne Aussage).
 Offen bleibt ein besseres eigenes Etikett als "geliefert", z. B. ob die Kamera das Objekt beim
 Loslassen unter der Hand sieht (`SelfEval`: "Objekt nicht am Loslass-Punkt gesehen").
 
