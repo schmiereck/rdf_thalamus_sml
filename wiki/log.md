@@ -2,6 +2,9 @@
 
 ## 2026-10-06
 
+* **Anlage**: [Haelt der Griff noch?](/befunde/halt-kopf.md) - Kopf gebaut, Sammellauf 100 Ep:
+  11 Vorschlaege, 8 echte Verluste; Veto-Netz noch nicht bereit. A/B Modus 2 gegen 3 laeuft.
+
 * **Anlage**: [Zufassen aus dem eigenen Ergebnis](/befunde/zufassen-selbst.md) - 76 Versuche, 84 %
   gehalten, Aspekte trennen nicht; Veto nicht gebaut. Nebenfund: unbemerktes Verlieren beim Tragen.
 

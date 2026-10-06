@@ -51,7 +51,8 @@ Objekt fuer "nicht gegriffen" (`ACT16_ABLAGE_FIX`). Im ganzen Zustand war das un
    optimistisch -- es braucht einen Vorschlag (oder Unsicherheit), den es verwerfen kann.
    Fuer das Zufassen gemessen ([Zufassen selbst](/befunde/zufassen-selbst.md)): die Aspekte vor
    dem Schliessen trennen nicht, 84 % der Griffe halten ohnehin - kein Hebel. Der naechste
-   Kandidat ist "haelt der Griff noch?" beim Tragen (11/80 Episoden verlieren unbemerkt).
+   Kandidat ist "haelt der Griff noch?" beim Tragen (11/80 Episoden verlieren unbemerkt) -
+   gebaut: [Haelt der Griff noch?](/befunde/halt-kopf.md).
 2. **Weitere Aspekt-Koepfe** fuer andere scharfe Entscheidungen (Schliessen; aufgeben). Aufgeben
    frei aus Ergebnissen ist gemessen schaedlich ([Aufgeben](/befunde/aufgeben.md)) - auch dort
    fehlte ein Vorschlag, den das Netz nur bestaetigen kann.
