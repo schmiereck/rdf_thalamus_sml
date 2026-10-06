@@ -58,6 +58,15 @@ os.environ.setdefault("ACT14_DOF", "4")   # act23 runs the 4-DOF arm: joint_3 fr
 for _k, _v in (("ACT_REACH_X0", "-0.12"), ("ACT_REACH_X1", "0.12"),
                ("ACT_REACH_Y0", "0.07"), ("ACT_REACH_Y1", "0.24")):
     os.environ.setdefault(_k, _v)
+# SELBST LOSLASSEN IN DER STEUER-GUI (Nutzerentscheid 2026-10-06, wiki/befunde/loslassen.md):
+#   Teacher-Korrektur + Loslass-Kopf + Lernen aus dem eigenen Ergebnis + Halte-Fenster.  Gemessen
+#   nach der Lernphase 102/200 gegen 102/200, eigenes Loslassen gelingt 81 statt 72 %.  NUR in der
+#   GUI (dort persistiert der Zustand, die Lernphase faellt einmal an); kopflose Messlaeufe behalten
+#   die alten Vorgaben, damit fruehere A/Bs vergleichbar bleiben.
+if os.environ.get("ACT23_VIZ", "0") == "1" and os.environ.get("ACT23_VIZ_HEADLESS", "0") != "1":
+    for _k, _v in (("ACT16_ABLAGE_FIX", "1"), ("ACT23_LOSLASS_KOPF", "1"),
+                   ("ACT23_LOSLASS_SELBST", "1"), ("ACT16_ENDE_HALTEN", "30")):
+        os.environ.setdefault(_k, _v)
 os.environ.setdefault("ACT16_ENDE_SELBST", "1")   # DAS EPISODENENDE ENTSCHEIDET DER AGENT (seit 2026-10-05):
 #   getragen + Hand ueber dem EIGENEN Ziel auf Ablagehoehe statt Orakel aus der wahren Objektlage.
 #   Gemessen (wiki/befunde/episodenende-selbst.md, 8 Seeds x 50): Orakel 53,1 %, selbst 60,7 %,
@@ -3109,7 +3118,8 @@ def run_self_learning_steering(headless=False):
                 _alt = np.asarray(act16.reactive_subgoal(_x), float)
                 act16.ABLAGE_FIX = True
                 _neu = np.asarray(act16.reactive_subgoal(_x), float)
-                if not np.allclose(_alt, _neu):
+                if not np.allclose(_alt, _neu) and not np.allclose(np.asarray(_buf_y[_i], float), _neu):
+                    #   nur noch NICHT korrigierte Zeilen -- sonst traenierte jeder GUI-Start nach
                     _buf_y[_i] = _neu
                     if _zaehl == "d":
                         _n_d += 1

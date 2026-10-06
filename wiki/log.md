@@ -2,6 +2,9 @@
 
 ## 2026-10-06
 
+* **Entscheidung**: [Loslassen am Ziel](/befunde/loslassen.md) - in der Steuer-GUI eingeschaltet
+  (Nutzer); kopflose Laeufe unveraendert.
+
 * **Ergaenzung**: [Loslassen am Ziel](/befunde/loslassen.md) - vollstaendiger Durchgang, 4 Seeds:
   nach der Lernphase 102/200 gegen 102/200 (Intervall +-9,8), Loslassen gelingt 81 statt 72 %.
 

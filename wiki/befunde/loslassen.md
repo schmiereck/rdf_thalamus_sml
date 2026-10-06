@@ -166,3 +166,9 @@ Loslassen gelungen (Selbst-Urteil): Teacher-Kopf allein 36/50 = 72 %, mit Erfolg
 wie mit der Aufraeumbewegung; ein Schaden ueber 10 Punkte ist ausgeschlossen. Das Erfolgsnetz
 macht das eigene Loslassen messbar treffsicherer (72 -> 81 %). Die Lernphase (rund 25 Episoden)
 kostet etwa 11 Punkte - in der GUI mit persistiertem Zustand faellt sie einmal an.
+
+**In der Steuer-GUI eingeschaltet (Nutzerentscheid 2026-10-06):** `ACT16_ABLAGE_FIX=1`,
+`ACT23_LOSLASS_KOPF=1`, `ACT23_LOSLASS_SELBST=1`, `ACT16_ENDE_HALTEN=30` werden nur bei
+`ACT23_VIZ=1` ohne `ACT23_VIZ_HEADLESS` gesetzt; kopflose Messlaeufe behalten die alten Vorgaben.
+Die Umetikettierung beim Start fasst nur noch nicht korrigierte Zeilen an (sonst trainierte jeder
+GUI-Start die Policy nach). Die Erfahrung des Erfolgsnetzes wird mit dem Zustand gespeichert.
