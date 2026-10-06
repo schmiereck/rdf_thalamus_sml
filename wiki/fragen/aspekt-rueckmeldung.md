@@ -50,7 +50,9 @@ Objekt fuer "nicht gegriffen" (`ACT16_ABLAGE_FIX`). Im ganzen Zustand war das un
    83 statt 72 % gelungenes Loslassen. Lehre: ein Erfolgsnetz allein raet in unbekannten Posen
    optimistisch -- es braucht einen Vorschlag (oder Unsicherheit), den es verwerfen kann.
    Offen: dasselbe fuer das Zufassen ("Druck baut sich auf").
-2. **Weitere Aspekt-Koepfe** fuer andere scharfe Entscheidungen (Schliessen; aufgeben).
+2. **Weitere Aspekt-Koepfe** fuer andere scharfe Entscheidungen (Schliessen; aufgeben). Aufgeben
+   frei aus Ergebnissen ist gemessen schaedlich ([Aufgeben](/befunde/aufgeben.md)) - auch dort
+   fehlte ein Vorschlag, den das Netz nur bestaetigen kann.
 3. **Aspekt-Erkenner aus dem Fovea-Bild** ("Objekt zwischen den Backen", "Objekt kippt") als
    Eingaenge fuer diese Koepfe - die Bruecke zur Wahrnehmung.
 

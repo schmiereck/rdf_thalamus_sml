@@ -2,6 +2,9 @@
 
 ## 2026-10-06
 
+* **Anlage**: [Aufgeben aus eigener Erfahrung](/befunde/aufgeben.md) - ehrliches Negativ, 52,3 gegen
+  45,9 %, 3 Seeds (vierter wegen Speichermangels abgebrochen).
+
 * **Entscheidung**: [Loslassen am Ziel](/befunde/loslassen.md) - in der Steuer-GUI eingeschaltet
   (Nutzer); kopflose Laeufe unveraendert.
 
