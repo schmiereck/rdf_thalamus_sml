@@ -1045,6 +1045,11 @@ LOSLASS_RUHIG = int(os.environ.get("ACT23_LOSLASS_RUHIG", "5"))
 # er ab AUFGEBEN_AB Schritten zweimal in Folge weniger als AUFGEBEN_P Erfolg erwartet.
 # KEINE SELBSTBESTAETIGUNG: aufgegebene Episoden lernen NICHT mit -- ihr "nicht geliefert" waere
 # die Folge des Aufgebens, nicht des Zustands, und der Kopf gaebe immer frueher auf.
+# ZUFASSEN AUS DEM EIGENEN ERGEBNIS, STUFE 1 (ACT23_GRIFF_SELBST, Vorgabe 0): jeder Greifversuch
+# im Netzbetrieb wird mit seinen Einzelaspekten im Moment des Zufassens und dem eigenen Tastsinn-
+# Ergebnis protokolliert ("[Griff-Versuch] ..."), zum Pruefen, ob die Aspekte trennen.  Noch kein
+# Eingriff (s. arm_modules/griff_kopf.py).
+GRIFF_SELBST = os.environ.get("ACT23_GRIFF_SELBST", "0") == "1"
 AUFGEBEN = os.environ.get("ACT23_AUFGEBEN", "0") == "1"
 AUFGEBEN_TAKT = 50
 AUFGEBEN_AB = int(os.environ.get("ACT23_AUFGEBEN_AB", "300"))
@@ -1273,6 +1278,7 @@ from pc_cvnn.arm_modules.hoehen_schaetzer import HoehenSchaetzer
 from pc_cvnn.arm_modules.groessen_schaetzer import GroessenSchaetzer
 from pc_cvnn.arm_modules.loslass_kopf import LoslassKopf
 from pc_cvnn.arm_modules.aufgeben_kopf import AufgebenKopf
+from pc_cvnn.arm_modules.griff_kopf import GriffKopf
 
 
 # ABSTUFUNG STATT PRIVILEG (ACT23_EIG_ABSTUFUNG, Vorgabe 0 bis gemessen).  Trifft das
@@ -3148,6 +3154,7 @@ def run_self_learning_steering(headless=False):
             aufgeben_kopf.lernen()
         print(f"  [Aufgeben] Kopf mit {len(aufgeben_kopf.y)} Momentaufnahmen -- "
               + ("entscheidet" if aufgeben_kopf.bereit else "sammelt noch (entscheidet noch nicht)"), flush=True)
+    griff_kopf = GriffKopf()                       # Stufe 1: nur sammeln, nicht persistiert
     loslass_kopf = (_loaded or {}).get("loslass_kopf") or LoslassKopf()
     if not isinstance(loslass_kopf, LoslassKopf):
         loslass_kopf = LoslassKopf()
@@ -7333,13 +7340,31 @@ def run_self_learning_steering(headless=False):
             return False, float("nan")
 
         _lk = {"n": 0, "auf": 0, "ruhig": 0, "vor": None, "pose": None, "letzt": None, "quelle": None,
-               "k": 0, "aufn": [], "unter": 0, "aufgegeben": None}
+               "k": 0, "aufn": [], "unter": 0, "aufgegeben": None,
+               "gv": None, "gv_n": 0, "gv_zu": False}
 
         def _policy_mit_kopf(s):
             """Netzbetrieb: die Policy entscheidet, der LOSLASS-KOPF entscheidet das Loslassen."""
             out = _policy_ueber_ports(s)
             _lk["letzt"] = np.asarray(s, float).copy()        # letzte Pose (s. LOSLASS_SELBST)
             _lk["k"] += 1
+            if GRIFF_SELBST and len(s) > 14:
+                # GREIFVERSUCH VERFOLGEN (s. GRIFF_SELBST): Beginn = die Policy will schliessen,
+                # die Klaue ist noch offen, die Hand steht ueber dem Objekt(glauben).  Ende =
+                # getragen (gelungen) oder die Klaue geht wieder auf (misslungen).
+                _q, _pr = float(s[8]), float(s[12])
+                if _lk["gv"] is None:
+                    if (float(out[3]) < 0.45 and _q > 0.45
+                            and float(np.linalg.norm(np.asarray(s[0:2]) - np.asarray(s[3:5]))) < 0.03):
+                        _lk["gv_n"] += 1
+                        _lk["gv"] = GriffKopf.aspekte(s, _lk["gv_n"]); _lk["gv_zu"] = False
+                else:
+                    if _q < 0.27:
+                        _lk["gv_zu"] = True
+                    if _pr > 0.3 and _q < 0.27 and float(s[2]) > 0.04:
+                        _griff_merken(_lk, True)
+                    elif _lk["gv_zu"] and _q > 0.45:
+                        _griff_merken(_lk, False)
             if AUFGEBEN and _lk["k"] % AUFGEBEN_TAKT == 0 and len(s) > 13:
                 _a = AufgebenKopf.aspekte(s, _lk["k"])
                 _lk["aufn"].append(_a)
@@ -7379,6 +7404,14 @@ def run_self_learning_steering(headless=False):
                 if _lk["auf"]:
                     out = np.array(out, float).copy(); out[3] = act16.J5_OPEN
             return out
+
+        def _griff_merken(_l, ok):
+            _a = _l["gv"]; _l["gv"] = None
+            griff_kopf.merken(_a, ok)
+            print(f"    [Griff-Versuch] {_l['gv_n']}: seitlich {1000 * _a[0]:.1f} mm, ueber Greifpunkt "
+                  f"{1000 * _a[1]:.1f} mm, Klaue {_a[2]:.2f}, Druck {_a[3]:.2f} N, Kurzachse "
+                  f"{1000 * _a[4]:.1f} mm, Hoehe {1000 * _a[5]:.1f} mm -> {'GEHALTEN' if ok else 'nicht gehalten'}",
+                  flush=True)
 
         def _perceive_vorblick(cmd):
             _r, _vorblick["r"] = _vorblick["r"], None
@@ -7813,6 +7846,8 @@ def run_self_learning_steering(headless=False):
                 else:
                     _txt += "  | nicht neben dem Bezug, kein Beispiel"
                 print(f"    [Richtung] {_txt}", flush=True)
+        if GRIFF_SELBST and _lk["gv"] is not None:
+            _griff_merken(_lk, False)                      # Episode endete mitten im Versuch
         # AUFGEBEN AUS DEM EIGENEN ERGEBNIS (s. AUFGEBEN): alle Momentaufnahmen dieser Episode
         # bekommen das Selbst-Urteil -- ausser die Episode wurde aufgegeben (keine Selbstbestaetigung).
         if AUFGEBEN and not D0_FREEZE and s_ok is not None and _lk["aufn"]:
