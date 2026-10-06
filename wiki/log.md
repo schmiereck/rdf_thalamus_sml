@@ -2,6 +2,9 @@
 
 ## 2026-10-06
 
+* **Ergaenzung**: [Loslassen am Ziel](/befunde/loslassen.md) - vollstaendiger Durchgang, 4 Seeds:
+  nach der Lernphase 102/200 gegen 102/200 (Intervall +-9,8), Loslassen gelingt 81 statt 72 %.
+
 * **Ergaenzung**: [Loslassen am Ziel](/befunde/loslassen.md) - Erfolgsnetz aus dem eigenen Ergebnis
   (`ACT23_LOSLASS_SELBST`): allein gescheitert (93 mm daneben), als Veto 83 statt 72 % gelungenes
   Loslassen, nach der Lernphase 53 gegen 51 % geliefert. Dritter Seed wegen Speichermangels abgebrochen.

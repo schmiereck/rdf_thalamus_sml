@@ -222,7 +222,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 # Chronik der Entwicklung
 
 * [act23-Entwicklungslinie](chronik/act23.md) - Juni bis September 2026, verdichtet: Etappen, Anlaesse, Messungen
-* [Loslassen am Ziel](befunde/loslassen.md) - **Der Agent laesst selbst los und lernt aus dem eigenen Ergebnis (Kamera-Selbst-Urteil) per Veto, wo es klappt: Loslassen gelingt 83 statt 72 %, nach der Lernphase 53 gegen 51 % geliefert.** Teacher-Fehler `ACT16_ABLAGE_FIX` gefunden. Vorgabe noch aus.
+* [Loslassen am Ziel](befunde/loslassen.md) - **Der Agent laesst selbst los und lernt aus dem eigenen Ergebnis (Kamera-Selbst-Urteil) per Veto, wo es klappt: Loslassen gelingt 81 statt 72 %, nach der Lernphase genau gleichauf (102/200 gegen 102/200, 4 Seeds).** Teacher-Fehler `ACT16_ABLAGE_FIX` gefunden. Vorgabe noch aus.
 * [Rueckmeldung je Aspekt](fragen/aspekt-rueckmeldung.md) - **Nutzeridee: Aspekte statt Gesamturteil.** Erster Beleg: Loslass-Kopf aus 5 Aspekten 99 %/0 % gegen ganzer Zustand 35 %/22 %.
 * [Das Episodenende entscheidet der Agent selbst](befunde/episodenende-selbst.md) - **Orakel aus der wahren Objektlage ersetzt durch Tastsinn + eigene Hand am eigenen Ziel: 53,1 -> 60,7 %, Seeds 7:1, Intervall [+0,7, +14,4].** Das Orakel endete zu frueh. Nebenbefund: die Policy laesst nicht los. Vorgabe in act23.
 * [Flache Objekte tiefer greifen](befunde/greifhoehe-flach.md) - **ehrliches Negativ: Teacher auf 16 mm 13/30 alt gegen 11/30 tiefer.** Die Vermutung stand auf 9 Episoden. `ACT16_GREIF_FLACH` bleibt aus.

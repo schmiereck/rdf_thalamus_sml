@@ -1,7 +1,7 @@
 ---
 type: Befund
 title: Loslassen am Ziel - der Agent laesst selbst los und lernt aus dem eigenen Ergebnis, wo es klappt
-description: Die Policy liess am Ziel nie los (Teacher-Fehler ACT16_ABLAGE_FIX; ein Netz fuer alles). Ein Loslass-Kopf aus Einzelaspekten laesst selbst los, oeffnete aber zu frueh (46/100 gegen 54/100). Mit einem ERFOLGSNETZ, das aus dem eigenen Ergebnis lernt (Pose beim Loslassen -> Selbst-Urteil der Kamera) und ein Veto hat, gelingt das Loslassen in 83 statt 72 % der Faelle, und nach der Lernphase liefert der Agent so gut wie mit der Aufraeumbewegung (53 gegen 51 %, Ep 25+, ~3 Seeds). Die Lernphase kostet (45 gegen 57 %). Allein entscheidend liess das Erfolgsnetz wild los (93 mm daneben).
+description: Die Policy liess am Ziel nie los (Teacher-Fehler ACT16_ABLAGE_FIX; ein Netz fuer alles). Ein Loslass-Kopf aus Einzelaspekten laesst selbst los, oeffnete aber zu frueh. Mit einem ERFOLGSNETZ, das aus dem eigenen Ergebnis lernt (Pose beim Loslassen -> Selbst-Urteil der Kamera) und ein Veto hat, gelingt das Loslassen in 81 statt 72 % der Faelle, und nach der Lernphase liefert der Agent genau so gut wie mit der Aufraeumbewegung (102/200 gegen 102/200, Intervall +-9,8, 4 Seeds). Die Lernphase kostet 11 Punkte (n. s.). Allein entscheidend liess das Erfolgsnetz wild los (93 mm daneben).
 tags: [act23, loslassen, teacher, aspekte, nutzeridee, ab]
 status: stable
 evidenz: gemessen
@@ -144,3 +144,25 @@ gut wie mit der Aufraeumbewegung; die Lernphase selbst kostet (45 gegen 57 %, n.
 erste Komponente, die eine Entscheidung aus eigener Erfahrung ohne Teacher-Etikett verfeinert
 ([Aspekt-Rueckmeldung](/fragen/aspekt-rueckmeldung.md)). Vorgabe bleibt vorerst aus; mit
 persistiertem Zustand (GUI) faellt die Lernphase nur einmal an.
+
+# Vollstaendiger Durchgang (2026-10-06, nach Speicherfreigabe)
+
+Seed 9083 komplett neu (der abgebrochene Teil war bis Episode 69 identisch), Seed 9084 dazu;
+9081/9082 wie oben (deterministisch, ein erneuter Lauf waere bitgleich).
+
+| Seed | gesamt E / S | Ep 25-74 E / S |
+|---|---|---|
+| 9081 | 42 / 40 | 28 / 29 |
+| 9082 | 36 / 36 | 21 / 25 |
+| 9083 | 41 / 35 | 27 / 23 |
+| 9084 | 42 / 39 | 26 / 25 |
+| **Ep 0-24** | **59 % / 48 %** | Differenz -11 [-24,7, +2,7], p = 0,16 |
+| **Ep 25-74** | | **102/200 / 102/200**, Differenz 0,0 [-9,8, +9,8], Seeds 2:2, McNemar 26:26 |
+
+Loslassen gelungen (Selbst-Urteil): Teacher-Kopf allein 36/50 = 72 %, mit Erfolgs-Veto
+**80/99 = 81 %**.
+
+**Endgueltige Lesart:** nach der Lernphase laesst der Agent selbst los und liefert genau so gut
+wie mit der Aufraeumbewegung; ein Schaden ueber 10 Punkte ist ausgeschlossen. Das Erfolgsnetz
+macht das eigene Loslassen messbar treffsicherer (72 -> 81 %). Die Lernphase (rund 25 Episoden)
+kostet etwa 11 Punkte - in der GUI mit persistiertem Zustand faellt sie einmal an.
