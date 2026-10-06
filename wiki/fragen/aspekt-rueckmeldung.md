@@ -49,7 +49,9 @@ Objekt fuer "nicht gegriffen" (`ACT16_ABLAGE_FIX`). Im ganzen Zustand war das un
    [Loslassen](/befunde/loslassen.md)): Pose beim Loslassen -> Selbst-Urteil der Kamera; als Veto
    83 statt 72 % gelungenes Loslassen. Lehre: ein Erfolgsnetz allein raet in unbekannten Posen
    optimistisch -- es braucht einen Vorschlag (oder Unsicherheit), den es verwerfen kann.
-   Offen: dasselbe fuer das Zufassen ("Druck baut sich auf").
+   Fuer das Zufassen gemessen ([Zufassen selbst](/befunde/zufassen-selbst.md)): die Aspekte vor
+   dem Schliessen trennen nicht, 84 % der Griffe halten ohnehin - kein Hebel. Der naechste
+   Kandidat ist "haelt der Griff noch?" beim Tragen (11/80 Episoden verlieren unbemerkt).
 2. **Weitere Aspekt-Koepfe** fuer andere scharfe Entscheidungen (Schliessen; aufgeben). Aufgeben
    frei aus Ergebnissen ist gemessen schaedlich ([Aufgeben](/befunde/aufgeben.md)) - auch dort
    fehlte ein Vorschlag, den das Netz nur bestaetigen kann.

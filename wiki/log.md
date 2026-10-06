@@ -2,6 +2,9 @@
 
 ## 2026-10-06
 
+* **Anlage**: [Zufassen aus dem eigenen Ergebnis](/befunde/zufassen-selbst.md) - 76 Versuche, 84 %
+  gehalten, Aspekte trennen nicht; Veto nicht gebaut. Nebenfund: unbemerktes Verlieren beim Tragen.
+
 * **Anlage**: [Aufgeben aus eigener Erfahrung](/befunde/aufgeben.md) - ehrliches Negativ, 52,3 gegen
   45,9 %, 3 Seeds (vierter wegen Speichermangels abgebrochen).
 

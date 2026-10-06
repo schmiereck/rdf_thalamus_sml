@@ -7349,21 +7349,27 @@ def run_self_learning_steering(headless=False):
             _lk["letzt"] = np.asarray(s, float).copy()        # letzte Pose (s. LOSLASS_SELBST)
             _lk["k"] += 1
             if GRIFF_SELBST and len(s) > 14:
-                # GREIFVERSUCH VERFOLGEN (s. GRIFF_SELBST): Beginn = die Policy will schliessen,
-                # die Klaue ist noch offen, die Hand steht ueber dem Objekt(glauben).  Ende =
-                # getragen (gelungen) oder die Klaue geht wieder auf (misslungen).
+                # GREIFVERSUCH VERFOLGEN (s. GRIFF_SELBST): Beginn = die Klaue SCHLIESST tatsaechlich
+                # (war offen > 0,45, jetzt < 0,27), die Hand steht ueber dem Objekt(glauben).  Erste
+                # Fassung begann beim ersten "zu"-Befehl -- der flackert im Anflug, Momentaufnahme
+                # 59 mm ueber dem Greifpunkt (Rauchtest 2026-10-06).  Die MOMENTAUFNAHME stammt aus dem
+                # letzten Schritt mit noch ganz offener Klaue -- beim Unterschreiten von 0,27 hat sich
+                # schon Druck aufgebaut und der Objektglaube ist auf die Hand gesprungen (seitlich
+                # 0,0 mm): das waeren Folgen des Griffs, nicht Grundlage der Entscheidung.
+                # Ende = getragen (gelungen) oder die Klaue geht wieder auf (misslungen).
                 _q, _pr = float(s[8]), float(s[12])
+                if _q > 0.45:
+                    _lk["gv_zu"] = np.asarray(s, float).copy()   # letzte Pose mit offener Klaue
                 if _lk["gv"] is None:
-                    if (float(out[3]) < 0.45 and _q > 0.45
-                            and float(np.linalg.norm(np.asarray(s[0:2]) - np.asarray(s[3:5]))) < 0.03):
+                    _o = _lk["gv_zu"]
+                    if (_o is not False and _q < 0.27
+                            and float(np.linalg.norm(_o[0:2] - _o[3:5])) < 0.03):
                         _lk["gv_n"] += 1
-                        _lk["gv"] = GriffKopf.aspekte(s, _lk["gv_n"]); _lk["gv_zu"] = False
+                        _lk["gv"] = GriffKopf.aspekte(_o, _lk["gv_n"]); _lk["gv_zu"] = False
                 else:
-                    if _q < 0.27:
-                        _lk["gv_zu"] = True
                     if _pr > 0.3 and _q < 0.27 and float(s[2]) > 0.04:
                         _griff_merken(_lk, True)
-                    elif _lk["gv_zu"] and _q > 0.45:
+                    elif _q > 0.45:
                         _griff_merken(_lk, False)
             if AUFGEBEN and _lk["k"] % AUFGEBEN_TAKT == 0 and len(s) > 13:
                 _a = AufgebenKopf.aspekte(s, _lk["k"])

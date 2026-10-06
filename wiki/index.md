@@ -222,6 +222,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 # Chronik der Entwicklung
 
 * [act23-Entwicklungslinie](chronik/act23.md) - Juni bis September 2026, verdichtet: Etappen, Anlaesse, Messungen
+* [Zufassen aus dem eigenen Ergebnis](befunde/zufassen-selbst.md) - **84 % der Griffe halten; die Aspekte vor dem Schliessen trennen nicht (AUC 0,27-0,56). Kein Veto gebaut.** Nebenfund: 11/80 Episoden verlieren das Objekt beim Tragen unbemerkt.
 * [Aufgeben aus eigener Erfahrung](befunde/aufgeben.md) - **ehrliches Negativ: 52,3 -> 45,9 % (3 Seeds, 0:3), nur 3,9 % Schritte gespart; mal zu vorsichtig, mal zu forsch.** `ACT23_AUFGEBEN` aus.
 * [Loslassen am Ziel](befunde/loslassen.md) - **Der Agent laesst selbst los und lernt aus dem eigenen Ergebnis (Kamera-Selbst-Urteil) per Veto, wo es klappt: Loslassen gelingt 81 statt 72 %, nach der Lernphase genau gleichauf (102/200 gegen 102/200, 4 Seeds).** Teacher-Fehler `ACT16_ABLAGE_FIX` gefunden. Vorgabe noch aus.
 * [Rueckmeldung je Aspekt](fragen/aspekt-rueckmeldung.md) - **Nutzeridee: Aspekte statt Gesamturteil.** Erster Beleg: Loslass-Kopf aus 5 Aspekten 99 %/0 % gegen ganzer Zustand 35 %/22 %.
