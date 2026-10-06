@@ -93,5 +93,7 @@ Konstante.
 
 # Verwandt
 
+* [Zufassen aus dem eigenen Ergebnis](/befunde/zufassen-selbst.md) - 2026-10-06 bestaetigt Behauptung 1 mit eigenem Etikett je Versuch (Tastsinn statt "geliefert"): Aspekte vor dem Schliessen trennen nicht.
+
 * [Laufzeitregeln](/mechanismen/laufzeit-regeln.md) - die Riegel-Messung, die das ausgeloest hat
 * [1109 Episoden ohne Lernfortschritt](/befunde/langlauf-ohne-fortschritt.md)
