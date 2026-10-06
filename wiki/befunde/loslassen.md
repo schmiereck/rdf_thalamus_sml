@@ -1,10 +1,10 @@
 ---
 type: Befund
-title: Loslassen am Ziel - Teacher-Fehler gefunden, Loslass-Kopf laesst selbst los, aber zu frueh
-description: Die Policy liess am Ziel nie los. Zwei Ursachen - der Teacher hielt ein aufsetzendes Objekt fuer "nicht gegriffen" und etikettierte "anheben" (Loslass-Regel geometrisch fast unerreichbar, ACT16_ABLAGE_FIX), und das gemeinsame Netz lernt den seltenen Moment nicht. Ein eigener Kopf aus fuenf Einzelaspekten (Nutzeridee) oeffnet am Ziel 99 %, > 5 cm vom Ziel 0 % (Pruefstand). Im Lauf laesst der Agent selbst los (18 von 19 Ankuenften), liefert aber 46/100 gegen 54/100 - er oeffnet zu frueh (14-15 mm hoch, bis 40 mm seitlich) und greift oefter daneben. Zwei Seeds, Lauf wegen Speichermangels abgebrochen.
+title: Loslassen am Ziel - der Agent laesst selbst los und lernt aus dem eigenen Ergebnis, wo es klappt
+description: Die Policy liess am Ziel nie los (Teacher-Fehler ACT16_ABLAGE_FIX; ein Netz fuer alles). Ein Loslass-Kopf aus Einzelaspekten laesst selbst los, oeffnete aber zu frueh (46/100 gegen 54/100). Mit einem ERFOLGSNETZ, das aus dem eigenen Ergebnis lernt (Pose beim Loslassen -> Selbst-Urteil der Kamera) und ein Veto hat, gelingt das Loslassen in 83 statt 72 % der Faelle, und nach der Lernphase liefert der Agent so gut wie mit der Aufraeumbewegung (53 gegen 51 %, Ep 25+, ~3 Seeds). Die Lernphase kostet (45 gegen 57 %). Allein entscheidend liess das Erfolgsnetz wild los (93 mm daneben).
 tags: [act23, loslassen, teacher, aspekte, nutzeridee, ab]
 status: stable
-evidenz: einzelmessung
+evidenz: gemessen
 ebene: act23-ab
 generated: { by: claude/opus-5.5, at: 2026-10-05T00:00:00Z }
 sources:
@@ -106,3 +106,41 @@ Schritt 3 (neues A/B) **nicht gefahren** - es haette mit hoher Wahrscheinlichkei
 wiederholt. Der naheliegende Weg ist die volle [Aspekt-Rueckmeldung](/fragen/aspekt-rueckmeldung.md):
 den Kopf mit dem **eigenen Ergebnis** etikettieren (Kamera nach dem Loslassen: liegt es im Ziel?)
 statt mit dem Teacher - genau in der Haltepose, die im Lauf vorkommt.
+
+# Nachtrag 2026-10-06: aus dem eigenen Ergebnis lernen (Nutzeridee, volle Form)
+
+`ACT23_LOSLASS_SELBST` (Vorgabe 0): nach jeder Episode, in der getragen wurde, bekommt die Pose,
+in der losgelassen wurde (vom Kopf, oder die letzte Haltepose vor der Aufraeumbewegung), das
+**Selbst-Urteil der Kamera** als Etikett. Ein zweites kleines Netz im `LoslassKopf` lernt daraus
+"klappt Loslassen hier?" aus denselben fuenf Aspekten. Kein Teacher.
+
+**Sammellauf** (heutiges Verhalten, 36 Episoden): 19 von 20 Faellen gut - die Aufraeumbewegung
+oeffnet nur ueber dem Ziel, Gegenbeispiele entstehen so kaum. Abgebrochen; die 20 Faelle bleiben
+als Startwissen.
+
+**Erste Fassung - das Erfolgsnetz entscheidet allein:** gescheitert. Aus 30 guten und 6
+schlechten Faellen nahe am Ziel lernte es pauschal "klappt schon" und liess bei 93 und 54 mm
+neben dem Ziel und 41 mm hoch los (11/30 gegen 18/30). Es weiss nicht, was es nicht weiss.
+
+**Zweite Fassung - Veto:** der Teacher-Kopf schlaegt vor, das Erfolgsnetz streicht Posen, an
+denen Loslassen nach eigener Erfahrung scheiterte. Gepaartes A/B, Arm E heute (Ende selbst,
+Aufraeumbewegung oeffnet), Arm S Teacher-Kopf + Erfolgs-Veto (+ ABLAGE_FIX, ENDE_HALTEN 30),
+75 Episoden je Seed aus einem Zustand mit den 20 gesammelten Faellen; der dritte Seed wurde nach
+70 Episoden wegen Speichermangels abgebrochen:
+
+| Seed | Ep 0-24 E / S | Ep 25+ E / S |
+|---|---|---|
+| 9081 | 14 / 11 | 28/50 / 29/50 |
+| 9082 | 15 / 11 | 21/50 / 25/50 |
+| 9083 | 14 / 12 | 25/45 / 23/45 |
+| **gesamt** | **57 % / 45 %** (p = 0,19) | **51,0 % / 53,1 %** (p = 0,81) |
+
+Wie gut das eigene Loslassen gelingt (Selbst-Urteil): Teacher-Kopf allein (Lernphase) 28 von 39 =
+72 %, mit Erfolgs-Veto **59 von 71 = 83 %**; seitlich gleich (median 11-14 mm).
+
+**Lesart:** der Agent laesst am Ziel **selbst** los und lernt **aus dem eigenen Ergebnis**, wo das
+klappt - die Erfolgsrate des Loslassens steigt von 72 auf 83 %. Nach der Lernphase liefert er so
+gut wie mit der Aufraeumbewegung; die Lernphase selbst kostet (45 gegen 57 %, n. s.). Das ist die
+erste Komponente, die eine Entscheidung aus eigener Erfahrung ohne Teacher-Etikett verfeinert
+([Aspekt-Rueckmeldung](/fragen/aspekt-rueckmeldung.md)). Vorgabe bleibt vorerst aus; mit
+persistiertem Zustand (GUI) faellt die Lernphase nur einmal an.

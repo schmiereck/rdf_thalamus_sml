@@ -2,6 +2,10 @@
 
 ## 2026-10-06
 
+* **Ergaenzung**: [Loslassen am Ziel](/befunde/loslassen.md) - Erfolgsnetz aus dem eigenen Ergebnis
+  (`ACT23_LOSLASS_SELBST`): allein gescheitert (93 mm daneben), als Veto 83 statt 72 % gelungenes
+  Loslassen, nach der Lernphase 53 gegen 51 % geliefert. Dritter Seed wegen Speichermangels abgebrochen.
+
 * **Ergaenzung**: [Loslassen am Ziel](/befunde/loslassen.md) - Umetikettierung schadet dem Greifen
   nicht; "erst bei ruhiger Hand" wirkungslos (Kopf extrapoliert ausserhalb der Teacher-Etiketten);
   Schritt 3 nicht gefahren. Codex-Integration c745ce6 in main uebernommen (fast-forward).

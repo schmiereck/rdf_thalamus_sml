@@ -43,11 +43,13 @@ Und die Aspekt-Sicht hat einen **Teacher-Fehler** sichtbar gemacht: in der Aspek
 Ziel, unten, haelt" standen 240 widerspruechliche Etiketten - der Teacher hielt ein aufgesetztes
 Objekt fuer "nicht gegriffen" (`ACT16_ABLAGE_FIX`). Im ganzen Zustand war das unsichtbar.
 
-# Offene Schritte (nicht gebaut)
+# Offene Schritte
 
-1. **Aspekt-Etiketten aus eigener Wahrnehmung** statt vom Teacher: "Objekt liegt im Ziel" aus der
-   Kamera nach dem Loslassen bewertet die Loslass-Entscheidung; "Druck baut sich auf" bewertet
-   das Zufassen. Dann lernt der Kopf ohne Teacher.
+1. ~~Aspekt-Etiketten aus eigener Wahrnehmung~~ **gebaut fuer das Loslassen** (2026-10-06,
+   [Loslassen](/befunde/loslassen.md)): Pose beim Loslassen -> Selbst-Urteil der Kamera; als Veto
+   83 statt 72 % gelungenes Loslassen. Lehre: ein Erfolgsnetz allein raet in unbekannten Posen
+   optimistisch -- es braucht einen Vorschlag (oder Unsicherheit), den es verwerfen kann.
+   Offen: dasselbe fuer das Zufassen ("Druck baut sich auf").
 2. **Weitere Aspekt-Koepfe** fuer andere scharfe Entscheidungen (Schliessen; aufgeben).
 3. **Aspekt-Erkenner aus dem Fovea-Bild** ("Objekt zwischen den Backen", "Objekt kippt") als
    Eingaenge fuer diese Koepfe - die Bruecke zur Wahrnehmung.
