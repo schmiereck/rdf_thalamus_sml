@@ -1046,6 +1046,10 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             elif run_combined._held_prev:                       # eben verloren -> am Fallort einfrieren
                 run_combined._cobs = (np.asarray(hxy, float).copy(), float(obj_h_s))
             run_combined._held_prev = _holding
+            # NUR MESSUNG (geht in keine Entscheidung): wahre Objekthoehe ueber Ruhelage, damit ein
+            # Kopf, der aus dem Tastsinn "verloren?" vorschlaegt, protokollieren kann, ob es stimmte
+            # (s. pc_act23 HALT_SELBST).
+            run_combined._wahr_hub = float(cz) - float(obj_h)
             if OBS_STATE:
                 c_st, cz_st = run_combined._cobs
             else:

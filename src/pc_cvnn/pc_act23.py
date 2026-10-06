@@ -1050,6 +1050,18 @@ LOSLASS_RUHIG = int(os.environ.get("ACT23_LOSLASS_RUHIG", "5"))
 # Ergebnis protokolliert ("[Griff-Versuch] ..."), zum Pruefen, ob die Aspekte trennen.  Noch kein
 # Eingriff (s. arm_modules/griff_kopf.py).
 GRIFF_SELBST = os.environ.get("ACT23_GRIFF_SELBST", "0") == "1"
+# HAELT DER GRIFF NOCH? (ACT23_HALT_SELBST, Vorgabe 0 bis gemessen; s. arm_modules/halt_kopf.py).
+# Der Tastsinn SCHLAEGT VOR: es hat in diesem Griff getragen, Klaue zu, Hand oben, seit 10 Schritten
+# kein Druck.  Ein Erfolgsnetz aus dem eigenen Ergebnis hat ein VETO ("wird trotzdem geliefert" =
+# Fehlalarm).  Ohne Veto: Klaue auf, die Policy greift neu (hoechstens HALT_MAX Mal je Episode).
+# Bis das Netz genug Erfahrung hat, wird NUR gesammelt, nicht eingegriffen.
+# ACT23_HALT_SELBST=2: immer nur sammeln (Messlauf fuer die Trennbarkeit).
+# ACT23_HALT_SELBST=3: der Vorschlag allein greift ein, ohne Veto (Vergleichsarm "nur Tastsinn").
+HALT_SELBST = os.environ.get("ACT23_HALT_SELBST", "0")
+HALT_MAX = 2
+HALT_OFFEN = 100                                 # hoechstens so viele Schritte "auf" nach dem Eingriff --
+#   gehalten wird, bis die Klaue offen IST (> 0,45, Propriozeption).  Erste Fassung: fest 15 Schritte,
+#   die Klaue kam von 0,07 nie ueber 0,26 (Rauchtest 2026-10-06), und die Policy schloss wieder.
 AUFGEBEN = os.environ.get("ACT23_AUFGEBEN", "0") == "1"
 AUFGEBEN_TAKT = 50
 AUFGEBEN_AB = int(os.environ.get("ACT23_AUFGEBEN_AB", "300"))
@@ -1278,6 +1290,7 @@ from pc_cvnn.arm_modules.hoehen_schaetzer import HoehenSchaetzer
 from pc_cvnn.arm_modules.groessen_schaetzer import GroessenSchaetzer
 from pc_cvnn.arm_modules.loslass_kopf import LoslassKopf
 from pc_cvnn.arm_modules.aufgeben_kopf import AufgebenKopf
+from pc_cvnn.arm_modules.halt_kopf import HaltKopf
 from pc_cvnn.arm_modules.griff_kopf import GriffKopf
 
 
@@ -3155,6 +3168,15 @@ def run_self_learning_steering(headless=False):
         print(f"  [Aufgeben] Kopf mit {len(aufgeben_kopf.y)} Momentaufnahmen -- "
               + ("entscheidet" if aufgeben_kopf.bereit else "sammelt noch (entscheidet noch nicht)"), flush=True)
     griff_kopf = GriffKopf()                       # Stufe 1: nur sammeln, nicht persistiert
+    halt_kopf = (_loaded or {}).get("halt_kopf") or HaltKopf()
+    if not isinstance(halt_kopf, HaltKopf):
+        halt_kopf = HaltKopf()
+    if HALT_SELBST != "0":
+        if not D0_FREEZE:
+            halt_kopf.lernen()
+        print(f"  [Halten] Kopf mit {len(halt_kopf.y)} Vorschlaegen ({int(sum(halt_kopf.y))} trotzdem geliefert) -- "
+              + ("hat ein Veto, greift ein" if halt_kopf.bereit and HALT_SELBST == "1"
+                 else "sammelt (greift nicht ein)"), flush=True)
     loslass_kopf = (_loaded or {}).get("loslass_kopf") or LoslassKopf()
     if not isinstance(loslass_kopf, LoslassKopf):
         loslass_kopf = LoslassKopf()
@@ -4247,6 +4269,7 @@ def run_self_learning_steering(headless=False):
                     "groessen_schaetzer": groessen_schaetzer,
                     "loslass_kopf": loslass_kopf,
                     "aufgeben_kopf": aufgeben_kopf,
+                    "halt_kopf": halt_kopf,
                     "wort_bedeutung": {w: [np.asarray(v, float) for v in l]
                                        for w, l in wort_bedeutung.items()},
                     "blick_daten": list(blick_daten),
@@ -7341,7 +7364,9 @@ def run_self_learning_steering(headless=False):
 
         _lk = {"n": 0, "auf": 0, "ruhig": 0, "vor": None, "pose": None, "letzt": None, "quelle": None,
                "k": 0, "aufn": [], "unter": 0, "aufgegeben": None,
-               "gv": None, "gv_n": 0, "gv_zu": False}
+               "gv": None, "gv_n": 0, "gv_zu": False,
+               "h_trug": False, "h_ohne": 0, "h_pmax": 0.0, "h_xy0": None, "h_vor": [],
+               "h_auf": 0, "h_n": 0, "h_aktiv": False}
 
         def _policy_mit_kopf(s):
             """Netzbetrieb: die Policy entscheidet, der LOSLASS-KOPF entscheidet das Loslassen."""
@@ -7371,6 +7396,37 @@ def run_self_learning_steering(headless=False):
                         _griff_merken(_lk, True)
                     elif _q > 0.45:
                         _griff_merken(_lk, False)
+            if HALT_SELBST != "0" and len(s) > 12:
+                # HAELT DER GRIFF NOCH? (s. HALT_SELBST).  Nur Sinnesdaten: Druck, Klaue, Handhoehe.
+                _q, _pr, _hz = float(s[8]), float(s[12]), float(s[2]) - float(s[9])
+                if _pr > 0.3 and _q < 0.27 and _hz > 0.03:
+                    _lk["h_trug"] = True; _lk["h_ohne"] = 0; _lk["h_xy0"] = None
+                    _lk["h_pmax"] = max(_lk["h_pmax"], _pr); _lk["h_aktiv"] = False
+                elif _lk["h_trug"] and _q < 0.27 and _hz > 0.03 and _pr < 0.1:
+                    if _lk["h_xy0"] is None:
+                        _lk["h_xy0"] = np.asarray(s[0:2], float).copy()
+                    _lk["h_ohne"] += 1
+                    if _lk["h_ohne"] == HaltKopf.VORSCHLAG_N and not _lk["h_aktiv"]:
+                        _a = HaltKopf.aspekte(s, _lk["h_ohne"], _lk["h_pmax"],
+                                              float(np.linalg.norm(np.asarray(s[0:2]) - _lk["h_xy0"])))
+                        _pg = halt_kopf.p_geliefert(_a)
+                        _greift = _lk["h_n"] < HALT_MAX and (
+                            HALT_SELBST == "3" or (HALT_SELBST == "1" and halt_kopf.bereit and _pg < 0.5))
+                        _wh = getattr(act16.run_combined, "_wahr_hub", float("nan"))
+                        _lk["h_vor"].append((_a, _greift))
+                        _lk["h_aktiv"] = True                  # ein Vorschlag je Druckverlust
+                        print(f"    [Halten] Vorschlag 'verloren?' nach {_lk['h_ohne']} Schritten ohne Druck: "
+                              f"Klaue {_q:.2f}, Hand {1000 * _hz:.0f} mm ueber Ruhe, Druck vorher max "
+                              f"{_lk['h_pmax']:.2f} N | Netz: {'%.2f' % _pg if halt_kopf.bereit else '-'} geliefert"
+                              f" -> {'KLAUE AUF, neu greifen' if _greift else 'kein Eingriff'}"
+                              f"  [Messung: Objekt {1000 * _wh:.0f} mm ueber Ruhe = "
+                              f"{'WIRKLICH VERLOREN' if _wh < 0.01 else 'haelt noch'}]", flush=True)
+                        if _greift:
+                            _lk["h_auf"] = HALT_OFFEN; _lk["h_n"] += 1
+                            _lk["h_trug"] = False; _lk["h_pmax"] = 0.0
+                if _lk["h_auf"] > 0:
+                    _lk["h_auf"] = 0 if _q > 0.45 else _lk["h_auf"] - 1
+                    out = np.array(out, float).copy(); out[3] = act16.J5_OPEN
             if AUFGEBEN and _lk["k"] % AUFGEBEN_TAKT == 0 and len(s) > 13:
                 _a = AufgebenKopf.aspekte(s, _lk["k"])
                 _lk["aufn"].append(_a)
@@ -7854,6 +7910,19 @@ def run_self_learning_steering(headless=False):
                 print(f"    [Richtung] {_txt}", flush=True)
         if GRIFF_SELBST and _lk["gv"] is not None:
             _griff_merken(_lk, False)                      # Episode endete mitten im Versuch
+        # HAELT DER GRIFF NOCH? -- Vorschlaege OHNE Eingriff bekommen das Selbst-Urteil als Etikett
+        # (keine Selbstbestaetigung: nach einem Eingriff waere das Ergebnis dessen Folge).
+        if HALT_SELBST != "0" and not D0_FREEZE and s_ok is not None and _lk["h_vor"]:
+            _neu = [a for a, g in _lk["h_vor"] if not g]
+            _vor = halt_kopf.bereit
+            for _a in _neu:
+                halt_kopf.merken(_a, bool(s_ok))
+            if _neu:
+                halt_kopf.lernen()
+            print(f"    [Halten] {len(_lk['h_vor'])} Vorschlaege, {len(_lk['h_vor']) - len(_neu)} mit Eingriff "
+                  f"-> Selbst-Urteil {'geliefert' if s_ok else 'nicht geliefert'} | Erfahrung "
+                  f"{len(halt_kopf.y)} ({int(sum(halt_kopf.y))} trotzdem geliefert)"
+                  + (" -- VETO-NETZ bereit" if halt_kopf.bereit and not _vor else ""), flush=True)
         # AUFGEBEN AUS DEM EIGENEN ERGEBNIS (s. AUFGEBEN): alle Momentaufnahmen dieser Episode
         # bekommen das Selbst-Urteil -- ausser die Episode wurde aufgegeben (keine Selbstbestaetigung).
         if AUFGEBEN and not D0_FREEZE and s_ok is not None and _lk["aufn"]:
