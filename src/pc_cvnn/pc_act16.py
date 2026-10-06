@@ -690,12 +690,16 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         #   (policy); closed at the object + no lift OR slip -> the world-model action; held but
         #   off-goal -> the place aim (policy).
         run_combined._ende = {"trug": False, "offen": 0, "grund": "budget"}   # s. ENDE_SELBST
+        run_combined._aufgeben = False        # von aussen gesetzt (act23 Aufgeben-Kopf): die Episode endet
         for k in range(cap):
             phase_age = phase_age + 1 if phase == last_phase else 0
             last_phase = phase
             if phase_age > PHASE_STALL:                       # stuck (e.g. can't reach the believed object)
                 run_combined._ende["grund"] = "stillstand"
                 break                                         # -> give up this episode instead of looping
+            if run_combined._aufgeben:                        # SELBST AUFGEGEBEN (act23, ACT23_AUFGEBEN):
+                run_combined._ende["grund"] = "aufgegeben"    #   ein gelernter Kopf erwartet keinen Erfolg mehr
+                break
             c_true = sim.obj_pos(cmd)[:2]; cz = sim.obj_pos(cmd)[2]; h = sim.grasp_pos(); hxy = h[:2]; hz = h[2]
             if cz > run_combined._maxcz:
                 run_combined._maxcz = float(cz)

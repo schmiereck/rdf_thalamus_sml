@@ -1038,7 +1038,17 @@ LOSLASS_KOPF = os.environ.get("ACT23_LOSLASS_KOPF", "0") == "1"
 # Aufraeumbewegung) -> Selbst-Urteil der Kamera.  Gesammelt wird auch OHNE ACT23_LOSLASS_KOPF; mit
 # ihm entscheidet das Erfolgsnetz, sobald es bereit ist (s. LoslassKopf.erfolg_bereit).
 LOSLASS_SELBST = os.environ.get("ACT23_LOSLASS_SELBST", "0") == "1"
-LOSLASS_RUHIG = int(os.environ.get("ACT23_LOSLASS_RUHIG", "5"))   # Schritte ruhige Hand vor dem Urteil (0 = aus)
+LOSLASS_RUHIG = int(os.environ.get("ACT23_LOSLASS_RUHIG", "5"))
+# AUFGEBEN AUS EIGENER ERFAHRUNG (ACT23_AUFGEBEN, Vorgabe 0 bis gemessen).  Alle AUFGEBEN_TAKT
+# Schritte eine Momentaufnahme aus Einzelaspekten (s. arm_modules/aufgeben_kopf.py); nach der
+# Episode bekommen alle das Selbst-Urteil als Etikett.  Sobald der Kopf bereit ist: aufgeben, wenn
+# er ab AUFGEBEN_AB Schritten zweimal in Folge weniger als AUFGEBEN_P Erfolg erwartet.
+# KEINE SELBSTBESTAETIGUNG: aufgegebene Episoden lernen NICHT mit -- ihr "nicht geliefert" waere
+# die Folge des Aufgebens, nicht des Zustands, und der Kopf gaebe immer frueher auf.
+AUFGEBEN = os.environ.get("ACT23_AUFGEBEN", "0") == "1"
+AUFGEBEN_TAKT = 50
+AUFGEBEN_AB = int(os.environ.get("ACT23_AUFGEBEN_AB", "300"))
+AUFGEBEN_P = float(os.environ.get("ACT23_AUFGEBEN_P", "0.05"))   # Schritte ruhige Hand vor dem Urteil (0 = aus)
 HOEHEN = [float(v) / 1000.0 for v in os.environ.get("ACT23_HOEHEN", "").split(",") if v.strip()]
 if RUECKFALL not in ("privileg", "aufgeben"):
     raise SystemExit(f"ACT23_RUECKFALL={RUECKFALL!r}: erlaubt sind privileg | aufgeben")
@@ -1262,6 +1272,7 @@ if ZIEL_RELATION in ("richtung", "alle") and not ZIEL_ADRESSE:
 from pc_cvnn.arm_modules.hoehen_schaetzer import HoehenSchaetzer
 from pc_cvnn.arm_modules.groessen_schaetzer import GroessenSchaetzer
 from pc_cvnn.arm_modules.loslass_kopf import LoslassKopf
+from pc_cvnn.arm_modules.aufgeben_kopf import AufgebenKopf
 
 
 # ABSTUFUNG STATT PRIVILEG (ACT23_EIG_ABSTUFUNG, Vorgabe 0 bis gemessen).  Trifft das
@@ -3129,6 +3140,14 @@ def run_self_learning_steering(headless=False):
               f"Selbst-Imitationszeilen neu etikettiert; Policy wird nachtrainiert", flush=True)
         if _n_d + _n_s:
             runtime.train(epochs=400)
+    aufgeben_kopf = (_loaded or {}).get("aufgeben_kopf") or AufgebenKopf()
+    if not isinstance(aufgeben_kopf, AufgebenKopf):
+        aufgeben_kopf = AufgebenKopf()
+    if AUFGEBEN:
+        if not D0_FREEZE:
+            aufgeben_kopf.lernen()
+        print(f"  [Aufgeben] Kopf mit {len(aufgeben_kopf.y)} Momentaufnahmen -- "
+              + ("entscheidet" if aufgeben_kopf.bereit else "sammelt noch (entscheidet noch nicht)"), flush=True)
     loslass_kopf = (_loaded or {}).get("loslass_kopf") or LoslassKopf()
     if not isinstance(loslass_kopf, LoslassKopf):
         loslass_kopf = LoslassKopf()
@@ -4220,6 +4239,7 @@ def run_self_learning_steering(headless=False):
                     "hoehe_schaetzer": hoehen_schaetzer,
                     "groessen_schaetzer": groessen_schaetzer,
                     "loslass_kopf": loslass_kopf,
+                    "aufgeben_kopf": aufgeben_kopf,
                     "wort_bedeutung": {w: [np.asarray(v, float) for v in l]
                                        for w, l in wort_bedeutung.items()},
                     "blick_daten": list(blick_daten),
@@ -7312,12 +7332,23 @@ def run_self_learning_steering(headless=False):
                   f"({_vorblick['fehlt'][2]})", flush=True)
             return False, float("nan")
 
-        _lk = {"n": 0, "auf": 0, "ruhig": 0, "vor": None, "pose": None, "letzt": None, "quelle": None}
+        _lk = {"n": 0, "auf": 0, "ruhig": 0, "vor": None, "pose": None, "letzt": None, "quelle": None,
+               "k": 0, "aufn": [], "unter": 0, "aufgegeben": None}
 
         def _policy_mit_kopf(s):
             """Netzbetrieb: die Policy entscheidet, der LOSLASS-KOPF entscheidet das Loslassen."""
             out = _policy_ueber_ports(s)
             _lk["letzt"] = np.asarray(s, float).copy()        # letzte Pose (s. LOSLASS_SELBST)
+            _lk["k"] += 1
+            if AUFGEBEN and _lk["k"] % AUFGEBEN_TAKT == 0 and len(s) > 13:
+                _a = AufgebenKopf.aspekte(s, _lk["k"])
+                _lk["aufn"].append(_a)
+                if aufgeben_kopf.bereit and _lk["k"] >= AUFGEBEN_AB and _lk["aufgegeben"] is None:
+                    _pa = aufgeben_kopf.p(_a)
+                    _lk["unter"] = _lk["unter"] + 1 if _pa < AUFGEBEN_P else 0
+                    if _lk["unter"] >= 2:
+                        _lk["aufgegeben"] = (_lk["k"], _pa)
+                        act16.run_combined._aufgeben = True
             if LOSLASS_KOPF and loslass_kopf.trained:
                 # EINRASTEN: der Kopf urteilt nur, solange gehalten wird (Klaue < 0,27).  Ohne
                 # Einrasten verstummte er, sobald die Klaue aufging, die Policy sagte wieder "zu",
@@ -7782,6 +7813,20 @@ def run_self_learning_steering(headless=False):
                 else:
                     _txt += "  | nicht neben dem Bezug, kein Beispiel"
                 print(f"    [Richtung] {_txt}", flush=True)
+        # AUFGEBEN AUS DEM EIGENEN ERGEBNIS (s. AUFGEBEN): alle Momentaufnahmen dieser Episode
+        # bekommen das Selbst-Urteil -- ausser die Episode wurde aufgegeben (keine Selbstbestaetigung).
+        if AUFGEBEN and not D0_FREEZE and s_ok is not None and _lk["aufn"]:
+            if _lk["aufgegeben"] is not None:
+                print(f"    [Aufgeben] nach {_lk['aufgegeben'][0]} Schritten aufgegeben (erwarteter Erfolg "
+                      f"{_lk['aufgegeben'][1]:.2f}) -- Selbst-Urteil "
+                      f"{'geliefert' if s_ok else 'nicht geliefert'}; lernt aus dieser Episode NICHT", flush=True)
+            else:
+                _vor = aufgeben_kopf.bereit
+                aufgeben_kopf.merken(_lk["aufn"], bool(s_ok)); aufgeben_kopf.lernen()
+                print(f"    [Aufgeben] {len(_lk['aufn'])} Momentaufnahmen -> "
+                      f"{'geliefert' if s_ok else 'nicht geliefert'} | Erfahrung {len(aufgeben_kopf.y)} "
+                      f"({int(sum(aufgeben_kopf.y))} gut)"
+                      + (" -- KOPF ENTSCHEIDET ab jetzt" if aufgeben_kopf.bereit and not _vor else ""), flush=True)
         # LOSLASSEN AUS DEM EIGENEN ERGEBNIS (s. LOSLASS_SELBST): die Pose, in der losgelassen wurde,
         # bekommt das Selbst-Urteil als Etikett.  Nur wenn wirklich getragen wurde: vom Kopf
         # geoeffnet, oder die letzte Pose hielt noch (dann oeffnete die Aufraeumbewegung dort).
