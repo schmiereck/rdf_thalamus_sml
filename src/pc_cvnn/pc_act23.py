@@ -1057,8 +1057,21 @@ GRIFF_SELBST = os.environ.get("ACT23_GRIFF_SELBST", "0") == "1"
 # Bis das Netz genug Erfahrung hat, wird NUR gesammelt, nicht eingegriffen.
 # ACT23_HALT_SELBST=2: immer nur sammeln (Messlauf fuer die Trennbarkeit).
 # ACT23_HALT_SELBST=3: der Vorschlag allein greift ein, ohne Veto (Vergleichsarm "nur Tastsinn").
+# ACT23_HALT_SELBST=4: GELERNTER VORSCHLAG (s. arm_modules/halt_kopf.py, HaltSehenKopf).  Ein Netz
+# sagt aus Tastsinn + Propriozeption "noch an der Hand?"; die Etiketten liefert die KAMERA ueber den
+# Selbst/Fremd-Test (zweimal hinsehen, HALT_BLICK_DT Schritte dazwischen: wandert der Fleck mit der
+# Hand, haelt der Griff).  Keine feste Schwelle entscheidet: vor der Bereitschaft wird nur geschaut
+# und gelernt.  Wann geschaut wird, ist Trainingsgeruest (nach 10 Schritten ohne Druck, alle 80
+# Trageschritte, und jedes Mal, bevor das Netz eingreift -- damit es auch dort Etiketten bekommt,
+# wo es "verloren" sagt).  Eingreifen tut nur das Netz.
 HALT_SELBST = os.environ.get("ACT23_HALT_SELBST", "0")
 HALT_MAX = 2
+HALT_BLICK_DT = 35                               # Schritte zwischen den zwei Blicken (Modus 4)
+HALT_BLICKE = 6                                  # hoechstens so viele Blickpaare je Episode
+HALT_PROBE = 0.04                                # PROBEBEWEGUNG zwischen den Blicken (m): nach einem Verlust
+#   steht die Hand still (Rauchtest 2026-10-07: 0-11 mm in 25 Schritten), der Selbst/Fremd-Test hat
+#   dann nichts zu vergleichen.  Wie ein Kind, das die Hand schuettelt, um zu sehen, ob das Spielzeug
+#   mitgeht: die Hand faehrt 40 mm Richtung Ziel, Hoehe und Klaue bleiben.  Trainingsgeruest.
 HALT_OFFEN = 100                                 # hoechstens so viele Schritte "auf" nach dem Eingriff --
 #   gehalten wird, bis die Klaue offen IST (> 0,45, Propriozeption).  Erste Fassung: fest 15 Schritte,
 #   die Klaue kam von 0,07 nie ueber 0,26 (Rauchtest 2026-10-06), und die Policy schloss wieder.
@@ -1290,7 +1303,7 @@ from pc_cvnn.arm_modules.hoehen_schaetzer import HoehenSchaetzer
 from pc_cvnn.arm_modules.groessen_schaetzer import GroessenSchaetzer
 from pc_cvnn.arm_modules.loslass_kopf import LoslassKopf
 from pc_cvnn.arm_modules.aufgeben_kopf import AufgebenKopf
-from pc_cvnn.arm_modules.halt_kopf import HaltKopf
+from pc_cvnn.arm_modules.halt_kopf import HaltKopf, HaltSehenKopf
 from pc_cvnn.arm_modules.griff_kopf import GriffKopf
 
 
@@ -3171,7 +3184,17 @@ def run_self_learning_steering(headless=False):
     halt_kopf = (_loaded or {}).get("halt_kopf") or HaltKopf()
     if not isinstance(halt_kopf, HaltKopf):
         halt_kopf = HaltKopf()
-    if HALT_SELBST != "0":
+    halt_sehen_kopf = (_loaded or {}).get("halt_sehen_kopf") or HaltSehenKopf()
+    if not isinstance(halt_sehen_kopf, HaltSehenKopf):
+        halt_sehen_kopf = HaltSehenKopf()
+    if HALT_SELBST == "4":
+        if not D0_FREEZE:
+            halt_sehen_kopf.lernen()
+        print(f"  [Halten-Sehen] Netz mit {len(halt_sehen_kopf.y)} Kamera-Etiketten "
+              f"({int(sum(halt_sehen_kopf.y))} haelt) -- "
+              + ("entscheidet das Neugreifen" if halt_sehen_kopf.bereit else "schaut und lernt (greift nicht ein)"),
+              flush=True)
+    if HALT_SELBST in ("1", "2", "3"):
         if not D0_FREEZE:
             halt_kopf.lernen()
         print(f"  [Halten] Kopf mit {len(halt_kopf.y)} Vorschlaegen ({int(sum(halt_kopf.y))} trotzdem geliefert) -- "
@@ -4271,6 +4294,7 @@ def run_self_learning_steering(headless=False):
                     "loslass_kopf": loslass_kopf,
                     "aufgeben_kopf": aufgeben_kopf,
                     "halt_kopf": halt_kopf,
+                    "halt_sehen_kopf": halt_sehen_kopf,
                     "wort_bedeutung": {w: [np.asarray(v, float) for v in l]
                                        for w, l in wort_bedeutung.items()},
                     "blick_daten": list(blick_daten),
@@ -7367,7 +7391,9 @@ def run_self_learning_steering(headless=False):
                "k": 0, "aufn": [], "unter": 0, "aufgegeben": None,
                "gv": None, "gv_n": 0, "gv_zu": False,
                "h_trug": False, "h_ohne": 0, "h_pmax": 0.0, "h_xy0": None, "h_vor": [],
-               "h_auf": 0, "h_n": 0, "h_aktiv": False}
+               "h_auf": 0, "h_n": 0, "h_aktiv": False,
+               "hs_trug": False, "hs_ohne": 0, "hs_pmax": 0.0, "hs_prev": None, "hs_ref": None,
+               "hs_blick": None, "hs_blicke": 0, "hs_k": 0, "hs_unter": 0, "hs_zeilen": []}
 
         def _policy_mit_kopf(s):
             """Netzbetrieb: die Policy entscheidet, der LOSLASS-KOPF entscheidet das Loslassen."""
@@ -7397,7 +7423,9 @@ def run_self_learning_steering(headless=False):
                         _griff_merken(_lk, True)
                     elif _q > 0.45:
                         _griff_merken(_lk, False)
-            if HALT_SELBST != "0" and len(s) > 12:
+            if HALT_SELBST == "4" and len(s) > 12:
+                out = _halt_sehen(s, out)
+            if HALT_SELBST in ("1", "2", "3") and len(s) > 12:
                 # HAELT DER GRIFF NOCH? (s. HALT_SELBST).  Nur Sinnesdaten: Druck, Klaue, Handhoehe.
                 _q, _pr, _hz = float(s[8]), float(s[12]), float(s[2]) - float(s[9])
                 if _pr > 0.3 and _q < 0.27 and _hz > 0.03:
@@ -7466,6 +7494,102 @@ def run_self_learning_steering(headless=False):
                         _lk["quelle"] = "Teacher-Kopf + Erfolgs-Veto" if _eigen else "Teacher-Kopf"
                 if _lk["auf"]:
                     out = np.array(out, float).copy(); out[3] = act16.J5_OPEN
+            return out
+
+        def _halt_flecken():
+            saved = sim.d.mocap_pos.copy()
+            dets = shape_clf.perceive_all(sim)
+            sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
+            return [d for d in dets if d.get("pos") is not None and d.get("chroma") is not None
+                    and float(d.get("area", 0.0)) >= 100.0]
+
+        def _halt_mein_fleck(dets, nahe):
+            ref = _lk["hs_ref"]
+            kand = [d for d in dets if float(np.linalg.norm(np.asarray(d["chroma"], float) - ref)) < OBJ_EIG_TOL]
+            if not kand:
+                return None
+            d = min(kand, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"], float)[:2] - nahe)))
+            return np.asarray(d["pos"], float)[:2].copy()
+
+        def _halt_sehen(s, out):
+            """GELERNTER VORSCHLAG "noch an der Hand?" (s. HALT_SELBST=4)."""
+            _q, _pr, _hz = float(s[8]), float(s[12]), float(s[2]) - float(s[9])
+            _h = np.asarray(s[0:2], float)
+            _v = 0.0 if _lk["hs_prev"] is None else 1000.0 * float(np.linalg.norm(_h - _lk["hs_prev"]))
+            _lk["hs_prev"] = _h.copy()
+            _tragen = _q < 0.27 and _hz > 0.03
+            if _q > 0.45:                                  # Klaue offen: dieser Griff ist vorbei
+                _lk["hs_trug"] = False; _lk["hs_ohne"] = 0; _lk["hs_pmax"] = 0.0
+                _lk["hs_blick"] = None; _lk["hs_unter"] = 0
+            elif _pr > 0.3 and _tragen:
+                if not _lk["hs_trug"] and _lk["hs_ref"] is None:
+                    # DIE FARBE DES EIGENEN OBJEKTS selbst merken: Fleck naechst der Hand beim ersten Tragen
+                    _d = [d for d in _halt_flecken()
+                          if float(np.linalg.norm(np.asarray(d["pos"], float)[:2] - _h)) < 0.06]
+                    if _d:
+                        _lk["hs_ref"] = np.asarray(min(_d, key=lambda d: float(np.linalg.norm(
+                            np.asarray(d["pos"], float)[:2] - _h)))["chroma"], float).copy()
+                _lk["hs_trug"] = True; _lk["hs_ohne"] = 0; _lk["hs_pmax"] = max(_lk["hs_pmax"], _pr)
+            elif _lk["hs_trug"] and _tragen:
+                _lk["hs_ohne"] += 1
+            if _lk["h_auf"] > 0:                           # Eingriff laeuft: Klaue auf, bis sie offen ist
+                _lk["h_auf"] = 0 if _q > 0.45 else _lk["h_auf"] - 1
+                out = np.array(out, float).copy(); out[3] = act16.J5_OPEN
+                return out
+            if not (_lk["hs_trug"] and _tragen) or _lk["hs_ref"] is None:
+                return out
+            _lk["hs_k"] += 1
+            _a = HaltSehenKopf.aspekte(s, _lk["hs_ohne"], _lk["hs_pmax"], _v)
+            _bereit = halt_sehen_kopf.bereit
+            _p = halt_sehen_kopf.p_haelt(_a) if _bereit else None
+            _b = _lk["hs_blick"]
+            if _b is not None:                             # zweiter Blick faellig?
+                _b["k"] += 1
+                if _b["k"] < HALT_BLICK_DT:
+                    out = np.array(out, float).copy()      # Probebewegung (s. HALT_PROBE)
+                    out[0], out[1], out[2] = _b["probe"][0], _b["probe"][1], _b["z"]
+                    return out
+                _lk["hs_blick"] = None
+                _o2 = _halt_mein_fleck(_halt_flecken(), _b["o1"])
+                _dh = float(np.linalg.norm(_h - _b["h1"]))
+                _do = None if _o2 is None else float(np.linalg.norm(_o2 - _b["o1"]))
+                _et = None
+                if _do is not None and _dh >= 0.012:
+                    _et = True if _do > 0.6 * _dh else (False if _do < 0.3 * _dh else None)
+                if _et is not None:
+                    _lk["hs_zeilen"].append((_b["a"], _et))
+                print(f"    [Halten-Blick] Hand {1000 * _dh:.0f} mm, Fleck "
+                      + ("nicht gesehen" if _do is None else f"{1000 * _do:.0f} mm")
+                      + f" -> {'HAELT' if _et else ('VERLOREN' if _et is False else 'unklar')}"
+                      f" | Druck damals {_b['a'][0]:.2f} N, {int(round(100 * _b['a'][1]))} Schritte ohne"
+                      f" | Netz damals {'-' if _b['p'] is None else '%.2f' % _b['p']}"
+                      f"  [Messung: {'WIRKLICH VERLOREN' if _b['wahr'] < 0.01 else 'haelt noch'}]", flush=True)
+                if _b["handeln"] and _p is not None and _p < 0.5 and _lk["h_n"] < HALT_MAX:
+                    _lk["h_auf"] = HALT_OFFEN; _lk["h_n"] += 1
+                    _lk["hs_trug"] = False; _lk["hs_pmax"] = 0.0; _lk["hs_unter"] = 0
+                    print(f"    [Halten-Sehen] Netz: noch an der Hand {_p:.2f} -> KLAUE AUF, neu greifen", flush=True)
+                    out = np.array(out, float).copy(); out[3] = act16.J5_OPEN
+                return out
+            _lk["hs_unter"] = _lk["hs_unter"] + 1 if (_p is not None and _p < 0.5) else 0
+            _handeln = _lk["hs_unter"] >= 3 and _lk["h_n"] < HALT_MAX
+            if _lk["hs_blicke"] < HALT_BLICKE and (_handeln or _lk["hs_ohne"] == 10
+                                                   or (_lk["hs_k"] - 20) % 80 == 0):
+                _o1 = _halt_mein_fleck(_halt_flecken(), _h)
+                if _o1 is None:
+                    print(f"    [Halten-Blick] eigener Fleck nicht gesehen (Druck {_pr:.2f} N, Hand "
+                          f"{1000 * _hz:.0f} mm ueber Ruhe)  [Messung: "
+                          f"{'WIRKLICH VERLOREN' if getattr(act16.run_combined, '_wahr_hub', 1.0) < 0.01 else 'haelt noch'}]",
+                          flush=True)
+                if _o1 is not None:
+                    _lk["hs_blicke"] += 1
+                    _r = np.asarray(s[6:8], float) - _h
+                    _r = _r / float(np.linalg.norm(_r)) if float(np.linalg.norm(_r)) > 0.01 else np.array([1.0, 0.0])
+                    _lk["hs_blick"] = {"a": _a, "k": 0, "h1": _h.copy(), "o1": _o1, "p": _p,
+                                       "probe": _h + HALT_PROBE * _r, "z": float(s[2]),
+                                       "handeln": _handeln,
+                                       "wahr": getattr(act16.run_combined, "_wahr_hub", float("nan"))}
+                    if _handeln:
+                        _lk["hs_unter"] = 0
             return out
 
         def _griff_merken(_l, ok):
@@ -7911,9 +8035,18 @@ def run_self_learning_steering(headless=False):
                 print(f"    [Richtung] {_txt}", flush=True)
         if GRIFF_SELBST and _lk["gv"] is not None:
             _griff_merken(_lk, False)                      # Episode endete mitten im Versuch
+        # NOCH AN DER HAND? (s. HALT_SELBST=4) -- die Kamera-Etiketten dieser Episode lernen
+        if HALT_SELBST == "4" and not D0_FREEZE and _lk["hs_zeilen"]:
+            _vor = halt_sehen_kopf.bereit
+            for _a, _et in _lk["hs_zeilen"]:
+                halt_sehen_kopf.merken(_a, _et)
+            halt_sehen_kopf.lernen()
+            print(f"    [Halten-Sehen] {len(_lk['hs_zeilen'])} Kamera-Etiketten | Erfahrung "
+                  f"{len(halt_sehen_kopf.y)} ({int(sum(halt_sehen_kopf.y))} haelt)"
+                  + (" -- NETZ ENTSCHEIDET ab jetzt" if halt_sehen_kopf.bereit and not _vor else ""), flush=True)
         # HAELT DER GRIFF NOCH? -- Vorschlaege OHNE Eingriff bekommen das Selbst-Urteil als Etikett
         # (keine Selbstbestaetigung: nach einem Eingriff waere das Ergebnis dessen Folge).
-        if HALT_SELBST != "0" and not D0_FREEZE and s_ok is not None and _lk["h_vor"]:
+        if HALT_SELBST in ("1", "2", "3") and not D0_FREEZE and s_ok is not None and _lk["h_vor"]:
             _neu = [a for a, g in _lk["h_vor"] if not g]
             _vor = halt_kopf.bereit
             for _a in _neu:

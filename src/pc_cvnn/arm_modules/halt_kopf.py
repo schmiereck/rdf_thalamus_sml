@@ -67,3 +67,61 @@ class HaltKopf:
         if self.net is None:
             return 1.0
         return float(self.net.predict(np.asarray(a, float))[0])
+
+
+class HaltSehenKopf:
+    """GELERNTER VORSCHLAG "ist das Objekt noch an der Hand?" (s. ACT23_HALT_SELBST=4).
+
+    WARUM: der Vorschlag des HaltKopf ("10 Schritte kein Druck") ist eine feste Schwelle -- als
+    Laufzeitregel unzulaessig (wiki/mechanismen/laufzeit-regeln.md), obwohl Neugreifen in der
+    Richtung half (wiki/befunde/halt-kopf.md).  Hier lernt ein Netz dieselbe Entscheidung aus
+    EIGENER Erfahrung.
+
+    ETIKETT AUS DER KAMERA -- der Selbst/Fremd-Test: zweimal hinsehen, dazwischen faehrt die Hand.
+    Wandert der Fleck in der Farbe des eigenen Objekts mit der Hand mit, haelt der Griff; bleibt er
+    liegen, ist das Objekt verloren.  Keine Hoehe, kein Privileg, unempfindlich gegen die Parallaxe
+    der schraegen Kamera (sie verschiebt beide Blicke gleich).  Die Farbe merkt sich der Agent selbst
+    beim ersten Tragen (Fleck naechst der Hand).
+
+    EINGANG des Netzes (nur Tastsinn + Propriozeption -- das Netz soll vorhersagen, was die Kamera
+    saehe):  Druck | Schritte ohne Druck | hoechster Druck in diesem Griff | Klaue | Hand ueber Ruhe
+    | Handgeschwindigkeit
+    """
+
+    MIN_ZEILEN = 20
+    MIN_KLASSE = 5
+
+    def __init__(self):
+        self.X, self.y = [], []
+        self.net = None
+
+    @staticmethod
+    def aspekte(s, ohne, pmax, v):
+        s = np.asarray(s, float)
+        return np.array([float(s[12]), min(ohne, 100) / 100.0, pmax, float(s[8]),
+                         float(s[2]) - float(s[9]), v], float)
+
+    def merken(self, a, haelt):
+        self.X.append(np.asarray(a, float)); self.y.append(1.0 if haelt else 0.0)
+        if len(self.X) > 4000:
+            self.X = self.X[-4000:]; self.y = self.y[-4000:]
+
+    @property
+    def bereit(self):
+        y = np.asarray(self.y, float)
+        return (self.net is not None and len(y) >= self.MIN_ZEILEN
+                and y.sum() >= self.MIN_KLASSE and (len(y) - y.sum()) >= self.MIN_KLASSE)
+
+    def lernen(self, epochs=150):
+        y = np.asarray(self.y, float)
+        if len(y) < self.MIN_ZEILEN or y.sum() < self.MIN_KLASSE or len(y) - y.sum() < self.MIN_KLASSE:
+            return False
+        from pc_cvnn.pc_act19 import Policy
+        self.net = Policy(din=6, dout=1, hid=16, rng=np.random.default_rng(19))
+        self.net.fit(np.asarray(self.X, float), y[:, None], epochs=epochs, quiet=True)
+        return True
+
+    def p_haelt(self, a):
+        if self.net is None:
+            return 1.0
+        return float(self.net.predict(np.asarray(a, float))[0])
