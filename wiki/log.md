@@ -1,5 +1,10 @@
 # Chronik
 
+## 2026-10-07
+
+* **Ergaenzung**: [Haelt der Griff noch?](/befunde/halt-kopf.md) - A/B je 100 Ep nacheinander: 55 gegen
+  51 % (p = 0,52), Verluste gerettet 4/6 gegen 2/8, Fehlalarme folgenlos. Vorgabe bleibt aus.
+
 ## 2026-10-06
 
 * **Anlage**: [Haelt der Griff noch?](/befunde/halt-kopf.md) - Kopf gebaut, Sammellauf 100 Ep:

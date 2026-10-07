@@ -3175,7 +3175,8 @@ def run_self_learning_steering(headless=False):
         if not D0_FREEZE:
             halt_kopf.lernen()
         print(f"  [Halten] Kopf mit {len(halt_kopf.y)} Vorschlaegen ({int(sum(halt_kopf.y))} trotzdem geliefert) -- "
-              + ("hat ein Veto, greift ein" if halt_kopf.bereit and HALT_SELBST == "1"
+              + ("Tastsinn greift ALLEIN ein (Vergleichsarm, kein Veto)" if HALT_SELBST == "3"
+                 else "hat ein Veto, greift ein" if halt_kopf.bereit and HALT_SELBST == "1"
                  else "sammelt (greift nicht ein)"), flush=True)
     loslass_kopf = (_loaded or {}).get("loslass_kopf") or LoslassKopf()
     if not isinstance(loslass_kopf, LoslassKopf):
