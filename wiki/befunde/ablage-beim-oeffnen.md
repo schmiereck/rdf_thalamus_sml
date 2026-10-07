@@ -199,5 +199,7 @@ Alle Schalter bleiben aus.
 
 # Verwandt
 
+* [Ablage im Netzbetrieb](/befunde/ablage-im-netzbetrieb.md) - 2026-10-08: im heutigen Netzbetrieb treffen 86 % der eigenen Ablagen; der Versatz sitzt dort schon beim Zufassen
+
 * [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md)
 * [Ablage-Schwelle im Teacher](/befunde/ablage-schwelle-im-teacher.md) (widerlegt)

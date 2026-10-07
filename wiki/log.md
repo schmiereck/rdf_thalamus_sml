@@ -2,6 +2,10 @@
 
 ## 2026-10-08
 
+* **Anlage**: [Ablage im Netzbetrieb](/befunde/ablage-im-netzbetrieb.md) - 380 Episoden zerlegt: eigene
+  Ablagen treffen 86 %; die Ablage ist nur der drittgroesste Verlust (9 %), hinter Hochbringen (20 %) und
+  Verlieren unterwegs (11 %).
+
 * **Ergaenzung**: [Noch an der Hand?](/befunde/halt-sehen.md) - Ablage nach dem Neugreifen: Efferenzkopie
   `_nachgreifen` (Oeffnen zum Nachgreifen beendet die Episode nicht) und Nachsehen (Kamera findet das
   gefallene Objekt, 4 mm). Ablage danach so gut wie die erste; Quote 49 / 50 / 52 / 51, nichts signifikant.
