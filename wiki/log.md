@@ -2,6 +2,9 @@
 
 ## 2026-10-07
 
+* **Anlage**: [Noch an der Hand?](/befunde/halt-sehen.md) - gelernter Vorschlag mit Kamera-Etikett;
+  Lernlauf 100 Ep, Etikett 44/46 richtig; Verdrahtungsfehler behoben; A/B laeuft.
+
 * **Ergaenzung**: [Haelt der Griff noch?](/befunde/halt-kopf.md) - A/B je 100 Ep nacheinander: 55 gegen
   51 % (p = 0,52), Verluste gerettet 4/6 gegen 2/8, Fehlalarme folgenlos. Vorgabe bleibt aus.
 

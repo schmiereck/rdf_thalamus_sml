@@ -222,6 +222,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 # Chronik der Entwicklung
 
 * [act23-Entwicklungslinie](chronik/act23.md) - Juni bis September 2026, verdichtet: Etappen, Anlaesse, Messungen
+* [Noch an der Hand? (gelernt, Kamera-Etikett)](befunde/halt-sehen.md) - Selbst/Fremd-Test mit Probebewegung; Kamera-Etikett 44/46 richtig, Netz trennt maessig (7/12 gegen 6/26). A/B laeuft.
 * [Haelt der Griff noch?](befunde/halt-kopf.md) - Tastsinn-Vorschlag + Veto + neu greifen; Mechanik belegt, Tastsinn trifft 8 von 11 echte Verluste; A/B: neu greifen 55 gegen 51 % (p = 0,52), echte Verluste gerettet 4/6 gegen 2/8; Fehlalarme kosten nichts. Vorgabe aus (Vorschlag ist feste Regel).
 * [Zufassen aus dem eigenen Ergebnis](befunde/zufassen-selbst.md) - **84 % der Griffe halten; die Aspekte vor dem Schliessen trennen nicht (AUC 0,27-0,56). Kein Veto gebaut.** Nebenfund: 11/80 Episoden verlieren das Objekt beim Tragen unbemerkt.
 * [Aufgeben aus eigener Erfahrung](befunde/aufgeben.md) - **ehrliches Negativ: 52,3 -> 45,9 % (3 Seeds, 0:3), nur 3,9 % Schritte gespart; mal zu vorsichtig, mal zu forsch.** `ACT23_AUFGEBEN` aus.
