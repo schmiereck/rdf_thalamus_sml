@@ -1067,6 +1067,11 @@ GRIFF_SELBST = os.environ.get("ACT23_GRIFF_SELBST", "0") == "1"
 HALT_SELBST = os.environ.get("ACT23_HALT_SELBST", "0")
 HALT_MAX = 2
 HALT_DIAG = os.environ.get("ACT23_HALT_DIAG", "0") == "1"   # nur Messung: Verlauf nach dem Eingriff
+# GREIF-SPUR (ACT23_GREIF_SPUR, nur Messung, geht in keine Entscheidung): was passiert zwischen dem
+# Anflug und dem Anheben?  Je Episode eine Zeile "[Greif-Spur]" mit den Schliess-Ereignissen
+# (Lage Hand / Glaube / wahres Objekt, Druck, Hub danach) und, wenn nie geschlossen wurde, wie tief
+# die Hand kam und ob die Policy schliessen wollte.  Die wahre Lage dient nur der Auswertung.
+GREIF_SPUR = os.environ.get("ACT23_GREIF_SPUR", "0") == "1"
 # NACHSEHEN NACH DEM OEFFNEN (ACT23_HALT_NACHSEHEN, Vorgabe 1 -- wirkt nur mit HALT_SELBST=4 und nur
 # nach einem Eingriff): die Kamera sucht den eigenen Farbfleck, der Objektglaube springt dorthin.
 HALT_NACHSEHEN = os.environ.get("ACT23_HALT_NACHSEHEN", "1") == "1"
@@ -7398,11 +7403,15 @@ def run_self_learning_steering(headless=False):
                "h_auf": 0, "h_n": 0, "h_aktiv": False,
                "hs_trug": False, "hs_ohne": 0, "hs_pmax": 0.0, "hs_prev": None, "hs_ref": None,
                "hs_blick": None, "hs_blicke": 0, "hs_k": 0, "hs_unter": 0, "hs_zeilen": []}
+        _gsp = {"aktiv": True, "nah": 0, "nah_tief": 0, "will_zu": 0, "min_h": None, "offen_war": True,
+                "zu": [], "ende": None, "gehoben": False, "wo_haengt": [], "k": 0}
 
         def _policy_mit_kopf(s):
             """Netzbetrieb: die Policy entscheidet, der LOSLASS-KOPF entscheidet das Loslassen."""
             out = _policy_ueber_ports(s)
             _lk["letzt"] = np.asarray(s, float).copy()        # letzte Pose (s. LOSLASS_SELBST)
+            if GREIF_SPUR and _gsp["aktiv"] and len(s) > 14:
+                _greif_spur(s, out)
             _lk["k"] += 1
             if GRIFF_SELBST and len(s) > 14:
                 # GREIFVERSUCH VERFOLGEN (s. GRIFF_SELBST): Beginn = die Klaue SCHLIESST tatsaechlich
@@ -7638,6 +7647,55 @@ def run_self_learning_steering(headless=False):
                     if _handeln:
                         _lk["hs_unter"] = 0
             return out
+
+        def _greif_spur(s, out):
+            """NUR MESSUNG (s. GREIF_SPUR)."""
+            g = _gsp; g["k"] += 1
+            _q, _pr = float(s[8]), float(s[12])
+            _hb = float(np.linalg.norm(np.asarray(s[0:2]) - np.asarray(s[3:5])))
+            _gz = float(s[9]) + 0.006 + max(0.0, float(s[14]) - 0.014)
+            _ueber = float(s[2]) - _gz                       # Hand ueber dem Greifpunkt
+            _w = getattr(act16.run_combined, "_wahr_xy", None)
+            _hub = float(getattr(act16.run_combined, "_wahr_hub", 0.0))
+            _hw = None if _w is None else float(np.linalg.norm(np.asarray(s[0:2]) - _w))
+            _bw = None if _w is None else float(np.linalg.norm(np.asarray(s[3:5]) - _w))
+            if _hub > 0.015 and _pr > 0.3:                   # gehoben: Spur zu Ende
+                g["gehoben"] = True; g["aktiv"] = False; g["ende"] = g["k"]
+                return
+            if _hb < 0.03:
+                g["nah"] += 1
+                if _ueber < 0.012:
+                    g["nah_tief"] += 1
+                if _q > 0.45 and float(out[3]) < 0.45:
+                    g["will_zu"] += 1
+                g["min_h"] = _ueber if g["min_h"] is None else min(g["min_h"], _ueber)
+            if _q > 0.45:
+                g["offen_war"] = True
+            elif _q < 0.27 and g["offen_war"]:
+                g["offen_war"] = False                       # ein Schliess-Ereignis
+                g["zu"].append({"k": g["k"], "ueber": _ueber, "hb": _hb, "hw": _hw, "bw": _bw,
+                                "p": 0.0, "hub": 0.0, "hand_hoch": 0.0, "z0": float(s[2])})
+            if g["zu"] and g["k"] - g["zu"][-1]["k"] <= 80:  # 80 Schritte nach dem Schliessen beobachten
+                z = g["zu"][-1]
+                z["p"] = max(z["p"], _pr); z["hub"] = max(z["hub"], _hub)
+                z["hand_hoch"] = max(z["hand_hoch"], float(s[2]) - z["z0"])
+            if g["k"] % 50 == 0:
+                g["wo_haengt"].append((round(1000 * _ueber), round(1000 * _hb), round(_q, 2)))
+
+        def _greif_spur_zeile():
+            g = _gsp
+            zz = " ; ".join(
+                f"zu@{z['k']}: ueber {1000 * z['ueber']:.0f} mm, Hand-Glaube {1000 * z['hb']:.0f}, "
+                f"Hand-wahr {'-' if z['hw'] is None else '%.0f' % (1000 * z['hw'])}, "
+                f"Glaube-wahr {'-' if z['bw'] is None else '%.0f' % (1000 * z['bw'])} mm, "
+                f"Druck {z['p']:.2f} N, Hub {1000 * z['hub']:.0f} mm, Hand hoch {1000 * z['hand_hoch']:.0f} mm"
+                for z in g["zu"][:6])
+            print(f"    [Greif-Spur] {'GEHOBEN' if g['gehoben'] else 'NICHT GEHOBEN'} nach {g['ende'] or g['k']} Schritten"
+                  f" | nah {g['nah']} (davon tief {g['nah_tief']}), Policy wollte zu bei offener Klaue {g['will_zu']}"
+                  f", tiefste Hand {'-' if g['min_h'] is None else '%.0f' % (1000 * g['min_h'])} mm ueber Greifpunkt"
+                  f" | {len(g['zu'])} mal geschlossen" + (f": {zz}" if zz else "")
+                  + (f" | Lage alle 50 (ueber, Hand-Glaube, Klaue): {g['wo_haengt'][-6:]}" if not g["gehoben"] else ""),
+                  flush=True)
 
         def _griff_merken(_l, ok):
             _a = _l["gv"]; _l["gv"] = None
@@ -8082,6 +8140,8 @@ def run_self_learning_steering(headless=False):
                 print(f"    [Richtung] {_txt}", flush=True)
         if GRIFF_SELBST and _lk["gv"] is not None:
             _griff_merken(_lk, False)                      # Episode endete mitten im Versuch
+        if GREIF_SPUR:
+            _greif_spur_zeile()
         # NOCH AN DER HAND? (s. HALT_SELBST=4) -- die Kamera-Etiketten dieser Episode lernen
         if HALT_SELBST == "4" and not D0_FREEZE and _lk["hs_zeilen"]:
             _vor = halt_sehen_kopf.bereit
