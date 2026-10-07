@@ -662,6 +662,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                               "min_h": None, "wunsch": [], "gesenkt": 0}
         last_phase = phase; phase_age = 0                    # STALL-ESCAPE: don't hang in one phase forever
         run_combined._cobs = None; run_combined._held_prev = False   # beobachtbare Objektschaetzung (Stufe C)
+        run_combined._nachgreifen = False                  # s. "_nachgreifen" im Selbst-Ende
         run_combined._lift_xy = None                         # Handposition beim ABHEBEN (Trage-Etikett)
         run_combined._maxcz = float(obj_h)                   # CHECKPOINTS (act23 credit routing): three
         run_combined._slipped = False                        #   self-measurable predictions per episode.
@@ -809,6 +810,14 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                         _E["lauf_max"] = _E["lauf"]; _E["hz_lauf"] = float(hz)
                 if _p_e > 0.3 and _q5 < J5_CLOSED_TH and hz > ENDE_TRAG_Z:
                     run_combined._ende["trug"] = True
+                # NACHGREIFEN IST KEIN LOSLASSEN (Efferenzkopie, 2026-10-08).  Oeffnet ein Kopf die
+                # Klaue, weil er das Objekt verloren glaubt (pc_act23 HALT_SELBST), setzt er
+                # run_combined._nachgreifen.  Ohne das galt dieses Oeffnen ueber dem Ziel als
+                # "losgelassen" -- "trug" bleibt die ganze Episode stehen --, und die Episode endete,
+                # bevor neu gegriffen wurde (A/B 2026-10-07: 6 von 15 gescheiterten Eingriffs-Episoden).
+                # Geloescht wird es durch den naechsten Griff (Druck in der geschlossenen Klaue).
+                if _p_e > 0.3 and _q5 < J5_CLOSED_TH:
+                    run_combined._nachgreifen = False
                 # AM EIGENEN ZIEL ABGESETZT: getragen, die Hand steht ueber dem SELBST gewaehlten
                 # Ziel (tgt, nicht die wahre Objektlage) auf Ablagehoehe (tgt_z + ENDE_HOEHE) und haelt
                 # noch.  Gemessen 2026-10-05: die Policy LAESST NICHT LOS -- sie senkt bis zur
@@ -823,7 +832,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 # (Objekt beim Heben verloren, die Policy oeffnet zum Nachgreifen) -- im Rauchtest
                 # 2026-10-05 beendete das sonst die Episode 168 mm neben dem Ziel.
                 _offen_jetzt = (run_combined._ende["trug"] and _q5 > J5_OPEN_TH and _p_e < 0.1
-                                and float(np.linalg.norm(hxy - tgt)) < tol)
+                                and float(np.linalg.norm(hxy - tgt)) < tol
+                                and not getattr(run_combined, "_nachgreifen", False))
                 _halt_jetzt = run_combined._ende["trug"] and _am_ziel
                 run_combined._ende["offen"] = run_combined._ende["offen"] + 1 if _offen_jetzt else 0
                 run_combined._ende["halten"] = run_combined._ende.get("halten", 0) + 1 if _halt_jetzt else 0

@@ -7451,7 +7451,7 @@ def run_self_learning_steering(headless=False):
                               f"  [Messung: Objekt {1000 * _wh:.0f} mm ueber Ruhe = "
                               f"{'WIRKLICH VERLOREN' if _wh < 0.01 else 'haelt noch'}]", flush=True)
                         if _greift:
-                            _lk["h_auf"] = HALT_OFFEN; _lk["h_n"] += 1
+                            _lk["h_auf"] = HALT_OFFEN; _lk["h_n"] += 1; act16.run_combined._nachgreifen = True
                             _lk["h_trug"] = False; _lk["h_pmax"] = 0.0
                 if _lk["h_auf"] > 0:
                     _lk["h_auf"] = 0 if _q > 0.45 else _lk["h_auf"] - 1
@@ -7565,7 +7565,7 @@ def run_self_learning_steering(headless=False):
                       f" | Netz damals {'-' if _b['p'] is None else '%.2f' % _b['p']}"
                       f"  [Messung: {'WIRKLICH VERLOREN' if _b['wahr'] < 0.01 else 'haelt noch'}]", flush=True)
                 if _b["handeln"] and _p is not None and _p < 0.5 and _lk["h_n"] < HALT_MAX:
-                    _lk["h_auf"] = HALT_OFFEN; _lk["h_n"] += 1
+                    _lk["h_auf"] = HALT_OFFEN; _lk["h_n"] += 1; act16.run_combined._nachgreifen = True
                     _lk["hs_trug"] = False; _lk["hs_pmax"] = 0.0; _lk["hs_unter"] = 0
                     print(f"    [Halten-Sehen] Netz: noch an der Hand {_p:.2f} -> KLAUE AUF, neu greifen", flush=True)
                     out = np.array(out, float).copy(); out[3] = act16.J5_OPEN
@@ -7586,7 +7586,7 @@ def run_self_learning_steering(headless=False):
                         # DAS NETZ ENTSCHEIDET, der Blick dient nur dem Lernen.  Erste Fassung wartete
                         # auf ein Blickpaar -- ist das verlorene Objekt verdeckt, versuchte sie es jeden
                         # Schritt neu und griff NIE ein (Lernlauf 2026-10-07: 4 Episoden, bis 448 Versuche).
-                        _lk["h_auf"] = HALT_OFFEN; _lk["h_n"] += 1
+                        _lk["h_auf"] = HALT_OFFEN; _lk["h_n"] += 1; act16.run_combined._nachgreifen = True
                         _lk["hs_trug"] = False; _lk["hs_pmax"] = 0.0; _lk["hs_unter"] = 0
                         print(f"    [Halten-Sehen] Netz: noch an der Hand {_p:.2f} -> KLAUE AUF, neu greifen "
                               f"(ohne Blick, Fleck nicht sichtbar)  [Messung: "
