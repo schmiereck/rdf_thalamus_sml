@@ -663,6 +663,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         last_phase = phase; phase_age = 0                    # STALL-ESCAPE: don't hang in one phase forever
         run_combined._cobs = None; run_combined._held_prev = False   # beobachtbare Objektschaetzung (Stufe C)
         run_combined._nachgreifen = False                  # s. "_nachgreifen" im Selbst-Ende
+        run_combined._cobs_nach = None                     # s. "_cobs_nach" (Nachsehen nach dem Oeffnen)
         run_combined._lift_xy = None                         # Handposition beim ABHEBEN (Trage-Etikett)
         run_combined._maxcz = float(obj_h)                   # CHECKPOINTS (act23 credit routing): three
         run_combined._slipped = False                        #   self-measurable predictions per episode.
@@ -817,7 +818,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 # bevor neu gegriffen wurde (A/B 2026-10-07: 6 von 15 gescheiterten Eingriffs-Episoden).
                 # Geloescht wird es durch den naechsten Griff (Druck in der geschlossenen Klaue).
                 if _p_e > 0.3 and _q5 < J5_CLOSED_TH:
-                    run_combined._nachgreifen = False
+                    run_combined._nachgreifen = False; run_combined._cobs_nach = None
                 # AM EIGENEN ZIEL ABGESETZT: getragen, die Hand steht ueber dem SELBST gewaehlten
                 # Ziel (tgt, nicht die wahre Objektlage) auf Ablagehoehe (tgt_z + ENDE_HOEHE) und haelt
                 # noch.  Gemessen 2026-10-05: die Policy LAESST NICHT LOS -- sie senkt bis zur
@@ -1051,6 +1052,12 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             _holding = press > 0.3 and _j5q < J5_CLOSED_TH
             if run_combined._cobs is None or phase in ("over", "lower", "close"):
                 run_combined._cobs = (np.asarray(c, float).copy(), float(obj_h_s))
+            # NACHSEHEN NACH DEM OEFFNEN (pc_act23 HALT_SELBST=4): hat der Kopf zum Neugreifen
+            # geoeffnet und das gefallene Objekt mit der Kamera wiedergefunden, gilt DIESE Lage --
+            # nicht der Ort, an dem der Druck verloren ging.  Gemessen 2026-10-08: das Objekt lag
+            # 15-20 mm neben dem eingefrorenen Glauben, die Policy griff 400 Schritte daneben.
+            if getattr(run_combined, "_nachgreifen", False) and run_combined._cobs_nach is not None:
+                run_combined._cobs = run_combined._cobs_nach
             if _holding:
                 run_combined._cobs = (np.asarray(hxy, float).copy(), float(hz))
             elif run_combined._held_prev:                       # eben verloren -> am Fallort einfrieren
@@ -1060,6 +1067,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
             # Kopf, der aus dem Tastsinn "verloren?" vorschlaegt, protokollieren kann, ob es stimmte
             # (s. pc_act23 HALT_SELBST).
             run_combined._wahr_hub = float(cz) - float(obj_h)
+            run_combined._wahr_xy = np.asarray(c_true, float)[:2].copy()   # nur Messung (HALT_DIAG)
+            run_combined._phase = phase                                    # nur Messung (HALT_DIAG)
             if OBS_STATE:
                 c_st, cz_st = run_combined._cobs
             else:

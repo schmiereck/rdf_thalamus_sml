@@ -1066,6 +1066,10 @@ GRIFF_SELBST = os.environ.get("ACT23_GRIFF_SELBST", "0") == "1"
 # wo es "verloren" sagt).  Eingreifen tut nur das Netz.
 HALT_SELBST = os.environ.get("ACT23_HALT_SELBST", "0")
 HALT_MAX = 2
+HALT_DIAG = os.environ.get("ACT23_HALT_DIAG", "0") == "1"   # nur Messung: Verlauf nach dem Eingriff
+# NACHSEHEN NACH DEM OEFFNEN (ACT23_HALT_NACHSEHEN, Vorgabe 1 -- wirkt nur mit HALT_SELBST=4 und nur
+# nach einem Eingriff): die Kamera sucht den eigenen Farbfleck, der Objektglaube springt dorthin.
+HALT_NACHSEHEN = os.environ.get("ACT23_HALT_NACHSEHEN", "1") == "1"
 HALT_BLICK_DT = 35                               # Schritte zwischen den zwei Blicken (Modus 4)
 HALT_BLICKE = 6                                  # hoechstens so viele Blickpaare je Episode
 HALT_PROBE = 0.04                                # PROBEBEWEGUNG zwischen den Blicken (m): nach einem Verlust
@@ -7425,6 +7429,18 @@ def run_self_learning_steering(headless=False):
                         _griff_merken(_lk, False)
             if HALT_SELBST == "4" and len(s) > 12:
                 out = _halt_sehen(s, out)
+            if HALT_DIAG and _lk["h_n"] > 0:
+                # NUR MESSUNG: was passiert nach dem Eingriff?  Hand, Objektglaube, wahre Lage.
+                _lk["hd"] = _lk.get("hd", 0) + 1
+                if _lk["hd"] % 40 == 1:
+                    _w = getattr(act16.run_combined, "_wahr_xy", None)
+                    print(f"    [Halt-Diag] +{_lk['hd'] - 1}: Hand ({1000 * s[0]:.0f},{1000 * s[1]:.0f}) "
+                          f"{1000 * (s[2] - s[9]):.0f} mm hoch | Glaube ({1000 * s[3]:.0f},{1000 * s[4]:.0f}) "
+                          f"cz {1000 * s[5]:.0f} | wahr ({1000 * _w[0]:.0f},{1000 * _w[1]:.0f}) hub "
+                          f"{1000 * getattr(act16.run_combined, '_wahr_hub', 0):.0f} | Klaue {s[8]:.2f} "
+                          f"Druck {s[12]:.2f} | Policy will ({1000 * out[0]:.0f},{1000 * out[1]:.0f},"
+                          f"{1000 * out[2]:.0f}) Klaue {out[3]:.2f} | FSM {getattr(act16.run_combined, '_phase', '?')}",
+                          flush=True)
             if HALT_SELBST in ("1", "2", "3") and len(s) > 12:
                 # HAELT DER GRIFF NOCH? (s. HALT_SELBST).  Nur Sinnesdaten: Druck, Klaue, Handhoehe.
                 _q, _pr, _hz = float(s[8]), float(s[12]), float(s[2]) - float(s[9])
@@ -7536,6 +7552,24 @@ def run_self_learning_steering(headless=False):
                 _lk["h_auf"] = 0 if _q > 0.45 else _lk["h_auf"] - 1
                 out = np.array(out, float).copy(); out[3] = act16.J5_OPEN
                 return out
+            if (HALT_NACHSEHEN and getattr(act16.run_combined, "_nachgreifen", False)
+                    and _lk["hs_ref"] is not None):
+                # NACHSEHEN (s. HALT_NACHSEHEN): wo liegt mein Objekt jetzt?  Alle 20 Schritte, bis
+                # wieder gegriffen ist; hoechstens 15 Blicke je Episode.
+                _lk["nk"] = _lk.get("nk", 0) + 1
+                if _lk["nk"] % 20 == 1 and _lk.get("nsehen", 0) < 15:
+                    _lk["nsehen"] = _lk.get("nsehen", 0) + 1
+                    _gl = np.asarray(s[3:5], float)
+                    _o = _halt_mein_fleck(_halt_flecken(), _gl)
+                    if _o is not None:
+                        _alt = act16.run_combined._cobs_nach
+                        act16.run_combined._cobs_nach = (_o.copy(), float(s[9]))
+                        if _alt is None or float(np.linalg.norm(_o - _alt[0])) > 0.01:
+                            _w = getattr(act16.run_combined, "_wahr_xy", None)
+                            print(f"    [Nachsehen] Objekt gesehen {1000 * float(np.linalg.norm(_o - _gl)):.0f} mm "
+                                  f"neben dem bisherigen Glauben"
+                                  + (f"  [Messung: {1000 * float(np.linalg.norm(_o - _w)):.0f} mm von der wahren Lage]"
+                                     if _w is not None else ""), flush=True)
             if not (_lk["hs_trug"] and _tragen) or _lk["hs_ref"] is None:
                 return out
             _lk["hs_k"] += 1
