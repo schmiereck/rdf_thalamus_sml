@@ -1,5 +1,11 @@
 # Chronik
 
+## 2026-10-08
+
+* **Ergaenzung**: [Noch an der Hand?](/befunde/halt-sehen.md) - Ablage nach dem Neugreifen: Efferenzkopie
+  `_nachgreifen` (Oeffnen zum Nachgreifen beendet die Episode nicht) und Nachsehen (Kamera findet das
+  gefallene Objekt, 4 mm). Ablage danach so gut wie die erste; Quote 49 / 50 / 52 / 51, nichts signifikant.
+
 ## 2026-10-07
 
 * **Ergaenzung**: [Noch an der Hand?](/befunde/halt-sehen.md) - A/B je 100 Ep: 49 gegen 50 %

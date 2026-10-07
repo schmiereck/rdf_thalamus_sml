@@ -17,6 +17,9 @@ sources:
   - id: ab
     resource: "c4_state, NO_PERSIST, GUI-Aufbau wie oben, Seed 9114, je 100 Ep nacheinander, ACT23_HALT_SELBST=0 gegen 4"
     title: A/B 2026-10-07
+  - id: ablage
+    resource: "cb7bff8 (Nachgreifen-Ende), 6102c2a (Nachsehen); je 100 Ep Seed 9114 von c4_state, Modus 4, Kontrollarm aus dem A/B"
+    title: Ablage nach dem Neugreifen 2026-10-08
 ---
 
 # Frage
@@ -101,6 +104,44 @@ ohne feste Schwelle. Fuer die Lieferquote ist dieser Faden erschoepft; der Engpa
 Ablage nach dem Neugreifen.
 
 `ACT23_HALT_SELBST` bleibt Vorgabe 0.
+
+# Ablage nach dem Neugreifen (2026-10-08)
+
+Nutzerauftrag nach dem A/B: "Kuemmere dich um die Ablage nach dem Neugreifen." Die Diagnose fand
+zwei Fehler VOR der Ablage - die neu gegriffenen Objekte kamen meist gar nicht bis dorthin.
+
+1. **Nachgreifen galt als Loslassen.** Das Selbst-Ende (`pc_act16`, ENDE_SELBST) wertet "Klaue
+   offen, kein Druck, Hand ueber dem eigenen Ziel" als "losgelassen"; "trug" bleibt die ganze
+   Episode gesetzt. Oeffnete der Kopf zum Neugreifen in Zielnaehe, endete die Episode sofort
+   (13 der 24 Eingriffs-Episoden endeten so). Abhilfe: eine **Efferenzkopie**
+   `run_combined._nachgreifen`, gesetzt vom Kopf beim Eingriff, geloescht beim naechsten Griff;
+   solange sie steht, ist Oeffnen kein Ende. Ohne Eingriff verhaltensneutral. Eine Abhilfe ueber
+   "Druck vor dem Oeffnen" waere falsch gewesen - manche Objekte werden mit 0 N getragen (Nagel).
+2. **Der Objektglaube blieb am Verlustort stehen.** Er friert dort ein, wo der Druck verloren ging;
+   das Objekt lag 15-20 mm daneben, die Policy griff 400 Schritte lang daneben (Diagnose
+   `ACT23_HALT_DIAG`, nur Messung). Abhilfe: **Nachsehen** (`ACT23_HALT_NACHSEHEN`, Vorgabe 1,
+   wirkt nur mit HALT_SELBST=4 und nur nach einem Eingriff) - alle 20 Schritte sucht die Kamera den
+   eigenen Farbfleck, der Glaube springt dorthin. Blickfehler zur wahren Lage im Median 4 mm.
+
+Gleicher Seed (9114) und Zustand (c4_state), je 100 Episoden, Kontrollarm 49/100:
+
+| Fassung | geliefert | Eingriffs-Episoden geliefert (dieselben Aufgaben ohne Kopf) | Enden nach Eingriff |
+|---|---|---|---|
+| Kopf | 50 | 10/24 (11) | losgelassen 13, Stillstand 9, abgesetzt 2 |
+| + Nachgreifen-Ende | 52 | 10/23 (10) | losgelassen 4, Stillstand 14, abgesetzt 5 |
+| + Nachsehen | 51 | 12/22 (12) | losgelassen 9, abgesetzt 7, Stillstand 6 |
+
+* Keine Fassung unterscheidet sich vom Kontrollarm (p = 1,00 / 0,75 / 0,88).
+* **Die Ablage nach dem Neugreifen ist jetzt so gut wie die erste:** Endabstand im Median 19 mm
+  (16 Ablagen nach Eingriff) gegen 17 mm (43 ohne); ueber 25 mm 4/16 gegen 8/43. Die verbleibenden
+  Fehlschlaege sind gewoehnliche Ablagefehler (27-39 mm) und vier Stillstaende (einer: Objekt
+  verdeckt unter der tief stehenden Hand, die Kamera findet es nie).
+
+**Lesart:** Der besondere Mangel "nach dem Neugreifen" ist behoben - zwei echte Fehler im
+Zusammenspiel, beide sauber geloest und ohne Wirkung auf Episoden ohne Eingriff. Die Lieferquote
+hebt das nicht messbar: ein Teil der Eingriffs-Aufgaben liefert auch ohne Kopf (12/22), und was
+uebrig bleibt, ist die allgemeine Ablagegenauigkeit (Toleranz 25 mm, Median 17-19 mm) - ein
+anderer, aelterer Faden. `ACT23_HALT_SELBST` bleibt Vorgabe 0.
 
 # Verwandt
 
