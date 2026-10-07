@@ -74,6 +74,43 @@ Die groesseren Posten liegen davor - **das Hochbringen** (20 % nie getragen) und
 sitzt. Bei Fehlablagen sitzt es schon beim Zufassen schief, und die Formen mit Ecken und Zinken
 (U, T, L) fuehren in jeder Spalte.
 
+# Sitz in der Klaue - Voraussetzung vor dem Bauen geprueft (2026-10-08)
+
+Nutzerentscheidung: an der gemeinsamen Wurzel ansetzen - lernen, wo das Objekt in der Klaue sitzt,
+und schief sitzende Griffe vor dem Anheben neu ansetzen. Vorher geprueft, ob der Sitz beim Zufassen
+(`[InKlaue]`, privilegiert, nur Messung) den Ausgang ueberhaupt vorhersagt. 331 Episoden mit Zeile.
+
+Ueber alle Objekte zusammen ein steiler Gradient:
+
+    |quer| beim Zufassen   0-3 mm   3-6    6-10   10-15   > 15
+    geliefert              79 %     65 %   51 %   45 %    30 %     (n 148 / 69 / 47 / 44 / 23)
+
+**Das ist ueberwiegend die Form, nicht der Sitz.** `[InKlaue]` misst gegen die Objektmitte; L, T, U
+werden absichtlich an einem Zinken gegriffen (Median |quer| 7-12 mm, Wuerfel 1 mm). Innerhalb jeder
+Form, geteilt am Median des eigenen |quer|:
+
+| Objekt | n | Median |quer| | geliefert darunter / darueber | |quer| geliefert gegen nicht |
+|---|---|---|---|---|
+| L | 51 | 10 mm | 54 / 52 % | 8 gegen 10 mm (p = 0,63) |
+| T | 55 | 7 mm | 55 / 54 % | 6 gegen 7 mm (p = 0,31) |
+| U | 37 | 12 mm | 50 / 24 % | 11 gegen 15 mm (p = 0,053) |
+| X | 49 | 3 mm | 85 / 73 % | 3 gegen 4 mm (p = 0,10) |
+| blau | 53 | 1 mm | 85 / 69 % | 1 gegen 2 mm (p = 0,057) |
+| gruen | 48 | 1 mm | 72 / 53 % | 1 gegen 2 mm (p = 0,079) |
+| rot | 38 | 1 mm | 92 / 62 % | 1 gegen 2 mm (p = 0,059) |
+
+* **L und T: kein Zusammenhang.**
+* **Wuerfel und X:** eine Richtung, aber bei 1 gegen 2 mm - weit unter dem, was die Kamera in der
+  Tiefe aufloest (Median ~5 mm, [Aufmerksamkeit](/fragen/aufmerksamkeit-objekt-ziel.md)). Ein Kopf,
+  der aus dem Kamerabild "sitzt schief" lernt, haette dort nichts zu sehen.
+* **U:** die einzige Form mit sichtbarem Unterschied (11 gegen 15 mm), knapp nicht signifikant bei
+  37 Episoden - und der [U-Form-Engpass](/befunde/u-form-engpass.md) ist ein geschlossener Faden
+  (fuenf Anlaeufe am Griff ohne Wirkung).
+
+**Ehrliches Negativ vor dem Bau:** der Sitz in der Klaue, so wie die Kamera ihn sehen koennte, ist
+kein tragender Hebel. Nicht gebaut. Das passt zu [Zufassen aus dem eigenen Ergebnis](/befunde/zufassen-selbst.md):
+auch dort trennten die Aspekte vor dem Schliessen nicht.
+
 # Verwandt
 
 * [Ablage beim echten Oeffnen](/befunde/ablage-beim-oeffnen.md) - die FSM-Zerlegung

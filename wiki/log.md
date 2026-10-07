@@ -2,6 +2,10 @@
 
 ## 2026-10-08
 
+* **Ergaenzung**: [Ablage im Netzbetrieb](/befunde/ablage-im-netzbetrieb.md) - Sitz in der Klaue vor dem Bau
+  geprueft: der Gesamtgradient (79 -> 30 %) ist die Form; innerhalb der Formen kein sichtbarer Hebel.
+  Ehrliches Negativ, nicht gebaut.
+
 * **Anlage**: [Ablage im Netzbetrieb](/befunde/ablage-im-netzbetrieb.md) - 380 Episoden zerlegt: eigene
   Ablagen treffen 86 %; die Ablage ist nur der drittgroesste Verlust (9 %), hinter Hochbringen (20 %) und
   Verlieren unterwegs (11 %).
