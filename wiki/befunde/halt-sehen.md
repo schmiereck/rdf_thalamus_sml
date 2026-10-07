@@ -1,9 +1,9 @@
 ---
 type: Befund
 title: Noch an der Hand? - gelernter Vorschlag, Etikett aus der Kamera
-description: Regelkonforme Fassung des Halt-Kopfs. Ein Netz sagt aus Tastsinn und Propriozeption "noch an der Hand?"; die Etiketten liefert die Kamera ueber den Selbst/Fremd-Test (zweimal hinsehen, dazwischen eine Probebewegung - wandert der eigene Farbfleck mit der Hand?). Lernlauf 100 Ep - das Kamera-Etikett stimmt in 44 von 46 Faellen mit der Messung, das Netz entscheidet ab Episode 46. Ein Verdrahtungsfehler (Eingriff wartete auf einen Blick, den es bei verdecktem Objekt nie gab) ist behoben. A/B laeuft.
+description: Regelkonforme Fassung des Halt-Kopfs. Ein Netz sagt aus Tastsinn und Propriozeption "noch an der Hand?"; die Etiketten liefert die Kamera ueber den Selbst/Fremd-Test (zweimal hinsehen, dazwischen eine Probebewegung - wandert der eigene Farbfleck mit der Hand?). Lernlauf 100 Ep - das Kamera-Etikett stimmt in 44 von 46 Faellen mit der Messung, das Netz entscheidet ab Episode 46. Ein Verdrahtungsfehler (Eingriff wartete auf einen Blick, den es bei verdecktem Objekt nie gab) ist behoben. A/B je 100 Ep - 49 gegen 50 % geliefert (p = 1,00); leeres Herumstehen nach Verlust 14 -> 6 Episoden, aber die neu gegriffenen Objekte scheitern an der Ablage. Vorgabe aus.
 tags: [act23, greifen, tragen, tastsinn, kamera, selbst-urteil, aspekte]
-status: draft
+status: stable
 evidenz: einzelmessung
 ebene: act23-ab
 generated: { by: claude/opus-5.5, at: 2026-10-07T00:00:00Z }
@@ -14,6 +14,9 @@ sources:
   - id: lernen
     resource: "Kopflos, c3_state -> c4_state (geschrieben), GUI-Aufbau (ACT16_ABLAGE_FIX=1 ACT23_LOSLASS_KOPF=1 ACT23_LOSLASS_SELBST=1 ACT16_ENDE_HALTEN=30), Seed 9113, 100 Ep, ACT23_HALT_SELBST=4"
     title: Lernlauf 2026-10-07
+  - id: ab
+    resource: "c4_state, NO_PERSIST, GUI-Aufbau wie oben, Seed 9114, je 100 Ep nacheinander, ACT23_HALT_SELBST=0 gegen 4"
+    title: A/B 2026-10-07
 ---
 
 # Frage
@@ -60,13 +63,44 @@ zu schauen und griff **nie** ein - 4 Episoden, bis zu 448 Versuche. Jetzt entsch
 ohne Blick; der Blick dient nur dem Lernen. Die Lernlauf-Zahlen oben stammen aus der fehlerhaften
 Fassung.
 
-# Lesart (vorlaeufig)
+# A/B (Seed 9114, je 100 Ep nacheinander, beide von c4_state)
 
-Die Kamera taugt als Lehrer fuer diesen Aspekt: der Selbst/Fremd-Test ist fast fehlerfrei, wenn er
-ein Etikett vergibt. Der Engpass ist das Netz: aus Tastsinn und Propriozeption allein trennt es
-nur maessig (7/12 gegen 6/26) - dieselbe Lehre wie beim Klauenwinkel, der Verlust und Halt nicht
-unterscheidet. Ob es trotzdem Lieferungen rettet, misst das laufende A/B (Modus 0 gegen 4, von
-c4_state, Seed 9114, je 100 Ep nacheinander).
+Modus 0 (aus) gegen Modus 4 (das gelernte Netz entscheidet von Anfang an, schaut und lernt weiter).
+Aufgabenfolge in allen 100 Episoden gleich (Abdruck).
+
+| | aus | gelernter Vorschlag |
+|---|---|---|
+| geliefert | 49/100 | **50/100** |
+| "getragen, dann lange leer oben" (> 200 Schritte ohne Druck, Hand > 30 mm) | 14 | **6** |
+| Episoden mit Eingriff | - | 24 (25 Eingriffe: 16 echte Verluste, 9 Fehlalarme) |
+| dieselben 24 Aufgaben geliefert | 11/24 | 10/24 |
+
+* McNemar 16 gegen 17 diskordante Paare, p = 1,00.
+* Kamera-Etikett gegen Messung: 35 von 38 Etiketten richtig (27 haelt, 8 verloren; 3 "haelt",
+  obwohl verloren); 21 Blickpaare ohne Etikett.
+* Netz an Blickpunkten: sagt "verloren" bei 10 von 14 echten Verlusten, bei 5 von 45 haltenden
+  Griffen - besser als im Lernlauf (mehr Etiketten).
+* Nach einem Eingriff enden 14 Episoden mit "losgelassen"/"abgesetzt", nur 6 mit Stillstand; 10
+  davon geliefert. Der Agent greift also wirklich neu und traegt wieder - der zweite Anlauf
+  scheitert aber genauso oft an der Ablage wie der erste.
+
+# Lesart
+
+**Ehrliches Negativ fuer die Lieferquote, positiv fuer den Mechanismus.** Was gelernt werden
+sollte, ist gelernt: der Agent merkt selbst, dass er nichts mehr haelt (Kamera als Lehrer, 92-96 %
+richtige Etiketten; das Netz erkennt 10 von 14 Verlusten), und das leere Herumstehen mit
+geschlossener Klaue faellt von 14 auf 6 Episoden. Geliefert wird dadurch nicht mehr (49 gegen 50) -
+die geretteten Objekte gehen beim zweiten Ablegen verloren.
+
+Damit ist auch das positive Vorzeichen aus [Haelt der Griff noch?](/befunde/halt-kopf.md)
+(Rettung 4/6 gegen 2/8, ein Seed) **nicht bestaetigt**.
+
+Im Sinne von [wiki/ziel.md](/ziel.md) zaehlt die Aneignung: der Agent hat einen Aspekt seiner
+eigenen Lage ("ich halte nichts mehr") aus eigener Erfahrung zu erkennen gelernt, ohne Teacher und
+ohne feste Schwelle. Fuer die Lieferquote ist dieser Faden erschoepft; der Engpass liegt in der
+Ablage nach dem Neugreifen.
+
+`ACT23_HALT_SELBST` bleibt Vorgabe 0.
 
 # Verwandt
 

@@ -108,7 +108,7 @@ der Hand ist, gelernt aus dem, was die Kamera nach dem Oeffnen sieht. Nicht geba
 
 # Verwandt
 
-* [Noch an der Hand? (gelernt)](/befunde/halt-sehen.md) - regelkonforme Fassung mit Kamera-Etikett
+* [Noch an der Hand? (gelernt)](/befunde/halt-sehen.md) - regelkonforme Fassung mit Kamera-Etikett; ihr A/B (49 gegen 50 %) bestaetigt die Rettung 4/6 gegen 2/8 von hier NICHT
 * [Zufassen aus dem eigenen Ergebnis](/befunde/zufassen-selbst.md)
 * [Loslassen am Ziel](/befunde/loslassen.md)
 * [Aspekt-Rueckmeldung](/fragen/aspekt-rueckmeldung.md)

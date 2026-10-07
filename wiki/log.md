@@ -2,6 +2,10 @@
 
 ## 2026-10-07
 
+* **Ergaenzung**: [Noch an der Hand?](/befunde/halt-sehen.md) - A/B je 100 Ep: 49 gegen 50 %
+  (p = 1,00); der Agent erkennt Verluste selbst, die neu gegriffenen Objekte scheitern an der Ablage.
+  Bestaetigt das positive Vorzeichen aus halt-kopf NICHT.
+
 * **Anlage**: [Noch an der Hand?](/befunde/halt-sehen.md) - gelernter Vorschlag mit Kamera-Etikett;
   Lernlauf 100 Ep, Etikett 44/46 richtig; Verdrahtungsfehler behoben; A/B laeuft.
 
