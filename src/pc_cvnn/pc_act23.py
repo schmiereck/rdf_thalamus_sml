@@ -7519,7 +7519,7 @@ def run_self_learning_steering(headless=False):
             _lk["hs_prev"] = _h.copy()
             _tragen = _q < 0.27 and _hz > 0.03
             if _q > 0.45:                                  # Klaue offen: dieser Griff ist vorbei
-                _lk["hs_trug"] = False; _lk["hs_ohne"] = 0; _lk["hs_pmax"] = 0.0
+                _lk["hs_trug"] = False; _lk["hs_ohne"] = 0; _lk["hs_pmax"] = 0.0; _lk["hs_ng"] = False
                 _lk["hs_blick"] = None; _lk["hs_unter"] = 0
             elif _pr > 0.3 and _tragen:
                 if not _lk["hs_trug"] and _lk["hs_ref"] is None:
@@ -7576,10 +7576,23 @@ def run_self_learning_steering(headless=False):
                                                    or (_lk["hs_k"] - 20) % 80 == 0):
                 _o1 = _halt_mein_fleck(_halt_flecken(), _h)
                 if _o1 is None:
-                    print(f"    [Halten-Blick] eigener Fleck nicht gesehen (Druck {_pr:.2f} N, Hand "
-                          f"{1000 * _hz:.0f} mm ueber Ruhe)  [Messung: "
-                          f"{'WIRKLICH VERLOREN' if getattr(act16.run_combined, '_wahr_hub', 1.0) < 0.01 else 'haelt noch'}]",
-                          flush=True)
+                    _wl = getattr(act16.run_combined, '_wahr_hub', 1.0) < 0.01
+                    if not _lk.get("hs_ng"):              # einmal je Griff melden, nicht je Schritt
+                        _lk["hs_ng"] = True
+                        print(f"    [Halten-Blick] eigener Fleck nicht gesehen (Druck {_pr:.2f} N, Hand "
+                              f"{1000 * _hz:.0f} mm ueber Ruhe)  [Messung: "
+                              f"{'WIRKLICH VERLOREN' if _wl else 'haelt noch'}]", flush=True)
+                    if _handeln:
+                        # DAS NETZ ENTSCHEIDET, der Blick dient nur dem Lernen.  Erste Fassung wartete
+                        # auf ein Blickpaar -- ist das verlorene Objekt verdeckt, versuchte sie es jeden
+                        # Schritt neu und griff NIE ein (Lernlauf 2026-10-07: 4 Episoden, bis 448 Versuche).
+                        _lk["h_auf"] = HALT_OFFEN; _lk["h_n"] += 1
+                        _lk["hs_trug"] = False; _lk["hs_pmax"] = 0.0; _lk["hs_unter"] = 0
+                        print(f"    [Halten-Sehen] Netz: noch an der Hand {_p:.2f} -> KLAUE AUF, neu greifen "
+                              f"(ohne Blick, Fleck nicht sichtbar)  [Messung: "
+                              f"{'WIRKLICH VERLOREN' if _wl else 'haelt noch'}]", flush=True)
+                        out = np.array(out, float).copy(); out[3] = act16.J5_OPEN
+                        return out
                 if _o1 is not None:
                     _lk["hs_blicke"] += 1
                     _r = np.asarray(s[6:8], float) - _h
