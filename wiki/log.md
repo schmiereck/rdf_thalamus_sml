@@ -2,6 +2,10 @@
 
 ## 2026-10-08
 
+* **Anlage**: [Zwischen Zufassen und Anheben](/befunde/zwischen-zufassen-und-anheben.md) - Greif-Spur
+  ueber 98 Episoden; Herausrutschen durch falschen Objektglauben (15 gegen 9 mm), danach Schweben an
+  der Teacher-Schwelle. ACT16_NACHGRIFF_FIX gemessen: verschiebt nur den Haengepunkt, ehrliches Negativ.
+
 * **Ergaenzung**: [Ablage im Netzbetrieb](/befunde/ablage-im-netzbetrieb.md) - Sitz in der Klaue vor dem Bau
   geprueft: der Gesamtgradient (79 -> 30 %) ist die Form; innerhalb der Formen kein sichtbarer Hebel.
   Ehrliches Negativ, nicht gebaut.
