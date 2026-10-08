@@ -1033,6 +1033,13 @@ REGELN_NETZ = os.environ.get("ACT23_REGELN_NETZ", "0") == "1"
 # Etiketten am Ziel widerspruechlich (der Start sagt es).  Mit ACT16_ABLAGE_FIX=1 werden die alten
 # Pufferzeilen, deren Etikett sich dadurch aendert, beim Laden einmal neu etikettiert.
 LOSLASS_KOPF = os.environ.get("ACT23_LOSLASS_KOPF", "0") == "1"
+# FEHLGRIFF-KOPF (ACT23_FEHLGRIFF_KOPF, Vorgabe 0 bis gemessen; s. arm_modules/fehlgriff_kopf.py):
+# ein eigener Klassifikator entscheidet bei geschlossener Klaue (fern vom Ziel) "aufmachen und neu
+# greifen".  Gelernt aus Teacher-Etiketten mit vorgezogener Fehlgriff-Schwelle; die gemeinsame
+# Policy und ihre Daten bleiben unberuehrt.  Dreimal in Folge "auf" -> Klaue auf, bis sie gefuehlt
+# offen ist; hoechstens FEHLGRIFF_MAX je Episode.
+FEHLGRIFF_KOPF = os.environ.get("ACT23_FEHLGRIFF_KOPF", "0") == "1"
+FEHLGRIFF_MAX = 3
 # AUS DEM EIGENEN ERGEBNIS (ACT23_LOSLASS_SELBST, Vorgabe 0).  Jede Episode, in der getragen wurde,
 # liefert eine Zeile: die Haltepose beim Loslassen (vom Kopf, oder die letzte vor der
 # Aufraeumbewegung) -> Selbst-Urteil der Kamera.  Gesammelt wird auch OHNE ACT23_LOSLASS_KOPF; mit
@@ -1311,6 +1318,7 @@ if ZIEL_RELATION in ("richtung", "alle") and not ZIEL_ADRESSE:
 from pc_cvnn.arm_modules.hoehen_schaetzer import HoehenSchaetzer
 from pc_cvnn.arm_modules.groessen_schaetzer import GroessenSchaetzer
 from pc_cvnn.arm_modules.loslass_kopf import LoslassKopf
+from pc_cvnn.arm_modules.fehlgriff_kopf import FehlgriffKopf
 from pc_cvnn.arm_modules.aufgeben_kopf import AufgebenKopf
 from pc_cvnn.arm_modules.halt_kopf import HaltKopf, HaltSehenKopf
 from pc_cvnn.arm_modules.griff_kopf import GriffKopf
@@ -3211,6 +3219,24 @@ def run_self_learning_steering(headless=False):
         print(f"  [Aufgeben] Kopf mit {len(aufgeben_kopf.y)} Momentaufnahmen -- "
               + ("entscheidet" if aufgeben_kopf.bereit else "sammelt noch (entscheidet noch nicht)"), flush=True)
     griff_kopf = GriffKopf()                       # Stufe 1: nur sammeln, nicht persistiert
+    fehlgriff_kopf = FehlgriffKopf()               # aus dem DAgger-Puffer gelernt, nicht persistiert
+
+    def _fehlgriff_teacher(x):
+        _alt = act16.NACHGRIFF_FIX
+        act16.NACHGRIFF_FIX = True
+        try:
+            return act16.reactive_subgoal(x)
+        finally:
+            act16.NACHGRIFF_FIX = _alt
+
+    def _fehlgriff_lernen(epochs=150):
+        return fehlgriff_kopf.lernen(runtime._X, _fehlgriff_teacher, epochs=epochs)
+
+    if FEHLGRIFF_KOPF:
+        _ok = _fehlgriff_lernen()
+        print(f"  [Fehlgriff] Kopf {'gelernt' if _ok else 'NICHT gelernt (zu wenig Zeilen)'} aus "
+              f"{fehlgriff_kopf.n_fit} Zustaenden mit geschlossener Klaue ({fehlgriff_kopf.n_auf} 'aufmachen') "
+              f"-- er entscheidet im Netzbetrieb das Neugreifen", flush=True)
     halt_kopf = (_loaded or {}).get("halt_kopf") or HaltKopf()
     if not isinstance(halt_kopf, HaltKopf):
         halt_kopf = HaltKopf()
@@ -7423,7 +7449,8 @@ def run_self_learning_steering(headless=False):
                "h_trug": False, "h_ohne": 0, "h_pmax": 0.0, "h_xy0": None, "h_vor": [],
                "h_auf": 0, "h_n": 0, "h_aktiv": False,
                "hs_trug": False, "hs_ohne": 0, "hs_pmax": 0.0, "hs_prev": None, "hs_ref": None,
-               "hs_blick": None, "hs_blicke": 0, "hs_k": 0, "hs_unter": 0, "hs_zeilen": []}
+               "hs_blick": None, "hs_blicke": 0, "hs_k": 0, "hs_unter": 0, "hs_zeilen": [],
+               "fg_n": 0, "fg_folge": 0, "fg_auf": 0}
         _gsp = {"aktiv": True, "nah": 0, "nah_tief": 0, "will_zu": 0, "min_h": None, "offen_war": True,
                 "zu": [], "ende": None, "gehoben": False, "wo_haengt": [], "k": 0}
 
@@ -7457,6 +7484,26 @@ def run_self_learning_steering(headless=False):
                         _griff_merken(_lk, True)
                     elif _q > 0.45:
                         _griff_merken(_lk, False)
+            if FEHLGRIFF_KOPF and fehlgriff_kopf.trained and len(s) > 14:
+                # FEHLGRIFF? (s. FEHLGRIFF_KOPF) -- der Kopf entscheidet, die Policy faehrt.
+                _q = float(s[8])
+                if _lk["fg_auf"] > 0:
+                    _lk["fg_auf"] = 0 if _q > 0.45 else _lk["fg_auf"] - 1
+                    out = np.array(out, float).copy(); out[3] = act16.J5_OPEN
+                elif FehlgriffKopf.zustaendig(s) and _lk["fg_n"] < FEHLGRIFF_MAX:
+                    _pf = fehlgriff_kopf.p(s)
+                    _lk["fg_folge"] = _lk["fg_folge"] + 1 if _pf > 0.5 else 0
+                    if _lk["fg_folge"] >= 3:
+                        _lk["fg_folge"] = 0; _lk["fg_n"] += 1; _lk["fg_auf"] = 100
+                        act16.run_combined._nachgreifen = True
+                        _a = FehlgriffKopf.aspekte(s)[0]
+                        print(f"    [Fehlgriff] Kopf {_pf:.2f}: Klaue auf, neu greifen (Druck {_a[0]:.2f} N, Hand "
+                              f"{1000 * _a[2]:.0f} mm ueber Greifpunkt, Glaube {1000 * _a[3]:.0f} mm ueber Ruhe)  "
+                              f"[Messung: Objekt {1000 * float(getattr(act16.run_combined, '_wahr_hub', 0.0)):.0f} mm "
+                              f"ueber Ruhe]", flush=True)
+                        out = np.array(out, float).copy(); out[3] = act16.J5_OPEN
+                else:
+                    _lk["fg_folge"] = 0
             if HALT_SELBST == "4" and len(s) > 12:
                 out = _halt_sehen(s, out)
             if HALT_DIAG and _lk["h_n"] > 0:
@@ -8640,6 +8687,8 @@ def run_self_learning_steering(headless=False):
             runtime.train(epochs=200)                          # act19's DAgger refits used 300; 80 underfit
             if LOSLASS_KOPF:                                   # der Loslass-Kopf lernt mit (s. LOSLASS_KOPF)
                 loslass_kopf.lernen(runtime._X, runtime._Y, epochs=60)
+            if FEHLGRIFF_KOPF:                                 # der Fehlgriff-Kopf ebenso
+                _fehlgriff_lernen(epochs=60)
         #   the shifting aggregate (user watched the net under-CLOSE the gripper -- the BC smoothing
         #   artefact that stronger refits + DAgger labels at the visited close-states sharpen)
         if np.isfinite(div):
