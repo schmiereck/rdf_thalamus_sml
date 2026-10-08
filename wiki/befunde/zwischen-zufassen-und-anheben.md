@@ -97,8 +97,8 @@ Schwelle zu verschieben, verschiebt nur den Haengepunkt. Dasselbe Muster zeigte 
 Loslassen (Pendeln um 0,27, s. [Loslassen](/befunde/loslassen.md)); geloest wurde es dort durch
 einen EIGENEN Kopf fuer die eine Entscheidung, der aus Einzelaspekten 99 % statt 35 % traf.
 
-Naheliegender naechster Schritt (nicht gebaut): ein eigener Kopf "Fehlgriff - aufmachen?" nach dem
-Muster des Loslass-Kopfs, statt die Entscheidung in der gemeinsamen Policy zu lassen.
+Naheliegender naechster Schritt: ein eigener Kopf "Fehlgriff - aufmachen?" nach dem
+Muster des Loslass-Kopfs - gebaut und gemessen in [Fehlgriff-Kopf](/befunde/fehlgriff-kopf.md): das Schweben ist weg, die Quote nicht besser.
 `ACT16_NACHGRIFF_FIX` bleibt Vorgabe 0.
 
 # Verwandt

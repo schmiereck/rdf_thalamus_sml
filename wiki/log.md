@@ -2,6 +2,11 @@
 
 ## 2026-10-08
 
+* **Anlage**: [Fehlgriff-Kopf](/befunde/fehlgriff-kopf.md) - eigener Kopf entscheidet das Neugreifen
+  (offline 645/653, 1 Fehlalarm in 329). act23-A/B gepaart: gehoben 69 gegen 68, geliefert 55 gegen 52,
+  nichts signifikant. Der Kopf oeffnet richtig, die Neugriffe zielen 38 mm daneben (Objekt beim Rutschen
+  verschoben, kein Nachsehen). Ehrliches Negativ fuer die Quote; Vorgabe bleibt 0.
+
 * **Anlage**: [Zwischen Zufassen und Anheben](/befunde/zwischen-zufassen-und-anheben.md) - Greif-Spur
   ueber 98 Episoden; Herausrutschen durch falschen Objektglauben (15 gegen 9 mm), danach Schweben an
   der Teacher-Schwelle. ACT16_NACHGRIFF_FIX gemessen: verschiebt nur den Haengepunkt, ehrliches Negativ.
