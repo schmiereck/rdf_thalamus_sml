@@ -132,6 +132,17 @@ ENDE_SELBST = os.environ.get("ACT16_ENDE_SELBST", "0") == "1"
 # Objekt GEGRIFFEN, auch wenn es schon aufsetzt.  An der Greifstelle greift das nie -- das Ziel
 # liegt dort mindestens 6 cm entfernt.
 ABLAGE_FIX = os.environ.get("ACT16_ABLAGE_FIX", "0") == "1"
+# DIE TOTZONE DES FEHLGRIFFS (ACT16_NACHGRIFF_FIX, Vorgabe 0 bis gemessen).  Der Teacher liess nur
+# neu greifen, wenn die Hand mit geschlossener Klaue und liegendem Objekt die volle Traghoehe
+# erreicht hatte (hz > carry_z - 12 mm, 78 mm).  Gemessen 2026-10-08 (wiki/befunde/
+# zwischen-zufassen-und-anheben.md): nach einem herausgerutschten Griff schwebt die Policy bei
+# 73-81 mm -- genau um diese Schwelle; der Teacher etikettiert dort abwechselnd "geschlossen auf 90 mm
+# anheben" und "aufmachen", und die Policy hat das Schweben gelernt (11 von 14 Episoden ohne zweiten
+# Versuch).  Mit dem Schalter gilt ein Fehlgriff schon ab NACHGRIFF_H ueber dem Greifpunkt.  Echte
+# Griffe trifft das nicht: mit Druck springt der beobachtete Objektglaube auf die Hand und gilt ab
+# lift_thresh (14 mm Hub) als gegriffen -- vor diesen 25 mm.  Nur Teacher-Etikett, keine Laufzeitregel.
+NACHGRIFF_FIX = os.environ.get("ACT16_NACHGRIFF_FIX", "0") == "1"
+NACHGRIFF_H = 0.025
 ENDE_TRAG_Z = 0.04                       # Hand sicher ueber jedem Tischobjekt (hoechstens 32 mm)
 ENDE_OFFEN = 5                           # Schritte offen + drucklos -> "losgelassen"
 ENDE_HALTEN = int(os.environ.get("ACT16_ENDE_HALTEN", "5"))   # Schritte am Ziel gehalten -> "am Ziel
@@ -427,7 +438,7 @@ def reactive_subgoal(state):
     # raised to carry height but the cube is STILL on the table, the grasp clearly missed -> re-OPEN above
     # the cube and retry the approach.  Triggers only once the empty lift is COMPLETE (a real grasp would
     # have raised the cube in lockstep, so cz>lift_thresh fires `grasped` first), so it never oscillates.
-    if (j5 < 0.25) and (hz > carry_z - 0.012):
+    if (j5 < 0.25) and (hz > carry_z - 0.012 or (NACHGRIFF_FIX and hz > grasp_z + NACHGRIFF_H)):
         return np.array([cx, cy, OVER_Z, J5_OPEN])        # missed -> reopen + re-approach (no push-to-foot)
     # The gripper STATE disambiguates the two regimes that look alike in (hz): descending-to-grasp
     # (gripper OPEN) vs ascending-with-cube (gripper CLOSED).  Splitting on j5 stops the open/close

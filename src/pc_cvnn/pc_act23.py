@@ -3181,6 +3181,27 @@ def run_self_learning_steering(headless=False):
               f"Selbst-Imitationszeilen neu etikettiert; Policy wird nachtrainiert", flush=True)
         if _n_d + _n_s:
             runtime.train(epochs=400)
+    # DIE TOTZONE DES FEHLGRIFFS NEU ETIKETTIEREN (s. pc_act16.NACHGRIFF_FIX) -- dasselbe Verfahren
+    # wie bei ABLAGE_FIX: wo die Korrektur das Teacher-Etikett aendert, wird es ersetzt.
+    if not D0_FREEZE and act16.NACHGRIFF_FIX and len(getattr(runtime, "_X", [])):
+        _n_d = _n_s = 0
+        for _buf_x, _buf_y, _zaehl in ((runtime._X, runtime._Y, "d"),
+                                       (getattr(runtime, "_Xi", []) or [], getattr(runtime, "_Yi", []) or [], "s")):
+            for _i, _x in enumerate(_buf_x):
+                act16.NACHGRIFF_FIX = False
+                _alt = np.asarray(act16.reactive_subgoal(_x), float)
+                act16.NACHGRIFF_FIX = True
+                _neu = np.asarray(act16.reactive_subgoal(_x), float)
+                if not np.allclose(_alt, _neu) and not np.allclose(np.asarray(_buf_y[_i], float), _neu):
+                    _buf_y[_i] = _neu
+                    if _zaehl == "d":
+                        _n_d += 1
+                    else:
+                        _n_s += 1
+        print(f"  [Nachgriff] Teacher-Korrektur (ACT16_NACHGRIFF_FIX): {_n_d} DAgger- und {_n_s} "
+              f"Selbst-Imitationszeilen neu etikettiert; Policy wird nachtrainiert", flush=True)
+        if _n_d + _n_s:
+            runtime.train(epochs=400)
     aufgeben_kopf = (_loaded or {}).get("aufgeben_kopf") or AufgebenKopf()
     if not isinstance(aufgeben_kopf, AufgebenKopf):
         aufgeben_kopf = AufgebenKopf()
@@ -7680,7 +7701,10 @@ def run_self_learning_steering(headless=False):
                 z["p"] = max(z["p"], _pr); z["hub"] = max(z["hub"], _hub)
                 z["hand_hoch"] = max(z["hand_hoch"], float(s[2]) - z["z0"])
             if g["k"] % 50 == 0:
-                g["wo_haengt"].append((round(1000 * _ueber), round(1000 * _hb), round(_q, 2)))
+                _t = act16.reactive_subgoal(np.asarray(s, float))    # nur Messung: was sagt der Teacher hier?
+                g["wo_haengt"].append((round(1000 * _ueber), round(1000 * _hb), round(_q, 2),
+                                       round(1000 * float(s[2])), round(1000 * float(s[5])),
+                                       "T:auf" if float(_t[3]) > 0.45 else f"T:zu z{1000 * float(_t[2]):.0f}"))
 
         def _greif_spur_zeile():
             g = _gsp
@@ -7694,7 +7718,7 @@ def run_self_learning_steering(headless=False):
                   f" | nah {g['nah']} (davon tief {g['nah_tief']}), Policy wollte zu bei offener Klaue {g['will_zu']}"
                   f", tiefste Hand {'-' if g['min_h'] is None else '%.0f' % (1000 * g['min_h'])} mm ueber Greifpunkt"
                   f" | {len(g['zu'])} mal geschlossen" + (f": {zz}" if zz else "")
-                  + (f" | Lage alle 50 (ueber, Hand-Glaube, Klaue): {g['wo_haengt'][-6:]}" if not g["gehoben"] else ""),
+                  + (f" | Lage alle 50 (ueber, Hand-Glaube, Klaue, Hand z, Glaube cz, Teacher): {g['wo_haengt'][-6:]}" if not g["gehoben"] else ""),
                   flush=True)
 
         def _griff_merken(_l, ok):
