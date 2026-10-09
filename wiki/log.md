@@ -1,5 +1,11 @@
 # Chronik
 
+## 2026-10-09
+
+* **Ergaenzung**: [Fehlgriff-Kopf](/befunde/fehlgriff-kopf.md) - mit Nachsehen nach dem Eingriff
+  (Kamera sucht den eigenen Fleck): Neugriffe 10 statt 38 mm daneben; gehoben 80 gegen 68 (p = 0,03),
+  geliefert 66 gegen 52 (p = 0,01), gepaart, ein Seed. Signifikanter Gewinn, Vorgabe bleibt 0 bis Nutzerentscheid.
+
 ## 2026-10-08
 
 * **Anlage**: [Fehlgriff-Kopf](/befunde/fehlgriff-kopf.md) - eigener Kopf entscheidet das Neugreifen

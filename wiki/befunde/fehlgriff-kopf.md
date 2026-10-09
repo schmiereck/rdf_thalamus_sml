@@ -1,7 +1,7 @@
 ---
 type: Befund
-title: Fehlgriff-Kopf - ein eigener Klassifikator loest das Schweben, aber der zweite Griff zielt auf einen noch falscheren Glauben
-description: Eigener Kopf "Klaue wieder aufmachen?" nach dem Muster des Loslass-Kopfs (ACT23_FEHLGRIFF_KOPF). Offline trifft er 645/653 Fehlgriff-Zustaende bei 1 Fehlalarm in 329 und keinem in gehaltenen Zustaenden. Im act23-A/B (gepaart, 100 Aufgaben) feuert er in 22 Episoden, die Hand oeffnet und greift neu - das Schweben ist weg. Die Quote bewegt sich nicht (gehoben 69 gegen 68, p = 1,00; geliefert 55 gegen 52, p = 0,66). Ursache: die Neugriffe landen 38 mm neben dem Objekt (erster Griff 14 mm), weil der erste Griff das Objekt verschoben hat und niemand nachsieht.
+title: Fehlgriff-Kopf - allein loest er nur das Schweben; mit Nachsehen hebt er die Quote (geliefert 66 gegen 52)
+description: Eigener Kopf "Klaue wieder aufmachen?" nach dem Muster des Loslass-Kopfs (ACT23_FEHLGRIFF_KOPF). Offline trifft er 645/653 Fehlgriff-Zustaende bei 1 Fehlalarm in 329 und keinem in gehaltenen Zustaenden. Im act23-A/B (gepaart, 100 Aufgaben) feuert er in 22 Episoden, die Hand oeffnet und greift neu - das Schweben ist weg. Die Quote bewegt sich nicht (gehoben 69 gegen 68, p = 1,00; geliefert 55 gegen 52, p = 0,66). Ursache: die Neugriffe landen 38 mm neben dem Objekt (erster Griff 14 mm), weil der erste Griff das Objekt verschoben hat und niemand nachsieht. MIT NACHSEHEN (Kamera sucht nach dem Oeffnen den eigenen Farbfleck, ACT23_FEHLGRIFF_NACHSEHEN): Neugriffe 10 mm neben dem Objekt, gehoben 80 gegen 68 (p = 0,03), geliefert 66 gegen 52 (p = 0,01) gegen die Kontrolle; gegen den Kopf allein 80 gegen 69 (p = 0,04) und 66 gegen 55 (p = 0,06).
 tags: [act23, greifen, fehlgriff, kopf, klassifikator, objektglaube]
 status: stable
 evidenz: einzelmessung
@@ -14,6 +14,9 @@ sources:
   - id: lauf
     resource: "c4_state, NO_PERSIST, GUI-Aufbau (ACT16_ABLAGE_FIX=1 ACT23_LOSLASS_KOPF=1 ACT23_LOSLASS_SELBST=1 ACT16_ENDE_HALTEN=30), ACT23_GREIF_SPUR=1, Seed 9115, 100 Ep; Kontrolle = Diagnoselauf aus zwischen-zufassen-und-anheben"
     title: A/B 2026-10-08
+  - id: nachsehen
+    resource: "ACT23_FEHLGRIFF_NACHSEHEN=1 (Vorgabe), sonst wie der A/B-Lauf, Seed 9115, 100 Ep; ein erster Lauf brach bei 54 Ep wegen Speichermangel ab und wurde zifferngenau reproduziert"
+    title: Nachsehen 2026-10-09
 ---
 
 # Frage
@@ -84,8 +87,44 @@ kann ein zweiter Versuch nicht besser sein als der erste. Das Muster kennt das P
 Farbfleck nach dem Oeffnen) das gefallene Objekt auf 4 mm. Dieses Nachsehen haengt im Code am
 Tragen-Zweig (`HALT_SELBST=4`) und lief hier nicht.
 
-Naheliegender naechster Schritt (nicht gebaut): das Nachsehen auch nach einem Fehlgriff-Eingriff
-ausloesen, sodass der Neugriff auf die gesehene Lage zielt. `ACT23_FEHLGRIFF_KOPF` bleibt Vorgabe 0.
+# Gemessen: Fehlgriff-Kopf mit Nachsehen (2026-10-09)
+
+`ACT23_FEHLGRIFF_NACHSEHEN` (Vorgabe 1, wirkt nur mit dem Kopf): beim Eingriff merkt sich der Agent
+die Farbe des Flecks unter der Hand (Kamera, `perceive_all`); ist die Klaue offen, sucht er alle 20
+Schritte diesen Fleck, und der Objektglaube springt dorthin. Dieselbe Funktion wie das Nachsehen
+nach einem Verlust beim Tragen (im Code zusammengelegt: `_nachsehen`).
+
+Gleicher Zustand, gleicher Seed, 100 Aufgaben gepaart:
+
+| | Kontrolle | Kopf allein | Kopf + Nachsehen |
+|---|---|---|---|
+| gehoben | 68 | 69 | **80** |
+| geliefert | 52 | 55 | **66** |
+| herausgerutscht, nicht gehoben | 14 | 18 | 9 |
+| Episoden mit Kopf-Eingriff | - | 22 | 29 |
+
+    Kopf + Nachsehen gegen Kontrolle:     gehoben 19 gegen 7 Paare, p = 0,03; geliefert 21 gegen 7, p = 0,01
+    Kopf + Nachsehen gegen Kopf allein:   gehoben 18 gegen 7, p = 0,04;      geliefert 20 gegen 9, p = 0,06
+
+**Die Neugriffe treffen jetzt:** weitere Schluesse unten 10 mm neben dem wahren Objekt (ohne
+Nachsehen 38 mm), so nah wie der erste Griff. Der gesehene Fleck lag in 24 von 26 Blicken 0-8 mm
+von der wahren Lage (Median 1 mm); zweimal 121/138 mm (falscher Fleck gleicher Farbe). Sechsmal lag
+beim Eingriff kein Fleck unter der Hand - dann kein Nachsehen.
+
+Ein abgebrochener erster Lauf (54 Episoden) wurde zifferngenau reproduziert (48/41 in beiden).
+Die Menge der Eingriffs-Episoden unterscheidet sich zwischen den Laeufen (22 gegen 29), weil die
+Koepfe im Lauf nachlernen und das Ergebnis frueherer Episoden spaetere veraendert; der Vergleich
+ist nach Aufgabe gepaart, nicht nach Verlauf.
+
+**Einordnung:** ein signifikanter Quotengewinn auf dem Greifpfad, gemessen
+mit EINEM Seed (`evidenz: einzelmessung`). Er entsteht nur aus beiden Teilen zusammen: der Kopf
+allein bringt nichts, das Nachsehen ohne Kopf wird nie ausgeloest. Beide sind eigene Wahrnehmung
+und Entscheidung, kein Privileg: die wahre Lage dient nur der Messung. Das Nachsehen ist eine feste
+Blickroutine zur Laufzeit (alle 20 Schritte) - dieselbe, die schon beim Tragen gilt; der Inhalt
+(wo, welche Farbe) kommt aus der Kamera.
+
+Offen: ein zweiter Seed; ob `ACT23_FEHLGRIFF_KOPF` Vorgabe werden soll, entscheidet der Nutzer.
+Bis dahin Vorgabe 0.
 
 # Verwandt
 

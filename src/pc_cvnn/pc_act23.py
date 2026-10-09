@@ -1040,6 +1040,13 @@ LOSLASS_KOPF = os.environ.get("ACT23_LOSLASS_KOPF", "0") == "1"
 # offen ist; hoechstens FEHLGRIFF_MAX je Episode.
 FEHLGRIFF_KOPF = os.environ.get("ACT23_FEHLGRIFF_KOPF", "0") == "1"
 FEHLGRIFF_MAX = 3
+# NACHSEHEN NACH DEM FEHLGRIFF (ACT23_FEHLGRIFF_NACHSEHEN, Vorgabe 1 -- wirkt nur mit FEHLGRIFF_KOPF).
+# Gemessen 2026-10-08 (wiki/befunde/fehlgriff-kopf.md): der Kopf oeffnet richtig, aber die Neugriffe
+# zielen 38 mm neben das Objekt (erster Griff 14 mm) -- der randstaendige Griff schiebt es beim
+# Rutschen weg, der Glaube bleibt stehen.  Wie nach dem Verlieren beim Tragen (HALT_NACHSEHEN): beim
+# Eingriff die Farbe des Flecks unter der Hand merken, nach dem Oeffnen alle 20 Schritte den eigenen
+# Fleck suchen, der Objektglaube springt dorthin.  Nur Kamera, keine Lage aus der Simulation.
+FEHLGRIFF_NACHSEHEN = os.environ.get("ACT23_FEHLGRIFF_NACHSEHEN", "1") == "1"
 # AUS DEM EIGENEN ERGEBNIS (ACT23_LOSLASS_SELBST, Vorgabe 0).  Jede Episode, in der getragen wurde,
 # liefert eine Zeile: die Haltepose beim Loslassen (vom Kopf, oder die letzte vor der
 # Aufraeumbewegung) -> Selbst-Urteil der Kamera.  Gesammelt wird auch OHNE ACT23_LOSLASS_KOPF; mit
@@ -7490,12 +7497,25 @@ def run_self_learning_steering(headless=False):
                 if _lk["fg_auf"] > 0:
                     _lk["fg_auf"] = 0 if _q > 0.45 else _lk["fg_auf"] - 1
                     out = np.array(out, float).copy(); out[3] = act16.J5_OPEN
+                elif (FEHLGRIFF_NACHSEHEN and _lk["fg_n"] > 0 and _q > 0.45
+                        and getattr(act16.run_combined, "_nachgreifen", False)):
+                    _nachsehen(s)                          # Klaue offen nach dem Eingriff: wo liegt es?
                 elif FehlgriffKopf.zustaendig(s) and _lk["fg_n"] < FEHLGRIFF_MAX:
                     _pf = fehlgriff_kopf.p(s)
                     _lk["fg_folge"] = _lk["fg_folge"] + 1 if _pf > 0.5 else 0
                     if _lk["fg_folge"] >= 3:
                         _lk["fg_folge"] = 0; _lk["fg_n"] += 1; _lk["fg_auf"] = 100
                         act16.run_combined._nachgreifen = True
+                        if FEHLGRIFF_NACHSEHEN and _lk["hs_ref"] is None:
+                            # DIE FARBE DES EIGENEN OBJEKTS merken: Fleck naechst der Hand (es liegt unter ihr)
+                            _h = np.asarray(s[0:2], float)
+                            _d = [d for d in _halt_flecken()
+                                  if float(np.linalg.norm(np.asarray(d["pos"], float)[:2] - _h)) < 0.06]
+                            if _d:
+                                _lk["hs_ref"] = np.asarray(min(_d, key=lambda d: float(np.linalg.norm(
+                                    np.asarray(d["pos"], float)[:2] - _h)))["chroma"], float).copy()
+                            else:
+                                print("    [Fehlgriff] kein Fleck unter der Hand -- Nachsehen nicht moeglich", flush=True)
                         _a = FehlgriffKopf.aspekte(s)[0]
                         print(f"    [Fehlgriff] Kopf {_pf:.2f}: Klaue auf, neu greifen (Druck {_a[0]:.2f} N, Hand "
                               f"{1000 * _a[2]:.0f} mm ueber Greifpunkt, Glaube {1000 * _a[3]:.0f} mm ueber Ruhe)  "
@@ -7604,6 +7624,26 @@ def run_self_learning_steering(headless=False):
             d = min(kand, key=lambda d: float(np.linalg.norm(np.asarray(d["pos"], float)[:2] - nahe)))
             return np.asarray(d["pos"], float)[:2].copy()
 
+        def _nachsehen(s):
+            """NACHSEHEN (s. HALT_NACHSEHEN / FEHLGRIFF_NACHSEHEN): wo liegt mein Objekt jetzt?  Alle 20
+            Schritte, solange nachgegriffen wird; hoechstens 15 Blicke je Episode."""
+            if not getattr(act16.run_combined, "_nachgreifen", False) or _lk["hs_ref"] is None:
+                return
+            _lk["nk"] = _lk.get("nk", 0) + 1
+            if _lk["nk"] % 20 == 1 and _lk.get("nsehen", 0) < 15:
+                _lk["nsehen"] = _lk.get("nsehen", 0) + 1
+                _gl = np.asarray(s[3:5], float)
+                _o = _halt_mein_fleck(_halt_flecken(), _gl)
+                if _o is not None:
+                    _alt = act16.run_combined._cobs_nach
+                    act16.run_combined._cobs_nach = (_o.copy(), float(s[9]))
+                    if _alt is None or float(np.linalg.norm(_o - _alt[0])) > 0.01:
+                        _w = getattr(act16.run_combined, "_wahr_xy", None)
+                        print(f"    [Nachsehen] Objekt gesehen {1000 * float(np.linalg.norm(_o - _gl)):.0f} mm "
+                              f"neben dem bisherigen Glauben"
+                              + (f"  [Messung: {1000 * float(np.linalg.norm(_o - _w)):.0f} mm von der wahren Lage]"
+                                 if _w is not None else ""), flush=True)
+
         def _halt_sehen(s, out):
             """GELERNTER VORSCHLAG "noch an der Hand?" (s. HALT_SELBST=4)."""
             _q, _pr, _hz = float(s[8]), float(s[12]), float(s[2]) - float(s[9])
@@ -7629,24 +7669,8 @@ def run_self_learning_steering(headless=False):
                 _lk["h_auf"] = 0 if _q > 0.45 else _lk["h_auf"] - 1
                 out = np.array(out, float).copy(); out[3] = act16.J5_OPEN
                 return out
-            if (HALT_NACHSEHEN and getattr(act16.run_combined, "_nachgreifen", False)
-                    and _lk["hs_ref"] is not None):
-                # NACHSEHEN (s. HALT_NACHSEHEN): wo liegt mein Objekt jetzt?  Alle 20 Schritte, bis
-                # wieder gegriffen ist; hoechstens 15 Blicke je Episode.
-                _lk["nk"] = _lk.get("nk", 0) + 1
-                if _lk["nk"] % 20 == 1 and _lk.get("nsehen", 0) < 15:
-                    _lk["nsehen"] = _lk.get("nsehen", 0) + 1
-                    _gl = np.asarray(s[3:5], float)
-                    _o = _halt_mein_fleck(_halt_flecken(), _gl)
-                    if _o is not None:
-                        _alt = act16.run_combined._cobs_nach
-                        act16.run_combined._cobs_nach = (_o.copy(), float(s[9]))
-                        if _alt is None or float(np.linalg.norm(_o - _alt[0])) > 0.01:
-                            _w = getattr(act16.run_combined, "_wahr_xy", None)
-                            print(f"    [Nachsehen] Objekt gesehen {1000 * float(np.linalg.norm(_o - _gl)):.0f} mm "
-                                  f"neben dem bisherigen Glauben"
-                                  + (f"  [Messung: {1000 * float(np.linalg.norm(_o - _w)):.0f} mm von der wahren Lage]"
-                                     if _w is not None else ""), flush=True)
+            if HALT_NACHSEHEN:
+                _nachsehen(s)
             if not (_lk["hs_trug"] and _tragen) or _lk["hs_ref"] is None:
                 return out
             _lk["hs_k"] += 1
