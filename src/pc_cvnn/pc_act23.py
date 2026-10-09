@@ -65,7 +65,8 @@ for _k, _v in (("ACT_REACH_X0", "-0.12"), ("ACT_REACH_X1", "0.12"),
 #   die alten Vorgaben, damit fruehere A/Bs vergleichbar bleiben.
 if os.environ.get("ACT23_VIZ", "0") == "1" and os.environ.get("ACT23_VIZ_HEADLESS", "0") != "1":
     for _k, _v in (("ACT16_ABLAGE_FIX", "1"), ("ACT23_LOSLASS_KOPF", "1"),
-                   ("ACT23_LOSLASS_SELBST", "1"), ("ACT16_ENDE_HALTEN", "30")):
+                   ("ACT23_LOSLASS_SELBST", "1"), ("ACT16_ENDE_HALTEN", "30"),
+                   ("ACT23_FEHLGRIFF_KOPF", "1")):   # Nutzerentscheid 2026-10-09, s. FEHLGRIFF_KOPF
         os.environ.setdefault(_k, _v)
 os.environ.setdefault("ACT16_ENDE_SELBST", "1")   # DAS EPISODENENDE ENTSCHEIDET DER AGENT (seit 2026-10-05):
 #   getragen + Hand ueber dem EIGENEN Ziel auf Ablagehoehe statt Orakel aus der wahren Objektlage.
@@ -1033,7 +1034,10 @@ REGELN_NETZ = os.environ.get("ACT23_REGELN_NETZ", "0") == "1"
 # Etiketten am Ziel widerspruechlich (der Start sagt es).  Mit ACT16_ABLAGE_FIX=1 werden die alten
 # Pufferzeilen, deren Etikett sich dadurch aendert, beim Laden einmal neu etikettiert.
 LOSLASS_KOPF = os.environ.get("ACT23_LOSLASS_KOPF", "0") == "1"
-# FEHLGRIFF-KOPF (ACT23_FEHLGRIFF_KOPF, Vorgabe 0 bis gemessen; s. arm_modules/fehlgriff_kopf.py):
+# FEHLGRIFF-KOPF (ACT23_FEHLGRIFF_KOPF; s. arm_modules/fehlgriff_kopf.py).  VORGABE IN DER STEUER-GUI
+# seit 2026-10-09 (Nutzerentscheid, wie beim Loslass-Kopf; kopflose Laeufe behalten 0): mit dem
+# Nachsehen gepoolt ueber zwei Seeds geliefert 121 gegen 95 von 200, p = 0,0005
+# (wiki/befunde/fehlgriff-kopf.md).
 # ein eigener Klassifikator entscheidet bei geschlossener Klaue (fern vom Ziel) "aufmachen und neu
 # greifen".  Gelernt aus Teacher-Etiketten mit vorgezogener Fehlgriff-Schwelle; die gemeinsame
 # Policy und ihre Daten bleiben unberuehrt.  Dreimal in Folge "auf" -> Klaue auf, bis sie gefuehlt

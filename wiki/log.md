@@ -2,6 +2,9 @@
 
 ## 2026-10-09
 
+* **Entscheidung**: [Fehlgriff-Kopf](/befunde/fehlgriff-kopf.md) ist Vorgabe in der Steuer-GUI
+  (Nutzerentscheid; kopflose Laeufe behalten 0).
+
 * **Ergaenzung**: [Fehlgriff-Kopf](/befunde/fehlgriff-kopf.md) - zweiter Seed (9223) bestaetigt:
   gehoben 81 gegen 66 (p = 0,01), geliefert 55 gegen 43 (p = 0,03). Gepoolt 200 Aufgaben: geliefert
   121 gegen 95 (p = 0,0005). evidenz -> gemessen.

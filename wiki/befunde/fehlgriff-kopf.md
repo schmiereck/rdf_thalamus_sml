@@ -147,7 +147,7 @@ Herausrutschen halbiert sich (31 auf 18).
 Was bleibt: von den gehobenen Objekten kommen im zweiten Seed nur 68 % an (55 von 81) - der
 Verlust verschiebt sich auf Tragen und Ablage ([Ablage im Netzbetrieb](/befunde/ablage-im-netzbetrieb.md)).
 
-`ACT23_FEHLGRIFF_KOPF` ist Vorgabe 0, bis der Nutzer ueber das Umschalten entscheidet.
+**Nutzerentscheid 2026-10-09:** `ACT23_FEHLGRIFF_KOPF` ist Vorgabe in der Steuer-GUI (wie der Loslass-Kopf); kopflose Laeufe behalten 0, damit fruehere A/Bs vergleichbar bleiben. Rauchtest mit dem Hauptzustand (2f70ac0d): Kopf lernt aus 4741 Zustaenden.
 
 # Verwandt
 
