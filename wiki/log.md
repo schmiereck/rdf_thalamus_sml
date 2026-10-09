@@ -2,6 +2,10 @@
 
 ## 2026-10-09
 
+* **Ergaenzung**: [Fehlgriff-Kopf](/befunde/fehlgriff-kopf.md) - zweiter Seed (9223) bestaetigt:
+  gehoben 81 gegen 66 (p = 0,01), geliefert 55 gegen 43 (p = 0,03). Gepoolt 200 Aufgaben: geliefert
+  121 gegen 95 (p = 0,0005). evidenz -> gemessen.
+
 * **Ergaenzung**: [Fehlgriff-Kopf](/befunde/fehlgriff-kopf.md) - mit Nachsehen nach dem Eingriff
   (Kamera sucht den eigenen Fleck): Neugriffe 10 statt 38 mm daneben; gehoben 80 gegen 68 (p = 0,03),
   geliefert 66 gegen 52 (p = 0,01), gepaart, ein Seed. Signifikanter Gewinn, Vorgabe bleibt 0 bis Nutzerentscheid.

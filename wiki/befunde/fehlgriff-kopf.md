@@ -1,10 +1,10 @@
 ---
 type: Befund
-title: Fehlgriff-Kopf - allein loest er nur das Schweben; mit Nachsehen hebt er die Quote (geliefert 66 gegen 52)
-description: Eigener Kopf "Klaue wieder aufmachen?" nach dem Muster des Loslass-Kopfs (ACT23_FEHLGRIFF_KOPF). Offline trifft er 645/653 Fehlgriff-Zustaende bei 1 Fehlalarm in 329 und keinem in gehaltenen Zustaenden. Im act23-A/B (gepaart, 100 Aufgaben) feuert er in 22 Episoden, die Hand oeffnet und greift neu - das Schweben ist weg. Die Quote bewegt sich nicht (gehoben 69 gegen 68, p = 1,00; geliefert 55 gegen 52, p = 0,66). Ursache: die Neugriffe landen 38 mm neben dem Objekt (erster Griff 14 mm), weil der erste Griff das Objekt verschoben hat und niemand nachsieht. MIT NACHSEHEN (Kamera sucht nach dem Oeffnen den eigenen Farbfleck, ACT23_FEHLGRIFF_NACHSEHEN): Neugriffe 10 mm neben dem Objekt, gehoben 80 gegen 68 (p = 0,03), geliefert 66 gegen 52 (p = 0,01) gegen die Kontrolle; gegen den Kopf allein 80 gegen 69 (p = 0,04) und 66 gegen 55 (p = 0,06).
+title: Fehlgriff-Kopf - allein loest er nur das Schweben; mit Nachsehen hebt er die Quote, auf zwei Seeds (geliefert 121 gegen 95 von 200, p = 0,0005)
+description: Eigener Kopf "Klaue wieder aufmachen?" nach dem Muster des Loslass-Kopfs (ACT23_FEHLGRIFF_KOPF). Offline trifft er 645/653 Fehlgriff-Zustaende bei 1 Fehlalarm in 329 und keinem in gehaltenen Zustaenden. Im act23-A/B (gepaart, 100 Aufgaben) feuert er in 22 Episoden, die Hand oeffnet und greift neu - das Schweben ist weg. Die Quote bewegt sich nicht (gehoben 69 gegen 68, p = 1,00; geliefert 55 gegen 52, p = 0,66). Ursache: die Neugriffe landen 38 mm neben dem Objekt (erster Griff 14 mm), weil der erste Griff das Objekt verschoben hat und niemand nachsieht. MIT NACHSEHEN (Kamera sucht nach dem Oeffnen den eigenen Farbfleck, ACT23_FEHLGRIFF_NACHSEHEN): Neugriffe 10 mm neben dem Objekt, gehoben 80 gegen 68 (p = 0,03), geliefert 66 gegen 52 (p = 0,01) gegen die Kontrolle; gegen den Kopf allein 80 gegen 69 (p = 0,04) und 66 gegen 55 (p = 0,06). ZWEITER SEED (9223) bestaetigt: gehoben 81 gegen 66 (p = 0,01), geliefert 55 gegen 43 (p = 0,03); gepoolt 200 Aufgaben gehoben 161 gegen 134 (p = 0,0003), geliefert 121 gegen 95 (p = 0,0005).
 tags: [act23, greifen, fehlgriff, kopf, klassifikator, objektglaube]
 status: stable
-evidenz: einzelmessung
+evidenz: gemessen
 ebene: act23-ab
 generated: { by: claude/opus-5.5, at: 2026-10-08T00:00:00Z }
 sources:
@@ -17,6 +17,9 @@ sources:
   - id: nachsehen
     resource: "ACT23_FEHLGRIFF_NACHSEHEN=1 (Vorgabe), sonst wie der A/B-Lauf, Seed 9115, 100 Ep; ein erster Lauf brach bei 54 Ep wegen Speichermangel ab und wurde zifferngenau reproduziert"
     title: Nachsehen 2026-10-09
+  - id: seed2
+    resource: "Seed 9223, Kopf + Nachsehen und eigene Kontrolle (ACT23_FEHLGRIFF_KOPF=0), sonst gleich, je 100 Ep, nacheinander"
+    title: Zweiter Seed 2026-10-09
 ---
 
 # Frage
@@ -116,15 +119,35 @@ Die Menge der Eingriffs-Episoden unterscheidet sich zwischen den Laeufen (22 geg
 Koepfe im Lauf nachlernen und das Ergebnis frueherer Episoden spaetere veraendert; der Vergleich
 ist nach Aufgabe gepaart, nicht nach Verlauf.
 
-**Einordnung:** ein signifikanter Quotengewinn auf dem Greifpfad, gemessen
-mit EINEM Seed (`evidenz: einzelmessung`). Er entsteht nur aus beiden Teilen zusammen: der Kopf
+**Einordnung:** ein signifikanter Quotengewinn auf dem Greifpfad, zunaechst
+mit EINEM Seed gemessen, s. den zweiten Seed unten. Er entsteht nur aus beiden Teilen zusammen: der Kopf
 allein bringt nichts, das Nachsehen ohne Kopf wird nie ausgeloest. Beide sind eigene Wahrnehmung
 und Entscheidung, kein Privileg: die wahre Lage dient nur der Messung. Das Nachsehen ist eine feste
 Blickroutine zur Laufzeit (alle 20 Schritte) - dieselbe, die schon beim Tragen gilt; der Inhalt
 (wo, welche Farbe) kommt aus der Kamera.
 
-Offen: ein zweiter Seed; ob `ACT23_FEHLGRIFF_KOPF` Vorgabe werden soll, entscheidet der Nutzer.
-Bis dahin Vorgabe 0.
+# Zweiter Seed (9223) - bestaetigt
+
+Eigene Kontrolle ohne Kopf, gleiche Aufgaben, gepaart:
+
+| | Kontrolle | Kopf + Nachsehen |
+|---|---|---|
+| gehoben | 66 | **81** (21 gegen 6 Paare, p = 0,01) |
+| geliefert | 43 | **55** (19 gegen 7, p = 0,03) |
+| herausgerutscht, nicht gehoben | 17 | 9 |
+| unten geschlossen, kein Druck | 6 | 1 |
+
+Neugriffe 15 mm neben dem wahren Objekt (erster Griff 11 mm); der gesehene Fleck 0-25 mm von der
+wahren Lage (Median 3 mm), kein falscher Fleck; siebenmal kein Fleck unter der Hand.
+
+**Beide Seeds gepoolt (200 Aufgaben):** gehoben 161 gegen 134 (40 gegen 13 Paare, p = 0,0003),
+geliefert 121 gegen 95 (40 gegen 14, p = 0,0005). Beide Seeds zeigen dasselbe Fehlerbild: das
+Herausrutschen halbiert sich (31 auf 18).
+
+Was bleibt: von den gehobenen Objekten kommen im zweiten Seed nur 68 % an (55 von 81) - der
+Verlust verschiebt sich auf Tragen und Ablage ([Ablage im Netzbetrieb](/befunde/ablage-im-netzbetrieb.md)).
+
+`ACT23_FEHLGRIFF_KOPF` ist Vorgabe 0, bis der Nutzer ueber das Umschalten entscheidet.
 
 # Verwandt
 
