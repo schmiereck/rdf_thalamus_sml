@@ -1,5 +1,11 @@
 # Chronik
 
+## 2026-10-10
+
+* **Anlage**: [GUI-Lauf 2026-10-09](/befunde/gui-lauf-2026-10-09.md) - Nutzerlauf 667 Episoden zerlegt:
+  Quote faellt im Lauf (55 -> 39 %), Tragen-Verluste rutschen schon beim Anheben, Fehlgriff-Kopf oeffnet
+  bei lose gehaltenem Objekt; Messfalle der Ablage-Zeile; Nutzerbeobachtung Griffwahl festgehalten.
+
 ## 2026-10-09
 
 * **Entscheidung**: [Fehlgriff-Kopf](/befunde/fehlgriff-kopf.md) ist Vorgabe in der Steuer-GUI
