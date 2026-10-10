@@ -2,6 +2,10 @@
 
 ## 2026-10-10
 
+* **Ergaenzung**: [GUI-Lauf 2026-10-09](/befunde/gui-lauf-2026-10-09.md) - Abfall kopflos nachgemessen,
+  2 x 300 Episoden: mit Kopf 51/45/44, ohne 48/40/39 je 100. Schwach, kopfunabhaengig, nicht signifikant
+  (gepoolt p = 0,10); Kopf gegen ohne 140 gegen 127 (p = 0,32). Offener Arm: eingefrorenes Lernen.
+
 * **Anlage**: [GUI-Lauf 2026-10-09](/befunde/gui-lauf-2026-10-09.md) - Nutzerlauf 667 Episoden zerlegt:
   Quote faellt im Lauf (55 -> 39 %), Tragen-Verluste rutschen schon beim Anheben, Fehlgriff-Kopf oeffnet
   bei lose gehaltenem Objekt; Messfalle der Ablage-Zeile; Nutzerbeobachtung Griffwahl festgehalten.
