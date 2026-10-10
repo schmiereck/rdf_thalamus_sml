@@ -150,6 +150,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 # Offene Fragen
 
+* [Formabhaengige Griffwahl](fragen/formabhaengige-griffwahl.md) - **Konzept nach Nutzerbeobachtung:** Handgelenk, Greifpunkt und Kandidaten kommen alle aus der Gesamtform (78 % der Episoden haben genau einen Kandidaten); drei Stufen, zuerst eine Wertprobe mit vorab festgelegtem Abbruchkriterium
 * [Dream-RSI: Forschungsplan](fragen/dream-rsi-forschungsplan.md) - replaygestuetzte Trainingssteuerung zuerst ueber getrennte Trainingslinien, danach Curriculum eines Arms; zentrale Paketstatus-Tabelle
 * [Direkte Servosteuerung](fragen/dream-rsi-servosteuerung.md) - S0-S3: eigener Motorpfad ohne kartesische Zwischenziele, spaeter optional Geschwindigkeits-/Drehmomentsteuerung; Eigenanpassung statt Teacher-Ueberbietung
 * [Fovea: neue Aufgaben und mehr Detail](fragen/dream-rsi-fovea.md) - F0-F3: Netzzustaende nutzen, Detailbedarf pruefen, Bestand beim Ausbau erhalten; bisherige Gegenbefunde bleiben gueltig

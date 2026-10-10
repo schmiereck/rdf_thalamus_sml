@@ -2,6 +2,10 @@
 
 ## 2026-10-10
 
+* **Anlage**: [Formabhaengige Griffwahl](/fragen/formabhaengige-griffwahl.md) - Konzept nach der
+  Nutzerbeobachtung. Am Code belegt, dass der Teilgriff "diese Zinke, quer zu ihr" nicht darstellbar ist.
+  Stufe 0 ist eine Wertprobe (act23-A/B, nur L/U/T/X) mit Kriterium +10 Punkte; Abgrenzung gegen FORCE_GRASP=prong.
+
 * **Ergaenzung**: [GUI-Lauf 2026-10-09](/befunde/gui-lauf-2026-10-09.md) - Abfall kopflos nachgemessen,
   2 x 300 Episoden: mit Kopf 51/45/44, ohne 48/40/39 je 100. Schwach, kopfunabhaengig, nicht signifikant
   (gepoolt p = 0,10); Kopf gegen ohne 140 gegen 127 (p = 0,32). Offener Arm: eingefrorenes Lernen.
