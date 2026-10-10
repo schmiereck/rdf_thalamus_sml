@@ -416,6 +416,65 @@ class Env:
         return int(d)
 
 
+FORCE_GRASP = os.environ.get("ACT23_FORCE_GRASP", "")
+# WERTPROBE "LOKALER GRIFF" (ACT23_FORCE_GRASP=lokal, nur Probe auf Zustandskopien, NIE Vorgabe --
+# wiki/fragen/formabhaengige-griffwahl.md, Stufe 0).  Heute kommen Handgelenk (k=2-Achse des GANZEN
+# Flecks), Greifpunkt (Material naechst dem Schwerpunkt) und Kandidaten (<= 0,3 Halbspannen davon)
+# alle aus der Gesamtform; ein Griff "diese Zinke, quer zu ihr" ist nicht darstellbar.  Die Probe
+# misst, was er wert waere: Punkt auf einem Materialstueck mit klarer LOKALER Achse, das in die Klaue
+# passt, moeglichst nah am Schwerpunkt (Balance), Klaue quer zur lokalen Achse.  Nur Wahrnehmung
+# (Maske der eigenen Detektion), keine Lage aus der Simulation.
+
+
+def lokaler_griff(W, r=0.014, breite_max=0.022, breite_min=0.006, aniso=2.0, streifen=0.0015, luecke=0.004):
+    """Lokaler Griff auf der Materialmaske W (Weltkoordinaten, N x 2).
+
+    Je Kandidatenpunkt: (1) nur Stuecke mit klarer Richtung -- Eigenwertverhaeltnis der Nachbarn im
+    Radius r >= aniso (Wuerfel und Kreuzungsmitten fallen heraus); (2) die Schnittrichtung ist der
+    SCHMALSTE zusammenhaengende Querschnitt durch den Punkt (36 Richtungen) -- robuster als die
+    Kovarianzachse, die nahe einer Kreuzung um 5-16 Grad kippt (Rauchtest L/X).  Die Klaue schliesst
+    entlang dieses Schnitts, der Griffpunkt ist seine Mitte.
+    Rueckgabe (Griffpunkt, Klauen-Yaw, Breite, Schwerpunktabstand) oder None."""
+    W = np.asarray(W, float)
+    if len(W) < 20:
+        return None
+    c = W.mean(0)
+    th = np.arange(36) * (np.pi / 36)
+    N = np.column_stack([np.cos(th), np.sin(th)])            # Schnittrichtungen
+    A = np.column_stack([-np.sin(th), np.cos(th)])           # quer dazu
+    best = None
+    for i in range(0, len(W), max(1, len(W) // 250)):
+        d = W - W[i]
+        nb = d[np.einsum("ij,ij->i", d, d) < r * r]
+        if len(nb) < 10:
+            continue
+        ev = np.linalg.eigvalsh(np.cov(nb.T))
+        if ev[1] < aniso * max(ev[0], 1e-12):
+            continue
+        bmin = None
+        for k in range(len(th)):
+            q = np.sort((d @ N[k])[np.abs(d @ A[k]) < streifen])
+            if len(q) < 3:
+                continue
+            j = int(np.argmin(np.abs(q)))
+            lo = hi = j
+            while lo > 0 and q[lo] - q[lo - 1] < luecke:
+                lo -= 1
+            while hi < len(q) - 1 and q[hi + 1] - q[hi] < luecke:
+                hi += 1
+            b = float(q[hi] - q[lo])
+            if bmin is None or b < bmin[0]:
+                bmin = (b, k, 0.5 * float(q[hi] + q[lo]))
+        if bmin is None or not (breite_min <= bmin[0] <= breite_max):
+            continue
+        b, k, mid = bmin
+        g = W[i] + N[k] * mid
+        dc = float(np.linalg.norm(g - c))
+        if best is None or dc < best[3]:
+            best = (g, float(th[k]) % np.pi, b, dc)
+    return best
+
+
 def rand_pos(rng):
     return np.array([rng.uniform(-0.10, 0.10), rng.uniform(0.09, 0.22)])   # inside the enlarged workspace
 
@@ -4397,7 +4456,7 @@ def run_self_learning_steering(headless=False):
         p_ref = sim.obj_pos(cmd)[:2]
         situation_feats.last_det = None
         saved = sim.d.mocap_pos.copy()                     # perceive_all parks the markers -> restore
-        dets = shape_clf.perceive_all(sim, cands=True)
+        dets = shape_clf.perceive_all(sim, cands=True, wpx=(FORCE_GRASP == "lokal"))
         sim.d.mocap_pos[:] = saved; mujoco.mj_forward(sim.m, sim.d)
         dets = [d for d in dets if d["pos"] is not None]
         if not dets:
@@ -7097,6 +7156,45 @@ def run_self_learning_steering(headless=False):
                                                         sy * loc[0] + cy * loc[1]])
                 sel_off["dxy"] = tgt - np.asarray(det["grasp_xy"], float)
                 a_exec = a_exec.copy(); a_exec[0], a_exec[1] = sel_off["dxy"]
+            if (FORCE_GRASP in ("lokal", "lokal_priv") and a_exec is not None and det is not None
+                    and det.get("grasp_xy") is not None
+                    and (det.get("wpx") is not None or FORCE_GRASP == "lokal_priv")):
+                # WERTPROBE Stufe 0 (s. lokaler_griff): Punkt UND Klaue aus der lokalen Achse.
+                # "lokal" liest die Maske der eigenen Detektion; "lokal_priv" die WAHRE Grundflaeche
+                # (Geom-Boxen des Koerpers, 1-mm-Raster) -- trennt den Wert des Griffs vom
+                # Wahrnehmungsfehler (Rauchtest: die Maske verschiebt den Punkt bei U/T/X um mm bis cm).
+                if FORCE_GRASP == "lokal_priv":
+                    _bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, body)
+                    _pts = []
+                    for _gi in np.nonzero(sim.m.geom_bodyid == _bid)[0]:
+                        _sx, _sy = sim.m.geom_size[_gi][:2]
+                        _u, _v = np.meshgrid(np.arange(-_sx, _sx + 1e-9, 0.001),
+                                             np.arange(-_sy, _sy + 1e-9, 0.001))
+                        _R = sim.d.geom_xmat[_gi].reshape(3, 3)[:2, :2]
+                        _pts.append(np.column_stack([_u.ravel(), _v.ravel()]) @ _R.T
+                                    + sim.d.geom_xpos[_gi][:2])
+                    _W = np.vstack(_pts) if _pts else None
+                else:
+                    _W = det["wpx"]
+                _lg = None if _W is None else (
+                    lokaler_griff(_W) if FORCE_GRASP == "lokal_priv"
+                    else lokaler_griff(_W, streifen=0.003, luecke=0.006))   # Maske nur jedes 3. Pixel
+                if _lg is None:
+                    print(f"    [Lokaler Griff] {body}: kein Stueck mit klarer Achse -- Normalwahl", flush=True)
+                else:
+                    _g, _wl, _b, _dc = _lg
+                    sel_off["dxy"] = _g - np.asarray(det["grasp_xy"], float)
+                    a_exec = a_exec.copy(); a_exec[0], a_exec[1] = sel_off["dxy"]
+                    a_exec[2], a_exec[3] = np.cos(2 * _wl), np.sin(2 * _wl)
+                    wf = (lambda s, _w=_wl: _w)
+                    # MESSUNG (nie Eingang): Punkt im Objektrahmen und Abstand zum Material-Bezug
+                    _rel = _g - sim.obj_pos(body)[:2]; _yr = float(sim.obj_yaw(body))
+                    _lo = np.array([np.cos(-_yr) * _rel[0] - np.sin(-_yr) * _rel[1],
+                                    np.sin(-_yr) * _rel[0] + np.cos(-_yr) * _rel[1]]) * 1e3
+                    print(f"    [Lokaler Griff] {body}: Breite {1e3 * _b:.0f}mm, {1e3 * _dc:.0f}mm vom "
+                          f"Schwerpunkt, {1e3 * float(np.linalg.norm(sel_off['dxy'])):.0f}mm vom Heuristik-Punkt, "
+                          f"Klaue {np.degrees(_wl):.0f} Grad  [Messung: Objektrahmen {_lo[0]:.0f},{_lo[1]:.0f}mm, "
+                          f"relwrist {(np.degrees(_wl) - np.degrees(_yr)) % 180.0:.0f}]", flush=True)
             if a_exec is not None and world.n() > 0:
                 # VORHERSAGE DES WELT-MODELLS fuer die AUSGEFUEHRTE Aktion, direkt vor der Ausfuehrung.
                 # WOZU: erst damit laesst sich messen, wieviel des vorhandenen Signals das Modell
