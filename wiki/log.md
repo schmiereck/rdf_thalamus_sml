@@ -1,5 +1,12 @@
 # Chronik
 
+## 2026-10-11
+
+* **Anlage**: [Wertprobe lokaler Griff](/befunde/lokaler-griff-wertprobe.md) - Stufe 0 der
+  formabhaengigen Griffwahl, gepaartes A/B 100 Aufgaben L/U/T/X: geliefert 49 gegen 66 (p = 0,019);
+  L/U/T 42 gegen 43, Kreuz 7 gegen 23. Vorab-Kriterium verfehlt, Faden geschlossen; Konzeptseite
+  auf widerlegt, Eintrag unter "Ausdruecklich geschlossen".
+
 ## 2026-10-10
 
 * **Anlage**: [Formabhaengige Griffwahl](/fragen/formabhaengige-griffwahl.md) - Konzept nach der

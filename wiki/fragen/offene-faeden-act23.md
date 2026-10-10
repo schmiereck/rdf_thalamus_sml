@@ -186,6 +186,10 @@ Kruecke, die nach [Projektziel](/ziel.md) abgebaut werden soll. Zwei bekannte Br
   Tripel-Farbe (verschlimmert), gebundene Farbe mit und ohne Indiz (beide schlechter), und
   die vollstaendige Bindung ueber den Pixelschnitt aendert nichts. Siehe
   [Die pixelweise Farbbindung](/befunde/farbbindung-pixelweise.md).
+* **Formabhaengige Griffwahl (Zinke quer statt Gesamtform)** - Wertprobe mit privilegiert
+  richtigem Punkt und Klaue: L/U/T 42 gegen 43, Kreuz 7 gegen 23, gesamt 49 gegen 66 (p = 0,019).
+  Auch die Querlage in der Klaue aendert sich nicht. Siehe
+  [Wertprobe lokaler Griff](/befunde/lokaler-griff-wertprobe.md).
 * **Rechnerlast als Einfluss auf die Lieferquote** - zwei natuerliche Lastfenster widersprechen
   einander, die Physik ist unter Volllast bitgleich, im Steuerpfad steht keine Wanduhr. Siehe
   [Rechnerlast](/befunde/rechnerlast.md).

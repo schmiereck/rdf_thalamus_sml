@@ -3,8 +3,8 @@ type: Frage
 title: Formabhaengige Griffwahl - heute greift der Agent die ganze Form, weil er nichts anderes darstellen kann
 description: Konzept nach der Nutzerbeobachtung im GUI-Lauf 2026-10-09. Am Code belegt - Handgelenk, Greifpunkt und Kandidaten sind alle aus der GESAMTform abgeleitet (k=2-Achse des ganzen Flecks, Material naechst dem Schwerpunkt, Kandidaten hoechstens 0,3 Halbspannen davon, in 78 % der Episoden genau einer). Ein Griff "diese Zinke, quer zu ihr" ist nicht darstellbar. Vorschlag in drei Stufen - erst den Wert mit einer festen Probe-Regel auf Kopien messen (mit vorab festgelegtem Abbruchkriterium), dann den Griff-Kandidaten lokal beschreiben (Punkt, lokale Achse, lokale Breite, Abstand zum Schwerpunkt), dann aus eigenem Tasten waehlen lernen. Grenzt sich gegen die geschlossenen Faeden ab.
 tags: [act23, greifen, form, wrist, greifpunkt, konzept, selbstlernen]
-status: stable
-evidenz: vermutung
+status: widerlegt
+evidenz: widerlegt
 ebene: code
 generated: { by: claude/opus-5.5, at: 2026-10-10T00:00:00Z }
 sources:
@@ -18,6 +18,10 @@ sources:
     resource: "log/pc_act23_2026-10-09_14-13-40_32344.txt, 667 Episoden"
     title: GUI-Lauf 2026-10-09
 ---
+
+> **Ergebnis Stufe 0 (2026-10-11): verfehlt, Faden geschlossen.** Gezielter Zinkengriff quer
+> bringt bei L, U und T nichts (42 gegen 43) und kostet beim Kreuz 16 Lieferungen; gesamt 49 gegen
+> 66 (p = 0,019). Siehe [Wertprobe lokaler Griff](/befunde/lokaler-griff-wertprobe.md).
 
 # Anlass
 
