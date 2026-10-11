@@ -233,7 +233,7 @@ wird am langen Zinken gegriffen).
 
 # Nachgeprueft 2026-10-11: die Versatzkette entkraeftet das Negativ nicht
 
-Der Versatz in der Klaue entsteht beim Absenken (Schieben, zu kurzes Reichen), nicht beim Sehen;
+Der Versatz in der Klaue entsteht beim Zufassen (nachgemessen: beim Schliessen, nicht beim Absenken), nicht beim Sehen;
 das erklaert den Sitz "+12 mm entlang", aendert aber keinen der Gruende dieser Seite. Ein Blick beim
 Zufassen saehe unter der Klaue nichts Neues, und der Sitz sagt die Lieferung je Form weiterhin nicht
 vorher. Siehe [Klauenlage und Griffversatz](/befunde/klauenlage-und-griffversatz.md).

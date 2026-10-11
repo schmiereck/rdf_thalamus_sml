@@ -2,6 +2,11 @@
 
 ## 2026-10-11
 
+* **Ergaenzung + Berichtigung**: [Klauenlage und Griffversatz](/befunde/klauenlage-und-griffversatz.md) - Messzeile
+  [Schub] (ef282a4), 60 Episoden L/T/X: beim Absenken bewegt sich das Objekt nicht (Median 0 mm), beim Schliessen
+  4 mm (T 7 mm, 8,5 Grad), meist zur Klauenmitte hin, ohne Zusammenhang mit der Lieferung. Berichtigt: "Schieben beim
+  Absenken" war falsch; "entlang" ist gegen den Reichpunkt gemessen, die Backenmitte liegt 4-9 mm davor.
+
 * **Ergaenzung**: [Klauenlage und Griffversatz](/befunde/klauenlage-und-griffversatz.md) - geprueft, ob die
   Versatzkette das Blickkorrektur-Negativ ([Aufmerksamkeit](/fragen/aufmerksamkeit-objekt-ziel.md)) entkraeftet: nein.
   Der Versatz entsteht unter der Klaue, wo der Blick verdeckt ist; der Sitz sagt die Lieferung je Form nicht

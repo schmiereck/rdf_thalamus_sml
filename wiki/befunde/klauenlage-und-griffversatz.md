@@ -146,7 +146,7 @@ Grundrissmitte und erklaert 2-3 % der Streuung. Der Versatz entsteht zu etwa gle
 zwei Quellen nach dem Sehen:
 
 * **Das Objekt bewegt sich, bevor die Klaue schliesst** - im Mittel 6 mm **in Anfahrtrichtung
-  der Klaue** (T und X je +5,6 mm). Die absenkende Klaue schiebt es vor sich her. Beim U kommen
+  der Klaue** (T und X je +5,6 mm). Die absenkende Klaue schiebt es vor sich her. [BERICHTIGT 2026-10-11, s. "Schub beim Zufassen": nicht beim Absenken, sondern beim Schliessen] Beim U kommen
   Ausreisser von 35-49 mm hinzu: das U wurde beim Anfahren weggestossen, die Hand ist ihm zum Teil
   nachgefahren (daher dort auch der grosse Reichfehler mit gleichem Vorzeichen).
 * **Die Hand bleibt vor dem Griffpunkt stehen** - bei L/T/X im Mittel 4-5 mm zu kurz entlang.
@@ -174,7 +174,7 @@ Ein neuer Befund entkraeftet ein Negativ, wenn er einen Grund liefert, warum das
 fuer den neuen Eingriff nicht gilt. Geprueft an den drei Gruenden des alten Negativs:
 
 1. **Der Versatz hat jetzt eine Ursache, aber dieselbe Groesse.** Die Versatzkette erklaert, woher der
-   Sitz "+12 mm entlang, quer 0" der BERICHTIGUNG vom 2026-09-28 kommt: Schieben beim Absenken plus zu
+   Sitz "+12 mm entlang, quer 0" der BERICHTIGUNG vom 2026-09-28 kommt: Schieben beim Absenken [BERICHTIGT 2026-10-11, s. "Schub beim Zufassen": nicht beim Absenken, sondern beim Schliessen] plus zu
    kurzes Reichen. Das ist eine Herkunft, kein neuer Posten - der Versatz, den die alten Eingriffe
    korrigiert haben, ist derselbe.
 2. **Ein Blick beim Zufassen haette nichts Neues zu sehen.** Die Fovea verfolgt das Objekt beim
@@ -198,10 +198,52 @@ fuer den neuen Eingriff nicht gilt. Geprueft an den drei Gruenden des alten Nega
    Korrektur, die das Objekt messbar naeher ans Ziel brachte, brachte keine Lieferungen.
 
 **Ergebnis: das Negativ steht.** Die Versatzkette verschiebt nur, WO man ansetzen muesste: nicht
-beim Hinsehen, sondern bei der Mechanik des Zufassens (die Klaue schiebt das Objekt vor sich her).
+beim Hinsehen, sondern bei der Mechanik des Zufassens (die Klaue schiebt das Objekt vor sich her) [BERICHTIGT 2026-10-11, s. "Schub beim Zufassen": nicht beim Absenken, sondern beim Schliessen].
 Das ist kein Blickfaden. Am Griff des U sind fuenf Anlaeufe ohne Wirkung geschlossen
 ([U-Form-Engpass](/befunde/u-form-engpass.md)); fuer L/T/X ist ein Eingriff am Absenken nicht
 gemessen und nach Punkt 3 wenig aussichtsreich.
+
+# Nachtrag: Schub beim Zufassen gemessen (Seed 9407, 51 Zugriffe L/T/X)
+
+Nutzerauftrag: *"Miss das Schieben beim Absenken fuer L/T/X."* Messzeile `[Schub]` (ef282a4, nur
+Log): Objektbewegung je Abschnitt - **oben** (Start bis Hand auf Hoehe der Oberkante), **Absenken**
+(bis die Klaue zu schliessen beginnt, Gelenk unter 80 % der Oeffnung), **Schliessen** (bis zum
+Zufassen) - mit Drehung und der ersten Arm-Beruehrung.
+
+    Objektbewegung, mm (Betrag)       oben     Absenken          Schliessen
+                                     Median   Median  Q75       Median  Q75   Mittel entl/quer   |Drehung| Median / Q75
+    L  (n 19)                          0        0     2,1         3,0   4,6     +1,4 / +1,9          1 /  3 Grad
+    T  (n 16)                          0        1,2   3,0         7,3   9,0     +4,0 / -2,6        8,5 / 20,5 Grad
+    X  (n 16)                          0        0     1,1         4,3   8,0     +3,0 / -1,5        3,5 /  7 Grad
+    alle (n 51)                        0        0     2,1         4,1   7,7     +2,7 / -0,6          3 /  7,5 Grad
+
+    erste Beruehrung: Backe (claw_left/right) 40, Finger/Fingerspitze 8, keine 3
+                      30x noch beim Absenken, 18x beim Schliessen; Hand im Median 1 mm unter der Oberkante
+    Seitenlage bei Beruehrung -> Schub quer beim Schliessen: r = -0,27 (p = 0,06);
+                      der Schub zeigt in 17 von 22 deutlichen Faellen zur Klauenmitte hin
+    Schliess-Schub geliefert gegen nicht: 4,1 gegen 3,6 mm (p = 0,37); L 1,9 gegen 4,0 (p = 0,08),
+                      T 7,8 gegen 4,4 (0,20), X 4,5 gegen 2,5 (0,13) - keine Richtung
+
+**BERICHTIGUNG der Versatzkette: beim Absenken wird nichts geschoben.** Die Klaue beruehrt das
+Objekt zwar oft schon im Absenken (30 von 48), bewegt es dabei aber nicht (Median 0, Q75 2 mm). Die
+Bewegung entsteht **beim Schliessen**: im Median 4 mm, beim T 7 mm mit 8,5 Grad Drehung (Q75 20 Grad).
+Sie ist ueberwiegend **zentrierend** - die zuerst treffende Backe schiebt das seitlich sitzende
+Objekt zur Klauenmitte (17 von 22) - und nach vorn (+2,7 mm entlang). Mit der Lieferung haengt sie
+nicht zusammen. Das ist das gewollte Verhalten einer Parallelklaue, kein Defekt.
+
+**Zweite Berichtigung, den Bezugspunkt betreffend:** "entlang" ist in `[Griffversatz]`,
+`[Versatzkette]` und `[Ablage]` gegen den **Reichpunkt** (site `contact`) gemessen. Die Backenmitte
+liegt laut `claw_fwd` (pc_act14) 4,4 mm (offen) bis 8,6 mm (zu) **vor** dem Reichpunkt. Der
+"wahre Versatz entlang +9 mm" der Versatzkette ist also zum groessten Teil diese Geometrie: gegen
+die Backenmitte (`[InKlaue]` tief) sitzen L und U bei +2 bis +3 mm, T und X bei +7 bis +8 mm, und
+die Backenmitte rueckt beim vollen Schliessen noch rund 4 mm nach vorn. Der "Reichfehler -5 mm
+entlang" (Hand bleibt vor dem Griffpunkt stehen) ist damit vermutlich **gelernter Ausgleich** dieser
+Geometrie, nicht ein Fehler - nicht gemessen. **Unberuehrt** bleiben alle Quer-Werte (der Versatz
+der Backenmitte liegt nur auf der Vorwaertsachse), die Korrelationen und das Ergebnis "Sehfehler 1 mm".
+
+**Was der Quer-Versatz damit ist:** die Hand trifft das Objekt seitlich versetzt (bei Beruehrung
+|quer| Median L 7, T 4, X 3 mm), das Schliessen zentriert es teilweise. Was danach quer bleibt,
+traegt sich bis in die Ablage (Versatzkette, r = 0,50), sagt die Lieferung je Form aber nicht vorher.
 
 # Bewertung
 
