@@ -138,6 +138,9 @@ knapp nicht.
   relativ zum gesehenen Blob. Er koennte also schon beim Zufassen wissen, wie weit die Objektmitte
   seitlich neben der Hand sitzen wird, ohne beim Tragen hinzusehen. Ob die Policy das als Eingang hat
   und ob dieser Wert den Versatz beim Absenken vorhersagt, steht nicht im Log.
+  **Nachgemessen 2026-10-11, negativ:** der gesehene Versatz sagt die Ablage nicht vorher (sd 1-4
+  mm, alle r n.s.), der wahre beim Zufassen schon (U quer r = 0,98) - siehe
+  [Klauenlage und Griffversatz](/befunde/klauenlage-und-griffversatz.md).
 
 # Verwandt
 

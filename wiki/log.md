@@ -2,6 +2,12 @@
 
 ## 2026-10-11
 
+* **Anlage**: [Klauenlage und Griffversatz](/befunde/klauenlage-und-griffversatz.md) - zwei Laeufe je 60
+  Episoden mit den neuen Log-Zeilen (158c866). Balken: Klaue Median 65 Grad zur Laengsachse, nur 4/32
+  quer; Achse auf 5 Grad gesehen, Klaue auf 0 Grad ausgefuehrt, Lieferung winkelunabhaengig (p = 0,98) -
+  das Weltmodell hat keinen Grund fuer quer. Griffversatz: gesehen sagt die Ablage nicht vorher, wahr schon.
+  Offener Punkt in [Verluste nach dem Anheben](/befunde/verluste-nach-dem-anheben.md) damit beantwortet.
+
 * **Anlage**: [Verluste nach dem Anheben](/befunde/verluste-nach-dem-anheben.md) - 760 angehobene
   Episoden aus GUI-Lauf, Langlauf-A/B und Wertprobe-Kontrolle je Form zerlegt. L/U setzen knapp daneben
   ab (32/35 % gegen Wuerfel 11 %; obj_blue ist der Balken, am selben Tag berichtigt), Hand steht gleich weit vom Ziel, die Policy gleicht nur den mittleren
