@@ -160,6 +160,49 @@ ausgleicht; die Streuung (sd 6-7 mm, beim U 11) gleicht sie nicht aus.
 Einschraenkung: ein Seed, U nur 8 Zugriffe (1 geliefert). Die Korrelation wahr -> Ablage aus dem
 ersten Lauf (U quer r = 0,98) repliziert gepoolt (r = 0,50), je Form bei n = 6-12 nicht stabil.
 
+# Entkraeftet das das Blickkorrektur-Negativ? Nein (2026-10-11)
+
+Nutzerauftrag: *"Pruef, ob das das Blickkorrektur-Negativ entkraeftet."* Gemeint sind die Messungen in
+[Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md): das Objekt in der Hand
+beim Ablegen ansehen und die Hand um den gesehenen Versatz verschieben (`ACT23_OBJ_SEHEN`: Objekt
+21 -> 15 mm naeher am Ziel, Lieferungen 56 gegen 49 von 120) und die Blickkorrektur selbst lernen
+(`ACT23_BLICK_LERNEN`: 126 gegen 125 von 300). Dazu die Vorpruefung in
+[Ablage im Netzbetrieb](/befunde/ablage-im-netzbetrieb.md): der Sitz beim Zufassen sagt die Lieferung
+innerhalb einer Form kaum vorher (331 Episoden, L/T kein Zusammenhang, U p = 0,053).
+
+Ein neuer Befund entkraeftet ein Negativ, wenn er einen Grund liefert, warum das damals Gemessene
+fuer den neuen Eingriff nicht gilt. Geprueft an den drei Gruenden des alten Negativs:
+
+1. **Der Versatz hat jetzt eine Ursache, aber dieselbe Groesse.** Die Versatzkette erklaert, woher der
+   Sitz "+12 mm entlang, quer 0" der BERICHTIGUNG vom 2026-09-28 kommt: Schieben beim Absenken plus zu
+   kurzes Reichen. Das ist eine Herkunft, kein neuer Posten - der Versatz, den die alten Eingriffe
+   korrigiert haben, ist derselbe.
+2. **Ein Blick beim Zufassen haette nichts Neues zu sehen.** Die Fovea verfolgt das Objekt beim
+   Anfahren schon im geschlossenen Regelkreis (Servo in over/lower; `[Fovea-Servo] Netz-Obs 88`).
+   Was danach noch entsteht, passiert beim Absenken und Schliessen, also unter der Klaue. Genau dort
+   fand die alte Vorpruefung den Blick verdeckt oder mit Parallaxe (aus der Tiefe ~5 mm genau). Der
+   zufaellige Anteil des Versatzes streut 6-7 mm (sd), der Blick ist 5 mm genau. Der systematische
+   Anteil (+9 mm entlang) wird von der Policy bereits ausgeglichen
+   ([Verluste nach dem Anheben](/befunde/verluste-nach-dem-anheben.md)).
+3. **Der Sitz traegt die Lieferung kaum - auch in den neuen Laeufen.** Beide Versatz-Laeufe
+   zusammen (96 Episoden L/U/T/X), wahrer Versatz beim Zufassen, geliefert gegen nicht:
+
+        je Form |quer|   L 5 gegen 11 mm (p = 0,07)  T 7,5 gegen 7 (0,56)  U 9 gegen 13,5 (0,17)  X 4 gegen 4 (0,46)
+        je Form |entl.|  L 10 gegen 11,5 (0,60)      T 10 gegen 12 (0,54)  U 10,5 gegen 5 (0,16)  X 10 gegen 15 (0,81)
+        gepoolt, Abstand vom Formmedian:  quer 4 gegen 7,5 mm (p = 0,016)   entlang 3 gegen 4,8 (p = 0,049)
+        Bonferroni (2 gepoolte Tests): 0,025 -> nur quer knapp
+        Objekt bewegt bis Zufassen: 4,5 gegen 9,5 mm (p = 0,10, n = 48)   Reichfehler 7,3 gegen 8,2 (p = 0,20)
+
+   Je Form kein Zusammenhang, gepoolt ein schwacher - dasselbe Bild wie die 331 Episoden vom
+   2026-10-08. Selbst eine perfekte Korrektur haette daher wenig zu gewinnen, und die alte
+   Korrektur, die das Objekt messbar naeher ans Ziel brachte, brachte keine Lieferungen.
+
+**Ergebnis: das Negativ steht.** Die Versatzkette verschiebt nur, WO man ansetzen muesste: nicht
+beim Hinsehen, sondern bei der Mechanik des Zufassens (die Klaue schiebt das Objekt vor sich her).
+Das ist kein Blickfaden. Am Griff des U sind fuenf Anlaeufe ohne Wirkung geschlossen
+([U-Form-Engpass](/befunde/u-form-engpass.md)); fuer L/T/X ist ein Eingriff am Absenken nicht
+gemessen und nach Punkt 3 wenig aussichtsreich.
+
 # Bewertung
 
 * **Klauenlage:** kein Defekt, sondern eine fehlende Lernspannung. Eine Regel "immer quer" waere

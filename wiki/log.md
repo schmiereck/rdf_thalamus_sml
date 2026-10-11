@@ -2,6 +2,11 @@
 
 ## 2026-10-11
 
+* **Ergaenzung**: [Klauenlage und Griffversatz](/befunde/klauenlage-und-griffversatz.md) - geprueft, ob die
+  Versatzkette das Blickkorrektur-Negativ ([Aufmerksamkeit](/fragen/aufmerksamkeit-objekt-ziel.md)) entkraeftet: nein.
+  Der Versatz entsteht unter der Klaue, wo der Blick verdeckt ist; der Sitz sagt die Lieferung je Form nicht
+  vorher (96 Ep, gepoolt nur quer p = 0,016). Hinweis auf der Aufmerksamkeitsseite ergaenzt.
+
 * **Ergaenzung**: [Klauenlage und Griffversatz](/befunde/klauenlage-und-griffversatz.md) - Messzeile
   [Versatzkette] (dd701c5), 60 Episoden L/U/T/X: Sehfehler Median 1 mm, 2-3 % der Streuung. Der Versatz beim
   Zufassen stammt je etwa zur Haelfte aus dem Schieben des Objekts beim Absenken (+6 mm in Anfahrtrichtung)

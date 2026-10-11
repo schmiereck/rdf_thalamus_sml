@@ -231,6 +231,13 @@ beim Loslassen) nutzt die richtige Handlage (`_objsicht["los"]`) und ist nicht b
 Der Griff selbst ist stabil und bis auf L/T/U mittig (quer 1-2 mm; L, T, U 7-14 mm, gewollt: das L
 wird am langen Zinken gegriffen).
 
+# Nachgeprueft 2026-10-11: die Versatzkette entkraeftet das Negativ nicht
+
+Der Versatz in der Klaue entsteht beim Absenken (Schieben, zu kurzes Reichen), nicht beim Sehen;
+das erklaert den Sitz "+12 mm entlang", aendert aber keinen der Gruende dieser Seite. Ein Blick beim
+Zufassen saehe unter der Klaue nichts Neues, und der Sitz sagt die Lieferung je Form weiterhin nicht
+vorher. Siehe [Klauenlage und Griffversatz](/befunde/klauenlage-und-griffversatz.md).
+
 # Was hier NICHT behauptet wird
 
 Keine Wirkung. Alles ist Codeanalyse; die einzige Messung ist die Zerlegung des Ablagefehlers.
