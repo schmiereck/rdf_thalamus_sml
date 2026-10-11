@@ -4,8 +4,8 @@
 
 * **Anlage**: [Verluste nach dem Anheben](/befunde/verluste-nach-dem-anheben.md) - 760 angehobene
   Episoden aus GUI-Lauf, Langlauf-A/B und Wertprobe-Kontrolle je Form zerlegt. L/U setzen knapp daneben
-  ab (32/35 % gegen Wuerfel 10 %), Hand steht gleich weit vom Ziel, die Policy gleicht nur den mittleren
-  Versatz in der Hand aus. Unterwegs verloren formunabhaengig. Messfalle: `trug True` ist kein Anheben
+  ab (32/35 % gegen Wuerfel 11 %; obj_blue ist der Balken, am selben Tag berichtigt), Hand steht gleich weit vom Ziel, die Policy gleicht nur den mittleren
+  Versatz in der Hand aus. Unterwegs verlieren die Zinkenformen nicht mehr als Wuerfel. Messfalle: `trug True` ist kein Anheben
   des kommandierten Objekts.
 
 * **Anlage**: [Wertprobe lokaler Griff](/befunde/lokaler-griff-wertprobe.md) - Stufe 0 der
