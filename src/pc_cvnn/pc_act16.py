@@ -354,6 +354,21 @@ ELONG_CMD = os.environ.get("ACT16_ELONG_CMD", "0") == "1"   # the COMMANDED obje
 #   test, step C): the net must FIND it, PERCEIVE its long axis, and align the wrist to the SHORT axis to grip.
 
 
+def _arm_kontakt(sim, body):
+    """Name des ersten ARM-Geoms, das gerade den Koerper `body` beruehrt, sonst None (nur Messung)."""
+    bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, body)
+    gb = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_GEOM, "gripper_base")
+    arm_root = int(sim.m.body_rootid[int(sim.m.geom_bodyid[gb])]) if gb >= 0 else -1
+    for c in range(int(sim.d.ncon)):
+        con = sim.d.contact[c]
+        b1, b2 = int(sim.m.geom_bodyid[con.geom1]), int(sim.m.geom_bodyid[con.geom2])
+        for mine, other, og in ((b1, b2, con.geom2), (b2, b1, con.geom1)):
+            if mine == bid and int(sim.m.body_rootid[other]) == arm_root and other != 0:
+                nm = mujoco.mj_id2name(sim.m, mujoco.mjtObj.mjOBJ_GEOM, og)
+                return nm if nm else f"geom{og}"
+    return None
+
+
 def _push_subgoal(hxy, hz, c, t):
     """MARKOVIAN push: get behind the object (relative to the target), lower, and follow-push it toward
     the target.  Phase inferred from geometry (no hidden state); the gripper stays spread (J5_PUSH)."""
@@ -680,6 +695,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         run_combined._slipped = False                        #   self-measurable predictions per episode.
         run_combined._attempted = False
         run_combined._zufassen = None                        # Schnappschuss beim Zufassen (nur Messung)
+        run_combined._schub = {}                             # Objektlage an Ereignissen bis zum Zufassen
         run_combined._inclaw = None                          # (quer, tief) mm des Objekts relativ zur
         #   Backenmitte beim Zufassen; None = die Klaue hat nie tief am Objekt geschlossen
         run_combined._release = None       # release snapshot (see the step loop)
@@ -715,6 +731,29 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                 run_combined._ende["grund"] = "aufgegeben"    #   ein gelernter Kopf erwartet keinen Erfolg mehr
                 break
             c_true = sim.obj_pos(cmd)[:2]; cz = sim.obj_pos(cmd)[2]; h = sim.grasp_pos(); hxy = h[:2]; hz = h[2]
+            if run_combined._zufassen is None and not run_combined._attempted:
+                # SCHUB (Messung 2026-10-11, geht in keine Entscheidung): wo bewegt sich das Objekt
+                # zwischen Episodenbeginn und Zufassen?  Ereignisse: Start, Hand auf Objektoberkante
+                # ("tief"), Klaue beginnt zu schliessen, erste Arm-Beruehrung.  pc_act23 druckt [Schub].
+                try:
+                    _sb = run_combined._schub
+                    _j5 = float(sim.d.qpos[sim.jqadr["joint_5"]])
+                    _ev = lambda: {"xy": np.asarray(c_true, float).copy(), "yaw": float(sim.obj_yaw(cmd)),
+                                   "hxy": np.asarray(hxy, float).copy(), "hz": float(hz), "j5": _j5, "k": k}
+                    if "start" not in _sb:
+                        _sb["start"] = _ev()
+                    _tief = hz < 2.0 * obj_h + 0.02
+                    if "tief" not in _sb and _tief:
+                        _sb["tief"] = _ev()
+                    if "schliesst" not in _sb and _tief and _j5 < 0.8 * J5_OPEN:
+                        _sb["schliesst"] = _ev()
+                    if "kontakt" not in _sb:
+                        _kg = _arm_kontakt(sim, cmd)
+                        if _kg is not None:
+                            _sb["kontakt"] = _ev(); _sb["kontakt"]["geom"] = _kg
+                            _sb["kontakt"]["top"] = float(hz - 2.0 * obj_h)
+                except Exception:
+                    pass
             if cz > run_combined._maxcz:
                 run_combined._maxcz = float(cz)
             if cz > obj_h + 0.02 and float(np.linalg.norm(c_true - hxy)) > 0.045:
@@ -809,7 +848,8 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                         run_combined._zufassen = {
                             "cxy": np.asarray(c_true, float).copy(), "reach": np.asarray(hxy, float)[:2].copy(),
                             "fwd": np.asarray(sim.claw_fwd(), float)[:2].copy(),
-                            "claw_yaw": float(sim.claw_yaw()), "obj_yaw": float(sim.obj_yaw(cmd))}
+                            "claw_yaw": float(sim.claw_yaw()), "obj_yaw": float(sim.obj_yaw(cmd)),
+                            "k": k, "hz": float(hz)}
                     except Exception:
                         run_combined._zufassen = None
                 #                                               down -> the grasp was TESTED (see header)

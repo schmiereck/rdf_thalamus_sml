@@ -8016,6 +8016,32 @@ def run_self_learning_steering(headless=False):
                       f" | Reichfehler (Hand - Griffpunkt) {_kv((_zf['reach'] - _gv['gp']) * 1e3)}"
                       f" | wahr (Grundriss - Hand) {_kv((_f_zf - _zf['reach']) * 1e3)}"
                       f" | Ursprung - Grundriss {_kv((_zf['cxy'] - _f_zf) * 1e3)} mm", flush=True)
+            _sb = dict(getattr(act16.run_combined, "_schub", {}) or {})
+            if "start" in _sb:
+                # SCHUB (Messung 2026-10-11): Objektbewegung je Abschnitt im Klauenrahmen beim Zufassen.
+                #   oben = Start -> Hand auf Hoehe der Oberkante, Absenken = -> Klaue beginnt zu schliessen,
+                #   Schliessen = -> Zufassen.  Fehlt ein Ereignis, rueckt der naechste Abschnitt auf.
+                _pts = [("oben", _sb.get("tief")), ("Absenken", _sb.get("schliesst")),
+                        ("Schliessen", {"xy": _zf["cxy"], "yaw": _zf["obj_yaw"], "k": _zf.get("k")})]
+                _prev = _sb["start"]; _teile = []
+                for _nm, _e in _pts:
+                    if _e is None:
+                        _teile.append(f"{_nm} -"); continue
+                    _d = (np.asarray(_e["xy"]) - np.asarray(_prev["xy"])) * 1e3
+                    _dr = np.degrees((_e["yaw"] - _prev["yaw"] + np.pi) % (2 * np.pi) - np.pi)
+                    _teile.append(f"{_nm} {_kv(_d)} dreh {_dr:+.0f}")
+                    _prev = _e
+                _ks = _sb.get("kontakt")
+                if _ks is None:
+                    _kt = "keine Beruehrung vor dem Zufassen"
+                else:
+                    _ph = ("vor tief" if "tief" not in _sb or _ks["k"] < _sb["tief"]["k"] else
+                           "beim Absenken" if "schliesst" not in _sb or _ks["k"] < _sb["schliesst"]["k"] else
+                           "beim Schliessen")
+                    _kr = (np.asarray(_ks["xy"]) - np.asarray(_ks["hxy"])) * 1e3
+                    _kt = (f"erste Beruehrung {_ks['geom']} {_ph}, Hand {_ks['top'] * 1e3:+.0f}mm ueber Oberkante, "
+                           f"Klaue {_ks['j5']:.2f} (offen {act16.J5_OPEN:.2f}), Objekt gegen Hand {_kv(_kr)}")
+                print(f"    [Schub] {body}: " + " | ".join(_teile) + f" mm/Grad | {_kt}", flush=True)
             def _fold(a):                                      # Winkel zweier Achsen, 0-90 Grad
                 d = np.degrees(a) % 180.0
                 return min(d, 180.0 - d)
