@@ -4964,7 +4964,7 @@ def run_self_learning_steering(headless=False):
         _h = SOCKEL_HOEHEN[int(crng.integers(len(SOCKEL_HOEHEN)))] if len(SOCKEL_HOEHEN) > 1 \
             else SOCKEL_HOEHEN[0]
         sim.m.geom_size[_g][2] = _h / 2.0
-        sim.huelle_nachfuehren(_g)                       # rbound UND aabb (vorher nur rbound)
+        sim.huelle_nachfuehren(_g, alt_rbound=True)      # rbound UND aabb (vorher nur rbound)
         _xy = np.asarray(scene.get(_aktiv, (np.asarray(SOCKEL_XY, float),))[0], float)
         if float(np.linalg.norm(_xy - np.asarray(PARK_XY, float))) < 0.05:
             _xy = platte["xy"].copy()                      # kam gerade aus dem Parkhaus: an die zuletzt
@@ -5215,7 +5215,7 @@ def run_self_learning_steering(headless=False):
         for _nm, _h in _hoehe.items():
             for _g in _geoms_of(_nm):
                 sim.m.geom_size[_g][2] = float(_h)
-                sim.huelle_nachfuehren(_g)               # rbound UND aabb (vorher nur rbound)
+                sim.huelle_nachfuehren(_g, alt_rbound=True)   # rbound UND aabb (vorher nur rbound)
 
     def _set_sizes():
         sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "obj_red")]] = np.array([0.012] * 3)

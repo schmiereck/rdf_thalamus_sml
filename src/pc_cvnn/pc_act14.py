@@ -62,6 +62,9 @@ ASSET = os.path.join(os.path.dirname(__file__), "assets", "bracket_arm.xml")
 # ECHTEN Hardware, der die XML nachgebildet ist.  Zurueck zum Original: ACT14_FINGER_KNICK
 # hier wieder auf None setzen (eine Zeile).  Siehe [[act23-nagelneigung]].
 _KNICK_ENV = os.environ.get("ACT14_FINGER_KNICK", "0")
+# ACT14_HUELLE_ALT=1: Kollisionshuelle umbemessener Koerper NICHT nachfuehren (Zustand vor 2026-10-11, nur fuer
+# das A/B der Korrektur; s. BracketArmSim.huelle_nachfuehren).
+_HUELLE_ALT = os.environ.get("ACT14_HUELLE_ALT", "0") == "1"
 
 
 def _finger_xml(knick_grad, knick_z_mm, nagel_grad):
@@ -311,7 +314,7 @@ class BracketArmSim:
         self.m.geom_size[self.m.body_geomadr[bid]] = np.asarray(half, float)
         self.huelle_nachfuehren(int(self.m.body_geomadr[bid]))
 
-    def huelle_nachfuehren(self, g):
+    def huelle_nachfuehren(self, g, alt_rbound=False):
         """Kollisionshuelle eines zur Laufzeit umbemessenen Quaders nachfuehren.  MuJoCo prueft vor jedem
         Kontakt geom_rbound UND geom_aabb, beide stammen aus dem Kompilieren; wer nur geom_size aendert,
         dessen vergroesserter Koerper ist ausserhalb der alten Huelle fuer die Physik nicht da (gemessen:
@@ -320,6 +323,10 @@ class BracketArmSim:
         if int(self.m.geom_type[g]) != int(mujoco.mjtGeom.mjGEOM_BOX):
             return
         s = np.asarray(self.m.geom_size[g], float)
+        if _HUELLE_ALT:                                  # A/B-Rueckschalter: Verhalten vor 2026-10-11
+            if alt_rbound:                               # (die Hoehen-Stellen fuehrten rbound schon damals)
+                self.m.geom_rbound[g] = float(np.linalg.norm(s))
+            return
         self.m.geom_rbound[g] = float(np.linalg.norm(s))
         self.m.geom_aabb[g][:3] = 0.0
         self.m.geom_aabb[g][3:] = s
