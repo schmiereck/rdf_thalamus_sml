@@ -679,6 +679,7 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
         run_combined._maxcz = float(obj_h)                   # CHECKPOINTS (act23 credit routing): three
         run_combined._slipped = False                        #   self-measurable predictions per episode.
         run_combined._attempted = False
+        run_combined._zufassen = None                        # Schnappschuss beim Zufassen (nur Messung)
         run_combined._inclaw = None                          # (quer, tief) mm des Objekts relativ zur
         #   Backenmitte beim Zufassen; None = die Klaue hat nie tief am Objekt geschlossen
         run_combined._release = None       # release snapshot (see the step loop)
@@ -800,6 +801,17 @@ def run_combined(sim, body, viz, CAM, episodes=12, cmd_fixed=None, force=None, p
                         run_combined._inclaw = sim.in_claw(c_true)   # pc_act14.in_claw)
                     except Exception:
                         run_combined._inclaw = None
+                    # GRIFFVERSATZ UND KLAUENLAGE (Messung 2026-10-11, geht in keine Entscheidung):
+                    # Objektmitte gegen Reichpunkt im Klauenrahmen -- derselbe Rahmen wie
+                    # "Objekt-Reichpunkt" der [Ablage]-Zeile -- und die Finger-Trennachse gegen die
+                    # wahre Laengsachse.  pc_act23 druckt beides als [Griffversatz] / [Klauenlage].
+                    try:
+                        run_combined._zufassen = {
+                            "cxy": np.asarray(c_true, float).copy(), "reach": np.asarray(hxy, float)[:2].copy(),
+                            "fwd": np.asarray(sim.claw_fwd(), float)[:2].copy(),
+                            "claw_yaw": float(sim.claw_yaw()), "obj_yaw": float(sim.obj_yaw(cmd))}
+                    except Exception:
+                        run_combined._zufassen = None
                 #                                               down -> the grasp was TESTED (see header)
             if via == "push" and np.linalg.norm(c - tgt) < tol:  # pushed home -> done
                 break

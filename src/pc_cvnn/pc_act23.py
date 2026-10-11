@@ -6991,6 +6991,7 @@ def run_self_learning_steering(headless=False):
         fe = situation_feats(body)                               # perceived situation for the LIFELONG loop
         a_exec = None                                            # FULL action this episode runs (self mode):
         sel_off["dxy"] = None                                    #   [offset, wrist, grip, gentle]
+        _gv = None                                               # Wahl fuer [Griffversatz]/[Klauenlage] (Messung)
         _mu_a = _sd_a = None                                     # Modell-Bewertung DER WAHL (s. [Welt-Vorhersage])
         # STAGE-1 de-scripting: in self mode the world model picks the WHOLE action for EVERY object --
         # wrist (the fixed teacher angle slips off diagonal cubes), grasp-point OFFSET (off_max>0),
@@ -7195,6 +7196,16 @@ def run_self_learning_steering(headless=False):
                           f"Schwerpunkt, {1e3 * float(np.linalg.norm(sel_off['dxy'])):.0f}mm vom Heuristik-Punkt, "
                           f"Klaue {np.degrees(_wl):.0f} Grad  [Messung: Objektrahmen {_lo[0]:.0f},{_lo[1]:.0f}mm, "
                           f"relwrist {(np.degrees(_wl) - np.degrees(_yr)) % 180.0:.0f}]", flush=True)
+            if a_exec is not None and det is not None and det.get("pos") is not None \
+                    and det.get("grasp_xy") is not None:
+                # WAS DER AGENT BEIM WAEHLEN WEISS (Messung 2026-10-11, geht in nichts ein): die
+                # gesehene Blob-Mitte gegen den geplanten Griffpunkt und die gesehene Achse.  Gegen
+                # die Wahrheit beim Zufassen gestellt in [Griffversatz] / [Klauenlage] unten.
+                _gv = {"pos": np.asarray(det["pos"], float)[:2],
+                       "gp": np.asarray(det["grasp_xy"], float)[:2]
+                             + (np.zeros(2) if sel_off["dxy"] is None else np.asarray(sel_off["dxy"], float)),
+                       "w_plan": float(wrist_of(a_exec)),
+                       "yaw_seen": float(0.5 * np.arctan2(float(fe[3]), float(fe[2])))}
             if a_exec is not None and world.n() > 0:
                 # VORHERSAGE DES WELT-MODELLS fuer die AUSGEFUEHRTE Aktion, direkt vor der Ausfuehrung.
                 # WOZU: erst damit laesst sich messen, wieviel des vorhandenen Signals das Modell
@@ -7963,6 +7974,30 @@ def run_self_learning_steering(headless=False):
             # Objekt dann aussermittig, und wandert dieser Versatz bis zur Ablage durch?
             print(f"    [InKlaue] {body}: quer {_ic[0]:+.0f}mm, tief {_ic[1]:+.0f}mm "
                   f"(0,0 = mittig zwischen den Backen)", flush=True)
+        _zf = getattr(act16.run_combined, "_zufassen", None)
+        if _zf is not None:
+            # GRIFFVERSATZ: Objektmitte gegen Reichpunkt im Klauenrahmen beim ZUFASSEN (wahr) und das,
+            # was der Agent davon aus seiner eigenen Wahl haette wissen koennen (gesehen = Blob-Mitte
+            # minus geplanter Griffpunkt).  Rahmen wie "Objekt-Reichpunkt" in [Ablage].
+            # KLAUENLAGE: Winkel zwischen Finger-Trennachse und wahrer Laengsachse, gefaltet auf
+            # 0-90 Grad (90 = Klaue quer zur Achse).  Dazu die Kette Wahrnehmung -> Wahl -> Ausfuehrung.
+            _u = _zf["fwd"] / (float(np.linalg.norm(_zf["fwd"])) + 1e-12); _q = np.array([-_u[1], _u[0]])
+            _w = (_zf["cxy"] - _zf["reach"]) * 1e3
+            _txt = f"wahr entlang {_w @ _u:+.0f} quer {_w @ _q:+.0f}mm"
+            if _gv is not None:
+                _s = (_gv["pos"] - _gv["gp"]) * 1e3
+                _txt = f"gesehen entlang {_s @ _u:+.0f} quer {_s @ _q:+.0f}mm | " + _txt
+            print(f"    [Griffversatz] {body}: {_txt} (Objektmitte gegen Reichpunkt beim Zufassen)", flush=True)
+            def _fold(a):                                      # Winkel zweier Achsen, 0-90 Grad
+                d = np.degrees(a) % 180.0
+                return min(d, 180.0 - d)
+            _kl = (f"    [Klauenlage] {body}: Trennachse gegen Laengsachse {_fold(_zf['claw_yaw'] - _zf['obj_yaw']):.0f} Grad"
+                   f" (90 = quer) | Achse wahr {np.degrees(_zf['obj_yaw']) % 180.0:.0f}")
+            if _gv is not None:
+                _kl += (f", gesehen {np.degrees(_gv['yaw_seen']) % 180.0:.0f} (Fehler {_fold(_gv['yaw_seen'] - _zf['obj_yaw']):.0f})"
+                        f" | geplant {np.degrees(_gv['w_plan']) % 180.0:.0f} = {_fold(_gv['w_plan'] - _zf['obj_yaw']):.0f} zur wahren Achse"
+                        f" | ausgefuehrt {np.degrees(_zf['claw_yaw']) % 180.0:.0f} ({_fold(_zf['claw_yaw'] - _gv['w_plan']):.0f} neben der Planung)")
+            print(_kl, flush=True)
         _g = dict(getattr(act16.run_combined, "_grip", {}) or {})
         def _ph(*names):                                       # Mittelwert ueber die genannten Phasen
             v = [x for n in names for x in _g.get(n, [])]
