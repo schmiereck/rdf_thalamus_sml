@@ -2631,6 +2631,8 @@ def run_self_learning_steering(headless=False):
     LAM = float(os.environ.get("ACT23_LAM", "1.0"))
     NPOS = int(os.environ.get("ACT23_NPOS", "10")); NTRIAL = int(os.environ.get("ACT23_NTRIAL", "5"))
     LONG = "obj_blue"; LONG_HALF = (0.034, 0.009, 0.012)   # clearly a LONG thin bar (not a cube)
+    if os.environ.get("ACT23_BALKEN_BREITE", ""):        # Balken-Welt: Breite in mm (Vorgabe 18), s. unten
+        LONG_HALF = (0.034, 0.0005 * float(os.environ["ACT23_BALKEN_BREITE"]), 0.012)
     CUBE_BODIES = ["obj_red", "obj_green"]
 
     print("act23 [viz] — self-learning grasper command-steering" + (" (headless self-test)" if headless else ""))
@@ -4621,6 +4623,26 @@ def run_self_learning_steering(headless=False):
         return v
 
     bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, LONG)
+    # BALKEN-WELT (ACT23_BALKEN_MASSE = Faktor auf die Masse, ACT23_BALKEN_REIBUNG = Gleitreibung des
+    # Balkens; Vorgabe 1 / leer = unveraendert).  Eine Eigenschaft der WELT, keine Regel: Nutzerauftrag
+    # 2026-10-11 "eine Welt, in der schraeges Greifen am Balken schadet".  In der Standardwelt richtet
+    # die schliessende Klaue den leichten, griffigen Balken selbst aus, schraeg kostet nichts
+    # (wiki/befunde/klauenlage-und-griffversatz.md).  Schwer und glatt kann er sich nicht mehr
+    # eindrehen lassen -- ob das schraeg bestraft, misst ACT23_FORCE_WRIST=rel:<Grad>.
+    _bal_g = int(sim.m.body_geomadr[bid])
+    _bal_m0 = float(sim.m.body_mass[bid]); _bal_i0 = np.asarray(sim.m.body_inertia[bid], float).copy()
+    _bal_mf = float(os.environ.get("ACT23_BALKEN_MASSE", "1") or "1")
+    if _bal_mf != 1.0:
+        sim.m.body_mass[bid] = _bal_m0 * _bal_mf
+        sim.m.body_inertia[bid] = _bal_i0 * _bal_mf
+    if os.environ.get("ACT23_BALKEN_REIBUNG", ""):
+        # MuJoCo nimmt sonst das MAXIMUM beider Reibwerte -- gegen Klaue und Tisch (je 1,0) waere ein
+        # kleinerer Wert wirkungslos.  Die hoehere Prioritaet setzt den Balkenwert fuer ALLE seine Kontakte.
+        sim.m.geom_friction[_bal_g][0] = float(os.environ["ACT23_BALKEN_REIBUNG"])
+        sim.m.geom_priority[_bal_g] = 1
+    if _bal_mf != 1.0 or os.environ.get("ACT23_BALKEN_REIBUNG", "") or os.environ.get("ACT23_BALKEN_BREITE", ""):
+        print(f"[Balken-Welt] Masse {1e3 * _bal_m0:.0f} -> {1e3 * float(sim.m.body_mass[bid]):.0f} g, "
+              f"Reibung {float(sim.m.geom_friction[_bal_g][0]):.2f}, Breite {2000 * LONG_HALF[1]:.0f} mm", flush=True)
     # ACT23_SEED (default 7 = historical behaviour): scene placement + auto target picks.  Parallel
     # label-harvest WORKERS (act23_dose_workers.py) start from the SAME state pickle with the same
     # pickled module rngs -- without distinct seeds here they would replay bit-identical episodes
@@ -5103,6 +5125,15 @@ def run_self_learning_steering(headless=False):
         _k = len(bodies)
         _rot = (exp_group["szene"] * _n_steht) % max(_k, 1)
         _steht = [bodies[(_rot + i) % _k] for i in range(min(_n_steht, _k))]
+        # ACT23_SZENE_MIT=<koerper,...>: diese Koerper stehen IMMER auf dem Tisch (Messaufbau fuer
+        # erzwungene Kommandos -- sonst parkt die Rotation den kommandierten Balken jede zweite
+        # Episode und er gilt als "nicht gefunden", gemessen 26 von 60).  Ersetzt die hintersten.
+        for _mit in [x for x in os.environ.get("ACT23_SZENE_MIT", "").split(",") if x]:
+            _e = next((b for b in bodies if b[0] == _mit), None)
+            if _e is not None and _e not in _steht and _steht:
+                _ers = next(i for i in range(len(_steht) - 1, -1, -1)
+                            if _steht[i][0] not in os.environ.get("ACT23_SZENE_MIT", "").split(","))
+                _steht[_ers] = _e
         _geparkt = [b for b in bodies if b not in _steht]
         order = list(range(len(SLOTS))); crng.shuffle(order)   # random object<->slot assignment (variety)
         scene_slots.clear()
@@ -7148,6 +7179,12 @@ def run_self_learning_steering(headless=False):
             # OPEN SLOT between the prongs, measured a coin flip).  a_exec is updated so credit labels
             # describe what actually RAN; probes run on disposable state copies only.
             _fw = os.environ.get("ACT23_FORCE_WRIST", "")
+            if _fw.startswith("rel:"):
+                # rel:<Grad> = Finger-Trennachse in diesem Winkel zur WAHREN Laengsachse (90 = quer).
+                # Messknopf fuer die Balken-Welt, privilegiert, nur auf Zustandskopien.
+                wp = (float(sim.obj_yaw(body)) + np.radians(float(_fw[4:]))) % np.pi
+                a_exec = a_exec.copy(); a_exec[2], a_exec[3] = np.cos(2 * wp), np.sin(2 * wp)
+                wf = (lambda s, _w=wp: _w)
             if _fw in ("priv", "pair"):
                 # "pair" = the shape-dependent pair hypothesis the two single-knob A/Bs uncovered:
                 # L wants the wrist PARALLEL to the long prong (W arm 14/20 vs 9/20) while U wants it

@@ -2,6 +2,11 @@
 
 ## 2026-10-11
 
+* **Anlage**: [Balken-Welt: schraeg schadet nicht](/befunde/balken-welt-schraeg.md) - Schalter
+  ACT23_BALKEN_BREITE/MASSE/REIBUNG, ACT23_SZENE_MIT, ACT23_FORCE_WRIST=rel:<Grad>; Pruefstand 90 gegen 45 Grad in
+  8 Welten: kein Gefaelle. Klaue dreht den Balken ein; wo nicht (schwer+griffig), scheitert auch quer. 10x-Arme wegen
+  Speichermangel abgebrochen, nicht neu gestartet.
+
 * **Ergaenzung + Berichtigung**: [Klauenlage und Griffversatz](/befunde/klauenlage-und-griffversatz.md) - Messzeile
   [Schub] (ef282a4), 60 Episoden L/T/X: beim Absenken bewegt sich das Objekt nicht (Median 0 mm), beim Schliessen
   4 mm (T 7 mm, 8,5 Grad), meist zur Klauenmitte hin, ohne Zusammenhang mit der Lieferung. Berichtigt: "Schieben beim

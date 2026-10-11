@@ -259,6 +259,8 @@ traegt sich bis in die Ablage (Versatzkette, r = 0,50), sagt die Lieferung je Fo
 
 # Verwandt
 
+* [Balken-Welt: schraeg schadet nicht](/befunde/balken-welt-schraeg.md) - der Versuch, schraeg bestrafen zu lassen
+
 * [Verluste nach dem Anheben](/befunde/verluste-nach-dem-anheben.md) - Anlass, offener Punkt hier beantwortet
 * [Wrist-Ausrichtung](/befunde/wrist-ausrichtung.md) - die Ausrichtung als selbst lernbare Policy
 * [Das Wrist-Gitter kostet nichts](/befunde/wrist-gitter-kostet-nichts.md) - das 22,5-Grad-Raster
