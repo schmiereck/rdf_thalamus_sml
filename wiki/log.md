@@ -2,6 +2,11 @@
 
 ## 2026-10-11
 
+* **Ergaenzung**: [Klauenlage und Griffversatz](/befunde/klauenlage-und-griffversatz.md) - Messzeile
+  [Versatzkette] (dd701c5), 60 Episoden L/U/T/X: Sehfehler Median 1 mm, 2-3 % der Streuung. Der Versatz beim
+  Zufassen stammt je etwa zur Haelfte aus dem Schieben des Objekts beim Absenken (+6 mm in Anfahrtrichtung)
+  und zu kurzem Reichen der Hand (-5 mm bei L/T/X); er sagt den Sitz beim Ablegen vorher (r = 0,50, p = 0,001).
+
 * **Anlage**: [Klauenlage und Griffversatz](/befunde/klauenlage-und-griffversatz.md) - zwei Laeufe je 60
   Episoden mit den neuen Log-Zeilen (158c866). Balken: Klaue Median 65 Grad zur Laengsachse, nur 4/32
   quer; Achse auf 5 Grad gesehen, Klaue auf 0 Grad ausgefuehrt, Lieferung winkelunabhaengig (p = 0,98) -

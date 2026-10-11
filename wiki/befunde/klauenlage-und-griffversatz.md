@@ -8,6 +8,9 @@ evidenz: einzelmessung
 ebene: act23-ab
 generated: { by: claude/opus-5, at: 2026-10-11T06:00:00Z }
 sources:
+  - id: kette
+    resource: "Dasselbe, Seed 9404, 60 Episoden L/U/T/X, Messzeile [Versatzkette] aus dd701c5"
+    title: Versatzketten-Lauf
   - id: balken
     resource: "GUI-Steuerung kopflos, Seed 9403, 60 Episoden ACT23_AUTO_OBJ=obj_blue, Szene je Episode, Farb-Mischung an, Kopie des Hauptzustands 2f70ac0d, NO_PERSIST, Messzeilen aus 158c866"
     title: Balkenlauf
@@ -118,6 +121,45 @@ Welcher von beiden, trennen die beiden Zeilen nicht (gesehen - wahr = Wahrnehmun
 Ausfuehrungsfehler); dafuer fehlt die wahre Objektmitte gegen den gesehenen Schwerpunkt als
 eigene Zeile.
 
+# Nachtrag: die Versatzkette (Seed 9404, 48 Zugriffe L/U/T/X)
+
+Nutzerauftrag: *"Bau die Logzeile gesehene gegen wahre Objektmitte und starte den Lauf."*
+`[Versatzkette]` (dd701c5) zerlegt die Luecke zwischen gesehenem und wahrem Versatz exakt:
+**wahr = gesehen - Sehfehler + Objektbewegung - Reichfehler**. Bezug ist die Grundrissmitte
+(flaechengewichtete Mitte der Koerper-Geoms), weil der MuJoCo-Ursprung bei L/U/T 2-6 mm daneben
+liegt und die Kamera die Flaeche sieht. Rauchtest: die Summe geht bis auf 1 mm Rundung auf.
+
+    Klauenrahmen, mm         |Median| entlang / quer   Mittel entlang / quer   Anteil an Var(wahr) entl / quer
+    Sehfehler (Blob-Mitte)        1 / 1                  -0,4 / +1,2                 0,03 / 0,02
+    Objekt bewegt bis Zufassen    3 / 3,5                +6,2 / -0,9                 0,48 / 0,57
+    Reichfehler (Hand-Griffpkt)   5 / 3                  -1,6 / -3,2                 0,45 / 0,35
+    wahr (Grundriss - Hand)      10 / 4                  +8,7 / +1,1
+
+    je Form, Mittel entlang: bewegt  L +0,6  T +5,6  U +17,4  X +5,6
+                             Reich   L -4,4  T -4,8  U +13,6  X -4,8
+    Vorhersage des Sitzes beim Ablegen ("Objekt-Reichpunkt" in [Ablage]), gepoolt n = 40:
+      wahr -> Sitz   entlang r = +0,50 (p = 0,001)   quer r = +0,50 (p = 0,001)
+      Sehfehler -> Sitz   r = +0,06 / +0,09 (n.s.)
+
+**Die Wahrnehmung ist es nicht.** Der gesehene Blob liegt im Median 1 mm neben der wahren
+Grundrissmitte und erklaert 2-3 % der Streuung. Der Versatz entsteht zu etwa gleichen Teilen aus
+zwei Quellen nach dem Sehen:
+
+* **Das Objekt bewegt sich, bevor die Klaue schliesst** - im Mittel 6 mm **in Anfahrtrichtung
+  der Klaue** (T und X je +5,6 mm). Die absenkende Klaue schiebt es vor sich her. Beim U kommen
+  Ausreisser von 35-49 mm hinzu: das U wurde beim Anfahren weggestossen, die Hand ist ihm zum Teil
+  nachgefahren (daher dort auch der grosse Reichfehler mit gleichem Vorzeichen).
+* **Die Hand bleibt vor dem Griffpunkt stehen** - bei L/T/X im Mittel 4-5 mm zu kurz entlang.
+
+Beides addiert sich bei T und X zu rund **+11 mm**: das Objekt sitzt systematisch eine Fingerbreite
+vor der Klauenmitte, und dieser Sitz traegt sich bis in die Ablage durch (r = 0,50). Der Agent
+sieht davon beim Zufassen nichts, weil er sein Ziel vor der Anfahrt festlegt. Der systematische
+Teil (Mittel) ist der, den die Policy laut [Verluste nach dem Anheben](/befunde/verluste-nach-dem-anheben.md)
+ausgleicht; die Streuung (sd 6-7 mm, beim U 11) gleicht sie nicht aus.
+
+Einschraenkung: ein Seed, U nur 8 Zugriffe (1 geliefert). Die Korrelation wahr -> Ablage aus dem
+ersten Lauf (U quer r = 0,98) repliziert gepoolt (r = 0,50), je Form bei n = 6-12 nicht stabil.
+
 # Bewertung
 
 * **Klauenlage:** kein Defekt, sondern eine fehlende Lernspannung. Eine Regel "immer quer" waere
@@ -125,7 +167,7 @@ eigene Zeile.
   **schadet** (schmalere Klaue, rutschigere Oberflaeche, laengerer Balken) - dann muesste das
   Weltmodell es aus eigenen Fehlschlaegen lernen. Ob es das kann, belegt der Dosislauf in
   [Wrist-Ausrichtung](/befunde/wrist-ausrichtung.md) (Kreuz-Merkmal, p ~ 0,03).
-* **Griffversatz:** die naechste Frage ist nicht mehr "sieht die Policy beim Tragen hin", sondern
+* **Griffversatz (durch den Nachtrag beantwortet: Schieben und Zu-kurz-Reichen, nicht Sehen):** die naechste Frage ist nicht mehr "sieht die Policy beim Tragen hin", sondern
   "wo entsteht der 4-14-mm-Versatz zwischen Sehen und Zufassen". Eine Zeile mit gesehenem gegen
   wahren Schwerpunkt beim Zufassen wuerde ihn in Wahrnehmung und Reichen zerlegen.
 * `evidenz: einzelmessung` - ein Seed je Lauf, kleine n pro Form.
