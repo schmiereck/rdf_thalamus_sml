@@ -2633,6 +2633,13 @@ def run_self_learning_steering(headless=False):
     LONG = "obj_blue"; LONG_HALF = (0.034, 0.009, 0.012)   # clearly a LONG thin bar (not a cube)
     if os.environ.get("ACT23_BALKEN_BREITE", ""):        # Balken-Welt: Breite in mm (Vorgabe 18), s. unten
         LONG_HALF = (0.034, 0.0005 * float(os.environ["ACT23_BALKEN_BREITE"]), 0.012)
+    if os.environ.get("ACT23_BALKEN_LAENGE", ""):       # Balken-Welt: Laenge in mm (Vorgabe 68)
+        LONG_HALF = (0.0005 * float(os.environ["ACT23_BALKEN_LAENGE"]), LONG_HALF[1], LONG_HALF[2])
+    # Der Balken ist im Modell ein 24-mm-Wuerfel und wird erst zur Laufzeit gestreckt; geom_rbound/geom_aabb
+    # bleiben dabei auf dem Wuerfel (21 mm Huellradius).  Gemessen: ein 120-mm-Balken uebersieht dann jede
+    # Beruehrung an seinen Enden (0 statt 4 Kontakte).  Mit ACT23_BALKEN_LAENGE wird die Huelle mitgefuehrt;
+    # die Vorgabewelt bleibt zeichengleich (ihre aeusseren ~4 mm sind fuer die Naegel ebenso unsichtbar).
+    _BAL_HUELLE = bool(os.environ.get("ACT23_BALKEN_LAENGE", ""))
     CUBE_BODIES = ["obj_red", "obj_green"]
 
     print("act23 [viz] — self-learning grasper command-steering" + (" (headless self-test)" if headless else ""))
@@ -4643,6 +4650,16 @@ def run_self_learning_steering(headless=False):
     if _bal_mf != 1.0 or os.environ.get("ACT23_BALKEN_REIBUNG", "") or os.environ.get("ACT23_BALKEN_BREITE", ""):
         print(f"[Balken-Welt] Masse {1e3 * _bal_m0:.0f} -> {1e3 * float(sim.m.body_mass[bid]):.0f} g, "
               f"Reibung {float(sim.m.geom_friction[_bal_g][0]):.2f}, Breite {2000 * LONG_HALF[1]:.0f} mm", flush=True)
+    def _bal_huelle():
+        """Kollisionshuelle des gestreckten Balkens nachfuehren (nur mit ACT23_BALKEN_LAENGE, s. oben)."""
+        if _BAL_HUELLE:
+            sim.m.geom_rbound[_bal_g] = float(np.linalg.norm(LONG_HALF))
+            sim.m.geom_aabb[_bal_g][3:] = np.asarray(LONG_HALF, float)
+
+    if _BAL_HUELLE:
+        print(f"[Balken-Welt] Laenge {2000 * LONG_HALF[0]:.0f} mm, Breite {2000 * LONG_HALF[1]:.0f} mm, "
+              f"Masse {1e3 * float(sim.m.body_mass[bid]):.1f} g (Masse und Traegheit bleiben die des Wuerfels), "
+              f"Kollisionshuelle nachgefuehrt", flush=True)
     # KLAUEN-WELT (ACT23_KLAUE_OFFEN_MAX = groesster Greiferwinkel joint_5, Vorgabe leer = 3,14): ein
     # Anschlag am Greifer, keine Regel -- das Netz befiehlt weiter, was es will, der Motor kommt nur nicht
     # weiter auf.  Lichte Weite zwischen den Naegeln bei 0,54 (Vorgabe offen) 56 mm, 0,42 44, 0,36 ~37,
@@ -4671,6 +4688,7 @@ def run_self_learning_steering(headless=False):
         park_all()
         if cmd == LONG:
             sim.m.geom_size[sim.m.body_geomadr[bid]] = np.asarray(LONG_HALF, float)
+            _bal_huelle()
             z = float(LONG_HALF[2])
         else:
             z = 0.012
@@ -5205,6 +5223,7 @@ def run_self_learning_steering(headless=False):
     def _set_sizes():
         sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "obj_red")]] = np.array([0.012] * 3)
         sim.m.geom_size[sim.m.body_geomadr[bid]] = np.asarray(LONG_HALF, float)   # obj_blue stays elongated
+        _bal_huelle()
         for nm, h0 in shape_half0.items():                 # repair the L/U FIRST geom too: any set_object_size
             if nm == NOVEL_BODY and _novel_half["h"] is not None:
                 # ABSICHTLICH verformter Probe-Koerper (ACT23_NOVEL_EVERY) -- NICHT zuruecksetzen.

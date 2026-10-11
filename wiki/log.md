@@ -2,6 +2,11 @@
 
 ## 2026-10-11
 
+* **Nachtrag 2**: [Balken-Welt: schraeg schadet nicht](/befunde/balken-welt-schraeg.md) - Schalter
+  ACT23_BALKEN_LAENGE; langer schmaler Balken 100/130 x 12/18 mm (auch mit Klaue bis 37 mm), je 12 Ep quer gegen 45 Grad:
+  kein Gefaelle (21/48 gegen 22/48). Welt-Fehler gefunden: geom_rbound/aabb des gestreckten Balkens bleiben beim
+  24-mm-Wuerfel (120-mm-Balken: 0 statt 4 Kontakte an den Enden); mit LAENGE nachgefuehrt, Vorgabe unveraendert.
+
 * **Nachtrag + Berichtigung**: [Balken-Welt: schraeg schadet nicht](/befunde/balken-welt-schraeg.md) - Schalter
   ACT23_KLAUE_OFFEN_MAX (Anschlag am Greifermotor). Klaue bis 44/37/34 mm und Balken 10-29 g / Reibung 1,7-2,0, je 12 Ep
   quer gegen 45 Grad: kein Gefaelle (Klaue gepoolt 17/36 gegen 13/36, p = 0,47). Schraeg haelt auch ohne Eindrehen

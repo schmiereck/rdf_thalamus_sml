@@ -1,7 +1,7 @@
 ---
 type: Befund
 title: Eine Welt, in der schraeges Greifen am Balken schadet - nicht gefunden, die Klaue richtet den Balken selbst aus
-description: Pruefstand mit erzwungener Klauenlage (quer 90 gegen schraeg 45 Grad) in acht Balken-Welten. Breiter (21/23 mm), schwerer oder glatter Balken - schraeg liefert so gut wie quer, weil die schliessende Klaue den Balken eindreht. Schwer UND griffig verhindert das Eindrehen (0 Grad), laesst dann aber auch quer kaum noch heben (48 g 3/12 gegen 3/12, 97 g und 194 g 0). Eine Welt mit Gefaelle zwischen quer und schraeg gibt es mit Balkeneigenschaften allein nicht. NACHTRAG: auch eine schmaler oeffnende Klaue (44/37/34 statt 56 mm) und feiner gestufte Reibung/Masse erzeugen keins (gepoolt Klaue 17/36 gegen 13/36, p = 0,47) - und schraeg haelt dort OHNE Eindrehen (Median 1 Grad).
+description: Pruefstand mit erzwungener Klauenlage (quer 90 gegen schraeg 45 Grad) in acht Balken-Welten. Breiter (21/23 mm), schwerer oder glatter Balken - schraeg liefert so gut wie quer, weil die schliessende Klaue den Balken eindreht. Schwer UND griffig verhindert das Eindrehen (0 Grad), laesst dann aber auch quer kaum noch heben (48 g 3/12 gegen 3/12, 97 g und 194 g 0). Eine Welt mit Gefaelle zwischen quer und schraeg gibt es mit Balkeneigenschaften allein nicht. NACHTRAG: auch eine schmaler oeffnende Klaue (44/37/34 statt 56 mm) und feiner gestufte Reibung/Masse erzeugen keins (gepoolt Klaue 17/36 gegen 13/36, p = 0,47) - und schraeg haelt dort OHNE Eindrehen (Median 1 Grad). NACHTRAG 2: auch ein langer schmaler Balken (100/130 mm lang, 12/18 mm breit, auch mit Klaue bis 37 mm) gibt keins (quer 21/48 gegen schraeg 22/48).
 tags: [act23, wrist, welt, balken, pruefstand, selbstlernen]
 status: stable
 evidenz: einzelmessung
@@ -130,6 +130,39 @@ Balken nichts. Damit gibt es fuer das Weltmodell keine Gegenbeispiele, aus denen
 koennte - und es gibt auch keinen Grund, warum es das sollte. Ein weiterer Kandidat waere ein
 deutlich LAENGERER oder schmalerer Balken (bei 45 Grad greift die Klaue dann eher eine Kante);
 nicht gemessen.
+
+# Nachtrag 2 (2026-10-11): langer schmaler Balken
+
+Nutzerauftrag: *"Teste den langen schmalen Balken."*
+
+**Gebaut:** `ACT23_BALKEN_LAENGE=<mm>` (Vorgabe 68). Masse und Traegheit bleiben die des 9,7-g-Wuerfels,
+wie schon bei der Breite.
+
+**Nebenbefund, Welt-Fehler:** obj_blue ist im Modell ein 24-mm-Wuerfel und wird erst zur Laufzeit auf
+Balkenmass gestreckt (`geom_size`); `geom_rbound` (21 mm) und `geom_aabb` bleiben dabei auf dem Wuerfel.
+Probe: Wuerfel 6 mm ueberlappend am Ende eines 120-mm-Balkens -> **0 Kontakte** (mit nachgefuehrter Huelle
+4, der Wuerfel wird weggedrueckt). Mit `ACT23_BALKEN_LAENGE` wird die Huelle nachgefuehrt. **Die Vorgabewelt
+ist unveraendert**: nach Rechnung (Huellradien 21 + ~9 mm) sind die aeusseren ~4 mm des 68-mm-Balkens fuer
+die Klauennaegel unsichtbar - fuer Griffe nahe der Mitte belanglos, nicht am Arm gemessen. Beheben waere
+eine Aenderung der Vorgabephysik (Nutzerentscheid).
+
+**Zahlen** (gleicher Aufbau, je 12 Episoden):
+
+    Welt                                   quer 90   schraeg 45   |Drehung beim Schliessen| 45er   Lage beim Zufassen (45er)
+    100 x 12 mm                             6          6           Median 1, max 5                44-49
+    130 x 12 mm                             4          6           Median 0, max 4                44-49
+    130 x 18 mm                             7          7           Median 0, max 16               44-60
+    130 x 12 mm, Klaue bis 0,36 (37 mm)     4          3           Median 0, max 1                44-46
+
+Gepoolt quer 21/48 gegen schraeg 22/48. Kein Vergleich auch nur in der Naehe einer Signifikanz.
+Fehlerarten in beiden Armen gemischt (nicht gegriffen / Griff am Objekt fehlgeschlagen / hielt nicht /
+daneben platziert), keine Art haeuft sich im 45er Arm.
+
+**Bewertung:** Auch Laenge und Schmalheit erzeugen kein Gefaelle. Der Balken dreht sich beim Schliessen
+nicht (Median 0 Grad), der 45-Grad-Griff haelt ihn trotzdem so gut wie der quere. Damit ist die
+Balken-Welt ueber Breite, Laenge, Masse, Reibung und Klauenoeffnung abgesucht: **in dieser Physik kostet
+ein schraeger Griff am Balken nichts.** Meine Vermutung, ein langer schmaler Balken lasse die Klaue bei
+45 Grad nur eine Kante fassen, ist widerlegt.
 
 # Verwandt
 
