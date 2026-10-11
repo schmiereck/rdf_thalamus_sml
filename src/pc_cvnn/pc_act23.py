@@ -4643,6 +4643,17 @@ def run_self_learning_steering(headless=False):
     if _bal_mf != 1.0 or os.environ.get("ACT23_BALKEN_REIBUNG", "") or os.environ.get("ACT23_BALKEN_BREITE", ""):
         print(f"[Balken-Welt] Masse {1e3 * _bal_m0:.0f} -> {1e3 * float(sim.m.body_mass[bid]):.0f} g, "
               f"Reibung {float(sim.m.geom_friction[_bal_g][0]):.2f}, Breite {2000 * LONG_HALF[1]:.0f} mm", flush=True)
+    # KLAUEN-WELT (ACT23_KLAUE_OFFEN_MAX = groesster Greiferwinkel joint_5, Vorgabe leer = 3,14): ein
+    # Anschlag am Greifer, keine Regel -- das Netz befiehlt weiter, was es will, der Motor kommt nur nicht
+    # weiter auf.  Lichte Weite zwischen den Naegeln bei 0,54 (Vorgabe offen) 56 mm, 0,42 44, 0,36 ~37,
+    # 0,33 ~33, 0,27 26 mm (Endstuecke je 1-4 mm enger).  Unter 0,31 nicht setzen: das Loslassen gilt erst
+    # ab J5_OPEN_TH = 0,30 als offen.  Nutzerauftrag 2026-10-11 (Balken-Welt, wiki/befunde/balken-welt-schraeg.md).
+    if os.environ.get("ACT23_KLAUE_OFFEN_MAX", ""):
+        _m5 = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_ACTUATOR, "m5")
+        sim.m.actuator_ctrlrange[_m5][1] = float(os.environ["ACT23_KLAUE_OFFEN_MAX"])
+        sim.m.actuator_ctrllimited[_m5] = 1
+        print(f"[Klauen-Welt] Greifer oeffnet hoechstens bis joint_5 = {sim.m.actuator_ctrlrange[_m5][1]:.2f} "
+              f"(Vorgabe offen {act16.J5_OPEN:.2f})", flush=True)
     # ACT23_SEED (default 7 = historical behaviour): scene placement + auto target picks.  Parallel
     # label-harvest WORKERS (act23_dose_workers.py) start from the SAME state pickle with the same
     # pickled module rngs -- without distinct seeds here they would replay bit-identical episodes

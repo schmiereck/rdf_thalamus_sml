@@ -2,6 +2,11 @@
 
 ## 2026-10-11
 
+* **Nachtrag + Berichtigung**: [Balken-Welt: schraeg schadet nicht](/befunde/balken-welt-schraeg.md) - Schalter
+  ACT23_KLAUE_OFFEN_MAX (Anschlag am Greifermotor). Klaue bis 44/37/34 mm und Balken 10-29 g / Reibung 1,7-2,0, je 12 Ep
+  quer gegen 45 Grad: kein Gefaelle (Klaue gepoolt 17/36 gegen 13/36, p = 0,47). Schraeg haelt auch ohne Eindrehen
+  (Median 1 Grad) - "die Klaue dreht ihn ein" war nicht der Grund. Berichtigt: die Klaue oeffnet innen 56 mm, nicht 24.
+
 * **Anlage**: [Balken-Welt: schraeg schadet nicht](/befunde/balken-welt-schraeg.md) - Schalter
   ACT23_BALKEN_BREITE/MASSE/REIBUNG, ACT23_SZENE_MIT, ACT23_FORCE_WRIST=rel:<Grad>; Pruefstand 90 gegen 45 Grad in
   8 Welten: kein Gefaelle. Klaue dreht den Balken ein; wo nicht (schwer+griffig), scheitert auch quer. 10x-Arme wegen

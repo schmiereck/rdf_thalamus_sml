@@ -1,7 +1,7 @@
 ---
 type: Befund
 title: Eine Welt, in der schraeges Greifen am Balken schadet - nicht gefunden, die Klaue richtet den Balken selbst aus
-description: Pruefstand mit erzwungener Klauenlage (quer 90 gegen schraeg 45 Grad) in acht Balken-Welten. Breiter (21/23 mm), schwerer oder glatter Balken - schraeg liefert so gut wie quer, weil die schliessende Klaue den Balken eindreht. Schwer UND griffig verhindert das Eindrehen (0 Grad), laesst dann aber auch quer kaum noch heben (48 g 3/12 gegen 3/12, 97 g und 194 g 0). Eine Welt mit Gefaelle zwischen quer und schraeg gibt es mit Balkeneigenschaften allein nicht; der naechste Hebel waere die Klaue selbst.
+description: Pruefstand mit erzwungener Klauenlage (quer 90 gegen schraeg 45 Grad) in acht Balken-Welten. Breiter (21/23 mm), schwerer oder glatter Balken - schraeg liefert so gut wie quer, weil die schliessende Klaue den Balken eindreht. Schwer UND griffig verhindert das Eindrehen (0 Grad), laesst dann aber auch quer kaum noch heben (48 g 3/12 gegen 3/12, 97 g und 194 g 0). Eine Welt mit Gefaelle zwischen quer und schraeg gibt es mit Balkeneigenschaften allein nicht. NACHTRAG: auch eine schmaler oeffnende Klaue (44/37/34 statt 56 mm) und feiner gestufte Reibung/Masse erzeugen keins (gepoolt Klaue 17/36 gegen 13/36, p = 0,47) - und schraeg haelt dort OHNE Eindrehen (Median 1 Grad).
 tags: [act23, wrist, welt, balken, pruefstand, selbstlernen]
 status: stable
 evidenz: einzelmessung
@@ -55,8 +55,9 @@ Welt, nicht eine Wirkung auf act23.)
 # Bewertung
 
 **Die Klaue richtet den Balken selbst aus.** Solange der Balken sich auf dem Tisch drehen kann,
-dreht die schliessende Klaue ihn Richtung quer - auch 23 mm breit (die Backen oeffnen innen rund
-24 mm) und auch 5-fach schwer. Ein glatter Balken dreht sich sogar leichter ein. Damit liefert
+dreht die schliessende Klaue ihn Richtung quer - auch 23 mm breit (~~die Backen oeffnen innen rund
+24 mm~~ **BERICHTIGT 2026-10-11:** die Naegel stehen offen 56 mm auseinander, 26 mm erst an der
+Schliessschwelle 0,27 - es war reichlich Platz) und auch 5-fach schwer. Ein glatter Balken dreht sich sogar leichter ein. Damit liefert
 schraeg so gut wie quer.
 
 **Wird das Eindrehen verhindert, scheitert alles.** Schwer und griffig haelt den Balken fest
@@ -72,6 +73,63 @@ es gibt in dieser Physik keine Gegenbeispiele.
 **Offen:** ein Eingriff an der KLAUE (schmalere Oeffnung, kuerzere Backen) statt am Balken. Das ist
 eine Aenderung am Greifer und betrifft alle Objekte; nicht ohne Nutzerentscheid. Zwischenwerte der
 Reibung (z. B. 1,6-1,8 bei 10-20 g) sind nicht gemessen.
+
+# Nachtrag 2026-10-11: Klaue schmaler, Reibung und Masse feiner
+
+Nutzerauftrag: *"Mache Klaue etwas schmaler oeffnen und Reibung und Gewicht feiner abstufen."*
+
+**Gebaut:** `ACT23_KLAUE_OFFEN_MAX=<joint_5>` - ein Anschlag am Greifermotor (`actuator_ctrlrange`
+von m5). Das Netz befiehlt weiter, was es will; die Klaue kommt nur nicht weiter auf. Weltschalter,
+keine Regel. Nicht unter 0,31 setzen: das Loslassen zaehlt erst ab `J5_OPEN_TH` = 0,30 als offen.
+Nebenwirkung nur im Log: die `[Schub]`-Marke "schliesst" (j5 < 0,8 x 0,54) liegt dann schon im Anflug.
+
+**Lichte Weite der Klaue** (gemessen mit `mj_geomDistance`, Ruhelage nach 1500 Schritten):
+
+    joint_5          0,54   0,50   0,46   0,42   0,38   0,34   0,30   0,27
+    Naegel  (mm)       56     52     48     44     39     35     30     26
+    Endstuecke (mm)    53     49     46     42     39     35     31     29
+
+Grob ueberschlagen braucht ein 18-mm-Balken unter 45 Grad mit ~12 mm breiten Backen rund
+18/sin45 + 12/tan45 = 37 mm, quer nur 18 mm.
+
+**Zahlen** (gleicher Aufbau wie oben: Seed 9511, je 12 Episoden, Balken immer auf dem Tisch, Kopie
+des Hauptzustands, NO_PERSIST; je Paar zwei Prozesse gleichzeitig):
+
+    Welt                                   quer 90   schraeg 45   |Drehung beim Schliessen| 45er Arm   Lage beim Zufassen (45er)
+    Klaue bis 0,42 (44 mm)                  7          5           Median 2, max 18                  45-62
+    Klaue bis 0,36 (37 mm)                  5          4           Median 1, max 10                  44-54
+    Klaue bis 0,33 (34 mm)                  5          4           Median 1, max 5                   44-50
+    10 g, Reibung 1,7                       7          6           Median 1, max 12                  45-57
+    10 g, Reibung 2,0                       4          6           Median 0, max 7                   45-52
+    19 g, Reibung 1,7                       5          6           Median 1, max 9                   44-54
+    19 g, Reibung 2,0                       4          5           Median 1, max 3                   45-48
+    29 g, Reibung 2,0                       4          4           Median 1, max 3                   45-47
+
+Klaue gepoolt quer 17/36 gegen schraeg 13/36, Fisher p = 0,47. Kein einzelner Vergleich auch nur
+in der Naehe (Bonferroni ueber 8 Welten: Schranke 0,006). Die Fehlerarten (Griff am Objekt
+fehlgeschlagen / hielt nicht / daneben platziert) sind in beiden Armen gleich verteilt.
+
+**Bewertung:**
+
+* **Kein Gefaelle, auch nicht mit schmaler Klaue.** Bei 34 mm Oeffnung - unter der Ueberschlags-
+  grenze von 37 mm fuer 45 Grad - greift die Klaue schraeg so gut wie quer.
+* **Die obige Erklaerung "die Klaue dreht den Balken ein" ist unvollstaendig.** Mit schmaler Klaue
+  und mit griffigem Balken dreht er sich beim Schliessen kaum noch (Median 0-1 Grad, Lage beim
+  Zufassen 44-50), und schraeg liefert trotzdem 4-6 von 12. **Ein 45-Grad-Griff haelt an diesem
+  Balken von sich aus.** Das Eindrehen ist ein Begleiteffekt, nicht der Grund, warum schraeg nichts
+  kostet. Der Ueberschlag mit 37 mm unterschaetzt offenbar, wie weit die Naegel (Neigung, sie
+  greifen unterhalb der Oberkante) einen schraegen Balken umfassen.
+* **Die feinen Stufen fuellen die Luecke nicht.** Zwischen "dreht ein, liefert" und "schwer und
+  griffig, liefert gar nicht" (frueher 48 g) gibt es bei 10-29 g und Reibung 1,7-2,0 keine Zone,
+  in der nur schraeg scheitert. Quer liegt hier bei 4-7 von 12 - unter den frueheren 8 der
+  Standardwelt, einzeln nicht signifikant (z. B. 4/12 gegen 8/12, p = 0,22; andere Laeufe,
+  anderer Commit).
+
+**Ehrliches Negativ, jetzt ueber Balken UND Klaue:** in dieser Physik kostet ein 45-Grad-Griff am
+Balken nichts. Damit gibt es fuer das Weltmodell keine Gegenbeispiele, aus denen es "quer" lernen
+koennte - und es gibt auch keinen Grund, warum es das sollte. Ein weiterer Kandidat waere ein
+deutlich LAENGERER oder schmalerer Balken (bei 45 Grad greift die Klaue dann eher eine Kante);
+nicht gemessen.
 
 # Verwandt
 
