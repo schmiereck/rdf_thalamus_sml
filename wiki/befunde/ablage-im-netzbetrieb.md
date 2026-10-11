@@ -113,6 +113,7 @@ auch dort trennten die Aspekte vor dem Schliessen nicht.
 
 # Verwandt
 
+* [Verluste nach dem Anheben](/befunde/verluste-nach-dem-anheben.md) - 760 angehobene Episoden je Form; die Policy gleicht nur den mittleren Versatz aus (2026-10-11)
 * [Ablage beim echten Oeffnen](/befunde/ablage-beim-oeffnen.md) - die FSM-Zerlegung
 * [Aufmerksamkeit fuer Objekt und Ziel](/fragen/aufmerksamkeit-objekt-ziel.md) - Objekt-Versatz-Korrektur (FSM)
 * [Noch an der Hand?](/befunde/halt-sehen.md) - das Verlieren unterwegs

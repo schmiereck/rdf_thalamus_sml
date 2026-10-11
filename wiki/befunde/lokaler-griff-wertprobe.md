@@ -106,9 +106,9 @@ trotzdem nichts.
   [Offene Faeden](/fragen/offene-faeden-act23.md).
 * `ACT23_FORCE_GRASP=lokal|lokal_priv` bleibt als Probe-Werkzeug im Code (Vorgabe leer, wie
   `prong`).
-* Wo die Verluste der Zinkenformen tatsaechlich sitzen, bleibt offen. Getragen werden die Formen
-  ueberwiegend, sie gehen danach verloren oder landen daneben
-  ([GUI-Lauf](/befunde/gui-lauf-2026-10-09.md)).
+* Wo die Verluste der Zinkenformen tatsaechlich sitzen: zerlegt in
+  [Verluste nach dem Anheben](/befunde/verluste-nach-dem-anheben.md) - L und U setzen knapp daneben
+  ab, weil die Hand den seitlichen Sitz des Objekts nicht ausgleicht.
 
 # Verwandt
 

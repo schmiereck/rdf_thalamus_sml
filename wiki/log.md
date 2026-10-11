@@ -2,6 +2,12 @@
 
 ## 2026-10-11
 
+* **Anlage**: [Verluste nach dem Anheben](/befunde/verluste-nach-dem-anheben.md) - 760 angehobene
+  Episoden aus GUI-Lauf, Langlauf-A/B und Wertprobe-Kontrolle je Form zerlegt. L/U setzen knapp daneben
+  ab (32/35 % gegen Wuerfel 10 %), Hand steht gleich weit vom Ziel, die Policy gleicht nur den mittleren
+  Versatz in der Hand aus. Unterwegs verloren formunabhaengig. Messfalle: `trug True` ist kein Anheben
+  des kommandierten Objekts.
+
 * **Anlage**: [Wertprobe lokaler Griff](/befunde/lokaler-griff-wertprobe.md) - Stufe 0 der
   formabhaengigen Griffwahl, gepaartes A/B 100 Aufgaben L/U/T/X: geliefert 49 gegen 66 (p = 0,019);
   L/U/T 42 gegen 43, Kreuz 7 gegen 23. Vorab-Kriterium verfehlt, Faden geschlossen; Konzeptseite
