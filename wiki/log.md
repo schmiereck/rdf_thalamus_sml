@@ -2,6 +2,11 @@
 
 ## 2026-10-11
 
+* **Behoben**: [Balken-Welt](/befunde/balken-welt-schraeg.md) - Kollisionshuelle (geom_rbound UND geom_aabb)
+  wird bei jeder Laufzeit-Umbemessung nachgefuehrt (`BracketArmSim.huelle_nachfuehren`, set_object_size, Balken,
+  Sockel- und Formhoehen). Aendert die Vorgabephysik: die Enden des 68-mm-Balkens sind fuer die Naegel jetzt da
+  (Probe 0 -> 4 Kontakte). Rauchtest 3/3 geliefert; Wirkung auf act23 nicht gemessen.
+
 * **Nachtrag 2**: [Balken-Welt: schraeg schadet nicht](/befunde/balken-welt-schraeg.md) - Schalter
   ACT23_BALKEN_LAENGE; langer schmaler Balken 100/130 x 12/18 mm (auch mit Klaue bis 37 mm), je 12 Ep quer gegen 45 Grad:
   kein Gefaelle (21/48 gegen 22/48). Welt-Fehler gefunden: geom_rbound/aabb des gestreckten Balkens bleiben beim

@@ -146,6 +146,15 @@ ist unveraendert**: nach Rechnung (Huellradien 21 + ~9 mm) sind die aeusseren ~4
 die Klauennaegel unsichtbar - fuer Griffe nahe der Mitte belanglos, nicht am Arm gemessen. Beheben waere
 eine Aenderung der Vorgabephysik (Nutzerentscheid).
 
+**BEHOBEN 2026-10-11 (Nutzerauftrag "Behebe den Huellenfehler auch in der Standardwelt"):**
+`BracketArmSim.huelle_nachfuehren(g)` (pc_act14) setzt `geom_rbound` und `geom_aabb` eines Quaders aus
+seinem `geom_size`; `set_object_size` ruft es immer, act23 ruft es fuer den Balken und an den beiden
+Hoehen-Stellen (Sockel, Formhoehen), die bisher nur `geom_rbound` nachfuehrten. Gemessen: **beide Felder
+sind noetig** - nur rbound oder nur aabb nachgefuehrt gibt weiter 0 Kontakte. In der Vorgabewelt bekommt
+ein nagelgrosser Wuerfel, der 2 mm in das Ende des 68-mm-Balkens ragt, jetzt 4 statt 0 Kontakte. Rauchtest
+act23 (3 Ep, Wuerfel/Balken/L) laeuft und liefert. **Alle Balken-Zahlen oben stammen noch aus der Welt mit
+alter Huelle** (Ausnahme: die LAENGE-Zeilen). Eine Wirkung auf act23 ist nicht gemessen (kein A/B).
+
 **Zahlen** (gleicher Aufbau, je 12 Episoden):
 
     Welt                                   quer 90   schraeg 45   |Drehung beim Schliessen| 45er   Lage beim Zufassen (45er)

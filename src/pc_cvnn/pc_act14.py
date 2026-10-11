@@ -309,6 +309,20 @@ class BracketArmSim:
         """Set a box object's half-extents at runtime (cube vs wide block) for affordances."""
         bid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_BODY, name)
         self.m.geom_size[self.m.body_geomadr[bid]] = np.asarray(half, float)
+        self.huelle_nachfuehren(int(self.m.body_geomadr[bid]))
+
+    def huelle_nachfuehren(self, g):
+        """Kollisionshuelle eines zur Laufzeit umbemessenen Quaders nachfuehren.  MuJoCo prueft vor jedem
+        Kontakt geom_rbound UND geom_aabb, beide stammen aus dem Kompilieren; wer nur geom_size aendert,
+        dessen vergroesserter Koerper ist ausserhalb der alten Huelle fuer die Physik nicht da (gemessen:
+        120-mm-Balken auf 24-mm-Wuerfel-Huelle, 0 statt 4 Kontakte an seinem Ende; nur eines der beiden
+        Felder nachzufuehren reicht nicht).  wiki/befunde/balken-welt-schraeg.md"""
+        if int(self.m.geom_type[g]) != int(mujoco.mjtGeom.mjGEOM_BOX):
+            return
+        s = np.asarray(self.m.geom_size[g], float)
+        self.m.geom_rbound[g] = float(np.linalg.norm(s))
+        self.m.geom_aabb[g][:3] = 0.0
+        self.m.geom_aabb[g][3:] = s
 
     def joint_range(self, name):
         jid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_JOINT, name)

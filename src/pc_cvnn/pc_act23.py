@@ -2635,11 +2635,10 @@ def run_self_learning_steering(headless=False):
         LONG_HALF = (0.034, 0.0005 * float(os.environ["ACT23_BALKEN_BREITE"]), 0.012)
     if os.environ.get("ACT23_BALKEN_LAENGE", ""):       # Balken-Welt: Laenge in mm (Vorgabe 68)
         LONG_HALF = (0.0005 * float(os.environ["ACT23_BALKEN_LAENGE"]), LONG_HALF[1], LONG_HALF[2])
-    # Der Balken ist im Modell ein 24-mm-Wuerfel und wird erst zur Laufzeit gestreckt; geom_rbound/geom_aabb
-    # bleiben dabei auf dem Wuerfel (21 mm Huellradius).  Gemessen: ein 120-mm-Balken uebersieht dann jede
-    # Beruehrung an seinen Enden (0 statt 4 Kontakte).  Mit ACT23_BALKEN_LAENGE wird die Huelle mitgefuehrt;
-    # die Vorgabewelt bleibt zeichengleich (ihre aeusseren ~4 mm sind fuer die Naegel ebenso unsichtbar).
-    _BAL_HUELLE = bool(os.environ.get("ACT23_BALKEN_LAENGE", ""))
+    # Der Balken ist im Modell ein 24-mm-Wuerfel und wird erst zur Laufzeit gestreckt.  Bis 2026-10-11 blieben
+    # geom_rbound/geom_aabb dabei auf dem Wuerfel (21 mm Huellradius): die aeusseren ~4 mm des 68-mm-Balkens
+    # waren fuer die Klauennaegel unsichtbar, ein 120-mm-Balken uebersah jede Beruehrung an seinen Enden.
+    # Seitdem fuehrt _bal_huelle() die Huelle immer mit (Nutzerauftrag, auch in der Vorgabewelt).
     CUBE_BODIES = ["obj_red", "obj_green"]
 
     print("act23 [viz] — self-learning grasper command-steering" + (" (headless self-test)" if headless else ""))
@@ -4651,15 +4650,13 @@ def run_self_learning_steering(headless=False):
         print(f"[Balken-Welt] Masse {1e3 * _bal_m0:.0f} -> {1e3 * float(sim.m.body_mass[bid]):.0f} g, "
               f"Reibung {float(sim.m.geom_friction[_bal_g][0]):.2f}, Breite {2000 * LONG_HALF[1]:.0f} mm", flush=True)
     def _bal_huelle():
-        """Kollisionshuelle des gestreckten Balkens nachfuehren (nur mit ACT23_BALKEN_LAENGE, s. oben)."""
-        if _BAL_HUELLE:
-            sim.m.geom_rbound[_bal_g] = float(np.linalg.norm(LONG_HALF))
-            sim.m.geom_aabb[_bal_g][3:] = np.asarray(LONG_HALF, float)
+        """Kollisionshuelle des gestreckten Balkens nachfuehren (s. oben bei LONG_HALF)."""
+        sim.huelle_nachfuehren(_bal_g)
 
-    if _BAL_HUELLE:
+    if os.environ.get("ACT23_BALKEN_LAENGE", ""):
         print(f"[Balken-Welt] Laenge {2000 * LONG_HALF[0]:.0f} mm, Breite {2000 * LONG_HALF[1]:.0f} mm, "
-              f"Masse {1e3 * float(sim.m.body_mass[bid]):.1f} g (Masse und Traegheit bleiben die des Wuerfels), "
-              f"Kollisionshuelle nachgefuehrt", flush=True)
+              f"Masse {1e3 * float(sim.m.body_mass[bid]):.1f} g (Masse und Traegheit bleiben die des Wuerfels)",
+              flush=True)
     # KLAUEN-WELT (ACT23_KLAUE_OFFEN_MAX = groesster Greiferwinkel joint_5, Vorgabe leer = 3,14): ein
     # Anschlag am Greifer, keine Regel -- das Netz befiehlt weiter, was es will, der Motor kommt nur nicht
     # weiter auf.  Lichte Weite zwischen den Naegeln bei 0,54 (Vorgabe offen) 56 mm, 0,42 44, 0,36 ~37,
@@ -4967,7 +4964,7 @@ def run_self_learning_steering(headless=False):
         _h = SOCKEL_HOEHEN[int(crng.integers(len(SOCKEL_HOEHEN)))] if len(SOCKEL_HOEHEN) > 1 \
             else SOCKEL_HOEHEN[0]
         sim.m.geom_size[_g][2] = _h / 2.0
-        sim.m.geom_rbound[_g] = float(np.linalg.norm(sim.m.geom_size[_g]))
+        sim.huelle_nachfuehren(_g)                       # rbound UND aabb (vorher nur rbound)
         _xy = np.asarray(scene.get(_aktiv, (np.asarray(SOCKEL_XY, float),))[0], float)
         if float(np.linalg.norm(_xy - np.asarray(PARK_XY, float))) < 0.05:
             _xy = platte["xy"].copy()                      # kam gerade aus dem Parkhaus: an die zuletzt
@@ -5218,7 +5215,7 @@ def run_self_learning_steering(headless=False):
         for _nm, _h in _hoehe.items():
             for _g in _geoms_of(_nm):
                 sim.m.geom_size[_g][2] = float(_h)
-                sim.m.geom_rbound[_g] = float(np.linalg.norm(sim.m.geom_size[_g]))
+                sim.huelle_nachfuehren(_g)               # rbound UND aabb (vorher nur rbound)
 
     def _set_sizes():
         sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "obj_red")]] = np.array([0.012] * 3)
