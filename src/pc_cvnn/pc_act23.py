@@ -6943,6 +6943,16 @@ def run_self_learning_steering(headless=False):
     # counter at zero.  D0b needs the outer trajectory identity for a scene/trajectory split.
     d0b_trace_episode = [0]
 
+    def _grundriss_mitte(sim, body):
+        """Flaechengewichtete Mitte der Geoms eines Koerpers in der Tischebene (nur Messung)."""
+        bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, body)
+        gs = [g for g in range(sim.m.ngeom) if int(sim.m.geom_bodyid[g]) == bid]
+        if not gs:
+            return np.asarray(sim.obj_pos(body), float)[:2]
+        w = np.array([4.0 * float(sim.m.geom_size[g][0]) * float(sim.m.geom_size[g][1]) for g in gs]) + 1e-12
+        xy = np.array([sim.d.geom_xpos[g][:2] for g in gs], float)
+        return (w[:, None] * xy).sum(0) / w.sum()
+
     def run_one():
         import time as _time
         d0b_trace_episode[0] += 1
@@ -7205,7 +7215,10 @@ def run_self_learning_steering(headless=False):
                        "gp": np.asarray(det["grasp_xy"], float)[:2]
                              + (np.zeros(2) if sel_off["dxy"] is None else np.asarray(sel_off["dxy"], float)),
                        "w_plan": float(wrist_of(a_exec)),
-                       "yaw_seen": float(0.5 * np.arctan2(float(fe[3]), float(fe[2])))}
+                       "yaw_seen": float(0.5 * np.arctan2(float(fe[3]), float(fe[2]))),
+                       "c_det": np.asarray(sim.obj_pos(body), float)[:2],
+                       "f_det": _grundriss_mitte(sim, body),
+                       "yaw_det": float(sim.obj_yaw(body))}
             if a_exec is not None and world.n() > 0:
                 # VORHERSAGE DES WELT-MODELLS fuer die AUSGEFUEHRTE Aktion, direkt vor der Ausfuehrung.
                 # WOZU: erst damit laesst sich messen, wieviel des vorhandenen Signals das Modell
@@ -7988,6 +8001,21 @@ def run_self_learning_steering(headless=False):
                 _s = (_gv["pos"] - _gv["gp"]) * 1e3
                 _txt = f"gesehen entlang {_s @ _u:+.0f} quer {_s @ _q:+.0f}mm | " + _txt
             print(f"    [Griffversatz] {body}: {_txt} (Objektmitte gegen Reichpunkt beim Zufassen)", flush=True)
+            if _gv is not None:
+                # VERSATZKETTE (Messung 2026-10-11, geht in nichts ein): zerlegt "wahr minus gesehen" exakt
+                # in Sehfehler, Objektbewegung und Reichfehler.  Bezug ist die GRUNDRISSMITTE (flaechen-
+                # gewichtete Mitte der Koerper-Geoms), nicht der Koerperursprung -- bei L/U/T liegt der
+                # Ursprung nicht in der Flaechenmitte, und die Kamera sieht die Flaeche.
+                #   wahr(Grundriss) = gesehen - Sehfehler + bewegt - Reichfehler
+                _dy = _zf["obj_yaw"] - _gv["yaw_det"]
+                _R = np.array([[np.cos(_dy), -np.sin(_dy)], [np.sin(_dy), np.cos(_dy)]])
+                _f_zf = _zf["cxy"] + _R @ (_gv["f_det"] - _gv["c_det"])          # Grundrissmitte beim Zufassen
+                _kv = lambda v: f"entlang {float(v @ _u):+.0f} quer {float(v @ _q):+.0f}"
+                print(f"    [Versatzkette] {body}: Sehfehler (Blob - Grundrissmitte) {_kv((_gv['pos'] - _gv['f_det']) * 1e3)}"
+                      f" | bewegt bis Zufassen {_kv((_f_zf - _gv['f_det']) * 1e3)}"
+                      f" | Reichfehler (Hand - Griffpunkt) {_kv((_zf['reach'] - _gv['gp']) * 1e3)}"
+                      f" | wahr (Grundriss - Hand) {_kv((_f_zf - _zf['reach']) * 1e3)}"
+                      f" | Ursprung - Grundriss {_kv((_zf['cxy'] - _f_zf) * 1e3)} mm", flush=True)
             def _fold(a):                                      # Winkel zweier Achsen, 0-90 Grad
                 d = np.degrees(a) % 180.0
                 return min(d, 180.0 - d)
