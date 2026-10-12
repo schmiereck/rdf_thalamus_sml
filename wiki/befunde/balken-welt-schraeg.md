@@ -153,7 +153,7 @@ Hoehen-Stellen (Sockel, Formhoehen), die bisher nur `geom_rbound` nachfuehrten. 
 sind noetig** - nur rbound oder nur aabb nachgefuehrt gibt weiter 0 Kontakte. In der Vorgabewelt bekommt
 ein nagelgrosser Wuerfel, der 2 mm in das Ende des 68-mm-Balkens ragt, jetzt 4 statt 0 Kontakte. Rauchtest
 act23 (3 Ep, Wuerfel/Balken/L) laeuft und liefert. **Alle Balken-Zahlen oben stammen noch aus der Welt mit
-alter Huelle** (Ausnahme: die LAENGE-Zeilen). Eine Wirkung auf act23 ist nicht gemessen (kein A/B).
+alter Huelle** (Ausnahme: die LAENGE-Zeilen). Eine Wirkung auf act23 ist nicht gemessen (kein A/B). NACHTRAG 2026-10-12: gemessen, neutral - [Huellenkorrektur: act23-A/B](/befunde/huellenkorrektur-ab.md).
 
 **Zahlen** (gleicher Aufbau, je 12 Episoden):
 

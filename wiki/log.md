@@ -1,5 +1,11 @@
 # Chronik
 
+## 2026-10-12
+
+* **Anlage**: [Huellenkorrektur: act23-A/B neutral](/befunde/huellenkorrektur-ab.md) - ACT14_HUELLE_ALT=1 gegen
+  Vorgabe, Seeds 9701-9708 je 25 Ep gepaart: 118/200 gegen 120/200, Vorzeichen 4:4 (Wilcoxon p = 0,67), McNemar
+  p = 0,33, Balken 22/25 gegen 21/25. Arm A vorab zeichengleich mit 16ea5d8 geprueft. Korrektur bleibt an.
+
 ## 2026-10-11
 
 * **Behoben**: [Balken-Welt](/befunde/balken-welt-schraeg.md) - Kollisionshuelle (geom_rbound UND geom_aabb)
