@@ -2,6 +2,11 @@
 
 ## 2026-10-12
 
+* **Messung**: [Huellenkorrektur](/befunde/huellenkorrektur-ab.md) Nachtrag 2 - act23-A/B der erweiterten Korrektur
+  (fadc510), Seeds 9701-9708 x 25: 118/200 gegen 120/200, alle 16 Logs zeichengleich mit dem ersten A/B. Sonde: ausser
+  dem ersten Balkenstrecken aendert keine Nachfuehrung einen Wert; Neuheits-obj_T und Hoehen kommen in der Vorgabewelt
+  nicht vor. Wirkungsfrei per Konstruktion, bleibt an.
+
 * **Ergaenzung + Berichtigung**: [Huellenkorrektur](/befunde/huellenkorrektur-ab.md) - alle Laufzeit-Umbemessungen
   im act23-Pfad geprueft und nachgefuehrt (main_diag obj_red, Neuheits-obj_T, Rueckstellungen, Trainingsbilder). Neu:
   Huellbaum bvh_aabb mehrteiliger Koerper (Traegheitsrahmen) - ohne ihn 32 von 320 Kontakten verpasst, mit 0. Balken:

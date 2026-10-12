@@ -1,7 +1,7 @@
 ---
 type: Befund
 title: Kollisionshuelle nachfuehren - act23-A/B neutral
-description: Gepaartes act23-A/B (8 Seeds x 25 Episoden je Arm) der Huellenkorrektur e4eb65e gegen die alte Huelle (ACT14_HUELLE_ALT=1). Kein Unterschied - 118/200 gegen 120/200, Vorzeichen ueber Seeds 4:4, McNemar p = 0,33, Balken 22/25 gegen 21/25. Die Korrektur bleibt als richtige Physik an; sie kostet nichts und bringt messbar nichts. NACHTRAG 2026-10-12: Pruefung aller umbemessenen Koerper - bei MEHRTEILIGEN Koerpern muss auch der Huellbaum (bvh_aabb) mit, sonst bleiben verpasste Kontakte (verformtes obj_T 32 von 320); jetzt behoben, gegen neu kompiliertes Modell 0 verpasst. Das A/B oben pruefte die Teilkorrektur.
+description: Gepaartes act23-A/B (8 Seeds x 25 Episoden je Arm) der Huellenkorrektur e4eb65e gegen die alte Huelle (ACT14_HUELLE_ALT=1). Kein Unterschied - 118/200 gegen 120/200, Vorzeichen ueber Seeds 4:4, McNemar p = 0,33, Balken 22/25 gegen 21/25. Die Korrektur bleibt als richtige Physik an; sie kostet nichts und bringt messbar nichts. NACHTRAG 2026-10-12: Pruefung aller umbemessenen Koerper - bei MEHRTEILIGEN Koerpern muss auch der Huellbaum (bvh_aabb) mit, sonst bleiben verpasste Kontakte (verformtes obj_T 32 von 320); jetzt behoben, gegen neu kompiliertes Modell 0 verpasst. Das A/B oben pruefte die Teilkorrektur. NACHTRAG 2: A/B der erweiterten Korrektur ist mit dem ersten zeichengleich - in der Vorgabewelt wird ausser dem Balken nie ein Koerper wirklich verformt, die Erweiterung ist dort wirkungsfrei.
 tags: [act23, physik, kollision, ab, balken]
 status: stable
 evidenz: gemessen
@@ -103,6 +103,30 @@ Logzeilen identisch mit 16ea5d8). Rauchtest der neuen Fassung 4 Episoden ohne Fe
 **Nicht gemessen:** die Wirkung der Erweiterung (Huellbaum, Neuheits-obj_T, Rueckstellungen) auf act23 -
 das A/B oben pruefte nur die Teilkorrektur. Masse und Traegheit umbemessener Koerper bleiben die des
 Kompilats (kein Huellenfehler, aber derselbe Typ von Altlast; nicht angefasst).
+
+# Nachtrag 2: act23-A/B der erweiterten Korrektur - zeichengleich, also gar keine Wirkung
+
+Nutzerauftrag 2026-10-12: *"Starte den A/B-Lauf fuer die erweiterte Huellenkorrektur."* Aufbau wie oben,
+Seeds 9701-9708 x 25 Ep, Arm A `ACT14_HUELLE_ALT=1`, Arm B Vorgabe auf fadc510, Kopie df320cd0.
+
+    Seed     9701  9702  9703  9704  9705  9706  9707  9708   gesamt
+    A alt     14    15    13    16    15    15    15    15    118/200
+    B fadc510 16    17    12    17    12    14    14    18    120/200
+
+* **Beide Arme sind zeichengleich mit dem ersten A/B** (674f878): Ergebnisfolge in allen 16 Logs identisch,
+  die vollen B-Logs unterscheiden sich nur in der Zeile mit dem Commit. Statistik daher wie oben (Seeds 4:4,
+  Wilcoxon p = 0,67). Nebenbei bestaetigt: act23 ist ueber Commits und Tage hinweg reproduzierbar.
+* **Warum keine Wirkung - gezaehlt** (Sonde, 6 Episoden Seed 9701, jede Huellen-Nachfuehrung mit Vorher/Nachher):
+  alle neuen Aufrufstellen laufen (Rueckstellung obj_red/L/U/T/X je Episode, Formerkennungs-Trainingsbilder
+  802-mal), aber **ausser dem allerersten Strecken des Balkens aendert keiner einen Wert** - die Koerper stehen
+  bei diesen Aufrufen schon auf der kompilierten Groesse, der Huellbaum bleibt unberuehrt. Die Neuheits-Verformung
+  von obj_T und die Sockel-/Formhoehen kommen in diesem Aufbau gar nicht vor.
+* Die Erweiterung ist also in der Vorgabewelt **wirkungsfrei per Konstruktion**, nicht "gemessen neutral". Sie
+  greift erst, wenn ein mehrteiliger Koerper wirklich verformt wird (Neuheits-obj_T, Hoehenschalter, main_diag).
+  Dort ist sie am Neukompilat belegt (oben), auf act23-Ebene nicht gemessen.
+
+**Entscheidung:** bleibt Vorgabe. Kein weiterer Lauf in der Vorgabewelt sinnvoll; eine act23-Messung braeuchte
+einen Aufbau mit verformtem mehrteiligem Koerper.
 
 # Verwandt
 
