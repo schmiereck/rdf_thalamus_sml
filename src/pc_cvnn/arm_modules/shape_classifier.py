@@ -527,6 +527,8 @@ class ShapeClassifierModule(ArmModule):
             bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, body)
             if half is not None:
                 sim.m.geom_size[sim.m.body_geomadr[bid]] = half
+                if hasattr(sim, "huelle_nachfuehren"):  # Kollisionshuelle mit (pc_act14, 2026-10-12)
+                    sim.huelle_nachfuehren(int(sim.m.body_geomadr[bid]))
             zc = float(sim.m.geom_size[sim.m.body_geomadr[bid]][2])   # rest z = the object's half-height
             from pc_cvnn.pc_act14 import REACH_XY                     # train over the CURRENT workspace
             sim.set_object(body, [rng.uniform(REACH_XY[0][0] + 0.03, REACH_XY[1][0] - 0.03),

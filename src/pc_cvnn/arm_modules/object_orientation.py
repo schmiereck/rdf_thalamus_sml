@@ -70,6 +70,8 @@ class ObjectOrientationModule(ArmModule):
         w = COLOUR_W[cmd]
         bid = mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, cmd)
         sim.m.geom_size[sim.m.body_geomadr[bid]] = np.asarray(half, float)
+        if hasattr(sim, "huelle_nachfuehren"):          # Kollisionshuelle mit (pc_act14, 2026-10-12)
+            sim.huelle_nachfuehren(int(sim.m.body_geomadr[bid]))
         others = [o for o in ("obj_red", "obj_green", "obj_blue") if o != cmd]
         sim.reset_home()
         sim.set_target_marker([0.0, -0.6], z=-0.05)              # park the magenta marker (perception nuisance)

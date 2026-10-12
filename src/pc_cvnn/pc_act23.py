@@ -400,6 +400,7 @@ class Env:
         for o in ALL:
             self.sim.set_object(o, [0.5, -0.6], z=0.012)
         self.sim.m.geom_size[self.sim.m.body_geomadr[self._rid]] = np.array([0.012] * 3)
+        self.sim.huelle_nachfuehren(int(self.sim.m.body_geomadr[self._rid]))
         self.sim.set_object(BODY[shape], p, z=0.012, yaw=yaw)
         mujoco.mj_forward(self.sim.m, self.sim.d); self.sim.step(60)
 
@@ -614,6 +615,7 @@ def main_diag():
             sim.set_object(o, [0.5, -0.6], z=0.012)
         sim.set_target_marker([0.0, -0.6], z=-0.05)
         sim.m.geom_size[sim.m.body_geomadr[bid]] = np.asarray(HALF, float)
+        sim.huelle_nachfuehren(int(sim.m.body_geomadr[bid]))   # 56-mm-Stab auf 24-mm-Wuerfelhuelle (2026-10-12)
         sim.set_object(CMD, p, z=float(HALF[2]), yaw=yaw); mujoco.mj_forward(sim.m, sim.d); sim.step(40)
         sim.set_target_marker(TARGET, z=0.001)
 
@@ -4679,6 +4681,7 @@ def run_self_learning_steering(headless=False):
         for o in ALL:
             sim.set_object(o, [0.5, -0.6], z=0.012)
         sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "obj_red")]] = np.array([0.012] * 3)
+        sim.huelle_nachfuehren(int(sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "obj_red")]))
         sim.set_target_marker([0.0, -0.6], z=-0.05)
 
     def setup_obj(cmd, p, yaw):
@@ -5219,6 +5222,7 @@ def run_self_learning_steering(headless=False):
 
     def _set_sizes():
         sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "obj_red")]] = np.array([0.012] * 3)
+        sim.huelle_nachfuehren(int(sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, "obj_red")]))
         sim.m.geom_size[sim.m.body_geomadr[bid]] = np.asarray(LONG_HALF, float)   # obj_blue stays elongated
         _bal_huelle()
         for nm, h0 in shape_half0.items():                 # repair the L/U FIRST geom too: any set_object_size
@@ -5233,8 +5237,10 @@ def run_self_learning_steering(headless=False):
                 sim.m.geom_size[sim.m.body_geomadr[
                     mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)]] = np.asarray(
                         _novel_half["h"], float)
+                sim.huelle_nachfuehren(int(sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)]))
                 continue
             sim.m.geom_size[sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)]] = h0
+            sim.huelle_nachfuehren(int(sim.m.body_geomadr[mujoco.mj_name2id(sim.m, mujoco.mjtObj.mjOBJ_BODY, nm)]))
             #   on a composite body hits only its first geom and silently DEFORMS the shape ("a segment turns
             #   90 deg") -- with PERSIST above this is a no-op, but the shape must never stay deformed.
         _hoehe_anwenden()                      # NEUE HOEHEN (s. HOEHEN) zuletzt, ueber allem anderen

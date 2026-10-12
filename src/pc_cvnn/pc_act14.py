@@ -330,6 +330,41 @@ class BracketArmSim:
         self.m.geom_rbound[g] = float(np.linalg.norm(s))
         self.m.geom_aabb[g][:3] = 0.0
         self.m.geom_aabb[g][3:] = s
+        self._koerper_bvh(int(self.m.geom_bodyid[g]))
+
+    def _koerper_bvh(self, b):
+        """Huellbaum (bvh_aabb, im Koerperrahmen) eines MEHRTEILIGEN Koerpers von den Blaettern her neu
+        rechnen.  Gemessen 2026-10-12: nur die Teilhuelle nachzufuehren verpasst bei verformtem obj_T gegen
+        L/U/X/Wuerfel noch 32 von 320 Kontakten des neu kompilierten Modells (ohne alles 40)."""
+        m = self.m
+        a, n = int(m.body_bvhadr[b]), int(m.body_bvhnum[b])
+        if a < 0 or n <= 1:
+            return
+        lo, hi = {}, {}
+
+        def box(k):
+            if k in lo:
+                return lo[k], hi[k]
+            gid = int(m.bvh_nodeid[k])
+            if gid >= 0 and int(m.bvh_child[k][0]) < 0 and int(m.bvh_child[k][1]) < 0:
+                # Blatt: Ecken des Teil-Quaders -> Koerperrahmen -> TRAEGHEITSrahmen (body_ipos/iquat), in dem
+                # MuJoCo den Baum fuehrt; davon die achsparallele Huelle.
+                R = np.zeros(9); mujoco.mju_quat2Mat(R, m.geom_quat[gid]); R = R.reshape(3, 3)
+                Ri = np.zeros(9); mujoco.mju_quat2Mat(Ri, m.body_iquat[b]); Ri = Ri.reshape(3, 3)
+                ecken = np.array([[sx, sy, sz] for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)], float)
+                pk = m.geom_pos[gid] + (m.geom_aabb[gid][:3] + ecken * m.geom_aabb[gid][3:]) @ R.T
+                pi = (pk - m.body_ipos[b]) @ Ri
+                l, u = pi.min(axis=0), pi.max(axis=0)
+            else:
+                ls, us = zip(*[box(a + int(ch)) for ch in m.bvh_child[k] if int(ch) >= 0])   # Kinder relativ zu body_bvhadr
+                l, u = np.min(ls, axis=0), np.max(us, axis=0)
+            lo[k], hi[k] = l, u
+            return l, u
+
+        for k in range(a, a + n):
+            l, u = box(k)
+            m.bvh_aabb[k][:3] = (l + u) / 2.0
+            m.bvh_aabb[k][3:] = (u - l) / 2.0
 
     def joint_range(self, name):
         jid = mujoco.mj_name2id(self.m, mujoco.mjtObj.mjOBJ_JOINT, name)

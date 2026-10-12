@@ -143,7 +143,7 @@ Balkenmass gestreckt (`geom_size`); `geom_rbound` (21 mm) und `geom_aabb` bleibe
 Probe: Wuerfel 6 mm ueberlappend am Ende eines 120-mm-Balkens -> **0 Kontakte** (mit nachgefuehrter Huelle
 4, der Wuerfel wird weggedrueckt). Mit `ACT23_BALKEN_LAENGE` wird die Huelle nachgefuehrt. **Die Vorgabewelt
 ist unveraendert**: nach Rechnung (Huellradien 21 + ~9 mm) sind die aeusseren ~4 mm des 68-mm-Balkens fuer
-die Klauennaegel unsichtbar - fuer Griffe nahe der Mitte belanglos, nicht am Arm gemessen. Beheben waere
+die Klauennaegel unsichtbar (**BERICHTIGT 2026-10-12: gemessen rund 8 mm je Ende**, s. [Huellenkorrektur](/befunde/huellenkorrektur-ab.md)) - fuer Griffe nahe der Mitte belanglos, nicht am Arm gemessen. Beheben waere
 eine Aenderung der Vorgabephysik (Nutzerentscheid).
 
 **BEHOBEN 2026-10-11 (Nutzerauftrag "Behebe den Huellenfehler auch in der Standardwelt"):**

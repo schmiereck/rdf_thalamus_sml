@@ -2,6 +2,11 @@
 
 ## 2026-10-12
 
+* **Ergaenzung + Berichtigung**: [Huellenkorrektur](/befunde/huellenkorrektur-ab.md) - alle Laufzeit-Umbemessungen
+  im act23-Pfad geprueft und nachgefuehrt (main_diag obj_red, Neuheits-obj_T, Rueckstellungen, Trainingsbilder). Neu:
+  Huellbaum bvh_aabb mehrteiliger Koerper (Traegheitsrahmen) - ohne ihn 32 von 320 Kontakten verpasst, mit 0. Balken:
+  ~8 statt ~4 mm je Ende unsichtbar. ALT weiter zeichengleich. Wirkung der Erweiterung auf act23 nicht gemessen.
+
 * **Anlage**: [Huellenkorrektur: act23-A/B neutral](/befunde/huellenkorrektur-ab.md) - ACT14_HUELLE_ALT=1 gegen
   Vorgabe, Seeds 9701-9708 je 25 Ep gepaart: 118/200 gegen 120/200, Vorzeichen 4:4 (Wilcoxon p = 0,67), McNemar
   p = 0,33, Balken 22/25 gegen 21/25. Arm A vorab zeichengleich mit 16ea5d8 geprueft. Korrektur bleibt an.
