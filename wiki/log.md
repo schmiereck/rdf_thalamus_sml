@@ -2,6 +2,12 @@
 
 ## 2026-10-14
 
+* **Messung**: [Sieht die Uebersichtskamera die eigene Hand?](/befunde/hand-sichtbarkeit.md) - Seeds 9701/9702 x 12 Ep,
+  Netz-Policy, heutiger Zustand; Sonde laesst den Lauf nachweislich unveraendert. Eine Klauenspitze in 99 % frei,
+  Hoehen 0-70 mm gut abgedeckt. Erster Durchgang mit falschem Verdeckungskriterium (45 %) verworfen.
+* **Berichtigung**: [Huellenkorrektur](/befunde/huellenkorrektur-ab.md) Nachtrag 2 - die Zaehlsonde lief auf einem
+  frisch trainierten 3-Gelenk-Agenten (frueher pc_act14-Import). Auf dem geladenen Zustand wiederholt: Aussage bleibt.
+
 * **Messung**: [Wie genau sind die Tisch-Homographien?](/befunde/homographie-genauigkeit.md) - beide H (shape_clf und
   Fovea) am Kameramodell und Ende zu Ende, 8 Koerper x 40 Orte x 3 Hoehen. Tisch 0,8 mm Median, Mitte = Rand; die
   Kalibrierebene liegt in 12 mm Hoehe, je mm Abweichung ~0,6 mm Fehler. Fuer die Abloesung: Gewinn nur ueber die Hoehe.

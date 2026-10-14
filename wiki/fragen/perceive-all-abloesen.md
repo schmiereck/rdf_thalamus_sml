@@ -131,8 +131,9 @@ ihr mitwandern, und darauf sitzen schon gelernte Schaetzer.
   auf dem Tisch 0,8 mm Median, Mitte und Rand gleich; je Millimeter Hoehenabweichung von 12 mm rund
   0,6 mm Fehler. Folge fuer Schritt 1: auf dem Tisch ist nichts zu gewinnen, nur bei der Hoehe -
   und dafuer braucht jede Umrechnung die Hoehe als Eingang.
-* Sieht die Uebersichtskamera die Hand in genug Arbeitsposen? Codex hat 238 Ansichten mit
-  sichtbarer Klaue aus vier Episoden gezaehlt ([Arbeitsposen](/befunde/act23-arbeitsposen-kamera.md)).
+* ~~Sieht die Uebersichtskamera die Hand in genug Arbeitsposen?~~ **Gemessen**
+  ([Handsicht](/befunde/hand-sichtbarkeit.md)): eine Klauenspitze in 99 % frei, Hoehen 0-70 mm ueber fast alle
+  Felder abgedeckt. Offen ist nun, wie der Agent die Hand ohne Segmentierung im Bild findet.
 * Soll die Fovea-Homographie mit ersetzt werden oder zuerst nur `shape_clf.H`?
 
 # Verwandt

@@ -121,6 +121,12 @@ Seeds 9701-9708 x 25 Ep, Arm A `ACT14_HUELLE_ALT=1`, Arm B Vorgabe auf fadc510, 
   802-mal), aber **ausser dem allerersten Strecken des Balkens aendert keiner einen Wert** - die Koerper stehen
   bei diesen Aufrufen schon auf der kompilierten Groesse, der Huellbaum bleibt unberuehrt. Die Neuheits-Verformung
   von obj_T und die Sockel-/Formhoehen kommen in diesem Aufbau gar nicht vor.
+* **BERICHTIGT 2026-10-14:** diese Zaehlsonde lief versehentlich auf einem FRISCH trainierten 3-Gelenk-Agenten
+  (sie importierte `pc_act14` vor act23, bevor act23 `ACT14_DOF=4` setzt; s.
+  [Handsicht](/befunde/hand-sichtbarkeit.md)). Die 802 Aufrufe aus den Formerkennungs-Trainingsbildern stammen
+  aus diesem Frischtraining. **Wiederholt auf dem geladenen Zustand** (6 Ep Seed 9701, Ergebnisfolge identisch
+  mit dem echten Lauf): Balken 214 Aufrufe, davon nur der erste mit Aenderung; Rueckstellung obj_red/L/U/T/X je
+  214, keiner aendert etwas; keine Trainingsbilder. Die Aussage "wirkungsfrei per Konstruktion" bleibt.
 * Die Erweiterung ist also in der Vorgabewelt **wirkungsfrei per Konstruktion**, nicht "gemessen neutral". Sie
   greift erst, wenn ein mehrteiliger Koerper wirklich verformt wird (Neuheits-obj_T, Hoehenschalter, main_diag).
   Dort ist sie am Neukompilat belegt (oben), auf act23-Ebene nicht gemessen.
