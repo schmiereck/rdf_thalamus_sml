@@ -155,6 +155,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [Direkte Servosteuerung](fragen/dream-rsi-servosteuerung.md) - S0-S3: eigener Motorpfad ohne kartesische Zwischenziele, spaeter optional Geschwindigkeits-/Drehmomentsteuerung; Eigenanpassung statt Teacher-Ueberbietung
 * [Fovea: neue Aufgaben und mehr Detail](fragen/dream-rsi-fovea.md) - F0-F3: Netzzustaende nutzen, Detailbedarf pruefen, Bestand beim Ausbau erhalten; bisherige Gegenbefunde bleiben gueltig
 * [Offene Faeden in act23](fragen/offene-faeden-act23.md) - geordnet nach belegter Wichtigkeit, mit den ausdruecklich geschlossenen Faeden am Ende
+* [perceive_all abloesen - Bestandsaufnahme](fragen/perceive-all-abloesen.md) - **acht gerechnete Stufen, zwei mit Privileg (Homographie aus bekannten Wuerfelorten, Arm ausgeblendet); jeder der 22 act23-Aufrufe braucht den Ort.** Vorschlag: zuerst den Ort ueber die eigene Hand lernen. Nichts gebaut.
 * [Latente Augmentierung](fragen/latente-augmentierung.md) - die Nutzeridee; Voraussetzungsmessung gemacht, Bau erfolgt
 * [Stetig adressieren statt Klassen vergeben](fragen/stetige-adressierung.md) - **Nutzeridee, zielnah:** die Aneignungsprobleme (Geburt, Knopf, Verhungern, Saettigung) sind Artefakte der Diskretisierung; `desc_embed` existiert fuer jedes Objekt und stirbt nie
 * [Die stetige Formachse ist genauso trennscharf](befunde/stetige-adressierung-erster-schritt.md) - der erste Schritt: der Weg ist frei, ein Gewinn ist es (noch) nicht

@@ -1,5 +1,12 @@
 # Chronik
 
+## 2026-10-14
+
+* **Anlage**: [perceive_all abloesen - Bestandsaufnahme](/fragen/perceive-all-abloesen.md) - Nutzerauftrag. Stufen,
+  Verbraucher und Privilegien am Code (09d3e2f): gelernt ist nur, was auf den Detektionen sitzt; Ort, Einzelobjekte
+  und Lage sind gerechnet, die Homographie wird mit bekannten Wuerfelorten kalibriert, der Arm beim Rendern
+  ausgeblendet. Reihenfolge-Vorschlag mit dem Ort ueber die eigene Hand als erstem Schritt. Nichts gebaut.
+
 ## 2026-10-12
 
 * **Messung**: [Huellenkorrektur](/befunde/huellenkorrektur-ab.md) Nachtrag 2 - act23-A/B der erweiterten Korrektur

@@ -162,6 +162,7 @@ Form; in einer eingefrorenen 80-Episoden-Messung lag er noch bei 57 %. Unerklaer
 **`perceive_all` ist Uebergangsgeruest.** CC-Segmentierung, Homographie und PCA sind genau die
 Kruecke, die nach [Projektziel](/ziel.md) abgebaut werden soll. Zwei bekannte Bruchstellen:
 `perceive_all` parkt die Marker, und die Homographie haengt an `RES=240`.
+Bestandsaufnahme und Reihenfolge-Vorschlag (2026-10-14): [perceive_all abloesen](/fragen/perceive-all-abloesen.md).
 
 # Ausdruecklich geschlossen - nicht wieder aufmachen
 
