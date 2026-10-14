@@ -2,6 +2,10 @@
 
 ## 2026-10-14
 
+* **Messung**: [Wie genau sind die Tisch-Homographien?](/befunde/homographie-genauigkeit.md) - beide H (shape_clf und
+  Fovea) am Kameramodell und Ende zu Ende, 8 Koerper x 40 Orte x 3 Hoehen. Tisch 0,8 mm Median, Mitte = Rand; die
+  Kalibrierebene liegt in 12 mm Hoehe, je mm Abweichung ~0,6 mm Fehler. Fuer die Abloesung: Gewinn nur ueber die Hoehe.
+
 * **Anlage**: [perceive_all abloesen - Bestandsaufnahme](/fragen/perceive-all-abloesen.md) - Nutzerauftrag. Stufen,
   Verbraucher und Privilegien am Code (09d3e2f): gelernt ist nur, was auf den Detektionen sitzt; Ort, Einzelobjekte
   und Lage sind gerechnet, die Homographie wird mit bekannten Wuerfelorten kalibriert, der Arm beim Rendern

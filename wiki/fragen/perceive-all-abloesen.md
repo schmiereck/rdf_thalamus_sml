@@ -127,8 +127,10 @@ ihr mitwandern, und darauf sitzen schon gelernte Schaetzer.
 
 # Offen vor dem ersten Bau
 
-* Wie genau ist die heutige Homographie gegen die Wahrheit, getrennt nach Tischmitte, Rand und
-  gehobenen Koerpern? Das ist die Messlatte fuer Schritt 1.
+* ~~Wie genau ist die heutige Homographie?~~ **Gemessen** ([Homographie-Genauigkeit](/befunde/homographie-genauigkeit.md)):
+  auf dem Tisch 0,8 mm Median, Mitte und Rand gleich; je Millimeter Hoehenabweichung von 12 mm rund
+  0,6 mm Fehler. Folge fuer Schritt 1: auf dem Tisch ist nichts zu gewinnen, nur bei der Hoehe -
+  und dafuer braucht jede Umrechnung die Hoehe als Eingang.
 * Sieht die Uebersichtskamera die Hand in genug Arbeitsposen? Codex hat 238 Ansichten mit
   sichtbarer Klaue aus vier Episoden gezaehlt ([Arbeitsposen](/befunde/act23-arbeitsposen-kamera.md)).
 * Soll die Fovea-Homographie mit ersetzt werden oder zuerst nur `shape_clf.H`?
