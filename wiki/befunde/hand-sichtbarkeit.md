@@ -85,6 +85,8 @@ Ungleich verteilt: in den unteren Hoehen haben einzelne Felder 0-8 Aufnahmen, an
   mit der eigenen Bewegung veraendert (Bilddifferenz bei bekannter Gelenkbewegung) oder ein
   Detektor, den der Agent aus dieser Mitbewegung selbst lernt. Heute blendet die Wahrnehmung den
   Arm beim Rendern aus; fuer Schritt 1 muss er im Bild bleiben.
+* **Nachtrag:** die Bilddifferenz ist inzwischen gemessen ([Hand aus Bilddifferenz](/befunde/hand-aus-bilddifferenz.md)):
+  grob ja, fuer eine Kalibrierung nicht genau genug (8-12 mm).
 
 # Berichtigung am eigenen Messaufbau
 

@@ -2,6 +2,10 @@
 
 ## 2026-10-14
 
+* **Messung**: [Findet die Bilddifferenz der eigenen Bewegung die Hand?](/befunde/hand-aus-bilddifferenz.md) - Seeds
+  9701/9702 x 12 Ep, Lauf zeichengleich. Passiv, Greifer- und Handgelenk-Zappeln (kinematisch). Mit gelerntem Versatz
+  im Greiferrahmen 7-13 mm je Aufnahme; gelernte Abbildung daraus 8-12 mm statt ~1 mm. Ehrliches Negativ fuer die
+  naive Differenz als Etikettquelle; offen bleibt ein aus den Zappel-Masken gelernter Detektor.
 * **Messung**: [Sieht die Uebersichtskamera die eigene Hand?](/befunde/hand-sichtbarkeit.md) - Seeds 9701/9702 x 12 Ep,
   Netz-Policy, heutiger Zustand; Sonde laesst den Lauf nachweislich unveraendert. Eine Klauenspitze in 99 % frei,
   Hoehen 0-70 mm gut abgedeckt. Erster Durchgang mit falschem Verdeckungskriterium (45 %) verworfen.

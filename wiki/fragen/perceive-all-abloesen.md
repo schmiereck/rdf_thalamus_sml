@@ -134,6 +134,10 @@ ihr mitwandern, und darauf sitzen schon gelernte Schaetzer.
 * ~~Sieht die Uebersichtskamera die Hand in genug Arbeitsposen?~~ **Gemessen**
   ([Handsicht](/befunde/hand-sichtbarkeit.md)): eine Klauenspitze in 99 % frei, Hoehen 0-70 mm ueber fast alle
   Felder abgedeckt. Offen ist nun, wie der Agent die Hand ohne Segmentierung im Bild findet.
+* ~~Findet der Agent die Hand ueber die Bilddifferenz?~~ **Gemessen**
+  ([Hand aus Bilddifferenz](/befunde/hand-aus-bilddifferenz.md)): grob ja (rund 1 cm), als Etikettquelle nein -
+  die daraus gelernte Abbildung trifft 8-12 mm statt ~1 mm, der Fehler ist systematisch. Offen: ein aus den
+  Zappel-Masken gelernter Hand-Detektor oder ein engerer Etikettpunkt (Antippen des Tischs).
 * Soll die Fovea-Homographie mit ersetzt werden oder zuerst nur `shape_clf.H`?
 
 # Verwandt
