@@ -123,7 +123,9 @@ def sample_gaze(sc, rng):
 
 def sample_gazemulti(sc, rng):
     """Wie gaze, aber alle drei Wuerfel muessen im Blickfeld liegen; cells = Schritt zur Mitte fuer rot, gruen,
-    blau (je dx, dy). Damit lassen sich bei GLEICHEN Bildern verschiedene Ziele abfragen."""
+    blau (je dx, dy), danach L und U (Koerperursprung; -128, wenn ausserhalb). Damit lassen sich bei GLEICHEN
+    Bildern verschiedene Ziele abfragen. Die Datei traegt ausserdem colors [5, 3]: die Farbe jedes Koerpers (rgba
+    seiner ersten Geometrie) als moegliche stetige Adresse des Ziels."""
     r = sample_gaze(sc, rng)
     if r is None:
         return None
@@ -134,6 +136,9 @@ def sample_gazemulti(sc, rng):
         if dist > 2 * K:
             return None
         cells += [co - F // 2, ro - F // 2]
+    for o in ("obj_L", "obj_U"):                                         # Formen: nur mitgefuehrt, -128 = nicht im Bild
+        ro, co, dist = nearest_cell(gaze, sc.project(sc.sim.obj_pos(o)))
+        cells += [co - F // 2, ro - F // 2] if dist <= 2 * K else [-128, -128]
     return img, tgt, gaze, tuple(cells)
 
 
@@ -183,7 +188,11 @@ def main():
         for split, n, seed in (("train", a.n_train, 1000 + ti), ("test", a.n_test, 9000 + ti)):
             print(f"{task} {split}: {n} Beispiele, Seed {seed}", flush=True)
             obs, tgt, gz, cl = collect(fns[task], n, seed)
-            np.savez_compressed(os.path.join(a.out, f"{task}_{split}.npz"), obs=obs, target=tgt, gaze=gz, cells=cl)
+            m = Scene().sim.m
+            cols = np.array([m.geom_rgba[m.body_geomadr[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, o)]][:3]
+                             for o in OBJECTS], np.float32)
+            np.savez_compressed(os.path.join(a.out, f"{task}_{split}.npz"), obs=obs, target=tgt, gaze=gz, cells=cl,
+                                colors=cols)
 
 
 if __name__ == "__main__":
