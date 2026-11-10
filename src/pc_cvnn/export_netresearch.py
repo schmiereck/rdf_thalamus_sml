@@ -8,11 +8,13 @@ Uebersichtskamera MIT sichtbarem Arm (kein Privileg im Bild), abgetastet mit der
 (hex_sample, F = 16, K = 4, abgestufte Peripherie). Zwei Aufgaben, Etikett je ein Schritt in Fovea-Zellen:
     gaze    Wo liegt der rote Wuerfel relativ zur Bildmitte? (dx, dy) = Zelle des Wuerfels - Mitte, -8..7.
             Das ist die Blickverschiebung, die ihn zentriert.
+    gazemulti  wie gaze, alle drei Wuerfel im Blickfeld; cells traegt den Schritt fuer rot, gruen und blau
     reach   Hand und roter Wuerfel sind im Bild. (dx, dy) = Zelle des Wuerfels - Zelle des Greifpunkts.
 Die Etiketten kommen aus dem Simulator (Projektion der wahren Orte) und gehen NUR in die Etiketten, nie ins
 Bild. Train und Test stammen aus getrennten Szenen (getrennte Zufallsstroeme), nie zeilenweise geteilt.
 Ausgabe je Aufgabe und Teil: <task>_<split>.npz mit obs uint8 [N, 3, 16, 16], target int8 [N, 2] (dx, dy),
-gaze float32 [N, 2] (Blickpunkt in Pixeln).
+gaze float32 [N, 2] (Blickpunkt in Pixeln), cells int8 [N, 4] (Spalte, Zeile der Hand bzw. Bezugszelle, dann des
+Wuerfels; nur fuer Diagnosen, z. B. ob ein Netz die Hand oder den Wuerfel nicht findet).
 Kein Lernzustand wird gelesen oder geschrieben; der Lauf beruehrt act23 nicht.
 """
 import argparse
@@ -116,7 +118,23 @@ def sample_gaze(sc, rng):
     gaze = px - np.array([_warp(c + 0.5 * (r & 1) - CTR) * K, _warp(r - CTR) * K * HEX_DY])
     if not (0 <= gaze[0] < RES and 0 <= gaze[1] < RES):
         return None
-    return sc.fovea(gaze), (c - F // 2, r - F // 2), gaze
+    return sc.fovea(gaze), (c - F // 2, r - F // 2), gaze, (c, r, c, r)
+
+
+def sample_gazemulti(sc, rng):
+    """Wie gaze, aber alle drei Wuerfel muessen im Blickfeld liegen; cells = Schritt zur Mitte fuer rot, gruen,
+    blau (je dx, dy). Damit lassen sich bei GLEICHEN Bildern verschiedene Ziele abfragen."""
+    r = sample_gaze(sc, rng)
+    if r is None:
+        return None
+    img, tgt, gaze, _ = r
+    cells = list(tgt)
+    for o in ("obj_green", "obj_blue"):
+        ro, co, dist = nearest_cell(gaze, sc.project(sc.sim.obj_pos(o)))
+        if dist > 2 * K:
+            return None
+        cells += [co - F // 2, ro - F // 2]
+    return img, tgt, gaze, tuple(cells)
 
 
 def sample_reach(sc, rng):
@@ -134,21 +152,21 @@ def sample_reach(sc, rng):
     dx, dy = co - ch, ro - rh
     if dist > 2 * K or not (-8 <= dx <= 7 and -8 <= dy <= 7):            # Wuerfel ausserhalb des Blickfelds
         return None
-    return sc.fovea(gaze), (dx, dy), gaze
+    return sc.fovea(gaze), (dx, dy), gaze, (ch, rh, co, ro)
 
 
 def collect(fn, n, seed):
     sc, rng = Scene(), np.random.default_rng(seed)
-    obs, tgt, gz, tried, t0 = [], [], [], 0, time.time()
+    obs, tgt, gz, cl, tried, t0 = [], [], [], [], 0, time.time()
     while len(obs) < n:
         tried += 1
         r = fn(sc, rng)
         if r is None:
             continue
-        obs.append(r[0]); tgt.append(r[1]); gz.append(r[2])
+        obs.append(r[0]); tgt.append(r[1]); gz.append(r[2]); cl.append(r[3])
         if len(obs) % 2000 == 0:
             print(f"  {len(obs)}/{n}  ({tried} Versuche, {time.time() - t0:.0f} s)", flush=True)
-    return np.stack(obs), np.array(tgt, np.int8), np.array(gz, np.float32)
+    return np.stack(obs), np.array(tgt, np.int8), np.array(gz, np.float32), np.array(cl, np.int8)
 
 
 def main():
@@ -159,12 +177,13 @@ def main():
     ap.add_argument("--tasks", nargs="+", default=["gaze", "reach"])
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    fns = {"gaze": sample_gaze, "reach": sample_reach}
-    for ti, task in enumerate(a.tasks):
+    fns = {"gaze": sample_gaze, "reach": sample_reach, "gazemulti": sample_gazemulti}
+    for task in a.tasks:
+        ti = list(fns).index(task)                               # Seed haengt an der Aufgabe, nicht an der Reihenfolge
         for split, n, seed in (("train", a.n_train, 1000 + ti), ("test", a.n_test, 9000 + ti)):
             print(f"{task} {split}: {n} Beispiele, Seed {seed}", flush=True)
-            obs, tgt, gz = collect(fns[task], n, seed)
-            np.savez_compressed(os.path.join(a.out, f"{task}_{split}.npz"), obs=obs, target=tgt, gaze=gz)
+            obs, tgt, gz, cl = collect(fns[task], n, seed)
+            np.savez_compressed(os.path.join(a.out, f"{task}_{split}.npz"), obs=obs, target=tgt, gaze=gz, cells=cl)
 
 
 if __name__ == "__main__":
