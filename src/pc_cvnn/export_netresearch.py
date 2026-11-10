@@ -16,6 +16,9 @@ Uebersichtskamera MIT sichtbarem Arm (kein Privileg im Bild), abgetastet mit der
     gazecolorref / gazecolorrefheld  wie gazecolor(held), dazu refs uint8 [N, 3, 3, 16, 16]: je Wuerfel ein
             ZEIGEBILD (der Wuerfel allein in einer anderen Szene, Blick auf ihm). Damit kann das Ziel durch ein
             Bild des Objekts genannt werden statt durch seine Farbe.
+    gazeshape / gazeshapeheld  drei Koerper gleicher Farbe und verschiedener Form (Wuerfel, L, U, T, Kreuz;
+            held: einer ist das Y, das im Training nie vorkommt), beliebig gedreht; refs uint8
+            [N, 3, 2, 3, 16, 16]: je Koerper ZWEI Zeigebilder. Die Adresse muss hier die FORM tragen.
     reach   Hand und roter Wuerfel sind im Bild. (dx, dy) = Zelle des Wuerfels - Zelle des Greifpunkts.
 Die Etiketten kommen aus dem Simulator (Projektion der wahren Orte) und gehen NUR in die Etiketten, nie ins
 Bild. Train und Test stammen aus getrennten Szenen (getrennte Zufallsstroeme), nie zeilenweise geteilt.
@@ -233,6 +236,85 @@ def sample_gazecolorheld(sc, rng):
     return _sample_gazecolor(sc, rng, 1)
 
 
+SHAPES = ["obj_red", "obj_L", "obj_U", "obj_T", "obj_X", "obj_Y"]     # Wuerfel, L, U, T, Kreuz, Y
+N_TRAIN_SHAPES = 5                                                    # das Y ist die zurueckgehaltene Form
+ALL_BODIES = SHAPES + ["obj_green", "obj_blue"]
+
+
+def _paint(sc, body, rgb):
+    m = sc.sim.m
+    b = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, body)
+    m.geom_rgba[m.body_geomadr[b]:m.body_geomadr[b] + m.body_geomnum[b], :3] = rgb
+
+
+def _place(sc, rng, bodies):
+    """Alle Koerper wegparken, die genannten an zufaellige Orte (Mindestabstand 60 mm) in beliebiger Drehung."""
+    s = sc.sim
+    s.reset_home()
+    for i, o in enumerate(ALL_BODIES):
+        s.set_object(o, [0.50 + 0.07 * i, -0.6])
+    placed = []
+    for o in bodies:
+        for _ in range(200):
+            q = rng.uniform(REACH_XY[0], REACH_XY[1])
+            if all(np.linalg.norm(q - r) > 0.06 for r in placed):
+                break
+        placed.append(q)
+        s.set_object(o, q, z=0.012, yaw=float(rng.uniform(0, 2 * np.pi)))
+    home = np.array([HOME[j] for j in ARM_JOINTS])
+    sc.set_arm(home + rng.uniform(-0.25, 0.25, size=len(home)))
+
+
+def _sample_gazeshape(sc, rng, held):
+    """Drei Koerper VERSCHIEDENER Form und GLEICHER Farbe (ein zufaelliger Farbton je Szene): nur die Form
+    unterscheidet sie. Dazu je Koerper ZWEI Zeigebilder (allein, andere Szene, andere Drehung).
+    held: einer der drei ist das Y, das im Training nie vorkommt.
+    cells: Schritt zur Mitte je Koerper (6), Farbe (3, RGB x 255 - 128), Form je Koerper (3, Index in SHAPES),
+    Index des Y unter den dreien (bzw. 0)."""
+    import colorsys
+    pool = [SHAPES[i] for i in rng.permutation(N_TRAIN_SHAPES)]
+    bodies = [SHAPES[5]] + pool[:2] if held else pool[:3]
+    bodies = [bodies[i] for i in rng.permutation(3)]
+    while True:
+        h = float(rng.uniform(0, 1))
+        if not 0.78 <= h <= 0.92:                                         # Magenta gehoert den Zielscheiben
+            break
+    rgb = np.array(colorsys.hsv_to_rgb(h, float(rng.uniform(0.6, 1.0)), float(rng.uniform(0.7, 1.0))), np.float32)
+    for o in SHAPES:
+        _paint(sc, o, rgb)
+    _place(sc, rng, bodies)
+    px = sc.project(sc.sim.obj_pos(bodies[0]))
+    r, c = (int(x) for x in rng.integers(0, F, size=2))
+    gaze = px - np.array([_warp(c + 0.5 * (r & 1) - CTR) * K, _warp(r - CTR) * K * HEX_DY])
+    if not (0 <= gaze[0] < RES and 0 <= gaze[1] < RES):
+        return None
+    cells = [c - F // 2, r - F // 2]
+    for o in bodies[1:]:
+        ro, co, dist = nearest_cell(gaze, sc.project(sc.sim.obj_pos(o)))
+        if dist > 2 * K:
+            return None
+        cells += [co - F // 2, ro - F // 2]
+    img = sc.fovea(gaze)
+    refs = []
+    for o in bodies:                                                     # danach: zwei Zeigebilder je Koerper
+        views = []
+        for _ in range(2):
+            _place(sc, rng, [o])
+            views.append(sc.fovea(sc.project(sc.sim.obj_pos(o)) + rng.uniform(-K, K, size=2)))
+        refs.append(np.stack(views))
+    cells += [int(round(255 * v)) - 128 for v in rgb] + [SHAPES.index(o) for o in bodies]
+    cells += [bodies.index(SHAPES[5]) if held else 0]
+    return img, tuple(cells[:2]), gaze, tuple(cells), np.stack(refs)
+
+
+def sample_gazeshape(sc, rng):
+    return _sample_gazeshape(sc, rng, False)
+
+
+def sample_gazeshapeheld(sc, rng):
+    return _sample_gazeshape(sc, rng, True)
+
+
 def sample_reach(sc, rng):
     sc.layout(rng)
     obj = sc.sim.obj_pos(TARGET)
@@ -278,7 +360,8 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     fns = {"gaze": sample_gaze, "reach": sample_reach, "gazemulti": sample_gazemulti,
            "gazecolor": sample_gazecolor, "gazecolorheld": sample_gazecolorheld,
-           "gazecolorref": sample_gazecolorref, "gazecolorrefheld": sample_gazecolorrefheld}
+           "gazecolorref": sample_gazecolorref, "gazecolorrefheld": sample_gazecolorrefheld,
+           "gazeshape": sample_gazeshape, "gazeshapeheld": sample_gazeshapeheld}
     for task in a.tasks:
         ti = list(fns).index(task)                               # Seed haengt an der Aufgabe, nicht an der Reihenfolge
         for split, n, seed in (("train", a.n_train, 1000 + ti), ("test", a.n_test, 9000 + ti)):
