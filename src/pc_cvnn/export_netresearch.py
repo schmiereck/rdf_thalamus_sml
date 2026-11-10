@@ -13,6 +13,9 @@ Uebersichtskamera MIT sichtbarem Arm (kein Privileg im Bild), abgetastet mit der
             eines zurueckgehaltenen Bands); cells = Schritt je Wuerfel (6), dann die drei Farben
             (9 Werte, RGB x 255 - 128) und ein Index. Die Farbe ist die stetige ADRESSE des Ziels.
     gazecolorheld  dasselbe, ein Wuerfel (Index im letzten Wert) traegt einen zurueckgehaltenen Farbton
+    gazecolorref / gazecolorrefheld  wie gazecolor(held), dazu refs uint8 [N, 3, 3, 16, 16]: je Wuerfel ein
+            ZEIGEBILD (der Wuerfel allein in einer anderen Szene, Blick auf ihm). Damit kann das Ziel durch ein
+            Bild des Objekts genannt werden statt durch seine Farbe.
     reach   Hand und roter Wuerfel sind im Bild. (dx, dy) = Zelle des Wuerfels - Zelle des Greifpunkts.
 Die Etiketten kommen aus dem Simulator (Projektion der wahren Orte) und gehen NUR in die Etiketten, nie ins
 Bild. Train und Test stammen aus getrennten Szenen (getrennte Zufallsstroeme), nie zeilenweise geteilt.
@@ -191,6 +194,37 @@ def _sample_gazecolor(sc, rng, n_held):
     return img, tgt, gaze, tuple(cells[:6]) + tuple(int(round(255 * v)) - 128 for v in cols.ravel()) + (held,)
 
 
+def _show(sc, rng, k):
+    """Den Wuerfel k ALLEIN zeigen: neue Szene, die anderen Koerper weit weg geparkt, Arm in neuer Stellung, der
+    Blick auf dem Wuerfel (bis +-1 Zelle daneben). Das ist das Bild, mit dem man dem Netz sagt, WAS gemeint
+    ist - aus einer anderen Szene als die Suchaufgabe, damit nur das Objekt selbst die Adresse tragen kann."""
+    s = sc.sim
+    s.reset_home()
+    for i, o in enumerate(OBJECTS):
+        s.set_object(o, [0.58 + 0.05 * i, -0.6])
+    s.set_object(CUBES[k], rng.uniform(REACH_XY[0], REACH_XY[1]), z=0.012, yaw=float(rng.uniform(0, np.pi)))
+    home = np.array([HOME[j] for j in ARM_JOINTS])
+    sc.set_arm(home + rng.uniform(-0.25, 0.25, size=len(home)))
+    px = sc.project(s.obj_pos(CUBES[k]))
+    return sc.fovea(px + rng.uniform(-K, K, size=2))
+
+
+def _sample_gazecolorref(sc, rng, n_held):
+    r = _sample_gazecolor(sc, rng, n_held)                               # setzt die Farben, rendert die Suchszene
+    if r is None:
+        return None
+    refs = np.stack([_show(sc, rng, k) for k in range(3)])               # danach: je Wuerfel ein Zeigebild
+    return (*r, refs)
+
+
+def sample_gazecolorref(sc, rng):
+    return _sample_gazecolorref(sc, rng, 0)
+
+
+def sample_gazecolorrefheld(sc, rng):
+    return _sample_gazecolorref(sc, rng, 1)
+
+
 def sample_gazecolor(sc, rng):
     return _sample_gazecolor(sc, rng, 0)
 
@@ -219,16 +253,19 @@ def sample_reach(sc, rng):
 
 def collect(fn, n, seed):
     sc, rng = Scene(), np.random.default_rng(seed)
-    obs, tgt, gz, cl, tried, t0 = [], [], [], [], 0, time.time()
+    obs, tgt, gz, cl, ex, tried, t0 = [], [], [], [], [], 0, time.time()
     while len(obs) < n:
         tried += 1
         r = fn(sc, rng)
         if r is None:
             continue
         obs.append(r[0]); tgt.append(r[1]); gz.append(r[2]); cl.append(r[3])
+        if len(r) > 4:
+            ex.append(r[4])
         if len(obs) % 2000 == 0:
             print(f"  {len(obs)}/{n}  ({tried} Versuche, {time.time() - t0:.0f} s)", flush=True)
-    return np.stack(obs), np.array(tgt, np.int8), np.array(gz, np.float32), np.array(cl, np.int8)
+    extra = {"refs": np.stack(ex)} if ex else {}
+    return np.stack(obs), np.array(tgt, np.int8), np.array(gz, np.float32), np.array(cl, np.int8), extra
 
 
 def main():
@@ -240,19 +277,20 @@ def main():
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     fns = {"gaze": sample_gaze, "reach": sample_reach, "gazemulti": sample_gazemulti,
-           "gazecolor": sample_gazecolor, "gazecolorheld": sample_gazecolorheld}
+           "gazecolor": sample_gazecolor, "gazecolorheld": sample_gazecolorheld,
+           "gazecolorref": sample_gazecolorref, "gazecolorrefheld": sample_gazecolorrefheld}
     for task in a.tasks:
         ti = list(fns).index(task)                               # Seed haengt an der Aufgabe, nicht an der Reihenfolge
         for split, n, seed in (("train", a.n_train, 1000 + ti), ("test", a.n_test, 9000 + ti)):
             if n == 0:
                 continue
             print(f"{task} {split}: {n} Beispiele, Seed {seed}", flush=True)
-            obs, tgt, gz, cl = collect(fns[task], n, seed)
+            obs, tgt, gz, cl, extra = collect(fns[task], n, seed)
             m = Scene().sim.m
             cols = np.array([m.geom_rgba[m.body_geomadr[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, o)]][:3]
                              for o in OBJECTS], np.float32)
             np.savez_compressed(os.path.join(a.out, f"{task}_{split}.npz"), obs=obs, target=tgt, gaze=gz, cells=cl,
-                                colors=cols)
+                                colors=cols, **extra)
 
 
 if __name__ == "__main__":
