@@ -128,6 +128,8 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 # Entscheidungen
 
+* [Regel 1 heisst "lernendes Netz", nicht "PC-CVNN"](entscheidungen/lernendes-netz-statt-pc-cvnn.md) - Nutzerentscheidung 2026-11-10; Netze aus NetResearch duerfen als Experten antreten
+
 * [Vorgaben 2026-08-30](entscheidungen/defaults-2026-08-30.md) - der 1053-Episoden-Zustand wird Standard, samt ehrlichem Vorbehalt zur Greifergeometrie
 * [Die Wissensbasis wird ein Wiki im Repo](entscheidungen/wissensbasis-als-wiki.md) - warum, und was daran noch offen ist
 * [ACT23_WORLD_FULL_EVERY](entscheidungen/welt-fit-plan.md) - der Welt-Fit laeuft nur noch jede vierte Episode voll; **Vorgabe seit 2026-09-08**, Rueckfall mit n=1
@@ -149,6 +151,8 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 * [D0b-F1b zeitliche Selbstbewegungs-Fovea](messungen/d0b-fovea-zeitbindung.md) - Zweibild-Crop-Kopf vorab getornt und in 3/3 Seeds verworfen
 
 # Offene Fragen
+
+* [Bruecke zu NetResearch](fragen/netresearch-bruecke.md) - was in welche Richtung uebertragbar ist, Stufenplan a-c fuer implantierte Netze, Vorschlaege zum Reduzieren auf Foveas; nichts gemessen
 
 * [Formabhaengige Griffwahl](fragen/formabhaengige-griffwahl.md) - **Stufe 0 verfehlt, geschlossen.** Konzept nach Nutzerbeobachtung: Handgelenk, Greifpunkt und Kandidaten kommen alle aus der Gesamtform (78 % der Episoden haben genau einen Kandidaten); drei Stufen, zuerst eine Wertprobe mit vorab festgelegtem Abbruchkriterium
 * [Dream-RSI: Forschungsplan](fragen/dream-rsi-forschungsplan.md) - replaygestuetzte Trainingssteuerung zuerst ueber getrennte Trainingslinien, danach Curriculum eines Arms; zentrale Paketstatus-Tabelle

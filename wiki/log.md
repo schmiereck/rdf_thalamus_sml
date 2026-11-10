@@ -1,5 +1,12 @@
 # Chronik
 
+## 2026-11-10
+
+* **Entscheidung**: [Regel 1 heisst "lernendes Netz"](/entscheidungen/lernendes-netz-statt-pc-cvnn.md) - Nutzer: PC-CVNN war ein
+  Versuch; das Lernverfahren ist nicht vorgeschrieben. [Ziel](/ziel.md) entsprechend angepasst.
+* **Anlage**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Analyse aus dem Lesen (nichts gemessen): Uebertragbares in
+  beide Richtungen, Stufenplan a-c (Export, Regelkreis, End-Benchmark), Reduktionsvorschlaege. Stufe a beauftragt.
+
 ## 2026-10-14
 
 * **Messung**: [Findet die Bilddifferenz der eigenen Bewegung die Hand?](/befunde/hand-aus-bilddifferenz.md) - Seeds

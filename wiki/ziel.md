@@ -36,7 +36,8 @@ Daraus folgt, wie ein Ergebnis zu beurteilen ist:
 
 # Zwei harte Architekturregeln
 
-**Alles laeuft durch ein lernendes PC-CVNN-Netz.** Keine Positionen, die von mathematischen
+**Alles laeuft durch ein lernendes Netz.** (Seit 2026-11-10 nicht mehr auf PC-CVNN festgelegt, siehe
+[Entscheidung](/entscheidungen/lernendes-netz-statt-pc-cvnn.md).) Keine Positionen, die von mathematischen
 Algorithmen erkannt und eingespeist werden. Ein zweites Auge mit anderer Wahrnehmung ist
 willkommen - aber nur, wenn es selbst ein lernendes Netz ist. `perceive_all` (CC-Segmentierung
 + Homographie + PCA) ist genau die Kruecke, die abgebaut werden soll; es gilt als
