@@ -9,6 +9,10 @@ Uebersichtskamera MIT sichtbarem Arm (kein Privileg im Bild), abgetastet mit der
     gaze    Wo liegt der rote Wuerfel relativ zur Bildmitte? (dx, dy) = Zelle des Wuerfels - Mitte, -8..7.
             Das ist die Blickverschiebung, die ihn zentriert.
     gazemulti  wie gaze, alle drei Wuerfel im Blickfeld; cells traegt den Schritt fuer rot, gruen und blau
+    gazecolor  wie gazemulti, aber die drei Wuerfel tragen je Szene zufaellige Farben (Farbton ausserhalb
+            eines zurueckgehaltenen Bands); cells = Schritt je Wuerfel (6), dann die drei Farben
+            (9 Werte, RGB x 255 - 128) und ein Index. Die Farbe ist die stetige ADRESSE des Ziels.
+    gazecolorheld  dasselbe, ein Wuerfel (Index im letzten Wert) traegt einen zurueckgehaltenen Farbton
     reach   Hand und roter Wuerfel sind im Bild. (dx, dy) = Zelle des Wuerfels - Zelle des Greifpunkts.
 Die Etiketten kommen aus dem Simulator (Projektion der wahren Orte) und gehen NUR in die Etiketten, nie ins
 Bild. Train und Test stammen aus getrennten Szenen (getrennte Zufallsstroeme), nie zeilenweise geteilt.
@@ -142,6 +146,59 @@ def sample_gazemulti(sc, rng):
     return img, tgt, gaze, tuple(cells)
 
 
+CUBES = ["obj_red", "obj_green", "obj_blue"]
+HELD = (0.25, 0.40)            # zurueckgehaltenes Farbton-Band (gruen): nie im Training, nur in gazecolorheld
+AVOID = [(0.78, 0.92), (0.04, 0.14), (0.46, 0.56)]   # Zielscheiben (magenta), L (orange), U (cyan)
+
+
+def _hue_ok(h, held):
+    if any(lo <= h <= hi for lo, hi in AVOID):
+        return False
+    return (HELD[0] <= h <= HELD[1]) == held
+
+
+def _hues(rng, n_held):
+    """Drei Farbtoene mit Mindestabstand 0.08 (zyklisch); die ersten n_held aus dem zurueckgehaltenen Band."""
+    import colorsys
+    while True:
+        hs = []
+        for i in range(3):
+            while True:
+                h = float(rng.uniform(0, 1))
+                if _hue_ok(h, i < n_held):
+                    break
+            hs.append(h)
+        d = [min(abs(a - b), 1 - abs(a - b)) for a in hs for b in hs if a is not b]
+        if min(d) >= 0.08:
+            break
+    order = rng.permutation(3)
+    cols = [colorsys.hsv_to_rgb(hs[i], float(rng.uniform(0.6, 1.0)), float(rng.uniform(0.7, 1.0))) for i in order]
+    return np.array(cols, np.float32), int(np.flatnonzero(order == 0)[0])
+
+
+def _sample_gazecolor(sc, rng, n_held):
+    """Wie gazemulti, aber die drei Wuerfel bekommen je Szene zufaellige Farben. Rueckgabe-Zellen: Schritt zur
+    Mitte je Wuerfel, danach die drei Farben (RGB x 255) und der Index des Wuerfels mit zurueckgehaltenem
+    Farbton (nur bei n_held = 1 von Bedeutung)."""
+    m = sc.sim.m
+    cols, held = _hues(rng, n_held)
+    for o, c in zip(CUBES, cols):
+        m.geom_rgba[m.body_geomadr[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, o)], :3] = c
+    r = sample_gazemulti(sc, rng)
+    if r is None:
+        return None
+    img, tgt, gaze, cells = r
+    return img, tgt, gaze, tuple(cells[:6]) + tuple(int(round(255 * v)) - 128 for v in cols.ravel()) + (held,)
+
+
+def sample_gazecolor(sc, rng):
+    return _sample_gazecolor(sc, rng, 0)
+
+
+def sample_gazecolorheld(sc, rng):
+    return _sample_gazecolor(sc, rng, 1)
+
+
 def sample_reach(sc, rng):
     sc.layout(rng)
     obj = sc.sim.obj_pos(TARGET)
@@ -182,10 +239,13 @@ def main():
     ap.add_argument("--tasks", nargs="+", default=["gaze", "reach"])
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    fns = {"gaze": sample_gaze, "reach": sample_reach, "gazemulti": sample_gazemulti}
+    fns = {"gaze": sample_gaze, "reach": sample_reach, "gazemulti": sample_gazemulti,
+           "gazecolor": sample_gazecolor, "gazecolorheld": sample_gazecolorheld}
     for task in a.tasks:
         ti = list(fns).index(task)                               # Seed haengt an der Aufgabe, nicht an der Reihenfolge
         for split, n, seed in (("train", a.n_train, 1000 + ti), ("test", a.n_test, 9000 + ti)):
+            if n == 0:
+                continue
             print(f"{task} {split}: {n} Beispiele, Seed {seed}", flush=True)
             obs, tgt, gz, cl = collect(fns[task], n, seed)
             m = Scene().sim.m
