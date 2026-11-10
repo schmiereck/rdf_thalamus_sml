@@ -2,6 +2,9 @@
 
 ## 2026-11-10
 
+* **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Stand von Stufe a eingetragen. Export um
+  Formen, Zeigebilder und Kandidaten-Blicke (`cands`) erweitert. Messungen liegen in NetResearch (Pruefstand,
+  keine act23-Aussage).
 * **Entscheidung**: [Regel 1 heisst "lernendes Netz"](/entscheidungen/lernendes-netz-statt-pc-cvnn.md) - Nutzer: PC-CVNN war ein
   Versuch; das Lernverfahren ist nicht vorgeschrieben. [Ziel](/ziel.md) entsprechend angepasst.
 * **Anlage**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Analyse aus dem Lesen (nichts gemessen): Uebertragbares in

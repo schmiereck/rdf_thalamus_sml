@@ -75,7 +75,13 @@ Zellen, der NetResearch-Eingang ist 16x16x3.
 | b | MuJoCo-Welt als Regelkreis-Aufgabe, Teacher als Experte (beide Projekte nutzen DAgger) | MuJoCo-Anbindung dort |
 | c | End-Benchmark: Lieferquote auf zurueckgehaltenen Relation-x-Zielart-Zellen, gepaart | act23-ab |
 
-Stand: Stufe a ist am 2026-11-10 beauftragt.
+Stand 2026-11-10: Stufe a laeuft (`src/pc_cvnn/export_netresearch.py`). Gemessen wurde in NetResearch,
+nicht hier; Zahlen und Protokoll stehen dort in `STAND.md` und `PLAN_TRAINER.md`. Kurz: Blick auf
+den Wuerfel zentrieren gelingt (0.93-1.00), Hand-zum-Objekt nicht (um 0.10). Ein Zielobjekt laesst
+sich per Kommando (Farbe) oder per Bild des Objekts vorgeben. Gleichfarbige Koerper verschiedener
+Form findet kein Netz in einem Blick (0.05-0.09); mit Nacheinander-Anschauen und Gedaechtnis
+waehlt ein Attention-Speicher in 82 % den richtigen (nie gesehene Form: 56 %). Das sind
+Pruefstandswerte auf exportierten Bildern und sagen einen act23-Lauf nicht vorher.
 
 # Reduzieren: Vorschlaege, ungeprueft
 

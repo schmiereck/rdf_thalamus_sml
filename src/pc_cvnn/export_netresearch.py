@@ -19,6 +19,8 @@ Uebersichtskamera MIT sichtbarem Arm (kein Privileg im Bild), abgetastet mit der
     gazeshape / gazeshapeheld  drei Koerper gleicher Farbe und verschiedener Form (Wuerfel, L, U, T, Kreuz;
             held: einer ist das Y, das im Training nie vorkommt), beliebig gedreht; refs uint8
             [N, 3, 2, 3, 16, 16]: je Koerper ZWEI Zeigebilder. Die Adresse muss hier die FORM tragen.
+            cands uint8 [N, 3, 3, 16, 16]: dieselbe Suchszene, der Blick auf jedem der drei Koerper
+            (Anschauen und Vergleichen: ist das, was ich gerade ansehe, das Gezeigte?).
     reach   Hand und roter Wuerfel sind im Bild. (dx, dy) = Zelle des Wuerfels - Zelle des Greifpunkts.
 Die Etiketten kommen aus dem Simulator (Projektion der wahren Orte) und gehen NUR in die Etiketten, nie ins
 Bild. Train und Test stammen aus getrennten Szenen (getrennte Zufallsstroeme), nie zeilenweise geteilt.
@@ -295,6 +297,8 @@ def _sample_gazeshape(sc, rng, held):
             return None
         cells += [co - F // 2, ro - F // 2]
     img = sc.fovea(gaze)
+    # ANSCHAUEN: dieselbe Szene, der Blick nacheinander auf jedem der drei Koerper (bis +-1 Zelle daneben)
+    cands = np.stack([sc.fovea(sc.project(sc.sim.obj_pos(o)) + rng.uniform(-K, K, size=2)) for o in bodies])
     refs = []
     for o in bodies:                                                     # danach: zwei Zeigebilder je Koerper
         views = []
@@ -304,7 +308,7 @@ def _sample_gazeshape(sc, rng, held):
         refs.append(np.stack(views))
     cells += [int(round(255 * v)) - 128 for v in rgb] + [SHAPES.index(o) for o in bodies]
     cells += [bodies.index(SHAPES[5]) if held else 0]
-    return img, tuple(cells[:2]), gaze, tuple(cells), np.stack(refs)
+    return img, tuple(cells[:2]), gaze, tuple(cells), {"refs": np.stack(refs), "cands": cands}
 
 
 def sample_gazeshape(sc, rng):
@@ -343,10 +347,10 @@ def collect(fn, n, seed):
             continue
         obs.append(r[0]); tgt.append(r[1]); gz.append(r[2]); cl.append(r[3])
         if len(r) > 4:
-            ex.append(r[4])
+            ex.append(r[4] if isinstance(r[4], dict) else {"refs": r[4]})
         if len(obs) % 2000 == 0:
             print(f"  {len(obs)}/{n}  ({tried} Versuche, {time.time() - t0:.0f} s)", flush=True)
-    extra = {"refs": np.stack(ex)} if ex else {}
+    extra = {k: np.stack([e[k] for e in ex]) for k in ex[0]} if ex else {}
     return np.stack(obs), np.array(tgt, np.int8), np.array(gz, np.float32), np.array(cl, np.int8), extra
 
 
