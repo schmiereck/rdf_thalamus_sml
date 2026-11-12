@@ -40,7 +40,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import mujoco  # noqa: E402
 
 from pc_cvnn.pc_act14 import ARM_JOINTS, HOME, REACH_XY, BracketArmSim  # noqa: E402
-from pc_cvnn.pc_act18 import F, HEX_DY, _warp, hex_sample  # noqa: E402
+from pc_cvnn.pc_act18 import F, HEX_DY, _warp, _warp_spacing, hex_sample, patch_mean  # noqa: E402
 
 RES, CAM, K = 240, "overview", 4
 OBJECTS = ["obj_red", "obj_green", "obj_blue", "obj_L", "obj_U"]
@@ -115,10 +115,62 @@ class Scene:
             self.set_arm(self.arm() + dq * min(1.0, 0.15 / max(m, 1e-9)))
         return float(np.linalg.norm(np.asarray(xyz) - s.grasp_pos()))
 
+    def render_fine(self):
+        """Dieselbe Szene mit doppelter Kameraaufloesung (2 * RES): eigener Simulator, Zustand und Farben
+        werden vom ersten uebernommen. Pixelorte sind dort doppelt so gross."""
+        if not hasattr(self, "fine"):
+            self.fine = BracketArmSim(render_wh=(2 * RES, 2 * RES))
+        f = self.fine
+        f.m.geom_rgba[:] = self.sim.m.geom_rgba
+        f.d.qpos[:] = self.sim.d.qpos
+        mujoco.mj_forward(f.m, f.d)
+        return f.render(CAM)
+
     def fovea(self, gaze):
         img = self.sim.render(CAM)
         cells = hex_sample(img, gaze, K)[:, :, 1:]                       # F, F, 3 in 0..1
         return np.round(cells * 255).astype(np.uint8).transpose(2, 0, 1)
+
+
+def fine_sample(img, gaze, n):
+    """(n * F) x (n * F) Zellen ueber DASSELBE Blickfeld wie die Fovea, also n-fach dichter (gleiche Verzerrung
+    zum Rand hin). img: Bild mit doppelter Aufloesung, gaze in dessen Pixeln."""
+    N, k = n * F, 2 * K
+    out, ctr = np.zeros((N, N, 3)), (N - 1) / 2.0
+    for r in range(N):
+        ir = (r - ctr) / n
+        cy, sy = gaze[1] + _warp(ir) * k * HEX_DY, _warp_spacing(ir) * k * HEX_DY / n
+        for c in range(N):
+            ic = (c + 0.5 * (r & 1) - ctr) / n
+            half = max(1, int(round(0.25 * (_warp_spacing(ic) * k / n + sy))))
+            out[r, c] = patch_mean(img, gaze[0] + _warp(ic) * k, cy, half)
+    return np.round(out * 255).astype(np.uint8).transpose(2, 0, 1)
+
+
+def sample_shapeview(sc, rng):
+    """AUFLOESUNG: drei Koerper gleicher Farbe und verschiedener Form (wie gazeshape), der Blick liegt auf
+    einem davon (bis +-1 Zelle daneben). Etikett = seine Form (cells[0], Index in SHAPES). Dasselbe in vier
+    Abtastungen: obs = Fovea wie bisher (16 x 16, 4 px je Zelle); z2 / z4 = 16 x 16 mit doppelter / vierfacher
+    Vergroesserung (kleineres Blickfeld); f32 = 32 x 32 ueber das Blickfeld von obs (doppelt so dicht).
+    z2, z4, f32 stammen aus einem Bild mit doppelter Kameraaufloesung."""
+    import colorsys
+    bodies = [SHAPES[i] for i in rng.permutation(N_TRAIN_SHAPES)][:3]
+    while True:
+        h = float(rng.uniform(0, 1))
+        if not 0.78 <= h <= 0.92:
+            break
+    rgb = np.array(colorsys.hsv_to_rgb(h, float(rng.uniform(0.6, 1.0)), float(rng.uniform(0.7, 1.0))), np.float32)
+    for o in SHAPES:
+        _paint(sc, o, rgb)
+    _place(sc, rng, bodies)
+    gaze = sc.project(sc.sim.obj_pos(bodies[0])) + rng.uniform(-K, K, size=2)
+    if not (0 <= gaze[0] < RES and 0 <= gaze[1] < RES):
+        return None
+    big = sc.render_fine()
+    z2 = np.round(hex_sample(big, 2 * gaze, K)[:, :, 1:] * 255).astype(np.uint8).transpose(2, 0, 1)
+    z4 = np.round(hex_sample(big, 2 * gaze, K / 2)[:, :, 1:] * 255).astype(np.uint8).transpose(2, 0, 1)
+    return sc.fovea(gaze), (0, 0), gaze, (SHAPES.index(bodies[0]),), {"z2": z2, "z4": z4,
+                                                                      "f32": fine_sample(big, 2 * gaze, 2)}
 
 
 def sample_gaze(sc, rng):
@@ -365,7 +417,7 @@ def main():
     fns = {"gaze": sample_gaze, "reach": sample_reach, "gazemulti": sample_gazemulti,
            "gazecolor": sample_gazecolor, "gazecolorheld": sample_gazecolorheld,
            "gazecolorref": sample_gazecolorref, "gazecolorrefheld": sample_gazecolorrefheld,
-           "gazeshape": sample_gazeshape, "gazeshapeheld": sample_gazeshapeheld}
+           "gazeshape": sample_gazeshape, "gazeshapeheld": sample_gazeshapeheld, "shapeview": sample_shapeview}
     for task in a.tasks:
         ti = list(fns).index(task)                               # Seed haengt an der Aufgabe, nicht an der Reihenfolge
         for split, n, seed in (("train", a.n_train, 1000 + ti), ("test", a.n_test, 9000 + ti)):
