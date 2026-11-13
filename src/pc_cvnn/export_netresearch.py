@@ -340,12 +340,14 @@ def _place(sc, rng, bodies):
     sc.set_arm(home + rng.uniform(-0.25, 0.25, size=len(home)))
 
 
-def _sample_gazeshape(sc, rng, held):
+def _sample_gazeshape(sc, rng, held, inner=False):
     """Drei Koerper VERSCHIEDENER Form und GLEICHER Farbe (ein zufaelliger Farbton je Szene): nur die Form
     unterscheidet sie. Dazu je Koerper ZWEI Zeigebilder (allein, andere Szene, andere Drehung).
     held: einer der drei ist das Y, das im Training nie vorkommt.
     cells: Schritt zur Mitte je Koerper (6), Farbe (3, RGB x 255 - 128), Form je Koerper (3, Index in SHAPES),
-    Index des Y unter den dreien (bzw. 0)."""
+    Index des Y unter den dreien (bzw. 0).
+    inner: alle drei Koerper liegen im voll aufgeloesten Teil der Fovea (hoechstens INNER_RING Zellen neben der
+    Mitte); der Blick liegt dazu nahe am Schwerpunkt der drei."""
     import colorsys
     pool = [SHAPES[i] for i in rng.permutation(N_TRAIN_SHAPES)]
     bodies = [SHAPES[5]] + pool[:2] if held else pool[:3]
@@ -359,16 +361,27 @@ def _sample_gazeshape(sc, rng, held):
         _paint(sc, o, rgb)
     _place(sc, rng, bodies)
     px = sc.project(sc.sim.obj_pos(bodies[0]))
-    r, c = (int(x) for x in rng.integers(0, F, size=2))
-    gaze = px - np.array([_warp(c + 0.5 * (r & 1) - CTR) * K, _warp(r - CTR) * K * HEX_DY])
-    if not (0 <= gaze[0] < RES and 0 <= gaze[1] < RES):
-        return None
-    cells = [c - F // 2, r - F // 2]
-    for o in bodies[1:]:
-        ro, co, dist = nearest_cell(gaze, sc.project(sc.sim.obj_pos(o)))
-        if dist > 2 * K:
+    if inner:
+        gaze = np.mean([sc.project(sc.sim.obj_pos(o)) for o in bodies], 0) + rng.uniform(-3 * K, 3 * K, size=2)
+        if not (0 <= gaze[0] < RES and 0 <= gaze[1] < RES):
             return None
-        cells += [co - F // 2, ro - F // 2]
+        cells = []
+        for o in bodies:
+            ro, co, dist = nearest_cell(gaze, sc.project(sc.sim.obj_pos(o)))
+            if dist > 2 * K or max(abs(co - F // 2), abs(ro - F // 2)) > INNER_RING:
+                return None
+            cells += [co - F // 2, ro - F // 2]
+    else:
+        r, c = (int(x) for x in rng.integers(0, F, size=2))
+        gaze = px - np.array([_warp(c + 0.5 * (r & 1) - CTR) * K, _warp(r - CTR) * K * HEX_DY])
+        if not (0 <= gaze[0] < RES and 0 <= gaze[1] < RES):
+            return None
+        cells = [c - F // 2, r - F // 2]
+        for o in bodies[1:]:
+            ro, co, dist = nearest_cell(gaze, sc.project(sc.sim.obj_pos(o)))
+            if dist > 2 * K:
+                return None
+            cells += [co - F // 2, ro - F // 2]
     img = sc.fovea(gaze)
     f32 = fine_sample(sc.render_fine(), 2 * gaze, 2)                      # Suchszene doppelt so dicht (ohne rng)
     # ANSCHAUEN: dieselbe Szene, der Blick nacheinander auf jedem der drei Koerper (bis +-1 Zelle daneben)
@@ -391,6 +404,17 @@ def sample_gazeshape(sc, rng):
 
 def sample_gazeshapeheld(sc, rng):
     return _sample_gazeshape(sc, rng, True)
+
+
+INNER_RING = 5
+
+
+def sample_gazeshapein(sc, rng):
+    return _sample_gazeshape(sc, rng, False, inner=True)
+
+
+def sample_gazeshapeinheld(sc, rng):
+    return _sample_gazeshape(sc, rng, True, inner=True)
 
 
 def sample_reach(sc, rng):
@@ -434,16 +458,20 @@ def main():
     ap.add_argument("--n-train", type=int, default=20000)
     ap.add_argument("--n-test", type=int, default=4000)
     ap.add_argument("--tasks", nargs="+", default=["gaze", "reach"])
+    ap.add_argument("--part", type=int, default=0, help="Teil k eines in mehreren Prozessen erzeugten Satzes: "
+                    "Seed + 100 * k, Dateiname <task>_<split>_p<k>.npz (k = 0: wie bisher)")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     fns = {"gaze": sample_gaze, "reach": sample_reach, "gazemulti": sample_gazemulti,
            "gazecolor": sample_gazecolor, "gazecolorheld": sample_gazecolorheld,
            "gazecolorref": sample_gazecolorref, "gazecolorrefheld": sample_gazecolorrefheld,
            "gazeshape": sample_gazeshape, "gazeshapeheld": sample_gazeshapeheld, "shapeview": sample_shapeview,
-           "shapeedge": sample_shapeedge}
+           "shapeedge": sample_shapeedge,
+           "gazeshapein": sample_gazeshapein, "gazeshapeinheld": sample_gazeshapeinheld}
     for task in a.tasks:
         ti = list(fns).index(task)                               # Seed haengt an der Aufgabe, nicht an der Reihenfolge
-        for split, n, seed in (("train", a.n_train, 1000 + ti), ("test", a.n_test, 9000 + ti)):
+        for split, n, seed in (("train", a.n_train, 1000 + ti + 100 * a.part),
+                               ("test", a.n_test, 9000 + ti + 100 * a.part)):
             if n == 0:
                 continue
             print(f"{task} {split}: {n} Beispiele, Seed {seed}", flush=True)
@@ -451,7 +479,7 @@ def main():
             m = Scene().sim.m
             cols = np.array([m.geom_rgba[m.body_geomadr[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, o)]][:3]
                              for o in OBJECTS], np.float32)
-            np.savez_compressed(os.path.join(a.out, f"{task}_{split}.npz"), obs=obs, target=tgt, gaze=gz, cells=cl,
+            np.savez_compressed(os.path.join(a.out, f"{task}_{split}" + (f"_p{a.part}" if a.part else "") + ".npz"), obs=obs, target=tgt, gaze=gz, cells=cl,
                                 colors=cols, **extra)
 
 
