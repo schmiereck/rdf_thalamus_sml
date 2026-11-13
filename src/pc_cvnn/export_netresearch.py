@@ -173,6 +173,27 @@ def sample_shapeview(sc, rng):
                                                                       "f32": fine_sample(big, 2 * gaze, 2)}
 
 
+def sample_shapeedge(sc, rng):
+    """AUFLOESUNG AM RAND: wie shapeview, aber der Koerper liegt irgendwo im Blickfeld, bis 7 Zellen neben der
+    Mitte (ab 5 Zellen werden die Zellen groeber), und er ist der einzige im Blickfeld. cells = (Form, Ring), Ring = max(|Spalte|, |Zeile|) des
+    Koerpers relativ zur Mitte, gerundet. obs = Fovea wie bisher, f32 = 32 x 32 ueber dasselbe Blickfeld."""
+    r = sample_shapeview(sc, rng)                                        # malt und stellt die Szene
+    if r is None:
+        return None
+    body = SHAPES[r[3][0]]
+    off = rng.uniform(-7.0, 7.0, size=2)
+    gaze = sc.project(sc.sim.obj_pos(body)) - np.array([_warp(off[0]) * K, _warp(off[1]) * K * HEX_DY])
+    if not (0 <= gaze[0] < RES and 0 <= gaze[1] < RES):
+        return None
+    for o in SHAPES:                                                     # nur EIN Koerper im Blickfeld, sonst
+        d = np.abs(sc.project(sc.sim.obj_pos(o)) - gaze)                 # ist offen, welcher gemeint ist
+        if o != body and d[0] < 16 * K and d[1] < 16 * K * HEX_DY:
+            return None
+    big = sc.render_fine()
+    return sc.fovea(gaze), (0, 0), gaze, (r[3][0], int(round(np.abs(off).max()))), {
+        "f32": fine_sample(big, 2 * gaze, 2)}
+
+
 def sample_gaze(sc, rng):
     sc.layout(rng)
     home = np.array([HOME[j] for j in ARM_JOINTS])
@@ -417,7 +438,8 @@ def main():
     fns = {"gaze": sample_gaze, "reach": sample_reach, "gazemulti": sample_gazemulti,
            "gazecolor": sample_gazecolor, "gazecolorheld": sample_gazecolorheld,
            "gazecolorref": sample_gazecolorref, "gazecolorrefheld": sample_gazecolorrefheld,
-           "gazeshape": sample_gazeshape, "gazeshapeheld": sample_gazeshapeheld, "shapeview": sample_shapeview}
+           "gazeshape": sample_gazeshape, "gazeshapeheld": sample_gazeshapeheld, "shapeview": sample_shapeview,
+           "shapeedge": sample_shapeedge}
     for task in a.tasks:
         ti = list(fns).index(task)                               # Seed haengt an der Aufgabe, nicht an der Reihenfolge
         for split, n, seed in (("train", a.n_train, 1000 + ti), ("test", a.n_test, 9000 + ti)):

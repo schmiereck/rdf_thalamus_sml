@@ -1,5 +1,11 @@
 # Chronik
 
+## 2026-11-13
+
+* **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Export um `shapeview` (Form bei vier
+  Abtastungen, zweiter Simulator mit doppelter Kameraaufloesung) und `shapeedge` (Koerper irgendwo im Blickfeld,
+  allein) erweitert. Befund aus NetResearch zur Aufloesung eingetragen (Pruefstand, keine act23-Aussage).
+
 ## 2026-11-10
 
 * **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Stand von Stufe a eingetragen. Export um

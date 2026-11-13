@@ -100,6 +100,13 @@ kleines Woerterbuch auf diese Vektoren.
 * **Aufloesung**: F24/F32 brachten nichts, weil nur Peripherie dazukam. Feiner abtasten bei
   gleicher Zellzahl oder eine zweite Fovea ist der andere Weg; das ist keine Wiederholung des
   geschlossenen Versuchs, aber auch nicht belegt.
+  Nachtrag 2026-11-13, gemessen in NetResearch am Export (`shapeview`, `shapeedge`; Pruefstand, sagt
+  keinen act23-Lauf vorher): Liegt der Blick auf dem Koerper, erkennen 100k-Netze die Form (5 Klassen)
+  schon mit der heutigen Fovea zu 93-99 %; doppelt so dichte Abtastung desselben Blickfelds
+  (32 x 32, drei gelernte Schichten davor) bringt dort 98-100 %. Liegt der Koerper irgendwo im
+  Blickfeld, faellt die heutige Fovea auf 55-62 %, die doppelt dichte haelt 65-77 %; in den zwei
+  aeusseren, groben Ringen sinken beide (43-55 % gegen 54-72 %). Die dichtere Abtastung lohnt also
+  abseits der Mitte, nicht auf dem angeblickten Koerper.
 * **Erfolgsmass** wie in [perceive_all abloesen](/fragen/perceive-all-abloesen.md): gleiche
   Lieferquote mit weniger Geruest.
 
