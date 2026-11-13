@@ -370,6 +370,7 @@ def _sample_gazeshape(sc, rng, held):
             return None
         cells += [co - F // 2, ro - F // 2]
     img = sc.fovea(gaze)
+    f32 = fine_sample(sc.render_fine(), 2 * gaze, 2)                      # Suchszene doppelt so dicht (ohne rng)
     # ANSCHAUEN: dieselbe Szene, der Blick nacheinander auf jedem der drei Koerper (bis +-1 Zelle daneben)
     cands = np.stack([sc.fovea(sc.project(sc.sim.obj_pos(o)) + rng.uniform(-K, K, size=2)) for o in bodies])
     refs = []
@@ -381,7 +382,7 @@ def _sample_gazeshape(sc, rng, held):
         refs.append(np.stack(views))
     cells += [int(round(255 * v)) - 128 for v in rgb] + [SHAPES.index(o) for o in bodies]
     cells += [bodies.index(SHAPES[5]) if held else 0]
-    return img, tuple(cells[:2]), gaze, tuple(cells), {"refs": np.stack(refs), "cands": cands}
+    return img, tuple(cells[:2]), gaze, tuple(cells), {"refs": np.stack(refs), "cands": cands, "f32": f32}
 
 
 def sample_gazeshape(sc, rng):
