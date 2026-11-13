@@ -152,6 +152,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 # Offene Fragen
 
+* [Drucksensor wieder loswerden](fragen/drucksensor-entkoppeln.md) - wo der Fingerdruck heute Pflicht ist (Policy-Zustand, OBS_STATE, Koepfe, Etiketten), Ersatzvorschlaege; aus dem Code gelesen, nichts gemessen; kein Druck-Eingang in NetResearch
 * [Bruecke zu NetResearch](fragen/netresearch-bruecke.md) - was in welche Richtung uebertragbar ist, Stufenplan a-c fuer implantierte Netze, Vorschlaege zum Reduzieren auf Foveas; nichts gemessen
 
 * [Formabhaengige Griffwahl](fragen/formabhaengige-griffwahl.md) - **Stufe 0 verfehlt, geschlossen.** Konzept nach Nutzerbeobachtung: Handgelenk, Greifpunkt und Kandidaten kommen alle aus der Gesamtform (78 % der Episoden haben genau einen Kandidaten); drei Stufen, zuerst eine Wertprobe mit vorab festgelegtem Abbruchkriterium

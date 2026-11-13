@@ -2,6 +2,7 @@
 
 ## 2026-11-13
 
+* **Anlage**: [Drucksensor wieder loswerden](/fragen/drucksensor-entkoppeln.md) - Bestandsaufnahme aus dem Review von agy, Fundstellen von Claude nachgeschlagen. Nutzer: Sensor bleibt vorerst, soll aber wieder weg und nicht nach NetResearch. Nichts geaendert, nichts gemessen.
 * **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Export um `shapeview` (Form bei vier
   Abtastungen, zweiter Simulator mit doppelter Kameraaufloesung) und `shapeedge` (Koerper irgendwo im Blickfeld,
   allein) erweitert. Befund aus NetResearch zur Aufloesung eingetragen (Pruefstand, keine act23-Aussage).
