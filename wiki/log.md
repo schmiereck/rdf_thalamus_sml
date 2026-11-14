@@ -1,5 +1,9 @@
 # Chronik
 
+## 2026-11-14
+
+* **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Export der Suchszenen (`gazeshape*`) speichert zusaetzlich den Pixelort jedes Koerpers (`pos`); verbraucht keine Zufallszahlen, die Szenen bleiben dieselben (gegen den alten Testsatz geprueft). Auswertung in NetResearch (Pruefstand, keine act23-Aussage).
+
 ## 2026-11-13
 
 * **Anlage**: [Drucksensor wieder loswerden](/fragen/drucksensor-entkoppeln.md) - Bestandsaufnahme aus dem Review von agy, Fundstellen von Claude nachgeschlagen. Nutzer: Sensor bleibt vorerst, soll aber wieder weg und nicht nach NetResearch. Nichts geaendert, nichts gemessen.
