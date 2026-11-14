@@ -3,6 +3,7 @@
 ## 2026-11-14
 
 * **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Export der Suchszenen (`gazeshape*`) speichert zusaetzlich den Pixelort jedes Koerpers (`pos`); verbraucht keine Zufallszahlen, die Szenen bleiben dieselben (gegen den alten Testsatz geprueft). Auswertung in NetResearch (Pruefstand, keine act23-Aussage).
+* **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - neue Export-Variante `gazeshapec` / `gazeshapecheld`: innere Suchszenen, Ort eines Koerpers ist sein Flaechenschwerpunkt statt des Koerper-Ursprungs (der liegt bei L / U / T 3,3 / 2,2 / 1,6 px daneben, eine Zelle = 4 px). Alte Saetze unveraendert. Nutzer: fuer das Greifen werden spaeter andere Punkte der Form wichtig (lange oder gut greifbare Zinken, je nach Ausrichtung).
 
 ## 2026-11-13
 

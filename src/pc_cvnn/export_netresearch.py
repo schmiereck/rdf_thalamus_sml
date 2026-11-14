@@ -340,15 +340,44 @@ def _place(sc, rng, bodies):
     sc.set_arm(home + rng.uniform(-0.25, 0.25, size=len(home)))
 
 
-def _sample_gazeshape(sc, rng, held, inner=False):
+_CENTROID = {}
+
+
+def centroid(sc, o):
+    """Weltpunkt des FLAECHENSCHWERPUNKTS von Koerper o (Draufsicht): die Vereinigung seiner Quader im
+    Koerperrahmen gerastert (0,25 mm), ueberlappende Quader zaehlen einfach. Der Koerper-Ursprung liegt bei den
+    unsymmetrischen Formen (L, U, T) bis 3,5 px daneben."""
+    m, d = sc.sim.m, sc.sim.d
+    bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, o)
+    if o not in _CENTROID:
+        gs = [g for g in range(m.ngeom) if m.geom_bodyid[g] == bid]
+        assert all(m.geom_type[g] == mujoco.mjtGeom.mjGEOM_BOX for g in gs), o
+        t = np.arange(-0.06, 0.06, 0.00025) + 0.000125                   # symmetrisch um 0
+        xy = np.stack(np.meshgrid(t, t, indexing="ij"), -1).reshape(-1, 2)
+        inside = np.zeros(len(xy), bool)
+        for g in gs:
+            rot = np.zeros(9)
+            mujoco.mju_quat2Mat(rot, m.geom_quat[g])
+            rot = rot.reshape(3, 3)
+            assert abs(abs(rot[2, 2]) - 1) < 1e-6, o                       # Quader nur um z gedreht
+            q = (xy - m.geom_pos[g][:2]) @ rot[:2, :2]                     # in den Rahmen des Quaders
+            inside |= (np.abs(q) <= m.geom_size[g][:2]).all(1)
+        _CENTROID[o] = np.array([*xy[inside].mean(0), 0.0])
+    return d.xpos[bid] + d.xmat[bid].reshape(3, 3) @ _CENTROID[o]
+
+
+def _sample_gazeshape(sc, rng, held, inner=False, centre=False):
     """Drei Koerper VERSCHIEDENER Form und GLEICHER Farbe (ein zufaelliger Farbton je Szene): nur die Form
     unterscheidet sie. Dazu je Koerper ZWEI Zeigebilder (allein, andere Szene, andere Drehung).
     held: einer der drei ist das Y, das im Training nie vorkommt.
     cells: Schritt zur Mitte je Koerper (6), Farbe (3, RGB x 255 - 128), Form je Koerper (3, Index in SHAPES),
     Index des Y unter den dreien (bzw. 0).
     inner: alle drei Koerper liegen im voll aufgeloesten Teil der Fovea (hoechstens INNER_RING Zellen neben der
-    Mitte); der Blick liegt dazu nahe am Schwerpunkt der drei."""
+    Mitte); der Blick liegt dazu nahe am Schwerpunkt der drei.
+    centre: Ort eines Koerpers ist sein Flaechenschwerpunkt (centroid) statt des Koerper-Ursprungs - fuer die
+    Schritte, die Kandidaten-Blicke und die Zeigebilder."""
     import colorsys
+    at = (lambda o: centroid(sc, o)) if centre else sc.sim.obj_pos
     pool = [SHAPES[i] for i in rng.permutation(N_TRAIN_SHAPES)]
     bodies = [SHAPES[5]] + pool[:2] if held else pool[:3]
     bodies = [bodies[i] for i in rng.permutation(3)]
@@ -360,14 +389,14 @@ def _sample_gazeshape(sc, rng, held, inner=False):
     for o in SHAPES:
         _paint(sc, o, rgb)
     _place(sc, rng, bodies)
-    px = sc.project(sc.sim.obj_pos(bodies[0]))
+    px = sc.project(at(bodies[0]))
     if inner:
-        gaze = np.mean([sc.project(sc.sim.obj_pos(o)) for o in bodies], 0) + rng.uniform(-3 * K, 3 * K, size=2)
+        gaze = np.mean([sc.project(at(o)) for o in bodies], 0) + rng.uniform(-3 * K, 3 * K, size=2)
         if not (0 <= gaze[0] < RES and 0 <= gaze[1] < RES):
             return None
         cells = []
         for o in bodies:
-            ro, co, dist = nearest_cell(gaze, sc.project(sc.sim.obj_pos(o)))
+            ro, co, dist = nearest_cell(gaze, sc.project(at(o)))
             if dist > 2 * K or max(abs(co - F // 2), abs(ro - F // 2)) > INNER_RING:
                 return None
             cells += [co - F // 2, ro - F // 2]
@@ -378,21 +407,21 @@ def _sample_gazeshape(sc, rng, held, inner=False):
             return None
         cells = [c - F // 2, r - F // 2]
         for o in bodies[1:]:
-            ro, co, dist = nearest_cell(gaze, sc.project(sc.sim.obj_pos(o)))
+            ro, co, dist = nearest_cell(gaze, sc.project(at(o)))
             if dist > 2 * K:
                 return None
             cells += [co - F // 2, ro - F // 2]
-    pos = np.array([sc.project(sc.sim.obj_pos(o)) for o in bodies], np.float32)   # Pixelort je Koerper (ohne rng)
+    pos = np.array([sc.project(at(o)) for o in bodies], np.float32)   # Pixelort je Koerper (ohne rng)
     img = sc.fovea(gaze)
     f32 = fine_sample(sc.render_fine(), 2 * gaze, 2)                      # Suchszene doppelt so dicht (ohne rng)
     # ANSCHAUEN: dieselbe Szene, der Blick nacheinander auf jedem der drei Koerper (bis +-1 Zelle daneben)
-    cands = np.stack([sc.fovea(sc.project(sc.sim.obj_pos(o)) + rng.uniform(-K, K, size=2)) for o in bodies])
+    cands = np.stack([sc.fovea(sc.project(at(o)) + rng.uniform(-K, K, size=2)) for o in bodies])
     refs = []
     for o in bodies:                                                     # danach: zwei Zeigebilder je Koerper
         views = []
         for _ in range(2):
             _place(sc, rng, [o])
-            views.append(sc.fovea(sc.project(sc.sim.obj_pos(o)) + rng.uniform(-K, K, size=2)))
+            views.append(sc.fovea(sc.project(at(o)) + rng.uniform(-K, K, size=2)))
         refs.append(np.stack(views))
     cells += [int(round(255 * v)) - 128 for v in rgb] + [SHAPES.index(o) for o in bodies]
     cells += [bodies.index(SHAPES[5]) if held else 0]
@@ -417,6 +446,15 @@ def sample_gazeshapein(sc, rng):
 
 def sample_gazeshapeinheld(sc, rng):
     return _sample_gazeshape(sc, rng, True, inner=True)
+
+
+def sample_gazeshapec(sc, rng):
+    """Wie gazeshapein, aber der Ort jedes Koerpers ist sein Flaechenschwerpunkt (sichtbare Mitte)."""
+    return _sample_gazeshape(sc, rng, False, inner=True, centre=True)
+
+
+def sample_gazeshapecheld(sc, rng):
+    return _sample_gazeshape(sc, rng, True, inner=True, centre=True)
 
 
 def sample_reach(sc, rng):
@@ -469,7 +507,8 @@ def main():
            "gazecolorref": sample_gazecolorref, "gazecolorrefheld": sample_gazecolorrefheld,
            "gazeshape": sample_gazeshape, "gazeshapeheld": sample_gazeshapeheld, "shapeview": sample_shapeview,
            "shapeedge": sample_shapeedge,
-           "gazeshapein": sample_gazeshapein, "gazeshapeinheld": sample_gazeshapeinheld}
+           "gazeshapein": sample_gazeshapein, "gazeshapeinheld": sample_gazeshapeinheld,
+           "gazeshapec": sample_gazeshapec, "gazeshapecheld": sample_gazeshapecheld}    # neue nur ANHAENGEN (Seed)
     for task in a.tasks:
         ti = list(fns).index(task)                               # Seed haengt an der Aufgabe, nicht an der Reihenfolge
         for split, n, seed in (("train", a.n_train, 1000 + ti + 100 * a.part),
