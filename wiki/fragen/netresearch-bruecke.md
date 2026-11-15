@@ -101,6 +101,9 @@ Zweiter Nachtrag am selben Tag: mit Training auf Blickfolgen (4 Bilder entlang e
 Lehrer) wird die letzte Zelle oefter nachgefuehrt (Ziel in der Mittelzelle nach 4 Schritten bis 75 % statt
 69 %), der falsche Koerper wird weiter nicht verlassen. Netze mit Gedaechtnis ueber die Schritte sind nicht
 besser als ein CNN ohne; sie benutzen den Zustand nur als Schrittzaehler. Pruefstand, keine act23-Aussage.
+Dritter Nachtrag am selben Tag: wird die Vorlage nur einmal vor dem Lauf gezeigt, brauchen die Netze ein
+Gedaechtnis (ohne: 32 % statt bis 93 %). Wer die Loesung im Training findet, verliert durch das Merken nichts;
+aber nicht jeder Trainingslauf findet sie (je nach Netz 3 bis 6 von 6 Laeufen). Pruefstand, keine act23-Aussage.
 
 # Reduzieren: Vorschlaege, ungeprueft
 

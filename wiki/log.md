@@ -2,6 +2,7 @@
 
 ## 2026-11-15
 
+* **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Befund vom Pruefstand: Blickschleife mit einmal gezeigter Vorlage braucht Gedaechtnis; Merken kostet nichts, aber nicht jeder Trainingslauf findet die Loesung.
 * **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Befund vom Pruefstand mit Training auf Blickfolgen: die letzte Zelle wird oefter nachgefuehrt, der falsche Koerper nicht verlassen; Gedaechtnis ueber die Schritte bringt gegenueber einem CNN ohne keinen Vorteil.
 * **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Befund vom Pruefstand mit `gazeshapeu` im Training: die Netze bleiben in der Blickschleife auf dem Koerper (90-95 % nach 4 Schritten), die Schleife korrigiert aber weder den falschen Koerper noch die letzte Zelle Abstand.
 * **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - neue Export-Variante `gazeshapeu`: der Blick haengt an einem Koerper, dessen Abstand zur Bildmitte gleichmaessig 0 bis 5 Zellen ist (auch 0: "ich sehe ihn schon an"), die anderen zwei liegen irgendwo im Blickfeld. Das sind die Zustaende, die eine Blickschleife nach dem ersten Schritt besucht und die in `gazeshapec` fehlen. Alte Saetze unveraendert (neue Variante am Ende angehaengt, eigener Seed).
