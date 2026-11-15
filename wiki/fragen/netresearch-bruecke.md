@@ -93,6 +93,10 @@ neben dem gesuchten Koerper landen, springen im naechsten Schritt wieder weg (na
 weil das Ziel in den exportierten Szenen nie in der Bildmitte liegt. Die Geometrie erlaubt 100 % nach zwei
 wahren Schritten; ein wahrer Schritt allein trifft die Mittelzelle nur in 67 %, weil die Zellen ab 5 Zellen
 neben der Mitte groeber sind. Folge fuer den Export: Szenen mit dem Ziel in und nahe der Mitte fehlen.
+Nachtrag am selben Tag: mit der Export-Variante `gazeshapeu` (Ziel 0-5 Zellen von der Mitte) zur Haelfte im
+Training bleiben die Netze auf dem Koerper (90-95 % nach 4 Schritten, hoechstens eine Zelle daneben). Die
+Schleife korrigiert aber nichts: wer nach dem ersten Schritt auf dem falschen Koerper sitzt, bleibt dort, und
+die letzte Zelle Abstand wird nicht nachgefuehrt. Pruefstand, keine act23-Aussage.
 
 # Reduzieren: Vorschlaege, ungeprueft
 
