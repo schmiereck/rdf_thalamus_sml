@@ -412,8 +412,10 @@ def _sample_gazeshape(sc, rng, held, inner=False, centre=False):
                 return None
             cells += [co - F // 2, ro - F // 2]
     pos = np.array([sc.project(at(o)) for o in bodies], np.float32)   # Pixelort je Koerper (ohne rng)
+    raw = sc.sim.render(CAM).copy()                                       # Kamerabild der Suchszene (ohne rng)
     img = sc.fovea(gaze)
-    f32 = fine_sample(sc.render_fine(), 2 * gaze, 2)                      # Suchszene doppelt so dicht (ohne rng)
+    big = sc.render_fine().copy()
+    f32 = fine_sample(big, 2 * gaze, 2)                                   # Suchszene doppelt so dicht (ohne rng)
     # ANSCHAUEN: dieselbe Szene, der Blick nacheinander auf jedem der drei Koerper (bis +-1 Zelle daneben)
     cands = np.stack([sc.fovea(sc.project(at(o)) + rng.uniform(-K, K, size=2)) for o in bodies])
     refs = []
@@ -426,7 +428,7 @@ def _sample_gazeshape(sc, rng, held, inner=False, centre=False):
     cells += [int(round(255 * v)) - 128 for v in rgb] + [SHAPES.index(o) for o in bodies]
     cells += [bodies.index(SHAPES[5]) if held else 0]
     return img, tuple(cells[:2]), gaze, tuple(cells), {"refs": np.stack(refs), "cands": cands, "f32": f32,
-                                                      "pos": pos}
+                                                      "pos": pos, **({"img": raw, "big": big} if KEEP_IMAGES else {})}
 
 
 def sample_gazeshape(sc, rng):
@@ -438,6 +440,9 @@ def sample_gazeshapeheld(sc, rng):
 
 
 INNER_RING = 5
+KEEP_IMAGES = False            # --images: das ganze Kamerabild der Suchszene mitspeichern (img 240 x 240, big
+#                                480 x 480), damit NetResearch die Fovea nach einem Blickschritt selbst neu
+#                                abtasten kann (Regelkreis, Stufe b der Bruecke). Verbraucht keine Zufallszahlen.
 
 
 def sample_gazeshapein(sc, rng):
@@ -500,7 +505,11 @@ def main():
     ap.add_argument("--tasks", nargs="+", default=["gaze", "reach"])
     ap.add_argument("--part", type=int, default=0, help="Teil k eines in mehreren Prozessen erzeugten Satzes: "
                     "Seed + 100 * k, Dateiname <task>_<split>_p<k>.npz (k = 0: wie bisher)")
+    ap.add_argument("--images", action="store_true", help="gazeshape*: Kamerabilder mitspeichern (img, big); "
+                    "Dateiname <task>_<split>_img.npz, dieselben Szenen wie ohne den Schalter")
     a = ap.parse_args()
+    global KEEP_IMAGES
+    KEEP_IMAGES = a.images
     os.makedirs(a.out, exist_ok=True)
     fns = {"gaze": sample_gaze, "reach": sample_reach, "gazemulti": sample_gazemulti,
            "gazecolor": sample_gazecolor, "gazecolorheld": sample_gazecolorheld,
@@ -520,7 +529,7 @@ def main():
             m = Scene().sim.m
             cols = np.array([m.geom_rgba[m.body_geomadr[mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, o)]][:3]
                              for o in OBJECTS], np.float32)
-            np.savez_compressed(os.path.join(a.out, f"{task}_{split}" + (f"_p{a.part}" if a.part else "") + ".npz"), obs=obs, target=tgt, gaze=gz, cells=cl,
+            np.savez_compressed(os.path.join(a.out, f"{task}_{split}" + (f"_p{a.part}" if a.part else "") + ("_img" if a.images else "") + ".npz"), obs=obs, target=tgt, gaze=gz, cells=cl,
                                 colors=cols, **extra)
 
 

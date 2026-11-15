@@ -83,6 +83,17 @@ Form findet kein Netz in einem Blick (0.05-0.09); mit Nacheinander-Anschauen und
 waehlt ein Attention-Speicher in 82 % den richtigen (nie gesehene Form: 56 %). Das sind
 Pruefstandswerte auf exportierten Bildern und sagen einen act23-Lauf nicht vorher.
 
+Stand 2026-11-15: ein erster Regelkreis, ohne MuJoCo in NetResearch. Der Export speichert mit `--images`
+das ganze Kamerabild der Suchszenen (`img`, `big`); NetResearch tastet die Fovea an jedem Blickpunkt selbst
+neu ab (Kopie der Geometrie von `hex_sample` / `fine_sample`, bitgenau gegen die exportierten Bilder
+geprueft). Der Blickschritt des Netzes wird ausgefuehrt, das naechste Bild kommt vom neuen Blickpunkt. Das
+deckt nur die Blickschleife auf einer stehenden Szene ab (kein Arm, keine Physik); Stufe b im Sinn der
+Tabelle bleibt offen. Befund vom Pruefstand: Netze, die im Einzelschritt in 94-96 % hoechstens eine Zelle
+neben dem gesuchten Koerper landen, springen im naechsten Schritt wieder weg (nach 4 Schritten 57-88 %),
+weil das Ziel in den exportierten Szenen nie in der Bildmitte liegt. Die Geometrie erlaubt 100 % nach zwei
+wahren Schritten; ein wahrer Schritt allein trifft die Mittelzelle nur in 67 %, weil die Zellen ab 5 Zellen
+neben der Mitte groeber sind. Folge fuer den Export: Szenen mit dem Ziel in und nahe der Mitte fehlen.
+
 # Reduzieren: Vorschlaege, ungeprueft
 
 Kernpfad: Fovea(s) -> Objekt-Vektor -> Ziel-Latent mit Relation als Phasendrehung -> Policy ->

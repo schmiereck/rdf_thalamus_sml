@@ -1,5 +1,9 @@
 # Chronik
 
+## 2026-11-15
+
+* **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Export-Schalter `--images`: die Suchszenen (`gazeshape*`) werden mit dem ganzen Kamerabild gespeichert (`img` 240 x 240, `big` 480 x 480, Datei `<task>_<split>_img.npz`); verbraucht keine Zufallszahlen, die Szenen sind dieselben (gegen den Testsatz geprueft). NetResearch tastet daraus die Fovea nach einem Blickschritt selbst neu ab (Kopie von `hex_sample` / `fine_sample`, bitgenau geprueft) - ein erster Regelkreis ohne MuJoCo dort. Befund vom Pruefstand (keine act23-Aussage): Einzelschritt-Netze verlassen den gefundenen Koerper nach dem ersten Schritt wieder, weil das Ziel in den exportierten Szenen nie in der Bildmitte liegt.
+
 ## 2026-11-14
 
 * **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Export der Suchszenen (`gazeshape*`) speichert zusaetzlich den Pixelort jedes Koerpers (`pos`); verbraucht keine Zufallszahlen, die Szenen bleiben dieselben (gegen den alten Testsatz geprueft). Auswertung in NetResearch (Pruefstand, keine act23-Aussage).
