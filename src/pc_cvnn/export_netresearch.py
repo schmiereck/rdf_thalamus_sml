@@ -366,7 +366,7 @@ def centroid(sc, o):
     return d.xpos[bid] + d.xmat[bid].reshape(3, 3) @ _CENTROID[o]
 
 
-def _sample_gazeshape(sc, rng, held, inner=False, centre=False):
+def _sample_gazeshape(sc, rng, held, inner=False, centre=False, spread=False):
     """Drei Koerper VERSCHIEDENER Form und GLEICHER Farbe (ein zufaelliger Farbton je Szene): nur die Form
     unterscheidet sie. Dazu je Koerper ZWEI Zeigebilder (allein, andere Szene, andere Drehung).
     held: einer der drei ist das Y, das im Training nie vorkommt.
@@ -375,7 +375,11 @@ def _sample_gazeshape(sc, rng, held, inner=False, centre=False):
     inner: alle drei Koerper liegen im voll aufgeloesten Teil der Fovea (hoechstens INNER_RING Zellen neben der
     Mitte); der Blick liegt dazu nahe am Schwerpunkt der drei.
     centre: Ort eines Koerpers ist sein Flaechenschwerpunkt (centroid) statt des Koerper-Ursprungs - fuer die
-    Schritte, die Kandidaten-Blicke und die Zeigebilder."""
+    Schritte, die Kandidaten-Blicke und die Zeigebilder.
+    spread (mit inner): der Blick haengt an EINEM Koerper (dem ersten) - sein Abstand zur Mitte ist gleichmaessig
+    0 bis INNER_RING Zellen, auch 0 ("ich sehe ihn schon an"), dazu ein Versatz innerhalb der Zelle. Die beiden
+    anderen muessen nur im Blickfeld liegen, auch im groben Rand. Das sind die Zustaende, die eine Blickschleife
+    nach dem ersten Schritt besucht; in den anderen Saetzen liegt das Ziel nie in der Mitte."""
     import colorsys
     at = (lambda o: centroid(sc, o)) if centre else sc.sim.obj_pos
     pool = [SHAPES[i] for i in rng.permutation(N_TRAIN_SHAPES)]
@@ -390,7 +394,24 @@ def _sample_gazeshape(sc, rng, held, inner=False, centre=False):
         _paint(sc, o, rgb)
     _place(sc, rng, bodies)
     px = sc.project(at(bodies[0]))
-    if inner:
+    if spread:
+        ring = int(rng.integers(0, INNER_RING + 1))
+        while True:
+            dx, dy = (int(v) for v in rng.integers(-ring, ring + 1, size=2))
+            if max(abs(dx), abs(dy)) == ring:
+                break
+        r, c = dy + F // 2, dx + F // 2
+        gaze = (px - np.array([_warp(c + 0.5 * (r & 1) - CTR) * K, _warp(r - CTR) * K * HEX_DY])
+                + rng.uniform(-0.5, 0.5, size=2) * np.array([K, K * HEX_DY]))
+        if not (0 <= gaze[0] < RES and 0 <= gaze[1] < RES):
+            return None
+        cells = []
+        for o in bodies:
+            ro, co, dist = nearest_cell(gaze, sc.project(at(o)))
+            if dist > 2 * K:
+                return None
+            cells += [co - F // 2, ro - F // 2]
+    elif inner:
         gaze = np.mean([sc.project(at(o)) for o in bodies], 0) + rng.uniform(-3 * K, 3 * K, size=2)
         if not (0 <= gaze[0] < RES and 0 <= gaze[1] < RES):
             return None
@@ -462,6 +483,11 @@ def sample_gazeshapecheld(sc, rng):
     return _sample_gazeshape(sc, rng, True, inner=True, centre=True)
 
 
+def sample_gazeshapeu(sc, rng):
+    """Wie gazeshapec, aber der Abstand eines Koerpers zur Bildmitte ist gleichmaessig 0..5 Zellen (spread)."""
+    return _sample_gazeshape(sc, rng, False, inner=True, centre=True, spread=True)
+
+
 def sample_reach(sc, rng):
     sc.layout(rng)
     obj = sc.sim.obj_pos(TARGET)
@@ -517,7 +543,8 @@ def main():
            "gazeshape": sample_gazeshape, "gazeshapeheld": sample_gazeshapeheld, "shapeview": sample_shapeview,
            "shapeedge": sample_shapeedge,
            "gazeshapein": sample_gazeshapein, "gazeshapeinheld": sample_gazeshapeinheld,
-           "gazeshapec": sample_gazeshapec, "gazeshapecheld": sample_gazeshapecheld}    # neue nur ANHAENGEN (Seed)
+           "gazeshapec": sample_gazeshapec, "gazeshapecheld": sample_gazeshapecheld,
+           "gazeshapeu": sample_gazeshapeu}    # neue nur ANHAENGEN (Seed)
     for task in a.tasks:
         ti = list(fns).index(task)                               # Seed haengt an der Aufgabe, nicht an der Reihenfolge
         for split, n, seed in (("train", a.n_train, 1000 + ti + 100 * a.part),
