@@ -97,6 +97,10 @@ Nachtrag am selben Tag: mit der Export-Variante `gazeshapeu` (Ziel 0-5 Zellen vo
 Training bleiben die Netze auf dem Koerper (90-95 % nach 4 Schritten, hoechstens eine Zelle daneben). Die
 Schleife korrigiert aber nichts: wer nach dem ersten Schritt auf dem falschen Koerper sitzt, bleibt dort, und
 die letzte Zelle Abstand wird nicht nachgefuehrt. Pruefstand, keine act23-Aussage.
+Zweiter Nachtrag am selben Tag: mit Training auf Blickfolgen (4 Bilder entlang eines Blicklaufs, verrauschter
+Lehrer) wird die letzte Zelle oefter nachgefuehrt (Ziel in der Mittelzelle nach 4 Schritten bis 75 % statt
+69 %), der falsche Koerper wird weiter nicht verlassen. Netze mit Gedaechtnis ueber die Schritte sind nicht
+besser als ein CNN ohne; sie benutzen den Zustand nur als Schrittzaehler. Pruefstand, keine act23-Aussage.
 
 # Reduzieren: Vorschlaege, ungeprueft
 
