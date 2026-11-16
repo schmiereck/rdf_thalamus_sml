@@ -104,6 +104,10 @@ besser als ein CNN ohne; sie benutzen den Zustand nur als Schrittzaehler. Pruefs
 Dritter Nachtrag am selben Tag: wird die Vorlage nur einmal vor dem Lauf gezeigt, brauchen die Netze ein
 Gedaechtnis (ohne: 32 % statt bis 93 %). Wer die Loesung im Training findet, verliert durch das Merken nichts;
 aber nicht jeder Trainingslauf findet sie (je nach Netz 3 bis 6 von 6 Laeufen). Pruefstand, keine act23-Aussage.
+Nachtrag 2026-11-17: die Laeufe, die die Loesung nicht fanden, scheiterten am Eingang, nicht am Gedaechtnis: der
+Vorlagen-Encoder endete in einem tanh, der frueh im Training saettigte und dann fuer jede Vorlage dasselbe
+ausgab. Ohne den tanh loesen alle Laeufe der Gitter-Netze (85-91 % nach 4 Schritten ohne sichtbare Vorlage).
+Lehre fuer Eingangs-Bausteine: ein begrenzender Ausgang kann eine Sackgasse sein. Pruefstand, keine act23-Aussage.
 
 # Reduzieren: Vorschlaege, ungeprueft
 

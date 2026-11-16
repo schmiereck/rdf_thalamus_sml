@@ -1,5 +1,9 @@
 # Chronik
 
+## 2026-11-17
+
+* **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Befund vom Pruefstand: ungeloeste Laeufe der Gedaechtnis-Schleife lagen an einem gesaettigten tanh am Vorlagen-Encoder, nicht am Gedaechtnis; ohne ihn loesen alle Gitter-Netze.
+
 ## 2026-11-15
 
 * **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Befund vom Pruefstand: Blickschleife mit einmal gezeigter Vorlage braucht Gedaechtnis; Merken kostet nichts, aber nicht jeder Trainingslauf findet die Loesung.
