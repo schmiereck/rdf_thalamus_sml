@@ -2,6 +2,7 @@
 
 ## 2026-11-17
 
+* **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Pruefstand mit zwei Zielen nacheinander: Gitter-Netze behalten beide Formen (layer_s 72 % beide getroffen), attnmem/vitmem meist Zufall.
 * **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Befund vom Pruefstand: ungeloeste Laeufe der Gedaechtnis-Schleife lagen an einem gesaettigten tanh am Vorlagen-Encoder, nicht am Gedaechtnis; ohne ihn loesen alle Gitter-Netze.
 
 ## 2026-11-15

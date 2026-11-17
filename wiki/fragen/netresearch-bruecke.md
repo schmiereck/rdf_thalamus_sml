@@ -108,6 +108,10 @@ Nachtrag 2026-11-17: die Laeufe, die die Loesung nicht fanden, scheiterten am Ei
 Vorlagen-Encoder endete in einem tanh, der frueh im Training saettigte und dann fuer jede Vorlage dasselbe
 ausgab. Ohne den tanh loesen alle Laeufe der Gitter-Netze (85-91 % nach 4 Schritten ohne sichtbare Vorlage).
 Lehre fuer Eingangs-Bausteine: ein begrenzender Ausgang kann eine Sackgasse sein. Pruefstand, keine act23-Aussage.
+Nachtrag 2026-11-17 (2): schwerere Stufe mit zwei Zielen nacheinander (beide Vorlagen nur vor dem Lauf, 3 Schritte
+zu A, dann 3 zu B). Die Gitter-Netze behalten beide Formen in Reihenfolge (beide Ziele getroffen: layer_s 72 %,
+hier_s 55 %), Transformer mit Gedaechtnis (attnmem, vitmem) meist nur Zufall. Diese Stufe trennt die Bauarten
+deutlich staerker als die mit einem Ziel. Pruefstand, keine act23-Aussage.
 
 # Reduzieren: Vorschlaege, ungeprueft
 
