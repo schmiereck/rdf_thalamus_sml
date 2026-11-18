@@ -119,6 +119,9 @@ Zuverlaessigkeit je Lauf wird zur wichtigeren Groesse. Pruefstand, keine act23-A
 Nachtrag 2026-11-18 (2): mit doppelter Trainingslaenge loest das Gitter mit Notizblock (layer_s_sp4) alle drei
 Laeufe (alle drei Ziele 71-75 %), layer_s ohne Notizblock wieder nur zwei von drei, nun ein anderer Lauf. Auf
 dieser Stufe entscheidet die Trainingslaenge ueber die Rangfolge. Pruefstand, keine act23-Aussage.
+Nachtrag 2026-11-18 (3): mit sechs Laeufen je Netz: layer_s_sp4 6 von 6, layer_s 3 von 6 (deutlicher Hinweis,
+p = 0,09). Gescheiterte Laeufe behalten nur das erste Ziel. Die Bauart sagt hier vorher, ob ein Netz beim Training
+verlaesslich ankommt, kaum wie gut es dann ist. Pruefstand, keine act23-Aussage.
 
 # Reduzieren: Vorschlaege, ungeprueft
 
