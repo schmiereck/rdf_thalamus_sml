@@ -2,6 +2,7 @@
 
 ## 2026-11-18
 
+* **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Ursache der gescheiterten Laeufe: gemerkte Ziele werden beim Losgehen von den ersten Kamerabildern verdraengt.
 * **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - drei Ziele mit sechs Laeufen je Netz: layer_s_sp4 6 von 6 geloest, layer_s 3 von 6; gescheiterte Laeufe behalten nur das erste Ziel.
 * **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - drei Ziele mit doppelter Trainingslaenge: layer_s_sp4 loest alle drei Laeufe (71-75 %), layer_s weiter nur zwei von drei.
 * **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Pruefstand mit drei Zielen nacheinander: layer_s 44 % alle drei getroffen, Trainingslaeufe streuen 18-61 %; die Stufe ist fuer die bisherige Trainingslaenge zu steil.
