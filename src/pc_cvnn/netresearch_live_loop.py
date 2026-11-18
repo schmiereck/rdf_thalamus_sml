@@ -16,6 +16,9 @@ A, B, A), je Folge: drei Hinweis-Schritte mit den Zeigebildern, dann 3 Blickschr
     live    nach den 3 Schritten eines Ziels fuehrt der Arm den Greifpunkt kinematisch (ohne Physik, die Koerper
             bleiben liegen) 5 cm ueber den Koerper, der dem Blickpunkt am naechsten ist, und bleibt dort, bis das
             naechste Ziel erledigt ist
+    away    Kontrolle zu live: nach dem ersten Ziel faehrt der Arm 5 cm ueber eine freie Tischstelle derselben Szene
+            (Hand im Bild im inneren Ring, im Bild moeglichst weit von allen Koerpern) und bleibt dort; die Hand ist im Bild, verdeckt
+            aber keinen Koerper
 Die Fovea (32 x 32, doppelt dichte Abtastung) wird bei jedem Schritt aus dem aktuellen Kamerabild neu abgetastet,
 mit der Geometrie von NetResearch (netresearch/tasks/fovea.py, bitgenau zum Export). Gemessen wie in
 NetResearch finds_loop_eval.py: am Ende jedes Ziels nahe (hoechstens eine Zelle) am Ziel, alle drei nahe.
@@ -114,7 +117,23 @@ def make_scene(sc, rng):
         refs.append(sc.fovea(sc.project(ex.centroid(sc, o)) + rng.uniform(-ex.K, ex.K, size=2)))
     sc.sim.d.qpos[:] = qpos
     mujoco.mj_forward(sc.sim.m, sc.sim.d)
-    return {"qpos": qpos, "gaze": gaze, "pos": pos, "world": np.array(world), "refs": np.stack(refs)}
+    world = np.array(world)
+    m, rr = world[:, :2].mean(0), np.linalg.norm(world[:, :2] - world[:, :2].mean(0), axis=1).max()
+    best, free = -1.0, None
+    for f in (1.0, 1.3, 0.7):
+        for a in np.linspace(0, 2 * np.pi, 16, endpoint=False):
+            w = np.array([m[0] + f * rr * np.cos(a), m[1] + f * rr * np.sin(a), world[:, 2].mean()])
+            hp = sc.project(w + np.array([0, 0, HOVER]))                       # Pixelort der schwebenden Hand
+            ro, co, _ = ex.nearest_cell(gaze, hp)
+            if max(abs(co - ex.F // 2), abs(ro - ex.F // 2)) > ex.INNER_RING:
+                continue
+            d = float(np.linalg.norm(pos - hp, axis=1).min())
+            if d > best:
+                best, free = d, w
+    if free is None:
+        return None
+    return {"qpos": qpos, "gaze": gaze, "pos": pos, "world": world, "refs": np.stack(refs), "free": free,
+            "free_dist": best}
 
 
 def view(sc, gaze):
@@ -131,6 +150,7 @@ def run_scene(sc, s, conn, cond):
     if conn is not None:
         ask(conn, {"op": "cue"}, {"refs": np.stack([s["refs"][order[:, k]] for k in range(G)])})
     near = np.zeros((n, G), bool)
+    prev = np.full((n, G), -1)                                                 # Koerper am Blick am Ende der Strecke
     for t in range(G * SEG):
         j = t // SEG
         if conn is None:
@@ -159,6 +179,13 @@ def run_scene(sc, s, conn, cond):
             for p in range(n):
                 dx, dy = measure(gaze[p], s["pos"], order[p, j])[:2]
                 near[p, j] = max(abs(dx), abs(dy)) <= 1
+                prev[p, j] = int(np.linalg.norm(s["pos"] - fv.centre_px(gaze[p]), axis=-1).argmin())
+            if cond == "away" and j == 0:
+                for p in range(n):
+                    sc.sim.d.qpos[:] = arm[p]
+                    mujoco.mj_forward(sc.sim.m, sc.sim.d)
+                    sc.reach_kinematic(s["free"] + np.array([0, 0, HOVER]))
+                    arm[p] = sc.sim.d.qpos.copy()
             if cond == "live" and j < G - 1:                                   # Arm ueber den angeblickten Koerper
                 for p in range(n):
                     c = fv.centre_px(gaze[p])
@@ -167,7 +194,7 @@ def run_scene(sc, s, conn, cond):
                     mujoco.mj_forward(sc.sim.m, sc.sim.d)
                     sc.reach_kinematic(s["world"][k] + np.array([0, 0, HOVER]))
                     arm[p] = sc.sim.d.qpos.copy()
-    return near
+    return near, prev
 
 
 def main():
@@ -195,14 +222,20 @@ def main():
                 ask(conn, {"op": "load", "task": a.task, "model": spec[0], "ckpt": spec[1], "seed": int(spec[2])})
             for cond in a.conds:
                 t0 = time.time()
-                near = np.concatenate([run_scene(sc, s, None if spec is None else conn, cond) for s in scenes])
+                res = [run_scene(sc, s, None if spec is None else conn, cond) for s in scenes]
+                near = np.concatenate([r[0] for r in res])
+                prev = np.concatenate([r[1] for r in res])
+                # verfehlte Strecke j >= 1: Blick endet auf dem Koerper, auf dem er am Ende der Strecke davor lag
+                stay = [round(float((prev[:, j] == prev[:, j - 1])[~near[:, j]].mean()), 4) if (~near[:, j]).any()
+                        else None for j in range(1, G)]
                 ret = np.tile(np.array(ORDERS)[:, 2] == np.array(ORDERS)[:, 0], len(scenes))
                 row = {"task": a.task, "model": spec[0] if spec else "oracle", "ckpt": spec[1] if spec else None,
                        "seed": int(spec[2]) if spec else -1, "cond": cond, "scenes": len(scenes), "scene_seed": a.seed,
                        "near_goal": [round(float(x), 4) for x in near.mean(0)],
                        "near_all": round(float(near.all(1).mean()), 4),
                        "near_all_new": round(float(near.all(1)[~ret].mean()), 4),
-                       "near_all_ret": round(float(near.all(1)[ret].mean()), 4)}
+                       "near_all_ret": round(float(near.all(1)[ret].mean()), 4),
+                       "miss_stay_prev": stay, "miss": [int((~near[:, j]).sum()) for j in range(G)]}
                 out.write(json.dumps(row) + "\n")
                 out.flush()
                 print(f"{label:<45} {cond:<6} near_goal {row['near_goal']} near_all {row['near_all']:.3f} "
