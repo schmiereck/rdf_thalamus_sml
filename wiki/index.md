@@ -47,6 +47,7 @@ Fuer act23-Arbeit in dieser Reihenfolge:
 
 # Befunde
 
+* [NetResearch-Netze live im Simulator](befunde/netresearch-live-blickschleife.md) - Bruecke Stufe b: Blickschleife mit drei Zielen live in MuJoCo; Rangfolge wie im Pruefstand (Spearman 0,97), Arm im Bild kostet die besten Netze 21-28 %; kinematischer Arm, kein act23
 * [S1: neue Rollouts bestanden](befunde/s1-unabhaengige-rollouts.md) - eingefrorener Online-Kopf auf zwei neuen Seeds: 90,78 Prozent weniger Fehler als Persistenz, 5/5 Gelenke, Positions-Latent-Port geprüft
 * [S1: unabhängige Rollouts und Positions-Latent](messungen/s1-unabhaengige-rollouts.md) - eingefrorener Test auf Seeds 211/307 und expliziter Positionsblock für das künftige Körpermodell
 * [S1: lokaler Online-Kopf besteht](befunde/s1-online-kopf.md) - 91,26 Prozent weniger Fehler als Persistenz, 5/5 Gelenke besser; kein Batch-Warmstart, unabhängige Rollouts als nächstes Tor

@@ -1,5 +1,10 @@
 # Chronik
 
+## 2026-11-19
+
+* **Anlage**: [NetResearch-Netze live im Simulator](/befunde/netresearch-live-blickschleife.md) - erster Test der Bruecke Stufe b (`src/pc_cvnn/netresearch_live_loop.py`): 12 NetResearch-Netze steuern den Blick live; ruhender Arm gleich Pruefstand, Rangfolge haelt mit bewegtem Arm, der Arm im Bild kostet 13-28 %. Kein act23-Lauf, kein Lernzustand beruehrt.
+* **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Verweis auf den ersten Live-Test.
+
 ## 2026-11-18
 
 * **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Ursache der gescheiterten Laeufe: gemerkte Ziele werden beim Losgehen von den ersten Kamerabildern verdraengt.

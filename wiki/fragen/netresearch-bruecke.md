@@ -127,6 +127,10 @@ zweite und dritte aber in den ersten Schritten, sobald echte Kamerabilder kommen
 das Gemerkte. Lehre fuer Auftraege an den Roboter: Ein Gedaechtnis, das Auftraege ueber den Beginn der Bewegung
 hinweg halten soll, muss gegen die laufende Wahrnehmung geschuetzt sein. Pruefstand, keine act23-Aussage.
 
+Nachtrag 2026-11-19: Erster Test von Stufe b, siehe [NetResearch-Netze live im Simulator](/befunde/netresearch-live-blickschleife.md).
+Die Netze steuern den Blick live in MuJoCo; mit ruhendem Arm wie im Pruefstand, die Rangfolge haelt auch mit
+bewegtem Arm, der Arm im Bild kostet aber 13-28 %. Kinematischer Arm, keine act23-Aussage.
+
 # Reduzieren: Vorschlaege, ungeprueft
 
 Kernpfad: Fovea(s) -> Objekt-Vektor -> Ziel-Latent mit Relation als Phasendrehung -> Policy ->
