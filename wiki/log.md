@@ -1,5 +1,9 @@
 # Chronik
 
+## 2026-11-18
+
+* **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Pruefstand mit drei Zielen nacheinander: layer_s 44 % alle drei getroffen, Trainingslaeufe streuen 18-61 %; die Stufe ist fuer die bisherige Trainingslaenge zu steil.
+
 ## 2026-11-17
 
 * **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Pruefstand mit zwei Zielen nacheinander: Gitter-Netze behalten beide Formen (layer_s 72 % beide getroffen), attnmem/vitmem meist Zufall.

@@ -112,6 +112,10 @@ Nachtrag 2026-11-17 (2): schwerere Stufe mit zwei Zielen nacheinander (beide Vor
 zu A, dann 3 zu B). Die Gitter-Netze behalten beide Formen in Reihenfolge (beide Ziele getroffen: layer_s 72 %,
 hier_s 55 %), Transformer mit Gedaechtnis (attnmem, vitmem) meist nur Zufall. Diese Stufe trennt die Bauarten
 deutlich staerker als die mit einem Ziel. Pruefstand, keine act23-Aussage.
+Nachtrag 2026-11-18: drei Ziele nacheinander, auch Rueckkehr zum ersten (A, B, A), damit das letzte Ziel
+nicht per Ausschluss zu finden ist. Alle drei getroffen: layer_s 44 %, aber je Trainingslauf 18-61 %; ein Lauf
+von drei findet nur das erste Ziel sicher. Die Stufe ist fuer die bisherige Trainingslaenge zu steil, die
+Zuverlaessigkeit je Lauf wird zur wichtigeren Groesse. Pruefstand, keine act23-Aussage.
 
 # Reduzieren: Vorschlaege, ungeprueft
 
