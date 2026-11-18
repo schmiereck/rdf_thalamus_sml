@@ -2,6 +2,7 @@
 
 ## 2026-11-18
 
+* **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - drei Ziele mit doppelter Trainingslaenge: layer_s_sp4 loest alle drei Laeufe (71-75 %), layer_s weiter nur zwei von drei.
 * **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Pruefstand mit drei Zielen nacheinander: layer_s 44 % alle drei getroffen, Trainingslaeufe streuen 18-61 %; die Stufe ist fuer die bisherige Trainingslaenge zu steil.
 
 ## 2026-11-17

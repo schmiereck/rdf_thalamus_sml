@@ -116,6 +116,9 @@ Nachtrag 2026-11-18: drei Ziele nacheinander, auch Rueckkehr zum ersten (A, B, A
 nicht per Ausschluss zu finden ist. Alle drei getroffen: layer_s 44 %, aber je Trainingslauf 18-61 %; ein Lauf
 von drei findet nur das erste Ziel sicher. Die Stufe ist fuer die bisherige Trainingslaenge zu steil, die
 Zuverlaessigkeit je Lauf wird zur wichtigeren Groesse. Pruefstand, keine act23-Aussage.
+Nachtrag 2026-11-18 (2): mit doppelter Trainingslaenge loest das Gitter mit Notizblock (layer_s_sp4) alle drei
+Laeufe (alle drei Ziele 71-75 %), layer_s ohne Notizblock wieder nur zwei von drei, nun ein anderer Lauf. Auf
+dieser Stufe entscheidet die Trainingslaenge ueber die Rangfolge. Pruefstand, keine act23-Aussage.
 
 # Reduzieren: Vorschlaege, ungeprueft
 
