@@ -2,6 +2,7 @@
 
 ## 2026-11-19
 
+* **Nachtrag**: [NetResearch-Netze live im Simulator](/befunde/netresearch-live-blickschleife.md) - Kontrolle mit der Hand ueber einer freien Stelle: gleicher Verlust, also Ablenkung durch das Arm-Bild, nicht Verdecken.
 * **Anlage**: [NetResearch-Netze live im Simulator](/befunde/netresearch-live-blickschleife.md) - erster Test der Bruecke Stufe b (`src/pc_cvnn/netresearch_live_loop.py`): 12 NetResearch-Netze steuern den Blick live; ruhender Arm gleich Pruefstand, Rangfolge haelt mit bewegtem Arm, der Arm im Bild kostet 13-28 %. Kein act23-Lauf, kein Lernzustand beruehrt.
 * **Nachtrag**: [Bruecke zu NetResearch](/fragen/netresearch-bruecke.md) - Verweis auf den ersten Live-Test.
 

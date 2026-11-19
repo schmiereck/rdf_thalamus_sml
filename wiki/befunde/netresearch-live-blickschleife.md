@@ -57,9 +57,18 @@ Orakel 1,00 in beiden Bedingungen. `near_all`:
 
 Die Bruecke ist sauber: Fovea, Szenenbau und Schrittdeutung des Pruefstands stimmen mit dem Simulator ueberein.
 Der Pruefstand sagt die Rangfolge der Netze vorher, aber nicht, wie stark ein Arm im Bild stoert. Ob der Verlust
-vom Verdecken kommt (die Hand liegt ueber einem Koerper) oder von Ablenkung durch ein nie gesehenes Bild, ist
-nicht gemessen. Fuer act23 heisst das: Der Arm ist dort immer im Bild. Ein Blick-Netz aus NetResearch muesste
+vom Verdecken kommt oder von Ablenkung, klaert die Kontrolle unten: Ablenkung. Fuer act23 heisst das: Der Arm ist dort immer im Bild. Ein Blick-Netz aus NetResearch muesste
 mit Arm-Bildern trainiert oder geprueft werden, bevor es in act23 eingesetzt wird.
+
+# Kontrolle: Verdecken oder Ablenkung
+
+Bedingung `away` (Commit 7d8f0ad): Nach dem ersten Ziel schwebt die Hand ueber einer freien Stelle im Bild
+(mindestens 15 px, knapp 4 Zellen, von jedem Koerper), die fuenf geloesten Gitter-Laeufe, dieselben 150 Szenen.
+Der Verlust ist so gross wie in `live` (0,96- bis 1,17-fach). Verdecken traegt nichts Messbares bei; es stoert das
+unbekannte Bild des Arms im Blickfeld. Mit Arm im Bild bleibt der Blick ausserdem oefter auf dem gerade
+gefundenen Koerper haengen (verfehlte Strecken 0,07-0,16 statt 0,01-0,05), ob die Hand dort liegt oder nicht.
+Folgerung: Ein Blick-Netz muss mit Arm-Bildern im Blickfeld trainiert oder geprueft werden; die Lage der Hand ist
+dabei nicht entscheidend.
 
 # Grenzen
 
