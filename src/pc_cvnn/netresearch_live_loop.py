@@ -150,6 +150,7 @@ def run_scene(sc, s, conn, cond):
     if conn is not None:
         ask(conn, {"op": "cue"}, {"refs": np.stack([s["refs"][order[:, k]] for k in range(G)])})
     near = np.zeros((n, G), bool)
+    out = np.zeros(n, bool)                                                    # Blick hat das Bild verlassen
     prev = np.full((n, G), -1)                                                 # Koerper am Blick am Ende der Strecke
     for t in range(G * SEG):
         j = t // SEG
@@ -162,23 +163,29 @@ def run_scene(sc, s, conn, cond):
                 mujoco.mj_forward(sc.sim.m, sc.sim.d)
                 sat = fv.integral(sc.render_fine())
                 views = np.stack([fv.sample_fine(sat, gaze[p]) for p in range(n)])
-            else:
-                views = []
+            else:                                                              # ein Bild je Armstellung
+                sats = {}
                 for p in range(n):
-                    sc.sim.d.qpos[:] = arm[p]
-                    mujoco.mj_forward(sc.sim.m, sc.sim.d)
-                    views.append(view(sc, gaze[p]))
-                views = np.stack(views)
+                    key = arm[p].tobytes()
+                    if key not in sats:
+                        sc.sim.d.qpos[:] = arm[p]
+                        mujoco.mj_forward(sc.sim.m, sc.sim.d)
+                        sats[key] = fv.integral(sc.render_fine())
+                views = np.stack([fv.sample_fine(sats[arm[p].tobytes()], gaze[p]) for p in range(n)])
             _, a = ask(conn, {"op": "step"}, {"views": views})
             steps = a["steps"]
-        for p in range(n):
+        for p in range(n):                                                     # wie finds_loop_eval: ein Schritt
+            if out[p]:                                                         # aus dem Bild beendet den Lauf, alle
+                continue                                                       # spaeteren Ziele zaehlen als verfehlt
             g = fv.shift(gaze[p], int(steps[p, 0]), int(steps[p, 1]))
             if inside(g):
                 gaze[p] = g
+            else:
+                out[p] = True
         if (t + 1) % SEG == 0:
             for p in range(n):
                 dx, dy = measure(gaze[p], s["pos"], order[p, j])[:2]
-                near[p, j] = max(abs(dx), abs(dy)) <= 1
+                near[p, j] = max(abs(dx), abs(dy)) <= 1 and not out[p]
                 prev[p, j] = int(np.linalg.norm(s["pos"] - fv.centre_px(gaze[p]), axis=-1).argmin())
             if cond == "away" and j == 0:
                 for p in range(n):
@@ -194,7 +201,7 @@ def run_scene(sc, s, conn, cond):
                     mujoco.mj_forward(sc.sim.m, sc.sim.d)
                     sc.reach_kinematic(s["world"][k] + np.array([0, 0, HOVER]))
                     arm[p] = sc.sim.d.qpos.copy()
-    return near, prev
+    return near, prev, out
 
 
 def main():
@@ -225,6 +232,7 @@ def main():
                 res = [run_scene(sc, s, None if spec is None else conn, cond) for s in scenes]
                 near = np.concatenate([r[0] for r in res])
                 prev = np.concatenate([r[1] for r in res])
+                n_out = int(np.concatenate([r[2] for r in res]).sum())
                 # verfehlte Strecke j >= 1: Blick endet auf dem Koerper, auf dem er am Ende der Strecke davor lag
                 stay = [round(float((prev[:, j] == prev[:, j - 1])[~near[:, j]].mean()), 4) if (~near[:, j]).any()
                         else None for j in range(1, G)]
@@ -235,7 +243,7 @@ def main():
                        "near_all": round(float(near.all(1).mean()), 4),
                        "near_all_new": round(float(near.all(1)[~ret].mean()), 4),
                        "near_all_ret": round(float(near.all(1)[ret].mean()), 4),
-                       "miss_stay_prev": stay, "miss": [int((~near[:, j]).sum()) for j in range(G)]}
+                       "miss_stay_prev": stay, "out": n_out, "out_rule": "bench", "miss": [int((~near[:, j]).sum()) for j in range(G)]}
                 out.write(json.dumps(row) + "\n")
                 out.flush()
                 print(f"{label:<45} {cond:<6} near_goal {row['near_goal']} near_all {row['near_all']:.3f} "
