@@ -84,8 +84,7 @@ Erzeugen aufgenommen, also in der eigenen Farbe der Szene. In 149 von 150 Szenen
 verschiedene Farben. Das gilt fuer alle Live-Zahlen dieser Seite (`static`, `live`, `away`, auch den Lauf mit der
 Pruefstands-Regel). Korrigiert: Die Szene traegt ihre Farbe (`rgb`), `show_scene` malt vor jeder Szene neu; neue
 Zeilen tragen das Feld `scene_colour: own`. Die Szenen selbst (Lage, Blick, Zeigebilder) sind unveraendert, die
-Farbe verbraucht keine Zufallszahlen. Neu gemessen ist noch nichts; die Zahlen oben gelten bis dahin nur unter
-Vorbehalt. Dass `static` trotzdem nahe am Pruefstand lag (Abweichung hoechstens 0,04), spricht dafuer, dass die
+Farbe verbraucht keine Zufallszahlen. Neu gemessen am selben Tag (siehe unten). Dass `static` trotzdem nahe am Pruefstand lag (Abweichung hoechstens 0,04), spricht dafuer, dass die
 Netze vor allem nach der Form suchen.
 
 **Video.** `src/pc_cvnn/netresearch_live_video.py` zeichnet einzelne Laeufe als .mp4 (ffmpeg) oder .gif auf:
@@ -95,3 +94,10 @@ die Zeigebilder in der Reihenfolge der Folge mit getroffen / verfehlt und die ak
 werden mit Zwischenbildern gezeigt (fuer die Messung springt er). Misst nichts, schreibt keine Ergebnisse.
 Erster Test: layer_s_sp4 (24000 Updates, Seed 0), `live`, Szenen 0-2, Folgen A B C und A B A: 5 von 6 Laeufen
 treffen alle drei Ziele. Die Videos liegen unter `log/video/` (nicht im Repo).
+
+**Neu gemessen mit eigener Szenenfarbe (2026-11-21).** Dieselben 12 Netze und 150 Szenen, `static`, `live` und
+`away` (`../NetResearch/results/robot_live_loop_v3.jsonl`). Die Befunde halten: Rangfolge wie im Pruefstand
+(Spearman 0,95), die Gitter-Netze verlieren mit dem Arm im Bild 23-30 %, und die Hand ueber einer freien Stelle
+kostet gleich viel wie ueber dem Koerper (`away` / `live` 0,92-1,05, jetzt fuer alle 10 Netze ueber Zufall). Die
+falsche Farbe hatte nur layer_s_sp4 etwas gekostet (`static` jetzt 0,02-0,04 hoeher); die anderen Netze suchen
+offenbar nur nach der Form. Die Zahlen oben sind damit durch diese ersetzt; die Aussagen bleiben.
