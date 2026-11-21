@@ -74,3 +74,24 @@ dabei nicht entscheidend.
 
 Kinematischer Arm, feste Schwebehoehe, keine Greifbewegung, 150 Szenen (Standardfehler von `near_all` etwa
 0,01). Stufe b der Bruecke, keine act23-Aussage.
+
+## Nachtrag 2026-11-21: Szenenfarbe falsch, Video-Aufzeichnung
+
+**Fehler in der Messung.** `make_scene` malt die drei Koerper jeder Szene in einer eigenen Zufallsfarbe, speichert
+die Farbe aber nicht. Die Farbe steht in `geom_rgba`, nicht in `qpos`. Weil zuerst alle 150 Szenen erzeugt und
+danach gerechnet wurden, lief jede Szene in der Farbe der zuletzt erzeugten. Die Zeigebilder dagegen wurden beim
+Erzeugen aufgenommen, also in der eigenen Farbe der Szene. In 149 von 150 Szenen hatten Zeigebild und Szene damit
+verschiedene Farben. Das gilt fuer alle Live-Zahlen dieser Seite (`static`, `live`, `away`, auch den Lauf mit der
+Pruefstands-Regel). Korrigiert: Die Szene traegt ihre Farbe (`rgb`), `show_scene` malt vor jeder Szene neu; neue
+Zeilen tragen das Feld `scene_colour: own`. Die Szenen selbst (Lage, Blick, Zeigebilder) sind unveraendert, die
+Farbe verbraucht keine Zufallszahlen. Neu gemessen ist noch nichts; die Zahlen oben gelten bis dahin nur unter
+Vorbehalt. Dass `static` trotzdem nahe am Pruefstand lag (Abweichung hoechstens 0,04), spricht dafuer, dass die
+Netze vor allem nach der Form suchen.
+
+**Video.** `src/pc_cvnn/netresearch_live_video.py` zeichnet einzelne Laeufe als .mp4 (ffmpeg) oder .gif auf:
+gleiche Szenen (gleiche Saat), Regeln und Bedingungen wie die Messung, ein Lauf statt zwoelf im Gleichschritt.
+Links das Kamerabild mit den Abtastpunkten der Fovea, der Mitte, der Blickspur und dem gesuchten Koerper; rechts
+die Zeigebilder in der Reihenfolge der Folge mit getroffen / verfehlt und die aktuelle Fovea. Fahrten des Arms
+werden mit Zwischenbildern gezeigt (fuer die Messung springt er). Misst nichts, schreibt keine Ergebnisse.
+Erster Test: layer_s_sp4 (24000 Updates, Seed 0), `live`, Szenen 0-2, Folgen A B C und A B A: 5 von 6 Laeufen
+treffen alle drei Ziele. Die Videos liegen unter `log/video/` (nicht im Repo).

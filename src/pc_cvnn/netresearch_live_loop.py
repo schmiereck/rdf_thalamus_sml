@@ -133,7 +133,16 @@ def make_scene(sc, rng):
     if free is None:
         return None
     return {"qpos": qpos, "gaze": gaze, "pos": pos, "world": world, "refs": np.stack(refs), "free": free,
-            "free_dist": best}
+            "free_dist": best, "rgb": rgb}
+
+
+def show_scene(sc, s):
+    """Szene herstellen: Lage (qpos) und Farbe. Die Farbe steht nicht in qpos; ohne Neu-Malen haette jede Szene
+    die Farbe der zuletzt erzeugten (bis 2026-11-21 so gemessen, Zeigebilder dagegen in der eigenen Farbe)."""
+    for o in ex.SHAPES:
+        ex._paint(sc, o, s["rgb"])
+    sc.sim.d.qpos[:] = s["qpos"]
+    mujoco.mj_forward(sc.sim.m, sc.sim.d)
 
 
 def view(sc, gaze):
@@ -145,6 +154,7 @@ def run_scene(sc, s, conn, cond):
     """Alle 12 Folgen einer Szene im Gleichschritt. conn None = Orakel. Gibt seg_near [12, G] zurueck."""
     n = len(ORDERS)
     order = np.array(ORDERS)
+    show_scene(sc, s)
     gaze = np.repeat(s["gaze"][None].astype(float), n, 0)
     arm = np.repeat(s["qpos"][None], n, 0)                                     # qpos je Lauf (Arm)
     if conn is not None:
@@ -243,7 +253,7 @@ def main():
                        "near_all": round(float(near.all(1).mean()), 4),
                        "near_all_new": round(float(near.all(1)[~ret].mean()), 4),
                        "near_all_ret": round(float(near.all(1)[ret].mean()), 4),
-                       "miss_stay_prev": stay, "out": n_out, "out_rule": "bench", "miss": [int((~near[:, j]).sum()) for j in range(G)]}
+                       "miss_stay_prev": stay, "out": n_out, "out_rule": "bench", "scene_colour": "own", "miss": [int((~near[:, j]).sum()) for j in range(G)]}
                 out.write(json.dumps(row) + "\n")
                 out.flush()
                 print(f"{label:<45} {cond:<6} near_goal {row['near_goal']} near_all {row['near_all']:.3f} "

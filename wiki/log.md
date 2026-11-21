@@ -1,5 +1,9 @@
 # Chronik
 
+## 2026-11-21
+
+* **Nachtrag**: [NetResearch-Netze live im Simulator](/befunde/netresearch-live-blickschleife.md) - Fehler gefunden: alle Szenen liefen in der Farbe der zuletzt erzeugten, die Zeigebilder in der eigenen; korrigiert, noch nicht neu gemessen. Neu: Video-Aufzeichnung einzelner Laeufe (`src/pc_cvnn/netresearch_live_video.py`).
+
 ## 2026-11-19
 
 * **Nachtrag**: [NetResearch-Netze live im Simulator](/befunde/netresearch-live-blickschleife.md) - Kontrolle mit der Hand ueber einer freien Stelle: gleicher Verlust, also Ablenkung durch das Arm-Bild, nicht Verdecken.
